@@ -1,0 +1,81 @@
+body,
+html {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
+#app {
+  display: flex;
+  height: 100%;
+}
+
+#editor-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: 10px;
+}
+
+#playbook-editor,
+#config-editor {
+  height: 40%;
+  margin-bottom: 10px;
+}
+
+#run-button {
+  padding: 10px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+#chat-container {
+  flex: 1;
+  border-left: 1px solid #ccc;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+#chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+#chat-input {
+  display: flex;
+  padding: 10px;
+}
+
+#message-input {
+  flex: 1;
+  padding: 5px;
+}
+
+#send-button {
+  padding: 5px 10px;
+  background-color: #4caf50;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.chat-message {
+  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 5px;
+}
+
+.user-message {
+  background-color: #e6f3ff;
+  align-self: flex-end;
+}
+
+.ai-message {
+  background-color: #f0f0f0;
+  align-self: flex-start;
+}
