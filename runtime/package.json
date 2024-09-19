@@ -1,4 +1,8 @@
 {
+  "name": "playbooks-ai-runtime",
+  "version": "1.0.0",
+  "description": "Runtime for Playbooks.ai",
+  "main": "index.js",
   "type": "module",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.27.3",

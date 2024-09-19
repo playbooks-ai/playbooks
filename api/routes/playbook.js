@@ -1,6 +1,6 @@
-const express = require("express");
+import express from "express";
+import PlaybookRuntime from "../../runtime/main.js";
 const router = express.Router();
-const PlaybookRuntime = require("../../runtime/main");
 
 router.post("/run", async (req, res) => {
   const { playbook, config } = req.body;
@@ -12,5 +12,4 @@ router.post("/run", async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
-module.exports = router;
+export default router;
