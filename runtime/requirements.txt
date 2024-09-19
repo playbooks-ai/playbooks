@@ -1,5 +1,0 @@
-litellm
-click
-fastapi
-uvicorn
-python-dotenv

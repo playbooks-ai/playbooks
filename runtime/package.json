@@ -1,0 +1,15 @@
+{
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.3",
+    "cohere-ai": "^7.13.1",
+    "commander": "^8.3.0",
+    "dotenv": "^10.0.0",
+    "litellm": "^0.1.1"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js",
+    "cli": "node cli.mjs -p ../examples/hello_world"
+  }
+}
