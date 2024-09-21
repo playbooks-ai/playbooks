@@ -16,7 +16,7 @@ ANTHROPIC_API_KEY=<your_anthropic_api_key>
 ## Usage
 Run the CLI with:
 ```bash
-python -m runtime.src.cli --project <path_to_project> [--model <model_name>]
+node ../runtime/cli.mjs --project <path_to_project> [--model <model_name>]
 ```
 
 - `--project`: Path to the project folder containing playbooks and config.json
@@ -25,7 +25,7 @@ python -m runtime.src.cli --project <path_to_project> [--model <model_name>]
 Example:
 ```bash
 cd playbooks.ai
-python -m runtime.src.cli --project examples/hello_world
+node ../runtime/cli.mjs -p ../examples/hello_world
 ```
 
 ## Features
@@ -35,6 +35,3 @@ python -m runtime.src.cli --project examples/hello_world
 
 ## Contributing
 Contributions are welcome! Please refer to CONTRIBUTING.md for guidelines.
-
-## License
-[Specify your license here]

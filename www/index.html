@@ -6,6 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Playbooks.ai Editor</title>
   <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/2.3.8/purify.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.30.1/min/vs/loader.js"></script>
 </head>
 
@@ -16,7 +18,11 @@
       <div id="config-editor"></div>
       <button id="run-button">Run Playbook</button>
     </div>
-    <div id="chat-container"></div>
+    <div id="chat-container">
+      <div id="chat-messages"></div>
+      <input type="text" id="message-input" placeholder="Type your message...">
+      <button id="send-button">Send</button>
+    </div>
   </div>
   <script src="app.js"></script>
 </body>

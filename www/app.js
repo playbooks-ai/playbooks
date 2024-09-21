@@ -48,7 +48,7 @@ function runPlaybook() {
   const playbookContent = playbookEditor.getValue();
   const configContent = configEditor.getValue();
 
-  fetch("/api/playbook/run", {
+  fetch("http://localhost:3000/api/playbook/run", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -57,7 +57,7 @@ function runPlaybook() {
   })
     .then((response) => response.json())
     .then((data) => {
-      addMessage("Playbook executed. Response: " + JSON.stringify(data), "ai");
+      addMessage(data, "ai");
     })
     .catch((error) => {
       console.error("Error:", error);
@@ -77,14 +77,20 @@ function sendMessage() {
 function addMessage(content, sender) {
   const messageElement = document.createElement("div");
   messageElement.classList.add("chat-message", `${sender}-message`);
-  messageElement.textContent = content;
+  // Use marked to convert Markdown to HTML, then sanitize with DOMPurify
+  messageElement.innerHTML = DOMPurify.sanitize(marked.parse(content));
   chatContainer.appendChild(messageElement);
   chatContainer.scrollTop = chatContainer.scrollHeight;
 }
 
 // WebSocket connection
 function connectWebSocket() {
-  ws = new WebSocket(`ws://${window.location.host}`);
+  // Use wss:// for secure connections, ws:// for non-secure
+  const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+  const host = window.location.hostname;
+  const port = 3000; // Make sure this matches your WebSocket server port
+
+  ws = new WebSocket(`${protocol}${host}:${port}`);
 
   ws.onmessage = function (event) {
     const message = JSON.parse(event.data);
