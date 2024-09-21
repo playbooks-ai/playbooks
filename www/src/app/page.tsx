@@ -1,5 +1,5 @@
-import HelloWorld from "@/components/HelloWorld";
+import ChatWidget from "@/components/ChatWidget";
 
 export default function Home() {
-  return <HelloWorld />;
+  return <ChatWidget />;
 }
