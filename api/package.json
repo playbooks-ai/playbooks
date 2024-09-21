@@ -3,9 +3,10 @@
   "version": "1.0.0",
   "description": "API for Playbooks.ai",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "start": "node index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.mjs",
+    "dev": "nodemon index.mjs"
   },
   "dependencies": {
     "body-parser": "^1.20.3",

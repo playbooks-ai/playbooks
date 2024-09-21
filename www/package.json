@@ -4,7 +4,7 @@
   },
   "scripts": {
     "start:frontend": "http-server . -p 8080 -c-1",
-    "start:backend": "node ../api/index.js",
+    "start:backend": "node ../api/index.mjs",
     "start": "npm run start:backend & npm run start:frontend"
   }
 }
