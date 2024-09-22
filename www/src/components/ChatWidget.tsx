@@ -50,7 +50,7 @@ const ChatWidget: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-screen max-w-2xl mx-auto p-4 bg-white">
+    <div className="flex flex-col h-full max-w-2xl mx-auto p-4 bg-white">
       <MessageList
         messages={messages}
         isStreaming={isStreaming}
