@@ -4,9 +4,35 @@ import MessageList from "@/components/MessageList";
 import UserInput from "@/components/UserInput";
 import { Message } from "@/types";
 import { handleChatCompletion } from "@/utils/chatUtils";
-import React, { useEffect, useRef, useState } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 
-const ChatWidget: React.FC = () => {
+type ChatWidgetProps = object;
+
+interface ChatWidgetRef {
+  runPlaybook: (code: string) => void;
+}
+
+const beginConversation = "Begin";
+
+const ChatWidget = forwardRef<ChatWidgetRef, ChatWidgetProps>((props, ref) => {
+  const [playbook, setPlaybook] = useState<string>("");
+
+  useImperativeHandle(ref, () => ({
+    runPlaybook: (code: string) => {
+      // Clear the current conversation messages
+      setMessages([]);
+      console.log("Running playbook with code:", code);
+      setPlaybook(code);
+      handleSubmit(beginConversation, code);
+    },
+  }));
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -17,8 +43,15 @@ const ChatWidget: React.FC = () => {
 
   useEffect(scrollToBottom, [messages, isStreaming]);
 
-  const handleSubmit = async (input: string) => {
+  const handleSubmit = async (input: string, pb: string) => {
     if (!input.trim()) return;
+    if (!pb) {
+      pb = playbook;
+    }
+
+    console.log("Messages:", messages);
+    console.log("Playbook:", pb);
+    console.log("Input:", input);
 
     const userMessage: Message = { role: "user", content: input };
     setMessages((prev) => [...prev, userMessage]);
@@ -26,11 +59,15 @@ const ChatWidget: React.FC = () => {
 
     try {
       await handleChatCompletion(
+        pb,
         [...messages, userMessage],
         (assistantMessage) => {
           setMessages((prev) => {
             const newMessages = [...prev];
-            if (newMessages[newMessages.length - 1].role === "assistant") {
+            if (
+              newMessages.length > 0 &&
+              newMessages[newMessages.length - 1].role === "assistant"
+            ) {
               newMessages[newMessages.length - 1].content = assistantMessage;
             } else {
               newMessages.push({
@@ -59,6 +96,8 @@ const ChatWidget: React.FC = () => {
       <UserInput onSubmit={handleSubmit} isStreaming={isStreaming} />
     </div>
   );
-};
+});
+
+ChatWidget.displayName = "ChatWidget";
 
 export default ChatWidget;

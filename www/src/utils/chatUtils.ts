@@ -1,13 +1,14 @@
 import { Message } from "@/types";
 
 export const handleChatCompletion = async (
+  playbook: string,
   messages: Message[],
   onUpdate: (assistantMessage: string) => void
 ) => {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, playbook }),
   });
 
   if (!response.ok) throw new Error("Network response was not ok");
