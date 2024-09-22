@@ -4,6 +4,7 @@ import { program } from "commander";
 import dotenv from "dotenv";
 import readline from "readline";
 import PlaybookRuntime from "./main.js";
+import { loadPlaybooks } from "./playbook.js";
 
 dotenv.config();
 
@@ -28,7 +29,8 @@ if (!options.project) {
   process.exit(1);
 }
 
-const runtime = new PlaybookRuntime(options.project, options.model);
+const [playbooks, config] = loadPlaybooks(options.project);
+const runtime = new PlaybookRuntime(playbooks, config, options.model);
 
 async function chat() {
   console.log('Chat session started. Type "exit" to quit.');

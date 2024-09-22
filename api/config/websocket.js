@@ -10,6 +10,9 @@ function setupWebSocket(wss) {
 
     clients.set(ws, metadata);
 
+    ws.onopen = function () {
+      console.log("WebSocket connection established");
+    };
     ws.on("message", (messageAsString) => {
       const message = JSON.parse(messageAsString);
       const metadata = clients.get(ws);
@@ -25,6 +28,11 @@ function setupWebSocket(wss) {
     ws.on("close", () => {
       clients.delete(ws);
     });
+
+    ws.onerror = function (error) {
+      console.error("WebSocket error:", error);
+      // You can add more detailed error logging here
+    };
   });
 }
 

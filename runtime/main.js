@@ -1,13 +1,13 @@
 import { LLM } from "./llm.js";
-import { createSystemPrompt, loadPlaybooks } from "./playbook.js";
+import { createSystemPrompt } from "./playbook.js";
 
 class PlaybookRuntime {
   constructor(
-    projectPath,
-    model = process.env.LLM_MODEL || "anthropic/claude-3-sonnet-20240229"
+    playbooks,
+    config,
+    model = process.env.LLM_MODEL || "claude-3-5-sonnet-20240620"
   ) {
     this.llm = new LLM(model);
-    const [playbooks, config] = loadPlaybooks(projectPath);
     this.systemPrompt = createSystemPrompt(playbooks, config);
     this.session = null;
   }
