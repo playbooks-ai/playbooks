@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
+import Spinner from "./Spinner";
 
 interface Message {
   role: "user" | "assistant";
@@ -10,14 +11,14 @@ interface Message {
 const ChatWidget: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  useEffect(scrollToBottom, [messages]);
+  useEffect(scrollToBottom, [messages, isStreaming]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,7 +27,7 @@ const ChatWidget: React.FC = () => {
     const userMessage: Message = { role: "user", content: input };
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setIsLoading(true);
+    setIsStreaming(true);
 
     try {
       const response = await fetch("/api/chat", {
@@ -63,7 +64,7 @@ const ChatWidget: React.FC = () => {
     } catch (error) {
       console.error("Error:", error);
     } finally {
-      setIsLoading(false);
+      setIsStreaming(false);
     }
   };
 
@@ -73,11 +74,16 @@ const ChatWidget: React.FC = () => {
         {messages.map((message, index) => (
           <div
             key={index}
-            className={`p-2 rounded-lg ${
-              message.role === "user" ? "bg-blue-100 ml-auto" : "bg-gray-100"
-            } max-w-[80%]`}
+            className={`p-2 ${
+              message.role === "user"
+                ? "bg-blue-100 rounded-lg ml-auto max-w-[80%]"
+                : "w-full"
+            }`}
           >
             {message.content}
+            {index === messages.length - 1 &&
+              message.role === "assistant" &&
+              isStreaming && <Spinner />}
           </div>
         ))}
         <div ref={messagesEndRef} />
@@ -89,14 +95,14 @@ const ChatWidget: React.FC = () => {
           onChange={(e) => setInput(e.target.value)}
           className="flex-1 p-2 border rounded-lg"
           placeholder="Type your message..."
-          disabled={isLoading}
+          disabled={isStreaming}
         />
         <button
           type="submit"
           className="bg-blue-500 text-white px-4 py-2 rounded-lg disabled:bg-blue-300"
-          disabled={isLoading}
+          disabled={isStreaming}
         >
-          {isLoading ? "Sending..." : "Send"}
+          {isStreaming ? "Sending..." : "Send"}
         </button>
       </form>
     </div>
