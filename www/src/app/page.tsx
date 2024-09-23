@@ -2,15 +2,29 @@
 
 import ChatWidget from "@/components/ChatWidget";
 import LeftPane from "@/components/LeftPane";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 export default function Home() {
   const [activeTab, setActiveTab] = useState("playbook");
+
+  const runPlaybook = (code: string) => {
+    // This function will be called when the "Run playbook" button is clicked
+    // You can implement the logic to send the code to the ChatWidget here
+    // For example:
+    if (chatWidgetRef.current) {
+      chatWidgetRef.current.runPlaybook(code);
+    }
+  };
+
+  const chatWidgetRef = useRef<{
+    runPlaybook: (code: string) => void;
+  } | null>(null);
+
   return (
     <div className="m-4 border border-gray-300 rounded-lg">
       {(() => {
-        const leftPane = <LeftPane />;
-        const chatWidget = <ChatWidget />;
+        const leftPane = <LeftPane runPlaybook={runPlaybook} />;
+        const chatWidget = <ChatWidget ref={chatWidgetRef} />;
 
         return (
           <div className="h-[600px]">
