@@ -90,3 +90,28 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@layer base {
+  h1 {
+    @apply scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl;
+  }
+  h2 {
+    @apply text-3xl font-semibold mb-3 text-gray-800;
+  }
+  h3 {
+    @apply text-2xl font-medium mb-2 text-gray-700;
+  }
+  p {
+    @apply text-base mb-4 text-gray-600;
+  }
+  ul,
+  ol {
+    @apply mb-4 pl-5;
+  }
+  li {
+    @apply mb-2;
+  }
+  a {
+    @apply text-blue-600 hover:text-blue-800 underline;
+  }
+}
