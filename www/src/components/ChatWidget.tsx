@@ -93,7 +93,10 @@ const ChatWidget = forwardRef<ChatWidgetRef, ChatWidgetProps>((props, ref) => {
         isStreaming={isStreaming}
         messagesEndRef={messagesEndRef}
       />
-      <UserInput onSubmit={handleSubmit} isStreaming={isStreaming} />
+      <UserInput
+        onSubmit={(input: string) => handleSubmit(input, playbook)}
+        isStreaming={isStreaming}
+      />
     </div>
   );
 });
