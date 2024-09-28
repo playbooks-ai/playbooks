@@ -12,9 +12,9 @@ const PlaybookEditor: React.FC<{ runPlaybook: (code: string) => void }> = ({
 When the user starts a conversation or asks for a greeting.
 
 ## Steps
-- Greet the user with a friendly "Hello, World!" message.
-- Give one-line explanation that this is a demonstration of a simple Hello World playbook.
-- Say goodbye to the user.
+1. Greet the user with a friendly "Hello, World!" message.
+2. Give one-line explanation that this is a demonstration of a simple Hello World playbook.
+3. Say goodbye to the user.
 
 ## Notes
 - If the user asks about capabilities beyond this simple playbook, explain that this is a basic example and suggest they explore more complex playbooks for advanced features.
