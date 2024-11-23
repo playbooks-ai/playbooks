@@ -58,27 +58,24 @@ const ChatWidget = forwardRef<ChatWidgetRef, ChatWidgetProps>((props, ref) => {
     setIsStreaming(true);
 
     try {
-      await handleChatCompletion(
-        pb,
-        [...messages, userMessage],
-        (assistantMessage) => {
-          setMessages((prev) => {
-            const newMessages = [...prev];
-            if (
-              newMessages.length > 0 &&
-              newMessages[newMessages.length - 1].role === "assistant"
-            ) {
-              newMessages[newMessages.length - 1].content = assistantMessage;
-            } else {
-              newMessages.push({
-                role: "assistant",
-                content: assistantMessage,
-              });
-            }
-            return newMessages;
-          });
-        }
-      );
+      await handleChatCompletion(pb, [...messages, userMessage], (chunk) => {
+        console.log("Raw chunk:", chunk);
+        setMessages((prev) => {
+          const newMessages = [...prev];
+          if (
+            newMessages.length > 0 &&
+            newMessages[newMessages.length - 1].role === "assistant"
+          ) {
+            newMessages[newMessages.length - 1].content = chunk;
+          } else {
+            newMessages.push({
+              role: "assistant",
+              content: chunk,
+            });
+          }
+          return newMessages;
+        });
+      });
     } catch (error) {
       console.error("Error:", error);
     } finally {
@@ -87,7 +84,7 @@ const ChatWidget = forwardRef<ChatWidgetRef, ChatWidgetProps>((props, ref) => {
   };
 
   return (
-    <div className="flex flex-col h-full max-w-2xl mx-auto p-4 bg-white">
+    <div className="flex flex-col h-full max-w-2xl mx-auto p-4">
       <MessageList
         messages={messages}
         isStreaming={isStreaming}
