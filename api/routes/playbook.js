@@ -9,10 +9,10 @@ const router = express.Router();
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 router.post("/run", async (req, res) => {
-  const { playbook, config } = req.body;
+  const { playbook, config, conversationHistory } = req.body;
   try {
     const runtime = new PlaybookRuntime([playbook], config);
-    const result = await runtime.chat("Start the conversation");
+    const result = await runtime.chat("Start the conversation", conversationHistory);
     res.json(result);
   } catch (error) {
     console.error("Error running playbook:", error);

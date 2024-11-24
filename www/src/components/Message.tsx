@@ -22,12 +22,14 @@ const Message: React.FC<MessageProps> = ({ message, isStreaming }) => {
       {message.role === "user" ? (
         message.content
       ) : (
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={markdownComponents}
-        >
-          {message.content}
-        </ReactMarkdown>
+        <pre style={{ "white-space": "pre-wrap" }}>
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={markdownComponents}
+          >
+            {message.content}
+          </ReactMarkdown>
+        </pre>
       )}
       {isStreaming && <Spinner />}
     </div>

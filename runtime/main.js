@@ -16,11 +16,20 @@ class PlaybookRuntime {
     this.session = this.llm.createChatSession(this.systemPrompt);
   }
 
-  async chat(message, onContent) {
-    if (!this.session) {
-      this.startConversation();
-    }
-    return await this.llm.chat(this.session, message, onContent);
+  async chat(message, conversationHistory = []) {
+    const messages = conversationHistory.map((msg) => ({
+      role: msg.role,
+      content: msg.content,
+    }));
+
+    messages.push({ role: "user", content: message });
+
+    const response = await this.llm.chat(messages);
+
+    return {
+      textResponse: response.completion,
+      // ...other properties you might want to return
+    };
   }
 }
 

@@ -1,8 +1,8 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import Editor from "@monaco-editor/react";
 import React, { useState } from "react";
-
 const PlaybookEditor: React.FC<{ runPlaybook: (code: string) => void }> = ({
   runPlaybook,
 }) => {
@@ -30,7 +30,7 @@ When the user starts a conversation or asks for a greeting.
         defaultLanguage="markdown"
         value={code}
         onChange={handleEditorChange}
-        theme="vs-light" // Available themes: "vs-light", "vs-dark", "hc-black", "hc-light"
+        theme="vs-dark" // Available themes: "vs-light", "vs-dark", "hc-black", "hc-light"
         options={{
           wordWrap: "on",
           fontSize: 16,
@@ -49,12 +49,12 @@ When the user starts a conversation or asks for a greeting.
         height="100%"
       />
       <div className="flex justify-center">
-        <button
+        <Button
           className="mt-4 mb-4 px-4 py-2 bg-blue-500 text-white font-semibold rounded-lg shadow-md hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75 transition duration-300 ease-in-out"
           onClick={() => runPlaybook(code)}
         >
           Run playbook
-        </button>
+        </Button>
       </div>
     </div>
   );

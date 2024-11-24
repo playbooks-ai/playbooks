@@ -1,3 +1,5 @@
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import React, { useState } from "react";
 
 interface UserInputProps {
@@ -16,7 +18,7 @@ const UserInput: React.FC<UserInputProps> = ({ onSubmit, isStreaming }) => {
 
   return (
     <form onSubmit={handleSubmit} className="flex space-x-2">
-      <input
+      <Input
         type="text"
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -24,13 +26,13 @@ const UserInput: React.FC<UserInputProps> = ({ onSubmit, isStreaming }) => {
         placeholder="Type your message..."
         disabled={isStreaming}
       />
-      <button
+      <Button
         type="submit"
         className="bg-blue-500 text-white px-4 py-2 rounded-lg disabled:bg-blue-300"
         disabled={isStreaming}
       >
         {isStreaming ? "Sending..." : "Send"}
-      </button>
+      </Button>
     </form>
   );
 };
