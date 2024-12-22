@@ -1,25 +1,26 @@
 from typing import Optional
 import anthropic
 from .base import BaseLLM
+import os
 
 class AnthropicLLM(BaseLLM):
     def __init__(self, api_key: Optional[str] = None, **kwargs):
         """Initialize Anthropic client"""
+        api_key = api_key or os.environ.get('ANTHROPIC_API_KEY')
         if not api_key:
             raise ValueError("API key is required for Anthropic")
             
         self.client = anthropic.Anthropic(api_key=api_key)
-        self.model = kwargs.get("model", "claude-3-opus-20240229")
+        self.model = kwargs.get("model") or "claude-3-5-sonnet-20241022"
         
     def generate(self, prompt: str, **kwargs) -> str:
         """Generate response using Anthropic's Claude"""
         response = self.client.messages.create(
             model=self.model,
+            max_tokens=4096,
+            temperature=0,
+            system="You are an AI agent that executes playbooks.",
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are an AI agent that executes playbooks."
-                },
                 {
                     "role": "user",
                     "content": prompt
