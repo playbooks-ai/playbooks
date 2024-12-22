@@ -4,6 +4,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.prompt import Prompt
+from rich.live import Live
 from typing import Optional, List
 
 from playbooks.core.loader import load
@@ -20,6 +21,13 @@ def print_markdown(text: str):
     md = Markdown(text)
     console.print(md)
 
+def print_streaming_markdown(stream_iterator):
+    """Print streaming markdown content"""
+    content = ""
+    with Live(Markdown(content), refresh_per_second=10) as live:
+        for chunk in stream_iterator:
+            content += chunk
+            live.update(Markdown(content))
 
 @app.command()
 def chat(
@@ -38,6 +46,10 @@ def chat(
     api_key: Optional[str] = typer.Option(
         None,
         help="API key for the selected LLM"
+    ),
+    stream: bool = typer.Option(
+        False,
+        help="Enable streaming output from LLM"
     )
 ):
     """Start an interactive chat session using the specified playbooks and LLM"""
@@ -61,9 +73,13 @@ def chat(
                 break
                 
             try:
-                response = runner.run(combined_playbooks, user_input=user_input)
                 console.print("\n[yellow]Agent: [/yellow]")
-                print_markdown(response)
+                if stream:
+                    response_stream = runner.run(combined_playbooks, user_input=user_input, stream=True)
+                    print_streaming_markdown(response_stream)
+                else:
+                    response = runner.run(combined_playbooks, user_input=user_input)
+                    print_markdown(response)
             except Exception as e:
                 console.print(f"\n[red]Error:[/red] {str(e)}")
                 
@@ -74,4 +90,4 @@ def main():
     app()
 
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,5 +1,8 @@
-from typing import Optional, Union
-from ..llms import BaseLLM, OpenAILLM, AnthropicLLM, VertexAILLM
+from typing import Optional, Union, Iterator
+from playbooks.llms.base import BaseLLM
+from playbooks.llms.openai import OpenAILLM
+from playbooks.llms.anthropic import AnthropicLLM
+from playbooks.llms.vertexai import VertexAILLM
 
 class PlaybookRunner:
     def __init__(self, llm: Optional[Union[BaseLLM, str]] = None, **kwargs):
@@ -25,12 +28,15 @@ class PlaybookRunner:
             raise ValueError(f"Unsupported LLM provider: {provider}")
         return providers[provider](**kwargs)
         
-    def run(self, playbooks: str, **kwargs) -> str:
+    def run(self, playbooks: str, stream: bool = False, **kwargs) -> Union[str, Iterator[str]]:
         """Run playbooks using the configured LLM"""
-        if self.llm:
-            return self.llm.generate(playbooks, **kwargs)
-        else:
+        if not self.llm:
             return "No LLM configured"
+            
+        if stream:
+            return self.llm.generate_stream(playbooks, **kwargs)
+        else:
+            return self.llm.generate(playbooks, **kwargs)
 
 def run(playbooks: str, **kwargs) -> str:
     """Convenience function to run playbooks"""

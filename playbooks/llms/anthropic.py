@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Iterator
 import anthropic
 from .base import BaseLLM
 import os
@@ -28,3 +28,22 @@ class AnthropicLLM(BaseLLM):
             ]
         )
         return response.content[0].text 
+
+    def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """Generate streaming response using Anthropic's Claude"""
+        response = self.client.messages.create(
+            model=self.model,
+            max_tokens=4096,
+            temperature=0,
+            system="You are an AI agent that executes playbooks.",
+            messages=[
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            stream=True
+        )
+        for message in response:
+            if message.type == "content_block_delta" and message.delta.text:
+                yield message.delta.text
