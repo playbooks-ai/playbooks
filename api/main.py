@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from playbooks.core.runner import PlaybookRunner
 from typing import Optional, Dict, Any
@@ -25,6 +26,7 @@ class PlaybookRequest(BaseModel):
     content: str
     llm_provider: Optional[str] = "anthropic"
     llm_options: Optional[Dict[str, Any]] = None
+    stream: Optional[bool] = False
 
 class PlaybookResponse(BaseModel):
     result: str
@@ -32,10 +34,22 @@ class PlaybookResponse(BaseModel):
 @app.post("/api/run-playbook", response_model=PlaybookResponse)
 async def run_playbook(request: PlaybookRequest):
     try:
-        # Create runner with just the LLM provider
         runner = PlaybookRunner(llm=request.llm_provider)
-        result = runner.run(request.content, user_input="Hello")
-        return PlaybookResponse(result=result)
+        
+        if request.stream:
+            async def stream_response():
+                async for chunk in runner.stream(request.content, user_input="Hello"):
+                    if chunk.strip():
+                        yield chunk
+
+            return StreamingResponse(
+                stream_response(),
+                media_type="text/plain"
+            )
+        else:
+            result = runner.run(request.content, user_input="Hello")
+            return PlaybookResponse(result=result)
+            
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
