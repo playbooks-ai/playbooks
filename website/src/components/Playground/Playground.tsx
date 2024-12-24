@@ -44,7 +44,6 @@ export default function Playground({ className = '' }: PlaygroundProps) {
         },
         body: JSON.stringify({
           content,
-          llm_provider: 'anthropic',
           stream: true,
         }),
       });
