@@ -42,20 +42,27 @@ async def run_playbook(request: PlaybookRequest):
 @app.get("/api/examples/{filename}")
 async def get_example(filename: str):
     try:
-        examples_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples")
-        file_path = os.path.join(examples_dir, filename)
-        
-        # Basic security check to prevent directory traversal
-        if not os.path.normpath(file_path).startswith(os.path.normpath(examples_dir)):
+        # Check for directory traversal in filename before constructing path
+        if os.path.isabs(filename) or ".." in os.path.normpath(filename):
             raise HTTPException(status_code=400, detail="Invalid filename")
             
-        if not os.path.exists(file_path):
+        examples_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples")
+        file_path = os.path.join(examples_dir, filename)
+
+        # Double check path is within examples directory
+        norm_file_path = os.path.normpath(file_path)
+        norm_examples_dir = os.path.normpath(examples_dir)
+        if not norm_file_path.startswith(norm_examples_dir):
+            raise HTTPException(status_code=400, detail="Invalid filename")
+            
+        # Check for file existence after security checks
+        if os.path.exists(file_path):
+            with open(file_path, "r") as f:
+                content = f.read()
+            return {"content": content}
+        else:
             raise HTTPException(status_code=404, detail="Example not found")
             
-        with open(file_path, "r") as f:
-            content = f.read()
-            
-        return {"content": content}
     except Exception as e:
         if isinstance(e, HTTPException):
             raise e

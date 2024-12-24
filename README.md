@@ -3,13 +3,32 @@ A framework for creating AI agents using human-readable and LLM-executed playboo
 
 ## Quick start
 
-It takes just a minute to try out playbooks!
-```bash
-pip install playbooks
-playbooks run examples/hello.md
+It all starts with a playbook. Here is an example playbook -
+
+- Create hello.md with the following playbook
+
+```
+# HelloWorld
+
+## Trigger
+When the user starts a conversation or asks for a greeting.
+
+## Steps
+- Greet the user with a friendly "Hello, World!" message.
+- Explain that this is a demonstration of a simple Hello World playbook.
+- Say goodbye to the user.
 ```
 
-Now write a playbook or two for a simple scenario and try it out. Don't worry, the syntax is quite flexible and forgiving.
+- Run the playbook
+
+```bash
+pip install playbooks
+playbooks run hello.md
+```
+
+Now, try modifying the hello.md playbook to greet the user with "Hello Playbooks!" instead and give it a try. Easy, right?
+
+Now take a look at some example playbooks in examples folder. Try writing your own playbooks. Don't worry, the syntax is quite flexible and forgiving.
 
 ## Why playbooks?
 
@@ -27,20 +46,6 @@ Playbooks is the perfect middle ground. Agent behavior is written in an easily r
 - external event triggered playbooks, and so on. 
 
 Not only that, business users can use a copilot that can transparently make changes to the playbooks on their behalf, enabling them to easily make changes to agent behavior, such as listing caveats and special cases, adding new business logic, and so on.
-
-It all starts with a playbook. Here is an example playbook -
-
-```playbook
-# HelloWorld
-
-## Trigger
-When the user starts a conversation or asks for a greeting.
-
-## Steps
-- Greet the user with a friendly "Hello, World!" message.
-- Explain that this is a demonstration of a simple Hello World playbook.
-- Say goodbye to the user.
-```
 
 ## Contributing
 
@@ -108,8 +113,8 @@ We maintain high test coverage to ensure code quality. Here's what you need to k
    # Run specific test file
    pytest tests/test_runner.py
 
-   # Run with coverage
-   pytest --cov=playbooks tests/
+   # Run with coverage report
+   pytest --cov=playbooks tests/ --cov-report=term-missing
    ```
 
 2. **Test Guidelines**
@@ -117,6 +122,22 @@ We maintain high test coverage to ensure code quality. Here's what you need to k
    - Maintain test coverage above 80%
    - Use meaningful test names that describe the behavior being tested
    - Mock external dependencies (e.g., LLM API calls)
+
+3. **Coverage Requirements**
+   We use `pytest-cov` to track code coverage. Aim for 80+% coverage.
+
+4. **Writing Tests**
+   - Use `pytest` fixtures for setup/teardown
+   - Use `pytest.mark.parametrize` for testing multiple inputs
+   - Mock LLM API calls using `pytest-mock`
+   ```python
+   def test_anthropic_generate(mocker):
+       mock_client = mocker.patch('anthropic.Anthropic')
+       mock_client.return_value.messages.create.return_value = ...
+       llm = AnthropicLLM(api_key="test")
+       result = llm.generate("test prompt")
+       assert result == expected_output
+   ```
 
 ### Pull Request Process
 
@@ -147,6 +168,7 @@ We maintain high test coverage to ensure code quality. Here's what you need to k
    - [ ] Documentation is updated
    - [ ] Changes are tested locally
    - [ ] PR description explains changes and motivation
+   - [ ] Test coverage is maintained or improved
 
 ### Code Style Guidelines
 
