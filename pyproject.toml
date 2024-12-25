@@ -8,7 +8,7 @@ readme = "README.md"
 packages = [{include = "playbooks"}]
 
 [tool.poetry.dependencies]
-python = "^3.9"
+python = "^3.12"
 openai = "^1.52.0"
 anthropic = "^0.42.0"
 google-cloud-aiplatform = "^1.38.1"
