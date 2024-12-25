@@ -61,7 +61,7 @@ async def get_example(filename: str):
         if os.path.isabs(filename) or ".." in os.path.normpath(filename):
             raise HTTPException(status_code=400, detail="Invalid filename")
             
-        examples_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples")
+        examples_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "examples/playbooks")
         file_path = os.path.join(examples_dir, filename)
 
         # Double check path is within examples directory
@@ -76,7 +76,7 @@ async def get_example(filename: str):
                 content = f.read()
             return {"content": content}
         else:
-            raise HTTPException(status_code=404, detail="Example not found")
+            raise HTTPException(status_code=404, detail="Example Not Found")
             
     except Exception as e:
         if isinstance(e, HTTPException):
