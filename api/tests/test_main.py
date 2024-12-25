@@ -13,8 +13,8 @@ def mock_env(monkeypatch):
 
 @pytest.fixture
 def mock_playbook_runner():
-    """Mock PlaybookRunner for testing"""
-    with patch("api.main.PlaybookRunner") as mock:
+    """Mock PlaybooksRunner for testing"""
+    with patch("api.main.PlaybooksRunner") as mock:
         instance = mock.return_value
         instance.run.return_value = "Test response"
         yield mock

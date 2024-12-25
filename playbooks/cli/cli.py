@@ -8,8 +8,7 @@ from rich.live import Live
 from typing import Optional, List
 
 from playbooks.core.loader import load
-from playbooks.core.runner import run
-from playbooks.core.runner import PlaybookRunner
+from playbooks.core.runner import PlaybooksRunner
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -60,7 +59,7 @@ def chat(
         combined_playbooks = load(playbook_paths)
         
         # Initialize runner with selected LLM
-        runner = PlaybookRunner(
+        runner = PlaybooksRunner(
             llm=llm,
             api_key=api_key,
             model=model
