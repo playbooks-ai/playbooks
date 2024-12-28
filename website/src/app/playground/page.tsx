@@ -3,48 +3,45 @@
 import { useState, useEffect } from 'react';
 import Editor from '@/components/Playground/Editor';
 
-const defaultPlaybook = `# Loading example playbook...`;
+const defaultPlaybook = `Loading example playbook...`;
+const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 export default function PlaygroundPage() {
   const [content, setContent] = useState(defaultPlaybook);
   const [result, setResult] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    const loadExample = async () => {
-      try {
-        const response = await fetch('http://localhost:8000/api/examples/hello.md');
-        if (!response.ok) {
-          throw new Error('Failed to load example');
-        }
-        const data = await response.json();
-        setContent(data.content);
-      } catch (error) {
-        console.error('Error loading example:', error);
-        setContent('# Error loading example playbook\n' + (error as Error).message);
+  const loadExamplePlaybook = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/examples/hello.md`);
+      if (!response.ok) {
+        throw new Error('Failed to load example playbook');
       }
-    };
+      const { content } = await response.json();
+      const text = content;
+      setContent(text);
+    } catch (error) {
+      setResult('Error loading example: ' + (error as Error).message);
+    }
+  };
 
-    loadExample();
+  useEffect(() => {
+    loadExamplePlaybook();
   }, []);
 
   const runPlaybook = async () => {
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:8000/api/run-playbook', {
+      const response = await fetch(`${API_URL}/api/run-playbook`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           content,
+          llm_provider: 'anthropic',
         }),
       });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to run playbook');
-      }
       
       const data = await response.json();
       setResult(data.result);
