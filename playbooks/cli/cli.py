@@ -9,6 +9,8 @@ from typing import Optional, List
 from playbooks.core.loader import load
 from playbooks.core.runner import run
 from playbooks.core.runner import PlaybookRunner
+from dotenv import load_dotenv
+load_dotenv()
 
 app = typer.Typer()
 console = Console()
