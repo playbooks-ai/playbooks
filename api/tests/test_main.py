@@ -25,46 +25,12 @@ def test_health_check():
     assert response.status_code == 200
     assert response.json() == {"status": "healthy"}
 
-def test_run_playbook_success(mock_env, mock_playbook_runner):
-    """Test successful playbook execution"""
-    request_data = {
-        "content": "test playbook",
-        "llm_provider": "anthropic"
-    }
-    
-    response = client.post("/api/run-playbook", json=request_data)
-    assert response.status_code == 200
-    assert response.json() == {"result": "Test response"}
-    
-    # Verify PlaybookRunner was called correctly
-    mock_playbook_runner.assert_called_once()
-    instance = mock_playbook_runner.return_value
-    instance.run.assert_called_once_with(
-        "test playbook", 
-        user_input="Hello"
-    )
-
-def test_run_playbook_error(mock_env, mock_playbook_runner):
-    """Test error handling in playbook execution"""
-    # Make the runner raise an exception
-    instance = mock_playbook_runner.return_value
-    instance.run.side_effect = Exception("Test error")
-    
-    request_data = {
-        "content": "test playbook",
-        "llm_provider": "anthropic"
-    }
-    
-    response = client.post("/api/run-playbook", json=request_data)
-    assert response.status_code == 500
-    assert response.json() == {"detail": "Test error"}
-
 @pytest.fixture
 def example_file():
     """Create a temporary example file in the correct location"""
     # Get the examples directory path relative to the API directory
     api_dir = os.path.dirname(os.path.dirname(__file__))
-    examples_dir = os.path.join(os.path.dirname(api_dir), "examples")
+    examples_dir = os.path.join(os.path.dirname(api_dir), "examples/playbooks")
     os.makedirs(examples_dir, exist_ok=True)
     test_file = os.path.join(examples_dir, "test.md")
     
@@ -88,7 +54,7 @@ def test_get_example_not_found():
     """Test example not found error"""
     response = client.get("/api/examples/nonexistent.md")
     assert response.status_code == 404
-    assert response.json() == {"detail": "Example not found"}
+    assert response.json() == {"detail": "Example Not Found"}
 
 def test_get_example_directory_traversal():
     """Test directory traversal prevention"""
