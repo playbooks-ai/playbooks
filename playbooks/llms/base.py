@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Iterator
 
 class BaseLLM(ABC):
     """Base class for LLM implementations"""
@@ -12,4 +12,9 @@ class BaseLLM(ABC):
     @abstractmethod
     def generate(self, prompt: str, **kwargs) -> str:
         """Generate response from the LLM"""
-        pass 
+        pass
+
+    @abstractmethod
+    def generate_stream(self, prompt: str, **kwargs) -> Iterator[str]:
+        """Generate streaming response from the LLM"""
+        pass
