@@ -35,6 +35,7 @@ export default function Playground({ className = '' }: PlaygroundProps) {
 
   const runPlaybook = async () => {
     setLoading(true);
+    setResult('');
     try {
       const response = await fetch(`${API_URL}/api/run-playbook`, {
         method: 'POST',
@@ -44,11 +45,30 @@ export default function Playground({ className = '' }: PlaygroundProps) {
         body: JSON.stringify({
           content,
           llm_provider: 'anthropic',
+          stream: true,
         }),
       });
       
-      const data = await response.json();
-      setResult(data.result);
+      if (response.headers.get('content-type')?.includes('text/plain')) {
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('No reader available');
+        }
+
+        const decoder = new TextDecoder();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          if (chunk.trim()) {
+            setResult(prev => prev + chunk);
+          }
+        }
+      } else {
+        const data = await response.json();
+        setResult(data.result);
+      }
     } catch (error) {
       setResult('Error running playbook: ' + (error as Error).message);
     } finally {
@@ -74,7 +94,7 @@ export default function Playground({ className = '' }: PlaygroundProps) {
         <div>
           <h3 className="text-2xl font-semibold mb-4">This is an AI Agent running the above playbook</h3>
           <div className="h-[400px] w-full border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-gray-50 dark:bg-gray-900 overflow-auto">
-            <pre className="whitespace-pre-wrap font-mono text-sm">
+            <pre className="whitespace-pre-wrap font-mono text-sm break-words">
               {result || 'Output will appear here...'}
             </pre>
           </div>

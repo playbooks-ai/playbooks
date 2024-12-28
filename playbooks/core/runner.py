@@ -1,4 +1,4 @@
-from typing import Optional, Union, Iterator
+from typing import Optional, Union, Iterator, AsyncIterator
 from playbooks.llms.base import BaseLLM
 from playbooks.llms.openai import OpenAILLM
 from playbooks.llms.anthropic import AnthropicLLM
@@ -34,9 +34,15 @@ class PlaybookRunner:
             return "No LLM configured"
             
         if stream:
-            return self.llm.generate_stream(playbooks, **kwargs)
-        else:
-            return self.llm.generate(playbooks, **kwargs)
+            return self.stream(playbooks, **kwargs)
+        return self.llm.generate(playbooks, **kwargs)
+
+    async def stream(self, playbooks: str, **kwargs) -> AsyncIterator[str]:
+        """
+        Run playbooks using the configured LLM with streaming enabled
+        """
+        for chunk in self.llm.generate_stream(playbooks, **kwargs):
+            yield chunk
 
 def run(playbooks: str, **kwargs) -> str:
     """Convenience function to run playbooks"""
