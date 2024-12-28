@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from playbooks.core.runner import PlaybookRunner
+from playbooks.config import DEFAULT_MODEL
 from typing import Optional, Dict, Any
 import os
 import yaml
@@ -24,7 +25,7 @@ app.add_middleware(
 
 class PlaybookRequest(BaseModel):
     content: str
-    llm_provider: Optional[str] = "anthropic"
+    model: Optional[str] = DEFAULT_MODEL
     llm_options: Optional[Dict[str, Any]] = None
     stream: Optional[bool] = False
 
@@ -34,11 +35,11 @@ class PlaybookResponse(BaseModel):
 @app.post("/api/run-playbook", response_model=PlaybookResponse)
 async def run_playbook(request: PlaybookRequest):
     try:
-        runner = PlaybookRunner(llm=request.llm_provider)
+        runner = PlaybookRunner(model=request.model)
         
         if request.stream:
             async def stream_response():
-                async for chunk in runner.stream(request.content, user_input="Hello"):
+                async for chunk in runner.stream(request.content):
                     if chunk.strip():
                         yield chunk
 
@@ -47,7 +48,7 @@ async def run_playbook(request: PlaybookRequest):
                 media_type="text/plain"
             )
         else:
-            result = runner.run(request.content, user_input="Hello")
+            result = await runner.run(request.content)
             return PlaybookResponse(result=result)
             
     except Exception as e:

@@ -1,50 +1,48 @@
 from typing import Optional, Union, Iterator, AsyncIterator
-from playbooks.llms.base import BaseLLM
-from playbooks.llms.openai import OpenAILLM
-from playbooks.llms.anthropic import AnthropicLLM
-from playbooks.llms.vertexai import VertexAILLM
+from litellm import acompletion
+from playbooks.config import DEFAULT_MODEL
 
 class PlaybookRunner:
-    def __init__(self, llm: Optional[Union[BaseLLM, str]] = None, **kwargs):
+    def __init__(self, model: str = DEFAULT_MODEL, api_key: Optional[str] = None, **kwargs):
         """
-        Initialize runner with an LLM client
+        Initialize runner with a model
         
         Args:
-            llm: LLM client instance or string identifier ('openai', 'anthropic', etc)
-            **kwargs: Additional arguments passed to LLM client
+            model: Model identifier (e.g. 'gpt-4', 'claude-3', etc)
+            api_key: Optional API key (can also be set via env vars)
+            **kwargs: Additional arguments passed to completion
         """
-        if isinstance(llm, str):
-            llm = self._get_llm_client(llm, **kwargs)
-            
-        self.llm = llm
+        self.model = model
+        self.api_key = api_key
+        self.kwargs = kwargs
         
-    def _get_llm_client(self, provider: str, **kwargs) -> BaseLLM:
-        providers = {
-            'openai': OpenAILLM,
-            'anthropic': AnthropicLLM,
-            'vertexai': VertexAILLM
-        }
-        if provider not in providers:
-            raise ValueError(f"Unsupported LLM provider: {provider}")
-        return providers[provider](**kwargs)
-        
-    def run(self, playbooks: str, stream: bool = False, **kwargs) -> Union[str, Iterator[str]]:
-        """Run playbooks using the configured LLM"""
-        if not self.llm:
-            return "No LLM configured"
-            
+    async def run(self, playbooks: str, stream: bool = False, **kwargs) -> str:
+        """Run playbooks using the configured model"""
         if stream:
             return self.stream(playbooks, **kwargs)
-        return self.llm.generate(playbooks, **kwargs)
+            
+        response = await acompletion(
+            model=self.model,
+            messages=[{"role": "user", "content": playbooks}],
+            api_key=self.api_key,
+            **{**self.kwargs, **kwargs}
+        )
+        return response.choices[0].message.content
 
     async def stream(self, playbooks: str, **kwargs) -> AsyncIterator[str]:
-        """
-        Run playbooks using the configured LLM with streaming enabled
-        """
-        for chunk in self.llm.generate_stream(playbooks, **kwargs):
-            yield chunk
+        """Run playbooks using the configured model with streaming enabled"""
+        response = await acompletion(
+            model=self.model,
+            messages=[{"role": "user", "content": playbooks}],
+            api_key=self.api_key,
+            stream=True,
+            **{**self.kwargs, **kwargs}
+        )
+        async for chunk in response:
+            if chunk.choices[0].delta.content:
+                yield chunk.choices[0].delta.content
 
-def run(playbooks: str, **kwargs) -> str:
+async def run(playbooks: str, **kwargs) -> str:
     """Convenience function to run playbooks"""
     runner = PlaybookRunner(**kwargs)
-    return runner.run(playbooks) 
+    return await runner.run(playbooks)
