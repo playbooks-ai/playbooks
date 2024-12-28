@@ -1,74 +1,92 @@
 import Image from "next/image";
 import Link from "next/link";
+import Playground from '@/components/Playground/Playground';
 
 export default function Home() {
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <h1 className="text-6xl font-bold mb-4">Playbooks</h1>
-        <p className="text-xl mb-8 text-gray-600 dark:text-gray-300 max-w-2xl text-center sm:text-left">
-          A powerful framework for creating and running AI-powered playbooks
-        </p>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <Link
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="/playground"
-          >
-            Try Playground
-          </Link>
-          <Link
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="/docs"
-          >
-            Read Documentation
-          </Link>
+    <main className="flex min-h-screen flex-col items-center justify-between p-4 md:p-12">
+      {/* Hero Section */}
+      <div className="w-full max-w-5xl">
+        <div className="flex flex-col items-center text-center mb-16">
+          <h1 className="text-5xl md:text-6xl font-bold mb-6">
+            Train AI Agents Like Humans
+          </h1>
+          <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl">
+            Create AI agents using human-readable and LLM-executed playbooks. Simple, flexible, and powerful.
+          </p>
+          <div className="flex gap-4">
+            {/* <Link
+              href="/playground"
+              className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            >
+              Try Playground
+            </Link> */}
+            <Link
+              href="/docs"
+              className="px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600"
+            >
+              Read Docs
+            </Link>
+            <a
+              className="px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600 flex items-center gap-2 text-gray-500 dark:text-white"
+              href="https://github.com/playbooks-ai/playbooks"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Image
+                src="/github-mark.svg"
+                alt="GitHub"
+                width={20}
+                height={20}
+                priority
+                className="dark:hidden"
+              />
+              <Image
+                src="/github-mark-white.svg"
+                alt="GitHub"
+                width={20}
+                height={20}
+                priority
+                className="hidden dark:block"
+              />
+              GitHub
+            </a>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-12">
-          <div className="p-6 border border-gray-200 dark:border-gray-800 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">Easy to Use</h3>
-            <p className="text-gray-600 dark:text-gray-400">
-              Write playbooks in simple YAML format and let AI do the heavy lifting
-            </p>
-          </div>
-          <div className="p-6 border border-gray-200 dark:border-gray-800 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">Powerful</h3>
-            <p className="text-gray-600 dark:text-gray-400">
-              Leverage state-of-the-art language models for complex tasks
-            </p>
-          </div>
-          <div className="p-6 border border-gray-200 dark:border-gray-800 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">Flexible</h3>
-            <p className="text-gray-600 dark:text-gray-400">
-              Support for multiple LLM providers and custom integrations
-            </p>
+        {/* Quick Start Demo */}
+        <div className="m-auto mb-16 max-w-6xl">
+          <h2 className="text-3xl font-bold mb-8 text-center"></h2>
+          <Playground className="max-w-6xl mx-auto" />
+        </div>
+
+        {/* Why Playbooks */}
+        <div className="mb-16">
+          <h2 className="text-3xl font-bold mb-8">Why Playbooks?</h2>
+          <div className="grid md:grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <p className="text-lg">
+                It all started with a simple question - Why can't we train AI agents just like we train human agents using training material and playbooks?
+              </p>
+              <p className="text-lg">
+                One of the biggest challenges in building AI agents today is specifying and modifying their behavior. Code is too complex for business users, UI builders lack flexibility, and LLMs struggle with complex prompts.
+              </p>
+            </div>
+            <div className="space-y-4">
+              <p className="text-lg">
+                Playbooks is the perfect middle ground. Write agent behavior in easily readable English-like pseudocode, while the framework handles:
+              </p>
+              <ul className="list-disc list-inside space-y-2 text-lg">
+                <li>Step-by-step control flow</li>
+                <li>Internal and external tool integration</li>
+                <li>Complex behaviors with multiple playbooks</li>
+                <li>Multi-agent communication</li>
+                <li>Event-triggered automation</li>
+              </ul>
+            </div>
           </div>
         </div>
-      </main>
-
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <Link
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="/docs"
-        >
-          Documentation
-        </Link>
-        <Link
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="/playground"
-        >
-          Playground
-        </Link>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://github.com/yourusername/playbooks"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          GitHub →
-        </a>
-      </footer>
-    </div>
+      </div>
+    </main>
   );
 }
