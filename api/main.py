@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from playbooks.core.runner import PlaybookRunner
+from playbooks.core.runner import PlaybooksRunner
 from playbooks.config import DEFAULT_MODEL
 from typing import Optional, Dict, Any
 import os
@@ -35,7 +35,7 @@ class PlaybookResponse(BaseModel):
 @app.post("/api/run-playbook", response_model=PlaybookResponse)
 async def run_playbook(request: PlaybookRequest):
     try:
-        runner = PlaybookRunner(model=request.model)
+        runner = PlaybooksRunner(model=request.model)
         
         if request.stream:
             async def stream_response():

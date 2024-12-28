@@ -2,7 +2,7 @@ from typing import Optional, Union, Iterator, AsyncIterator
 from litellm import acompletion
 from playbooks.config import DEFAULT_MODEL
 
-class PlaybookRunner:
+class PlaybooksRunner:
     def __init__(self, model: str = DEFAULT_MODEL, api_key: Optional[str] = None, **kwargs):
         """
         Initialize runner with a model
@@ -44,5 +44,5 @@ class PlaybookRunner:
 
 async def run(playbooks: str, **kwargs) -> str:
     """Convenience function to run playbooks"""
-    runner = PlaybookRunner(**kwargs)
+    runner = PlaybooksRunner(**kwargs)
     return await runner.run(playbooks)
