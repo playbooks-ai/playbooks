@@ -1,5 +1,5 @@
 .gradientBackground {
-  position: fixed;
+  position: absolute;
   top: 0;
   left: 0;
   right: 0;
@@ -7,6 +7,7 @@
   z-index: -1;
   overflow: hidden;
   background-color: #000000;
+  min-height: 100vh;
 }
 
 .gradientBackground::before,
@@ -63,11 +64,11 @@
   }
 
   25% {
-    transform: translate(-15%, 55%) scale(0.9) rotate(-90deg);
+    transform: translate(15%, -15%) scale(0.9) rotate(-90deg);
   }
 
   50% {
-    transform: translate(-25%, -15%) scale(2.2) rotate(-180deg);
+    transform: translate(-25%, 15%) scale(2.2) rotate(-180deg);
   }
 
   75% {
