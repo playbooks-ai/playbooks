@@ -9,7 +9,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./api:/app/api
+      - ./website/api:/app/api
       - ./python:/app/python
       - ./.env:/app/.env
     environment:
@@ -28,8 +28,8 @@ services:
     ports:
       - "3000:3000"
     volumes:
-      - ./website:/app/website
-      - ./website/node_modules:/app/node_modules
+      - ./website/frontend:/app/website/frontend
+      - ./node_modules:/app/node_modules
     environment:
       - NODE_ENV=development
     env_file:

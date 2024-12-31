@@ -4,8 +4,8 @@ FROM node:20-slim as builder
 WORKDIR /app
 
 # Copy package files
-COPY website/package*.json ./
-COPY website/yarn.lock ./
+COPY website/frontend/package*.json ./
+COPY website/frontend/yarn.lock ./
 
 # Install dependencies
 RUN yarn install --frozen-lockfile
@@ -17,7 +17,7 @@ FROM builder as development
 ENV NODE_ENV=development
 
 # Mount points for volumes
-VOLUME ["/app/website", "/app/node_modules"]
+VOLUME ["/app/website/frontend", "/app/node_modules"]
 
 # Start development server
 CMD ["yarn", "dev"]
@@ -26,7 +26,7 @@ CMD ["yarn", "dev"]
 FROM builder as production-build
 
 # Copy application code
-COPY website .
+COPY website/frontend .
 
 # Build application
 RUN yarn build
