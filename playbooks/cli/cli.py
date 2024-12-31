@@ -8,7 +8,7 @@ from rich.live import Live
 from typing import Optional, List
 
 from playbooks.core.loader import load
-from playbooks.core.runner import PlaybooksRunner
+from playbooks.core.runtime import RuntimeConfig, SingleThreadedPlaybooksRuntime
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -58,26 +58,26 @@ def chat(
         playbook_paths = playbook_paths[1:]
         combined_playbooks = load(playbook_paths)
         
-        # Initialize runner with selected LLM
-        runner = PlaybooksRunner(
-            llm=llm,
-            api_key=api_key,
-            model=model
+        # Initialize runtime with selected LLM
+        config = RuntimeConfig(
+            model=model,
+            api_key=api_key
         )
+        runtime = SingleThreadedPlaybooksRuntime(config)
         
         # Start chat loop
         while True:
-            user_input = Prompt.ask("\nYou")
-            if user_input.lower() in ("exit", "quit"):
+            user_input = Prompt.ask("\n[blue]User[/blue]")
+            if user_input.lower() in ["exit", "quit"]:
                 break
                 
             try:
                 console.print("\n[yellow]Agent: [/yellow]")
                 if stream:
-                    response_stream = runner.run(combined_playbooks, user_input=user_input, stream=True)
+                    response_stream = runtime.stream(combined_playbooks, user_input=user_input)
                     print_streaming_markdown(response_stream)
                 else:
-                    response = runner.run(combined_playbooks, user_input=user_input)
+                    response = runtime.run(combined_playbooks, user_input=user_input)
                     print_markdown(response)
             except Exception as e:
                 console.print(f"\n[red]Error:[/red] {str(e)}")
