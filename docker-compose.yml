@@ -5,23 +5,44 @@ services:
     build:
       context: .
       dockerfile: docker/api.Dockerfile
+      target: development
     ports:
       - "8000:8000"
     volumes:
-      - .:/app
+      - ./api:/app/api
+      - ./python:/app/python
+      - ./.env:/app/.env
     environment:
       - PYTHONPATH=/app
+      - ENVIRONMENT=development
     env_file:
       - .env
+    depends_on:
+      - redis
 
   web:
     build:
       context: .
       dockerfile: docker/web.Dockerfile
+      target: development
     ports:
       - "3000:3000"
     volumes:
-      - ./website:/app
-      - /app/node_modules
+      - ./website:/app/website
+      - ./website/node_modules:/app/node_modules
+    environment:
+      - NODE_ENV=development
+    env_file:
+      - .env
     depends_on:
       - api
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:

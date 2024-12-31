@@ -1,11 +1,11 @@
 [tool.poetry]
 name = "playbooks"
 version = "0.1.0"
+license = {file = "LICENSE-CODE"}
 description = "A framework for creating AI agents using human-readable playbooks"
-authors = ["Your Name <your.email@example.com>"]
-license = "MIT"
+authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 readme = "README.md"
-packages = [{include = "playbooks"}]
+packages = [{include = "src/playbooks"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
