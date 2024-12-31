@@ -4,9 +4,11 @@ from playbooks.core.loader import load
 
 @pytest.fixture(autouse=True)
 def change_test_dir(request):
-    # Get the project root directory (4 levels up from test file)
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../.."))
-    os.chdir(project_root)
+    # Get the directory containing the test file
+    test_dir = os.path.dirname(__file__)
+    # Get the playbooks package directory (2 levels up from test file)
+    package_dir = os.path.abspath(os.path.join(test_dir, ".."))
+    os.chdir(package_dir)
 
 def test_load_single_file():
     content = load(["examples/playbooks/hello.md"])

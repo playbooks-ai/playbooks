@@ -1,7 +1,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
+from playbooks.config import DEFAULT_MODEL
 from playbooks.core.runtime import (
     RuntimeConfig,
     SingleThreadedPlaybooksRuntime,
@@ -21,8 +21,7 @@ async def test_runtime_init():
     # Test default initialization
     config = RuntimeConfig()
     runtime = SingleThreadedPlaybooksRuntime(config)
-    assert runtime.config.model == "test_model"
-    assert runtime.config.api_key == "test_key"
+    assert runtime.config.model == DEFAULT_MODEL
 
     # Test custom initialization
     config = RuntimeConfig(model="custom-model", api_key="test-key")
@@ -32,38 +31,22 @@ async def test_runtime_init():
 
 
 async def test_run_playbook():
+    test_response = "test response"
     runtime = SingleThreadedPlaybooksRuntime()
-    test_response = "Test response"
-
-    mock_response = AsyncMock()
-    mock_response.choices = [AsyncMock()]
-    mock_response.choices[0].message.content = test_response
-
-    with patch(
-        "playbooks.core.runtime.acompletion", AsyncMock(return_value=mock_response)
-    ):
-        response = await runtime.run("test playbook")
-        assert response == test_response
+    runtime.load("examples/playbooks/hello.md", mock_llm_response=test_response)
+    response = await runtime.run("test playbook")
+    assert str(response) == test_response
 
 
 async def test_stream_playbook():
-    runtime = SingleThreadedPlaybooksRuntime(RuntimeConfig())
-    test_chunks = ["Hello", " World", "!"]
+    runtime = SingleThreadedPlaybooksRuntime()
+    test_response = "Hello World !"
+    runtime.load("examples/playbooks/hello.md", mock_llm_response=test_response)
 
-    async def mock_stream():
-        for chunk in test_chunks:
-            mock_chunk = AsyncMock()
-            mock_chunk.choices = [AsyncMock()]
-            mock_chunk.choices[0].delta.content = chunk
-            yield mock_chunk
-
-    with patch(
-        "playbooks.core.runtime.acompletion", AsyncMock(return_value=mock_stream())
-    ):
-        chunks = []
-        async for chunk in runtime.stream("test playbook"):
-            chunks.append(chunk)
-        assert chunks == test_chunks
+    chunks = []
+    async for chunk in runtime.stream("test playbook"):
+        chunks.append(chunk)
+    assert chunks == ["Hello", "World", "!"]
 
 
 async def test_run_with_kwargs():

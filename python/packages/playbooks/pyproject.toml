@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "playbooks"
 version = "0.1.0"
-license = {file = "LICENSE-CODE"}
+license = "LICENSE-CODE"
 description = "A framework for creating AI agents using human-readable playbooks"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 readme = "README.md"
