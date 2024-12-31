@@ -1,4 +1,14 @@
-# Playbooks
+[![GitHub - License](https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github&style=plastic&color=green)](https://github.com/playbooks-ai/playbooks/blob/master/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/playbooks?logo=pypi&style=plastic&color=blue)](https://pypi.org/project/playbooks/)
+[![Documentation](https://img.shields.io/badge/Docs-GitHub-blue?logo=github&style=plastic&color=red)](https://github.com/playbooks-ai/playbooks/tree/master/docs)
+[![Python Version](https://img.shields.io/badge/Python-3.12-blue?style=plastic&logo=python)](https://www.python.org/)
+[![Homepage](https://img.shields.io/badge/Homepage-playbooks.ai-green?style=plastic&logo=google-chrome)](https://runplaybooks.ai/)
+
+
+<div align="center">
+   <img src="./website/frontend/public/playbooks-logo.png" alt="Playbooks Logo" width="300"/>
+</div>
+
 A framework for creating AI agents using human-readable and LLM-executed playbooks.
 
 ## Quick start
