@@ -15,6 +15,9 @@ google-cloud-aiplatform = "^1.38.1"
 typer = ">=0.9.0,<1.0.0"
 rich = "^13.7.0"
 python-dotenv = "^1.0.1"
+autogen-core = "0.4.0.dev11"
+litellm = "^1.56.3"
+md2py = "^0.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
@@ -22,6 +25,7 @@ pytest-cov = "^4.1.0"
 black = "^23.7.0"
 ruff = "^0.1.7"
 pyright = "^1.1.373"
+pytest-asyncio = "^0.21.1"
 
 [build-system]
 requires = ["poetry-core"]
