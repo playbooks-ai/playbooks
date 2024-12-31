@@ -1,21 +1,38 @@
-[![GitHub - License](https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github&style=plastic&color=green)](https://github.com/playbooks-ai/playbooks/blob/master/LICENSE)
-[![PyPI](https://img.shields.io/pypi/v/playbooks?logo=pypi&style=plastic&color=blue)](https://pypi.org/project/playbooks/)
-[![Documentation](https://img.shields.io/badge/Docs-GitHub-blue?logo=github&style=plastic&color=red)](https://github.com/playbooks-ai/playbooks/tree/master/docs)
-[![Python Version](https://img.shields.io/badge/Python-3.12-blue?style=plastic&logo=python)](https://www.python.org/)
-[![Homepage](https://img.shields.io/badge/Homepage-playbooks.ai-green?style=plastic&logo=google-chrome)](https://runplaybooks.ai/)
+<div align="center">
+  <img src="./website/frontend/public/playbooks-logo-only.png" alt="Logo" width="300">
+  <h1 align="center">Playbooks AI</h1>
+</div>
 
 
 <div align="center">
-   <img src="./website/frontend/public/playbooks-logo.png" alt="Playbooks Logo" width="300"/>
+   <a href="https://github.com/playbooks-ai/playbooks/blob/master/LICENSE">
+      <img src="https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github&style=plastic&color=green" alt="GitHub License"></a>
+   
+   <a href="https://pypi.org/project/playbooks/">
+      <img src="https://img.shields.io/pypi/v/playbooks?logo=pypi&style=plastic&color=blue" alt="PyPI Version"></a>
+   
+   <a href="https://github.com/playbooks-ai/playbooks/tree/master/docs">
+      <img src="https://img.shields.io/badge/Docs-GitHub-blue?logo=github&style=plastic&color=red" alt="Documentation"></a>
+   <br>
+   <a href="https://www.python.org/">
+      <img src="https://img.shields.io/badge/Python-3.12-blue?style=plastic&logo=python" alt="Python Version"></a>
+   
+   <a href="https://runplaybooks.ai/">
+      <img src="https://img.shields.io/badge/Homepage-runplaybooks.ai-green?style=plastic&logo=google-chrome" alt="Homepage"></a>
 </div>
 
-A framework for creating AI agents using human-readable and LLM-executed playbooks.
+<div align="center">
+  <h2 align="center">Train AI Agents Like Humans</h2>
+</div>
+
+Playbooks AI is a framework for creating AI agents using human-readable and LLM-executed playbooks.
 
 ## Quick start
 
-It all starts with a playbook. Here is an example playbook -
+It all starts with a playbook! It is easy to see playbooks in action at [runplaybooks.ai](https://runplaybooks.ai).
 
-- Create hello.md with the following playbook
+It is also easy to try out playbooks in a development setup.
+- Create an example playbooks in hello.md
 
 ```
 # HelloWorld
