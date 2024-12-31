@@ -1,0 +1,2 @@
+api: cd api && uvicorn main:app --reload
+web: cd frontend && npm run dev -- --port 3000
