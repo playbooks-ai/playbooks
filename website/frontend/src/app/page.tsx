@@ -1,6 +1,50 @@
 import Image from "next/image";
 import Link from "next/link";
 import Playground from '@/components/Playground/Playground';
+import { Metadata } from 'next';
+
+export const metadata: Metadata = {
+  title: 'Playbooks AI - Train AI Agents Like Humans',
+  description: 'Create AI agents using human-readable and LLM-executed playbooks. Simple, flexible, and powerful platform for training and deploying AI agents.',
+  keywords: ['AI agents', 'LLM', 'playbooks', 'artificial intelligence', 'machine learning', 'training'],
+  openGraph: {
+    title: 'Playbooks AI - Train AI Agents Like Humans',
+    description: 'Create AI agents using human-readable and LLM-executed playbooks. Simple, flexible, and powerful platform for training and deploying AI agents.',
+    url: 'https://playbooks.ai',
+    siteName: 'Playbooks AI',
+    images: [
+      {
+        url: '/playbooks-logo.png',
+        width: 600,
+        height: 600,
+        alt: 'Playbooks AI Logo',
+      }
+    ],
+    locale: 'en_US',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'Playbooks AI - Train AI Agents Like Humans',
+    description: 'Create AI agents using human-readable and LLM-executed playbooks. Simple, flexible, and powerful platform for training and deploying AI agents.',
+    images: ['/playbooks-logo.png'],
+  },
+  robots: {
+    index: true,
+    follow: true,
+  },
+  viewport: {
+    width: 'device-width',
+    initialScale: 1,
+  },
+  icons: {
+    icon: [
+      { url: '/playbooks-icon.png', sizes: '600x600' },
+      { url: '/playbooks-logo.png', sizes: '600x600' }
+    ],
+    apple: '/playbooks-logo.png',
+  },
+};
 
 export default function Home() {
   return (
@@ -8,6 +52,14 @@ export default function Home() {
       {/* Hero Section */}
       <div className="w-full max-w-5xl">
         <div className="flex flex-col items-center text-center mb-16">
+          <Image
+            src="/playbooks-logo.png"
+            alt="Playbooks AI Logo"
+            width={128}
+            height={128}
+            priority
+            className="mb-8"
+          />
           <h1 className="text-5xl md:text-6xl font-bold mb-6">
             Train AI Agents Like Humans
           </h1>
