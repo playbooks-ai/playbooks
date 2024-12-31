@@ -5,7 +5,7 @@ license = "LICENSE-CODE"
 description = "A framework for creating AI agents using human-readable playbooks"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 readme = "README.md"
-packages = [{include = "src/playbooks"}]
+packages = [{include = "playbooks", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.12"
