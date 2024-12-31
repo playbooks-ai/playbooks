@@ -14,10 +14,13 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 
 app = FastAPI(title="Playbooks API")
 
-# Configure CORS for development
+# Configure CORS for development and production
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Next.js development server
+    allow_origins=[
+        "http://localhost:3000",  # Next.js development server
+        "https://playbooks-frontend.onrender.com",  # Production frontend
+    ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
