@@ -8,6 +8,12 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: DEFAULT_MODEL
+        value: claude-3-5-sonnet-20241022
+      - key: DEBUG
+        value: "true"
 
   # Frontend Static Site
   - type: web
