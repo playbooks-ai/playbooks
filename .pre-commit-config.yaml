@@ -5,7 +5,7 @@ repos:
       - id: ruff
         name: Run Linter Check (Ruff)
         args: [ --fix ]
-        files: ^(playbooks|tests|examples)/
+        files: ^(python|examples)/
       - id: ruff-format
         name: Run Formatter (Ruff)
   - repo: https://github.com/RobertCraigie/pyright-python
