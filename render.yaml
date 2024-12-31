@@ -6,7 +6,7 @@ services:
     region: oregon
     branch: master
     repo: https://github.com/amolk/playbooks
-    runtime: python3
+    runtime: python
     buildCommand: cd website/api && pip install -r requirements.txt
     startCommand: cd website/api && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
