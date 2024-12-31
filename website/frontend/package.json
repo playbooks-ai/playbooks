@@ -9,18 +9,18 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@monaco-editor/react": "^4.6.0",
-    "next": "15.1.2",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "@monaco-editor/react": "*",
+    "next": "*",
+    "react": "*",
+    "react-dom": "*"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "*",
+    "@types/react-dom": "*",
     "eslint": "^9",
-    "eslint-config-next": "15.1.2",
+    "eslint-config-next": "*",
     "postcss": "^8",
     "tailwindcss": "^3.4.1",
     "typescript": "^5"
