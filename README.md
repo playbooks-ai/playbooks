@@ -61,122 +61,67 @@ If you want to help, checkout some of the issues marked as `good-first-issue` or
    cd playbooks
    ```
 
-2. **Install Dependencies**
+2. **Environment Variables**
+   Set up environment variables for the playbooks package (`python/packages/playbooks/.env`):
    ```bash
-   # Install Python dependencies
-   pip install -r api/requirements.txt
+   # LLM Configuration
+   DEFAULT_MODEL=claude-3-5-sonnet-20241022
+   ANTHROPIC_API_KEY=your-anthropic-api-key
+   OPENAI_API_KEY=your-openai-api-key  # Optional
+
+   # API Configuration
+   PORT=8000
+   HOST=0.0.0.0
+   ```
+3. **playbooks Python package Setup**
+   ```bash
+   # Create and activate a virtual environment (recommended)
+   python -m venv venv # or conda create -n venv python, or pyenv virtualenv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+   
+   # Install playbooks Python package in development mode
+   cd python/packages/playbooks
+   pip install poetry
+   poetry install
+   cd ../../..
+   ```
+
+4. **Website Setup**
+   ```bash
+   # Install foreman (process manager)
+   sudo gem install foreman
+   
+   # Set up API
+   cd website/api
    pip install -r requirements.txt
-
-   # Install Node.js dependencies for the website
-   cd website
-   npm install
    cd ..
-   ```
+   
+   # Set up Frontend
+   cd frontend
+   npm install
+   cd ../..
 
-3. **Environment Variables**
-   Create a `.env` file in the root directory:
-   ```bash
-   ANTHROPIC_API_KEY=your_api_key_here
-   ```
-
-4. **Docker Setup (Optional)**
-   ```bash
-   # Build and start containers
-   docker-compose up --build
-   ```
-
-### Running the Development Server
-
-1. **Start the FastAPI Server**
-   ```bash
-   cd playbooks
-   uvicorn api.main:app --reload
-   ```
-
-2. **Start the Next.js Website**
-   ```bash
+   # Run the website
    cd website
-   npm run dev
+   foreman start
    ```
 
-The API will be available at `http://localhost:8000` and the website at `http://localhost:3000`.
-
+   For detailed website development instructions, see `website/README.md`.
+   
 ### Testing
 
-We maintain high test coverage to ensure code quality. Here's what you need to know:
+We use pytest for testing. Here's how to run the tests:
 
-1. **Running Tests**
+1. **Run playbooks Python Package Tests**
    ```bash
-   # Run all tests
+   cd python/packages/playbooks
    pytest
-
-   # Run specific test file
-   pytest tests/test_runner.py
-
-   # Run with coverage report
-   pytest --cov=playbooks tests/ --cov-report=term-missing
    ```
 
-2. **Test Guidelines**
-   - Write tests for all new features
-   - Maintain test coverage above 80%
-   - Use meaningful test names that describe the behavior being tested
-   - Mock external dependencies (e.g., LLM API calls)
-
-3. **Coverage Requirements**
-   We use `pytest-cov` to track code coverage. Aim for 80+% coverage.
-
-4. **Writing Tests**
-   - Use `pytest` fixtures for setup/teardown
-   - Use `pytest.mark.parametrize` for testing multiple inputs
-   - Mock LLM API calls using `pytest-mock`
-   ```python
-   def test_anthropic_generate(mocker):
-       mock_client = mocker.patch('anthropic.Anthropic')
-       mock_client.return_value.messages.create.return_value = ...
-       llm = AnthropicLLM(api_key="test")
-       result = llm.generate("test prompt")
-       assert result == expected_output
-   ```
-
-### Pull Request Process
-
-1. **Create a Branch**
+2. **Run Website API Tests**
    ```bash
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Make Your Changes**
-   - Follow the existing code style
-   - Add/update tests as needed
-   - Update documentation if required
-
-3. **Commit Guidelines**
-   - Use clear, descriptive commit messages
-   - Reference issue numbers in commit messages
-   - Keep commits focused and atomic
-
-4. **Submit PR**
-   - Create a pull request against the `main` branch
-   - Fill out the PR template completely
-   - Add relevant labels
-   - Request review from maintainers
-
-5. **PR Checklist**
-   - [ ] Tests pass
-   - [ ] Code follows style guidelines
-   - [ ] Documentation is updated
-   - [ ] Changes are tested locally
-   - [ ] PR description explains changes and motivation
-   - [ ] Test coverage is maintained or improved
-
-### Code Style Guidelines
-
-- Follow PEP 8 for Python code
-- Use type hints for Python functions
-- Follow React/Next.js best practices for frontend code
-- Document public APIs and complex logic
-- Keep functions focused and under 50 lines when possible
+   cd website/api
+   pytest
 
 ### Getting Help
 
