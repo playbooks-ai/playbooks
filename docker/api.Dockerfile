@@ -9,7 +9,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy only requirements files first
-COPY api/requirements.txt api/requirements.txt
+COPY website/api/requirements.txt api/requirements.txt
 COPY python/requirements.txt python/requirements.txt
 
 # Install dependencies
@@ -20,7 +20,7 @@ RUN pip install --no-cache-dir -r api/requirements.txt \
 FROM builder as development
 
 # Copy the application code
-COPY api api/
+COPY website/api api/
 COPY python python/
 
 ENV PYTHONPATH=/app
