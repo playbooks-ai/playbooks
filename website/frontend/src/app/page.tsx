@@ -62,7 +62,7 @@ export default function Home() {
             priority
             className="mb-8"
           />
-          <h1 className="text-5xl md:text-6xl font-bold mb-6">
+          <h1 className="text-5xl md:text-6xl mb-6">
             Train AI Agents Like Humans
           </h1>
           <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl">
@@ -110,13 +110,13 @@ export default function Home() {
 
         {/* Quick Start Demo */}
         <div className="m-auto mb-16 max-w-6xl">
-          <h2 className="text-3xl font-bold mb-8 text-center"></h2>
+          <h2 className="text-3xl mb-8 text-center"></h2>
           <Playground className="max-w-6xl mx-auto" />
         </div>
 
         {/* Why Playbooks */}
         <div className="mb-16">
-          <h2 className="text-3xl font-bold mb-8">Why Playbooks?</h2>
+          <h2 className="text-3xl mb-8">Why Playbooks?</h2>
           <div className="grid md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <p className="text-lg">

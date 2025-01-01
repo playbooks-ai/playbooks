@@ -17,7 +17,7 @@
   width: 200%;
   height: 200%;
   background: radial-gradient(circle at center,
-      #373737 0%,
+      #e600ff32 0%,
       #232323 25%,
       transparent 50%);
   animation: moveGradient1 170s cubic-bezier(0.4, 0, 0.2, 1) infinite;
@@ -28,8 +28,8 @@
 
 .gradientBackground::after {
   background: radial-gradient(circle at center,
-      #464646 0%,
-      #191919 35%,
+      #00ff1a2d 0%,
+      #000000 35%,
       transparent 60%);
   animation: moveGradient2 90s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   opacity: 0.8;
@@ -41,7 +41,7 @@
   }
 
   25% {
-    transform: translate(25%, -15%) scale(1.2) rotate(90deg);
+    transform: translate(-25%, -65%) scale(2.2) rotate(90deg);
   }
 
   50% {
@@ -49,7 +49,7 @@
   }
 
   75% {
-    transform: translate(-15%, 15%) scale(1.1) rotate(270deg);
+    transform: translate(-15%, 35%) scale(0.1) rotate(270deg);
   }
 
   100% {
@@ -59,23 +59,23 @@
 
 @keyframes moveGradient2 {
   0% {
-    transform: translate(25%, 25%) scale(1.1) rotate(0deg);
+    transform: translate(25%, 25%) scale(2.1) rotate(0deg);
   }
 
   25% {
-    transform: translate(-15%, 25%) scale(0.9) rotate(-90deg);
+    transform: translate(-15%, 55%) scale(0.9) rotate(-90deg);
   }
 
   50% {
-    transform: translate(-25%, -15%) scale(1.2) rotate(-180deg);
+    transform: translate(-25%, -15%) scale(2.2) rotate(-180deg);
   }
 
   75% {
-    transform: translate(15%, -25%) scale(0.8) rotate(-270deg);
+    transform: translate(45%, -45%) scale(0.8) rotate(-270deg);
   }
 
   100% {
-    transform: translate(25%, 25%) scale(1.1) rotate(-360deg);
+    transform: translate(25%, 25%) scale(2.1) rotate(-360deg);
   }
 }
 
