@@ -5,17 +5,24 @@
 
 
 <div align="center">
-   <a href="https://github.com/playbooks-ai/playbooks/blob/master/LICENSE">
-      <img src="https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github&style=plastic&color=green" alt="GitHub License"></a>
-   
    <a href="https://pypi.org/project/playbooks/">
       <img src="https://img.shields.io/pypi/v/playbooks?logo=pypi&style=plastic&color=blue" alt="PyPI Version"></a>
+
+   <a href="https://www.python.org/">
+      <img src="https://img.shields.io/badge/Python-3.12-blue?style=plastic&logo=python" alt="Python Version"></a>
+
+  <a href="https://github.com/playbooks-ai/playbooks/blob/master/LICENSE">
+      <img src="https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github&style=plastic&color=green" alt="GitHub License"></a>   
    
    <a href="https://github.com/playbooks-ai/playbooks/tree/master/docs">
       <img src="https://img.shields.io/badge/Docs-GitHub-blue?logo=github&style=plastic&color=red" alt="Documentation"></a>
    <br>
-   <a href="https://www.python.org/">
-      <img src="https://img.shields.io/badge/Python-3.12-blue?style=plastic&logo=python" alt="Python Version"></a>
+
+   <a href="https://github.com/playbooks-ai/playbooks/actions/workflows/test.yml">
+      <img src="https://github.com/playbooks-ai/playbooks/actions/workflows/test.yml/badge.svg", alt="Test"></a>
+
+   <a href="https://github.com/playbooks-ai/playbooks/actions/workflows/lint.yml">
+      <img src="https://github.com/playbooks-ai/playbooks/actions/workflows/lint.yml/badge.svg", alt="Lint"></a>
    
    <a href="https://runplaybooks.ai/">
       <img src="https://img.shields.io/badge/Homepage-runplaybooks.ai-green?style=plastic&logo=google-chrome" alt="Homepage"></a>
