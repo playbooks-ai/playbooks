@@ -2,10 +2,6 @@ services:
   # Backend API Service
   - type: web
     name: playbooks-api
-    plan: free
-    region: oregon
-    branch: master
-    repo: https://github.com/amolk/playbooks
     runtime: python
     buildCommand: cd website/api && pip install -r requirements.txt
     startCommand: cd website/api && uvicorn main:app --host 0.0.0.0 --port $PORT
@@ -16,10 +12,6 @@ services:
   # Frontend Static Site
   - type: web
     name: playbooks-frontend
-    plan: free
-    region: oregon
-    branch: master
-    repo: https://github.com/amolk/playbooks
     runtime: node
     buildCommand: cd website/frontend && npm install && npm run build
     startCommand: cd website/frontend && npm start
