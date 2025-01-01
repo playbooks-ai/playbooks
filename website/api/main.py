@@ -5,10 +5,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
-
 from playbooks.config import DEFAULT_MODEL
 from playbooks.core.runtime import RuntimeConfig, SingleThreadedPlaybooksRuntime
+from pydantic import BaseModel
 
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
@@ -41,21 +40,21 @@ async def run_playbook(request: PlaybookRequest):
     try:
         config = RuntimeConfig(model=request.model)
         runtime = SingleThreadedPlaybooksRuntime(config)
-        
+
         if request.stream:
+
             async def stream_response():
-                async for chunk in runtime.stream(request.content, **(request.llm_options or {})):
+                async for chunk in runtime.stream(
+                    request.content, **(request.llm_options or {})
+                ):
                     if chunk.strip():
                         yield chunk
 
-            return StreamingResponse(
-                stream_response(),
-                media_type="text/plain"
-            )
+            return StreamingResponse(stream_response(), media_type="text/plain")
         else:
             result = await runtime.run(request.content, **(request.llm_options or {}))
             return PlaybookResponse(result=result)
-            
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -68,7 +67,8 @@ async def get_example(filename: str):
             raise HTTPException(status_code=400, detail="Invalid filename")
 
         examples_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)), "examples/playbooks"
+            os.path.dirname(os.path.dirname(__file__)),
+            "../python/packages/playbooks/examples/playbooks",
         )
         file_path = os.path.join(examples_dir, filename)
 
