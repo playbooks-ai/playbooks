@@ -1,0 +1,22 @@
+services:
+  # Backend API Service
+  - type: web
+    name: playbooks-api
+    runtime: python3.9
+    buildCommand: cd api && pip install -r requirements.txt
+    startCommand: cd api && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+
+  # Frontend Static Site
+  - type: web
+    name: playbooks-frontend
+    runtime: node
+    buildCommand: cd frontend && npm install && npm run build
+    startCommand: cd frontend && npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 16.x
+      - key: API_URL
+        value: https://playbooks-api.onrender.com
