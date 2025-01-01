@@ -20,3 +20,5 @@ services:
         value: 23.x
       - key: API_URL
         value: https://playbooks-api.onrender.com
+      - key: NEXT_PUBLIC_API_URL
+        value: https://playbooks-api.onrender.com
