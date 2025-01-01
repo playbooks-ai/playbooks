@@ -4,7 +4,7 @@ import secrets
 from base64 import b64encode
 
 from cryptography.fernet import Fernet
-from database import SessionLocal
+from database import SessionLocal, Base, engine
 from fastapi import Request, Response
 from models import UserSession
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
@@ -59,18 +59,31 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 encrypted_data = session_cookie.encode()
                 decrypted_data = fernet.decrypt(encrypted_data)
                 session_id = json.loads(decrypted_data)["session_id"]
-                session = (
-                    db.query(UserSession)
-                    .filter(UserSession.session_id == session_id)
-                    .first()
-                )
-                if session and session.is_valid():
-                    return session
+                try:
+                    # Ensure tables exist
+                    Base.metadata.create_all(bind=engine)
+                    session = (
+                        db.query(UserSession)
+                        .filter(UserSession.session_id == session_id)
+                        .first()
+                    )
+                    if session and session.is_valid():
+                        return session
+                except Exception as e:
+                    print(f"Database error: {e}")
+                    # Fall through to create new session
             except:
                 pass
 
         # Create new session
-        session = UserSession.create_new()
-        db.add(session)
-        db.commit()  # Commit immediately after adding
-        return session
+        try:
+            # Ensure tables exist
+            Base.metadata.create_all(bind=engine)
+            session = UserSession.create_new()
+            db.add(session)
+            db.commit()  # Commit immediately after adding
+            return session
+        except Exception as e:
+            print(f"Error creating session: {e}")
+            db.rollback()
+            raise

@@ -18,6 +18,9 @@ engine = create_engine(
     connect_args=(
         {"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {}
     ),
+    # Add pool settings for better connection handling
+    pool_pre_ping=True,  # Enable connection health checks
+    pool_recycle=3600,  # Recycle connections after 1 hour
 )
 
 # Create SessionLocal class

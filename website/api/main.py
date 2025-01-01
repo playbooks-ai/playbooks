@@ -13,7 +13,11 @@ from pydantic import BaseModel, ConfigDict
 from session import SessionMiddleware
 
 # Create database tables
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+except Exception as e:
+    print(f"Error creating database tables: {e}")
+    # Don't fail startup, tables will be created on first request
 
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
