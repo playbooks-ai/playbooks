@@ -65,7 +65,7 @@ export default function Home() {
           <h1 className="text-5xl md:text-6xl mb-6">
             Train AI Agents Like Humans
           </h1>
-          <p className="text-xl md:text-2xl text-gray-600 dark:text-gray-300 mb-8 max-w-3xl">
+          <p className="text-xl md:text-2xl mb-8 max-w-3xl">
             Create AI agents using human-readable and LLM-executed playbooks. Simple, flexible, and powerful.
           </p>
           <div className="flex gap-4">
@@ -82,7 +82,7 @@ export default function Home() {
               Read Docs
             </Link>
             <a
-              className="px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600 flex items-center gap-2 text-gray-500 dark:text-white"
+              className="px-6 py-3 border border-gray-300 dark:border-gray-700 rounded-lg hover:border-gray-400 dark:hover:border-gray-600 flex items-center gap-2"
               href="https://github.com/playbooks-ai/playbooks"
               target="_blank"
               rel="noopener noreferrer"
