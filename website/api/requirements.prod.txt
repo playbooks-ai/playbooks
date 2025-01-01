@@ -3,4 +3,4 @@ uvicorn>=0.24.0
 pydantic>=2.4.2
 python-dotenv>=1.0.0
 litellm>=0.28.0
-git+https://github.com/amolk/playbooks.git#egg=playbooks&subdirectory=python/packages/playbooks
+git+https://${GITHUB_TOKEN}@github.com/playbooks-ai/playbooks.git#egg=playbooks&subdirectory=python/packages/playbooks
