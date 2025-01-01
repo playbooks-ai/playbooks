@@ -20,6 +20,7 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",  # Next.js development server
         "https://playbooks-frontend.onrender.com",  # Production frontend
+        "https://runplaybooks.ai",  # Production domain
     ],
     allow_credentials=True,
     allow_methods=["GET", "POST"],
