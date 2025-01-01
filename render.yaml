@@ -7,7 +7,7 @@ services:
     startCommand: cd website/api && uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.0
+        value: 3.12.0
 
   # Frontend Static Site
   - type: web
