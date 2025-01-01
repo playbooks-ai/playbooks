@@ -66,7 +66,7 @@ export default function Home() {
           <div className="grid md:grid-cols-2 gap-8">
             <div className="space-y-4">
               <p className="text-lg">
-                It all started with a simple question - Why can't we train AI agents just like we train human agents using training material and playbooks?
+                It all started with a simple question - Why can&apos;t we train AI agents just like we train human agents using training material and playbooks?
               </p>
               <p className="text-lg">
                 One of the biggest challenges in building AI agents today is specifying and modifying their behavior. Code is too complex for business users, UI builders lack flexibility, and LLMs struggle with complex prompts.
