@@ -29,29 +29,63 @@ Playbooks AI is a framework for creating AI agents using human-readable and LLM-
 
 ## Quick start
 
-It all starts with a playbook! It is easy to see playbooks in action at [runplaybooks.ai](https://runplaybooks.ai).
+3 easy ways to try out playbooks:
 
-It is also easy to try out playbooks in a development setup.
-- Create an example playbooks in hello.md
+1. Visit [runplaybooks.ai](https://runplaybooks.ai) and try out the demo playground
 
-```
-# HelloWorld
-
-## Trigger
-When the user starts a conversation or asks for a greeting.
-
-## Steps
-- Greet the user with a friendly "Hello, World!" message.
-- Explain that this is a demonstration of a simple Hello World playbook.
-- Say goodbye to the user.
-```
-
-- Run the playbook
+<!-- 2. On command line:
 
 ```bash
 pip install playbooks
 playbooks run hello.md
-```
+``` -->
+
+2. In Python REPL
+
+   a. Install the playbooks Python package
+   ```bash
+   pip install playbooks
+   ```
+
+   b. Try running a simple playbook
+   Start Python REPL -
+
+   ```bash
+   python
+   ```
+
+   Paste the following code with your Anthropic API key -
+
+   ```python
+   import asyncio
+   import playbooks
+
+   playbook = """
+   # HelloWorld Agent
+   This is a simple Hello World agent.
+
+   ## HelloWorld
+
+   ### Trigger
+   When the user starts a conversation or asks for a greeting.
+
+   ### Steps
+   - Greet the user with a friendly "Hello, World!" message.
+   - Explain that this is a demonstration of a simple Hello World playbook.
+   - Say goodbye to the user. 
+   """
+
+   print(
+      asyncio.run(
+         playbooks.run(
+               playbook,
+               model="claude-3-5-sonnet-20241022",
+               api_key="<YOUR ANTHROPIC API KEY>",
+         )
+      )
+   )
+   ```
+
 
 Now, try modifying the hello.md playbook to greet the user with "Hello Playbooks!" instead and give it a try. Easy, right?
 
