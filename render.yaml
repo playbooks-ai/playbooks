@@ -17,6 +17,6 @@ services:
     startCommand: cd website/frontend && npm start
     envVars:
       - key: NODE_VERSION
-        value: 16.x
+        value: 23.x
       - key: API_URL
         value: https://playbooks-api.onrender.com
