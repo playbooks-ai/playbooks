@@ -1,8 +1,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import Playground from '@/components/Playground/Playground';
-import { Metadata } from 'next';
+import { Metadata, Viewport } from 'next';
 import styles from './gradient.module.css';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+};
 
 export const metadata: Metadata = {
   title: 'Playbooks AI - Train AI Agents Like Humans',
@@ -33,10 +38,6 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
-  },
-  viewport: {
-    width: 'device-width',
-    initialScale: 1,
   },
   icons: {
     icon: [
