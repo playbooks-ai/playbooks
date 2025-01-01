@@ -5,3 +5,4 @@ python-dotenv>=1.0.0
 pytest>=7.4.0
 pytest-cov>=4.1.0
 litellm>=0.28.0
+-e ../../python/packages/playbooks
