@@ -26,6 +26,7 @@ ruff = "*"
 pyright = "*"
 pytest_asyncio = "*"
 autogen_core = "^0.4.0.dev13"
+mypy = "*"
 
 [build-system]
 requires = ["poetry-core"]

@@ -9,3 +9,5 @@ litellm
 sqlalchemy
 cryptography
 psycopg2-binary  # For PostgreSQL support
+ruff
+black
