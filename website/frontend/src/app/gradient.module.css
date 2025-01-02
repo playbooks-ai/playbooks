@@ -12,15 +12,12 @@
 
 .gradientBackground::before,
 .gradientBackground::after {
-  content: "";
+  content: '';
   position: absolute;
   inset: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle at center,
-      #e600ff32 0%,
-      #232323 25%,
-      transparent 50%);
+  background: radial-gradient(circle at center, #e600ff32 0%, #232323 25%, transparent 50%);
   animation: moveGradient1 170s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   filter: blur(60px);
   opacity: 0.7;
@@ -28,10 +25,7 @@
 }
 
 .gradientBackground::after {
-  background: radial-gradient(circle at center,
-      #00ff1a2d 0%,
-      #000000 35%,
-      transparent 60%);
+  background: radial-gradient(circle at center, #00ff1a2d 0%, #000000 35%, transparent 60%);
   animation: moveGradient2 90s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   opacity: 0.8;
 }
@@ -86,7 +80,6 @@
 }
 
 @keyframes pulse {
-
   0%,
   100% {
     filter: brightness(1);

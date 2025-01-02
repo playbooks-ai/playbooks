@@ -26,7 +26,7 @@ export default function Editor({ initialValue = '', onChange }: EditorProps) {
   };
 
   return (
-    <div className="h-[200px] w-full border border-gray-200 dark:border-gray-800 rounded-lg overflow-hidden">
+    <div className="monaco-editor-container h-[200px] w-full overflow-hidden rounded-lg border border-gray-200 dark:border-gray-800">
       <MonacoEditor
         height="100%"
         defaultLanguage="yaml"

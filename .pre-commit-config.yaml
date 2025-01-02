@@ -15,3 +15,46 @@ repos:
       - id: ruff-format
         name: Run Formatter (Ruff)
         files: ^(python/packages/playbooks|website/api)/
+
+  - repo: local
+    hooks:
+      - id: prettier
+        name: Run Formatter (Prettier)
+        entry: bash -c 'cd website/frontend && npm run format'
+        language: system
+        types_or: [javascript, jsx, ts, tsx, css, json]
+        files: ^website/frontend/
+        pass_filenames: false
+
+      - id: eslint
+        name: Run Linter Check (ESLint)
+        entry: bash -c 'cd website/frontend && npm run lint'
+        language: system
+        types_or: [javascript, jsx, ts, tsx]
+        files: ^website/frontend/
+        pass_filenames: false
+
+      - id: frontend-tests
+        name: Run Frontend Tests
+        entry: bash -c 'cd website/frontend && npm ci && npm test'
+        language: system
+        files: ^website/frontend/src/.*\.(ts|tsx|js|jsx)$
+        exclude: ^website/frontend/src/.*\.(test|spec)\.(ts|tsx|js|jsx)$
+        pass_filenames: false
+
+      - id: playbooks-tests
+        name: Run Playbooks Package Tests
+        entry: bash -c 'cd python/packages/playbooks && poetry install && poetry run pytest tests/'
+        language: system
+        files: ^python/packages/playbooks/src/.*\.py$
+        types: [python]
+        pass_filenames: false
+
+      - id: website-api-tests
+        name: Run Website API Tests
+        entry: bash -c 'cd website/api && pip install -r requirements.txt && pytest tests/'
+        language: system
+        files: ^website/api/.*\.py$
+        exclude: ^website/api/tests/.*\.py$
+        types: [python]
+        pass_filenames: false

@@ -1,0 +1,7 @@
+.next
+node_modules
+build
+dist
+coverage
+.git
+*.md
