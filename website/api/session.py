@@ -3,7 +3,7 @@ import os
 import secrets
 from base64 import b64encode
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from database import Base, SessionLocal, engine
 from fastapi import Request, Response
 from models import UserSession
@@ -71,7 +71,7 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 except Exception as e:
                     print(f"Database error: {e}")
                     # Fall through to create new session
-            except (json.JSONDecodeError, ValueError) as e:
+            except (json.JSONDecodeError, ValueError, InvalidToken) as e:
                 print(f"Session decoding error: {e}")
                 pass
 
