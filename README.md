@@ -9,7 +9,7 @@
       <img src="https://img.shields.io/pypi/v/playbooks?logo=pypi&style=plastic&color=blue" alt="PyPI Version"></a>
 
    <a href="https://www.python.org/">
-      <img src="https://img.shields.io/badge/Python-3.12-blue?style=plastic&logo=python" alt="Python Version"></a>
+      <img src="https://img.shields.io/badge/Python-3.10-blue?style=plastic&logo=python" alt="Python Version"></a>
 
   <a href="https://github.com/playbooks-ai/playbooks/blob/master/LICENSE">
       <img src="https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github&style=plastic&color=green" alt="GitHub License"></a>   
