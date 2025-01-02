@@ -36,7 +36,7 @@ def print_streaming_markdown(stream_iterator):
 
 
 @app.command()
-def chat(
+async def chat(
     playbook_paths: List[str] = PLAYBOOK_PATHS_ARG,
     llm: str = typer.Option(
         None, help="LLM provider to use (openai, anthropic, vertexai)"
@@ -72,7 +72,9 @@ def chat(
                     )
                     print_streaming_markdown(response_stream)
                 else:
-                    response = runtime.run(combined_playbooks, user_input=user_input)
+                    response = await runtime.run(
+                        combined_playbooks, user_input=user_input
+                    )
                     print_markdown(response)
             except Exception as e:
                 console.print(f"\n[red]Error:[/red] {str(e)}")
