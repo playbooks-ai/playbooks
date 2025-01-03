@@ -2,9 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import Editor from './Editor';
+import { loadExamplePlaybook, runPlaybook, sendChatMessage } from './api';
+import ChatInterface, { ChatMessage } from './ChatInterface';
 
 const defaultPlaybook = `Loading example playbook...`;
-const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface PlaygroundProps {
   className?: string;
@@ -12,77 +13,50 @@ interface PlaygroundProps {
 
 export default function Playground({ className = '' }: PlaygroundProps) {
   const [content, setContent] = useState(defaultPlaybook);
-  const [result, setResult] = useState('');
+  const [result, setResult] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-
-  const loadExamplePlaybook = async () => {
-    try {
-      const response = await fetch(`${API_URL}/api/examples/hello.md`);
-      if (!response.ok) {
-        throw new Error('Failed to load example playbook');
-      }
-      const { content } = await response.json();
-      const text = content;
-      setContent(text);
-    } catch (error) {
-      setResult('Error loading example: ' + (error as Error).message);
-    }
-  };
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadExamplePlaybook();
-  }, []);
-
-  const runPlaybook = async () => {
-    setLoading(true);
-    setResult('');
-    try {
-      const response = await fetch(`${API_URL}/api/run-playbook`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content,
-          stream: true,
-        }),
-      });
-
-      if (response.headers.get('content-type')?.includes('text/plain')) {
-        const reader = response.body?.getReader();
-        if (!reader) {
-          throw new Error('No reader available');
-        }
-
-        const decoder = new TextDecoder();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          if (chunk.trim()) {
-            setResult(prev => prev + chunk);
-          }
-        }
-      } else {
-        const data = await response.json();
-        setResult(data.result);
+    const loadExample = async () => {
+      try {
+        const exampleContent = await loadExamplePlaybook();
+        setContent(exampleContent);
+        setError(null);
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        setError(`Error loading example: ${errorMessage}`);
+        console.error('Error loading example playbook:', error);
       }
-    } catch (error) {
-      setResult('Error running playbook: ' + (error as Error).message);
-    } finally {
-      setLoading(false);
-    }
-  };
+    };
+    loadExample();
+  }, []);
 
   return (
     <div className={`${className}`}>
       <div className="grid grid-cols-1 gap-8">
+        {error && (
+          <div className="text-red-600" role="alert">
+            {error}
+          </div>
+        )}
         <div>
           <h3 className="mb-4 text-2xl font-semibold">This is a playbook</h3>
           <Editor initialValue={content} onChange={setContent} />
           <button
-            onClick={runPlaybook}
+            onClick={async () => {
+              setLoading(true);
+              try {
+                await runPlaybook(content, {
+                  onMessageUpdate: messages => setResult(messages),
+                  onError: error => console.error('Error running playbook:', error),
+                  onDone: () => setLoading(false),
+                });
+              } catch (error) {
+                console.error('Error running playbook:', error);
+                setLoading(false);
+              }
+            }}
             disabled={loading}
             className="float-right mt-4 rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
           >
@@ -94,11 +68,23 @@ export default function Playground({ className = '' }: PlaygroundProps) {
           <h3 className="mb-4 text-2xl font-semibold">
             This is an AI Agent running the above playbook
           </h3>
-          <div className="h-[400px] w-full overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
-            <pre className="whitespace-pre-wrap break-words font-mono text-sm">
-              {result || 'Output will appear here...'}
-            </pre>
-          </div>
+          <ChatInterface
+            messages={result}
+            onSendMessage={async message => {
+              setLoading(true);
+              try {
+                await sendChatMessage(message, content, result, {
+                  onMessageUpdate: messages => setResult(messages),
+                  onError: error => console.error('Error sending message:', error),
+                  onDone: () => setLoading(false),
+                });
+              } catch (error) {
+                console.error('Error sending message:', error);
+                setLoading(false);
+              }
+            }}
+            loading={loading}
+          />
         </div>
       </div>
     </div>
