@@ -41,6 +41,36 @@ This will start:
 - API server at http://localhost:8000
 - Frontend development server at http://localhost:3000
 
+### Testing
+
+#### Frontend Tests
+
+1. Unit Tests:
+```bash
+cd frontend
+npm test           # Run tests once
+npm run test:watch # Run tests in watch mode
+```
+
+2. Browser Tests:
+```bash
+cd frontend
+npm run test:e2e      # Run browser tests in headless mode
+npm run test:e2e:ui   # Run browser tests with UI for debugging
+```
+
+Browser tests use Playwright and will:
+- Automatically start the development server
+- Run tests against Chrome browser
+- Generate HTML test reports
+- Shut down the server when complete
+
+#### API Tests
+```bash
+cd api
+pytest
+```
+
 ### Service Details
 
 #### API
