@@ -84,7 +84,11 @@ describe('Playground', () => {
         expect.stringMatching(/\/api\/run-playbook$/),
         expect.objectContaining({
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'text/event-stream',
+          },
+          credentials: 'include',
           body: expect.any(String),
         })
       );

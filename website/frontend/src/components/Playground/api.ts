@@ -13,8 +13,6 @@ async function processStream(response: Response, processor: StreamProcessor) {
   if (!reader) {
     throw new Error('No reader available');
   }
-
-  let result = '';
   const decoder = new TextDecoder();
 
   try {
@@ -22,20 +20,40 @@ async function processStream(response: Response, processor: StreamProcessor) {
       const { done, value } = await reader.read();
       if (done) break;
 
-      const chunk = decoder.decode(value);
-      if (chunk.trim()) {
-        result += chunk;
-        processor.onChunk(result);
+      const text = decoder.decode(value);
+      const lines = text.split('\n');
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') {
+            processor.onDone?.();
+            break;
+          }
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) {
+              processor.onError?.(new Error(parsed.error));
+            } else if (parsed.content) {
+              processor.onChunk(parsed.content);
+            }
+          } catch {
+            console.warn('Failed to parse SSE data:', data);
+          }
+        }
       }
     }
-    processor.onDone?.();
   } catch (error) {
     processor.onError?.(error as Error);
+  } finally {
+    reader.releaseLock();
   }
 }
 
 export async function loadExamplePlaybook(): Promise<string> {
-  const response = await fetch(`${API_URL}/api/examples/hello.md`);
+  const response = await fetch(`${API_URL}/api/examples/hello.md`, {
+    credentials: 'include',
+  });
   if (!response.ok) {
     throw new Error('Failed to load example playbook');
   }
@@ -60,30 +78,35 @@ export async function runPlaybook(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
       },
+      credentials: 'include',
       body: JSON.stringify({
         content,
         stream: true,
       }),
     });
 
-    if (response.headers.get('content-type')?.includes('text/plain')) {
+    if (!response.ok) {
+      throw new Error('Failed to run playbook');
+    }
+
+    if (response.headers.get('content-type')?.includes('text/event-stream')) {
+      let accumulatedResponse = '';
       await processStream(response, {
         onChunk: assistantResponse => {
-          onMessageUpdate([{ role: 'assistant', content: assistantResponse }]);
+          accumulatedResponse += assistantResponse;
+          onMessageUpdate([{ role: 'assistant', content: accumulatedResponse }]);
         },
+        onError,
         onDone,
       });
     } else {
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Failed to run playbook');
-      }
-      onMessageUpdate([{ role: 'assistant', content: data.message }]);
+      const result = await response.json();
+      onMessageUpdate([{ role: 'assistant', content: result.result }]);
       onDone();
     }
   } catch (error) {
-    onMessageUpdate([{ role: 'error', content: 'Error: ' + (error as Error).message }]);
     onError(error as Error);
   }
 }
@@ -107,37 +130,42 @@ export async function sendChatMessage(
   onMessageUpdate(updatedMessages);
 
   try {
-    const response = await fetch(`${API_URL}/api/run-playbook`, {
+    const response = await fetch(`${API_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'text/event-stream',
       },
+      credentials: 'include',
       body: JSON.stringify({
-        content: `${content}\n\nUser: ${message}`,
+        message,
         stream: true,
       }),
     });
 
-    if (response.headers.get('content-type')?.includes('text/plain')) {
+    if (!response.ok) {
+      throw new Error('Failed to send message');
+    }
+
+    if (response.headers.get('content-type')?.includes('text/event-stream')) {
+      let accumulatedResponse = '';
       await processStream(response, {
         onChunk: assistantResponse => {
-          onMessageUpdate([...updatedMessages, { role: 'assistant', content: assistantResponse }]);
+          accumulatedResponse += assistantResponse;
+          onMessageUpdate([
+            ...updatedMessages,
+            { role: 'assistant', content: accumulatedResponse },
+          ]);
         },
+        onError,
         onDone,
       });
     } else {
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'Failed to send message');
-      }
-      onMessageUpdate([...updatedMessages, { role: 'assistant', content: data.result }]);
+      const result = await response.json();
+      onMessageUpdate([...updatedMessages, { role: 'assistant', content: result.result }]);
       onDone();
     }
   } catch (error) {
-    onMessageUpdate([
-      ...updatedMessages,
-      { role: 'error', content: 'Error: ' + (error as Error).message },
-    ]);
     onError(error as Error);
   }
 }

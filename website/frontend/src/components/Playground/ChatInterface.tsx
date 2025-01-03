@@ -48,12 +48,14 @@ export default function ChatInterface({ messages, onSendMessage, loading }: Chat
     <div>
       <div
         ref={chatContainerRef}
+        data-testid="chat-container"
         className="h-[400px] w-full overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900"
       >
         <div className="flex flex-col space-y-4">
           {messages.map((message, index) => (
             <div
               key={index}
+              data-testid={`chat-message-${message.role}`}
               className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
@@ -65,7 +67,10 @@ export default function ChatInterface({ messages, onSendMessage, loading }: Chat
                       : 'bg-gray-200 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
                 }`}
               >
-                <pre className="whitespace-pre-wrap break-words font-mono text-sm">
+                <pre
+                  className="whitespace-pre-wrap break-words font-mono text-sm"
+                  data-testid="message-content"
+                >
                   {message.content}
                 </pre>
               </div>
@@ -77,6 +82,7 @@ export default function ChatInterface({ messages, onSendMessage, loading }: Chat
         <input
           ref={inputRef}
           type="text"
+          data-testid="chat-input"
           value={userInput}
           onChange={e => setUserInput(e.target.value)}
           onKeyPress={e => e.key === 'Enter' && handleSend()}
@@ -85,6 +91,7 @@ export default function ChatInterface({ messages, onSendMessage, loading }: Chat
           disabled={loading}
         />
         <button
+          data-testid="chat-send-button"
           onClick={handleSend}
           disabled={loading}
           className="rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50"

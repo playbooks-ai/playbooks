@@ -54,6 +54,12 @@ class PlaybooksRuntime:
     def load(self, playbook_path: str, mock_llm_response: str = None) -> None:
         # Load playbook content using the loader
         self.playbooks_content = load([playbook_path])
+
+        # Load playbooks
+        self.load_playbooks(self.playbooks_content, mock_llm_response)
+
+    def load_playbooks(self, playbooks_content: str, mock_llm_response: str = None):
+        self.playbooks_content = playbooks_content
         self.events.append({"type": "load", "playbooks": self.playbooks_content})
 
         self.ast = md2py(self.playbooks_content)
@@ -78,19 +84,32 @@ class PlaybooksRuntime:
 
                 return mock_stream()
             return {"choices": [{"message": {"content": self._mock_llm_response}}]}
+
+        # Remove conversation from kwargs if present since Anthropic doesn't accept it
+        kwargs.pop("conversation", None)
         return await acompletion(stream=stream, **kwargs)
 
     async def run(
-        self, playbooks: str, stream: bool = False, **kwargs
+        self, playbooks: str, user_message: str = None, stream: bool = False, **kwargs
     ) -> Union[str, AsyncIterator[str]]:
         """Run playbooks using the configured model"""
-        self.events.append({"type": "user_message", "message": ""})
+        if user_message:
+            self.events.append({"type": "user_message", "message": user_message})
         if stream:
-            return self.stream(playbooks, **kwargs)
+            return self.stream(playbooks, user_message, **kwargs)
+
+        # Get conversation history from kwargs if present, otherwise create initial messages
+        messages = kwargs.pop(
+            "conversation",
+            [
+                {"role": "system", "content": playbooks},
+                {"role": "user", "content": user_message or playbooks},
+            ],
+        )
 
         raw_response = await self._get_completion(
             model=self.config.model,
-            messages=[{"role": "user", "content": playbooks}],
+            messages=messages,
             api_key=self.config.api_key,
             **kwargs,
         )
@@ -98,11 +117,22 @@ class PlaybooksRuntime:
         self.events.append({"type": "agent_message", "message": response})
         return response
 
-    async def stream(self, playbooks: str, **kwargs) -> AsyncIterator[str]:
+    async def stream(
+        self, playbooks: str, user_message: str = None, **kwargs
+    ) -> AsyncIterator[str]:
         """Run playbooks using the configured model with streaming enabled"""
+        # Get conversation history from kwargs if present, otherwise create initial messages
+        messages = kwargs.pop(
+            "conversation",
+            [
+                {"role": "system", "content": playbooks},
+                {"role": "user", "content": user_message or playbooks},
+            ],
+        )
+
         response = await self._get_completion(
             model=self.config.model,
-            messages=[{"role": "user", "content": playbooks}],
+            messages=messages,
             api_key=self.config.api_key,
             stream=True,
             **kwargs,
