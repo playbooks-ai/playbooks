@@ -28,13 +28,13 @@ def load(paths: List[str]) -> str:
 
     contents = []
     for file in set(all_files):
-        file = Path(file)
-        if file.is_file():
-            contents.append(file.read_text())
+        file_path = Path(file)
+        if file_path.is_file():
+            contents.append(file_path.read_text())
 
-    contents = "\n\n".join(contents)
+    combined_contents = "\n\n".join(contents)
 
-    if not contents:
+    if not combined_contents:
         raise FileNotFoundError("No files found")
 
-    return contents
+    return combined_contents
