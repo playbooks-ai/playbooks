@@ -1,13 +1,19 @@
 import os
 from typing import Any, Dict, Optional
 
+from database import engine
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from models import Base
 from playbooks.config import DEFAULT_MODEL
 from playbooks.core.runtime import RuntimeConfig, SingleThreadedPlaybooksRuntime
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+from session import SessionMiddleware
+
+# Create database tables
+Base.metadata.create_all(bind=engine)
 
 # Load environment variables from .env file
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
@@ -27,8 +33,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Add session middleware
+app.add_middleware(SessionMiddleware)
+
 
 class PlaybookRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     content: str
     model: Optional[str] = DEFAULT_MODEL
     llm_options: Optional[Dict[str, Any]] = None
@@ -36,6 +46,7 @@ class PlaybookRequest(BaseModel):
 
 
 class PlaybookResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     result: str
 
 
@@ -71,11 +82,10 @@ async def get_example(filename: str):
             raise HTTPException(status_code=400, detail="Invalid filename")
 
         examples_dir = os.path.join(
-            os.path.dirname(os.path.dirname(__file__)),
-            "../python/packages/playbooks/examples/playbooks",
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "python/packages/playbooks/examples/playbooks",
         )
         file_path = os.path.join(examples_dir, filename)
-
         # Double check path is within examples directory
         norm_file_path = os.path.normpath(file_path)
         norm_examples_dir = os.path.normpath(examples_dir)
