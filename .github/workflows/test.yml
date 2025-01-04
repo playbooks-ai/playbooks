@@ -57,7 +57,16 @@ jobs:
     - name: (Website Frontend) Run tests
       run: |
         cd website/frontend
-        npm test
+        npm test -- --coverage
+
+    - name: Upload Frontend coverage
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        slug: playbooks-ai/playbooks
+        file: ./website/frontend/coverage/coverage-final.json
+        fail_ci_if_error: true
+        flags: website-frontend
 
     - name: Upload Playbooks package coverage
       uses: codecov/codecov-action@v5
