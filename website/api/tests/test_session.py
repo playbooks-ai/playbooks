@@ -1,6 +1,6 @@
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 import pytest
 from database import Base, SessionLocal
@@ -9,15 +9,13 @@ from fastapi.testclient import TestClient
 from models import UserSession
 from session import SessionMiddleware, fernet
 from sqlalchemy import create_engine
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 # Use SQLite in-memory database for testing
 TEST_DATABASE_URL = "sqlite:///:memory:"
 engine = create_engine(
-    TEST_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool
+    TEST_DATABASE_URL, connect_args={"check_same_thread": False}, poolclass=StaticPool
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -42,6 +40,7 @@ def create_test_app():
 
     # Override the SessionLocal in the session middleware
     import session
+
     session.SessionLocal = TestingSessionLocal
 
     # Add session middleware
@@ -135,7 +134,8 @@ def test_invalid_session(client):
 def test_session_database(client, test_db):
     """Test that sessions are properly stored in database"""
     response = client.get("/api/health")
-    
+    assert response.status_code == 200
+
     sessions = test_db.query(UserSession).all()
     assert len(sessions) == 1
     assert sessions[0].is_valid() is True

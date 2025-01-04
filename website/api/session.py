@@ -4,11 +4,10 @@ import secrets
 from base64 import b64encode
 
 from cryptography.fernet import Fernet
-from database import SessionLocal, Base, engine
+from database import Base, SessionLocal, engine
 from fastapi import Request, Response
 from models import UserSession
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
-from starlette.responses import Response
 
 # Generate a secret key for cookie encryption
 SECRET_KEY = os.getenv("SECRET_KEY", b64encode(secrets.token_bytes(32)).decode())
@@ -72,7 +71,8 @@ class SessionMiddleware(BaseHTTPMiddleware):
                 except Exception as e:
                     print(f"Database error: {e}")
                     # Fall through to create new session
-            except:
+            except (json.JSONDecodeError, ValueError) as e:
+                print(f"Session decoding error: {e}")
                 pass
 
         # Create new session

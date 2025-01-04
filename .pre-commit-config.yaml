@@ -1,14 +1,21 @@
 repos:
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        name: Run Formatter (Black)
+        files: ^(python/packages/playbooks|website/api)/
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.1.7
     hooks:
       - id: ruff
         name: Run Linter Check (Ruff)
         args: [ --fix ]
-        files: ^(python|examples)/
+        files: ^(python/packages/playbooks|website/api)/
       - id: ruff-format
         name: Run Formatter (Ruff)
+        files: ^(python/packages/playbooks|website/api)/
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.360
     hooks:
-    - id: pyright 
+      - id: pyright
