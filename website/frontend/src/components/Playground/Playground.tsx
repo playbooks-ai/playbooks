@@ -47,7 +47,7 @@ export default function Playground({ className = '' }: PlaygroundProps) {
           stream: true,
         }),
       });
-      
+
       if (response.headers.get('content-type')?.includes('text/plain')) {
         const reader = response.body?.getReader();
         if (!reader) {
@@ -79,21 +79,23 @@ export default function Playground({ className = '' }: PlaygroundProps) {
     <div className={`${className}`}>
       <div className="grid grid-cols-1 gap-8">
         <div>
-          <h3 className="text-2xl font-semibold mb-4">This is a playbook</h3>
+          <h3 className="mb-4 text-2xl font-semibold">This is a playbook</h3>
           <Editor initialValue={content} onChange={setContent} />
           <button
             onClick={runPlaybook}
             disabled={loading}
-            className="float-right mt-4 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            className="float-right mt-4 rounded-lg bg-blue-600 px-6 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
           >
             {loading ? 'Running...' : 'Run Playbook'}
           </button>
         </div>
-        
+
         <div>
-          <h3 className="text-2xl font-semibold mb-4">This is an AI Agent running the above playbook</h3>
-          <div className="h-[400px] w-full border border-gray-200 dark:border-gray-800 rounded-lg p-4 bg-gray-50 dark:bg-gray-900 overflow-auto">
-            <pre className="whitespace-pre-wrap font-mono text-sm break-words">
+          <h3 className="mb-4 text-2xl font-semibold">
+            This is an AI Agent running the above playbook
+          </h3>
+          <div className="h-[400px] w-full overflow-auto rounded-lg border border-gray-200 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-900">
+            <pre className="whitespace-pre-wrap break-words font-mono text-sm">
               {result || 'Output will appear here...'}
             </pre>
           </div>

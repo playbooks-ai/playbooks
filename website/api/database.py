@@ -5,7 +5,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 
 # Get environment variables
 DATABASE_URL = os.getenv(
-    "DATABASE_URL", "sqlite:///./playbooks.db"  # Default to SQLite for development
+    "DATABASE_URL",
+    "sqlite:///./playbooks.db",  # Default to SQLite for development
 )
 
 # Handle special case for Render.com Postgres URL

@@ -92,7 +92,7 @@ class PlaybooksRuntime:
             model=self.config.model,
             messages=[{"role": "user", "content": playbooks}],
             api_key=self.config.api_key,
-            **kwargs
+            **kwargs,
         )
         response = raw_response["choices"][0]["message"]["content"]
         self.events.append({"type": "agent_message", "message": response})
@@ -105,7 +105,7 @@ class PlaybooksRuntime:
             messages=[{"role": "user", "content": playbooks}],
             api_key=self.config.api_key,
             stream=True,
-            **kwargs
+            **kwargs,
         )
         complete_message = ""
         async for chunk in response:

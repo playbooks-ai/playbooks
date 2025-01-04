@@ -44,6 +44,21 @@ jobs:
         cd website/api
         pytest tests/ --cov=. --cov-report=xml -v
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        
+    - name: (Website Frontend) Install dependencies
+      run: |
+        cd website/frontend
+        npm ci
+        
+    - name: (Website Frontend) Run tests
+      run: |
+        cd website/frontend
+        npm test
+
     - name: Upload Playbooks package coverage
       uses: codecov/codecov-action@v5
       with:
