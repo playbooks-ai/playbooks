@@ -15,7 +15,3 @@ repos:
       - id: ruff-format
         name: Run Formatter (Ruff)
         files: ^(python/packages/playbooks|website/api)/
-  - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.360
-    hooks:
-      - id: pyright
