@@ -33,7 +33,7 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.ruff]
 select = ["E", "F", "B"]
-ignore = ["B006", "B018"]
+ignore = ["B006", "B018", "E501"]
 line-length = 88
 
 [tool.poetry.scripts]

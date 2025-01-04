@@ -15,7 +15,7 @@ async def test_one_autogen_agent():
     completed_tasks = []
 
     # Register agents with the runtime
-    agent_id = await TestProcessor.register(
+    await TestProcessor.register(
         runtime, "agent", lambda: TestProcessor("Agent", completed_tasks)
     )
 
@@ -38,10 +38,10 @@ async def test_two_autogen_agents():
     completed_tasks = []
 
     # Register agents with the runtime
-    agent1_id = await TestProcessor.register(
+    await TestProcessor.register(
         runtime, "agent_1", lambda: TestProcessor("Agent 1", completed_tasks)
     )
-    agent2_id = await TestProcessor.register(
+    await TestProcessor.register(
         runtime, "agent_2", lambda: TestProcessor("Agent 2", completed_tasks)
     )
 

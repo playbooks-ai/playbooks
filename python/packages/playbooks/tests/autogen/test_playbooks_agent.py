@@ -9,8 +9,9 @@ from autogen_core import (
     default_subscription,
     message_handler,
 )
+
 from playbooks.core.runtime import SingleThreadedPlaybooksRuntime
-from litellm import completion
+
 
 @dataclass
 class Task:
@@ -46,7 +47,10 @@ async def test_one_autogen_agent():
 
     # Start playbooks runtime with a single agent
     playbooks_runtime = SingleThreadedPlaybooksRuntime()
-    playbooks_runtime.load("examples/playbooks/hello.md", mock_llm_response="Hello! I am a mock response from the test.")
+    playbooks_runtime.load(
+        "examples/playbooks/hello.md",
+        mock_llm_response="Hello! I am a mock response from the test.",
+    )
     assert len(playbooks_runtime.agents) == 1
     assert playbooks_runtime.agents[0].name == "HelloWorld Agent"
 
@@ -54,7 +58,7 @@ async def test_one_autogen_agent():
     completed_tasks = []
 
     # Register agents with the runtime
-    agent_id = await TestPlaybooksProcessor.register(
+    await TestPlaybooksProcessor.register(
         runtime,
         "agent",
         lambda: TestPlaybooksProcessor("Agent", completed_tasks, playbooks_runtime),
