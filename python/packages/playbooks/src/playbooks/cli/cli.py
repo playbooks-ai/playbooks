@@ -36,7 +36,7 @@ def print_streaming_markdown(stream_iterator):
 
 
 @app.command()
-async def chat(
+def chat(
     playbook_paths: List[str] = PLAYBOOK_PATHS_ARG,
     llm: str = typer.Option(
         None, help="LLM provider to use (openai, anthropic, vertexai)"
@@ -46,41 +46,73 @@ async def chat(
     stream: bool = typer.Option(False, help="Enable streaming output from LLM"),
 ):
     """Start an interactive chat session using the specified playbooks and LLM"""
+    import asyncio
+
+    asyncio.run(_async_chat(playbook_paths, llm, model, api_key, stream))
+
+
+async def _async_chat(
+    playbook_paths: List[str],
+    llm: Optional[str],
+    model: Optional[str],
+    api_key: Optional[str],
+    stream: bool,
+):
     if playbook_paths is None:
         playbook_paths = PLAYBOOK_PATHS_ARG
 
     try:
         # Load playbooks
-        playbook_paths = playbook_paths[1:]
+        console.print(f"\nLoading playbooks from: {playbook_paths}")
         combined_playbooks = load(playbook_paths)
+        console.print("\nLoaded playbooks successfully")
 
         # Initialize runtime with selected LLM
+        console.print(
+            f"\nInitializing runtime with model={model}, api_key={'*' * len(api_key) if api_key else None}"
+        )
         config = RuntimeConfig(model=model, api_key=api_key)
         runtime = SingleThreadedPlaybooksRuntime(config)
+        console.print("\nRuntime initialized successfully")
 
         # Start chat loop
         while True:
-            user_input = Prompt.ask("\n[blue]User[/blue]")
-            if user_input.lower() in ["exit", "quit"]:
-                break
-
             try:
-                console.print("\n[yellow]Agent: [/yellow]")
-                if stream:
-                    response_stream = runtime.stream(
-                        combined_playbooks, user_input=user_input
-                    )
-                    print_streaming_markdown(response_stream)
-                else:
-                    response = await runtime.run(
-                        combined_playbooks, user_input=user_input
-                    )
-                    print_markdown(response)
+                console.print("\nWaiting for user input...")
+                user_input = Prompt.ask("\n[blue]User[/blue]")
+                console.print(f"\nReceived user input: {user_input}")
+
+                if user_input.lower() in ["exit", "quit"]:
+                    console.print("\nExiting chat loop...")
+                    break
+
+                try:
+                    console.print("\n[yellow]Agent: [/yellow]")
+                    if stream:
+                        console.print("\nStarting streaming response...")
+                        response_stream = runtime.stream(
+                            combined_playbooks, user_message=user_input
+                        )
+                        print_streaming_markdown(response_stream)
+                    else:
+                        console.print("\nGetting non-streaming response...")
+                        response = await runtime.run(
+                            combined_playbooks, user_message=user_input
+                        )
+                        print_markdown(response)
+                except Exception as e:
+                    console.print(f"\n[red]Error during response:[/red] {str(e)}")
+                    raise
+
             except Exception as e:
-                console.print(f"\n[red]Error:[/red] {str(e)}")
+                console.print(f"\n[red]Error in chat loop:[/red] {str(e)}")
+                raise
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Goodbye![/yellow]")
+    except Exception as e:
+        console.print(f"\n[red]Fatal error:[/red] {str(e)}")
+        raise
 
 
 def main():
