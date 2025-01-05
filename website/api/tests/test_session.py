@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 from database import Base, SessionLocal
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 from models import UserSession
 from session import SessionMiddleware, fernet
@@ -37,6 +37,20 @@ def create_test_app():
     @app.get("/api/health")
     def health_check():
         return {"status": "healthy"}
+
+    @app.post("/api/session/data")
+    def set_session_data(request: Request, data: dict):
+        session = request.state.session
+        session.runtime_data = json.dumps(data)
+        request.state.db.commit()
+        return {"status": "ok"}
+
+    @app.get("/api/session/data")
+    def get_session_data(request: Request):
+        session = request.state.session
+        if session.runtime_data:
+            return json.loads(session.runtime_data)
+        return {}
 
     # Override the SessionLocal in the session middleware
     import session
@@ -155,3 +169,28 @@ def test_session_expiry(test_db):
 
     # Verify session is expired
     assert session.is_valid() is False
+
+
+def test_session_data_persistence(client):
+    """Test that data stored in session persists across requests"""
+    # First request to create session
+    response1 = client.get("/api/health")
+    session_cookie1 = response1.cookies["session"]
+
+    # Store some data in session
+    test_data = {"user_preference": "dark_mode", "last_visit": "2025-01-02"}
+    client.cookies.set("session", session_cookie1)
+    response2 = client.post("/api/session/data", json=test_data)
+    assert response2.status_code == 200
+
+    # Get data in a new request
+    response3 = client.get("/api/session/data")
+    assert response3.status_code == 200
+    assert response3.json() == test_data
+
+    # Verify data persists even with a new client
+    new_client = TestClient(create_test_app())
+    new_client.cookies.set("session", session_cookie1)
+    response4 = new_client.get("/api/session/data")
+    assert response4.status_code == 200
+    assert response4.json() == test_data

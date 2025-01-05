@@ -15,6 +15,7 @@ class UserSession(Base):
     last_active = Column(
         DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
     )
+    runtime_data = Column(String, nullable=True)
 
     @classmethod
     def create_new(cls):

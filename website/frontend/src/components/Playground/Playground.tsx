@@ -44,6 +44,7 @@ export default function Playground({ className = '' }: PlaygroundProps) {
           <h3 className="mb-4 text-2xl font-semibold">This is a playbook</h3>
           <Editor initialValue={content} onChange={setContent} />
           <button
+            data-testid="run-playbook-button"
             onClick={async () => {
               setLoading(true);
               try {
