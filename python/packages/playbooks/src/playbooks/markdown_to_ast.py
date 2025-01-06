@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from markdown_it import MarkdownIt
 
@@ -151,7 +151,20 @@ def add_markdown_attributes(node: Dict[str, Any]) -> str:
     return node
 
 
-def markdown_to_ast(markdown: str) -> List[Dict[str, Any]]:
+def markdown_to_ast(markdown: str) -> Dict[str, Any]:
     tree = parse_markdown_to_dict(markdown)
     add_markdown_attributes(tree)
-    return tree
+
+    # If tree is already a root/document node, just change its type and add text field
+    if tree.get("type") == "root":
+        tree["type"] = "document"
+        tree["text"] = ""
+        return tree
+
+    # Otherwise wrap the tree in a document node
+    return {
+        "type": "document",
+        "text": "",
+        "children": [tree] if isinstance(tree, dict) else tree.get("children", []),
+        "markdown": markdown,
+    }
