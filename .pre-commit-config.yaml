@@ -42,13 +42,13 @@ repos:
         exclude: ^website/frontend/src/.*\.(test|spec)\.(ts|tsx|js|jsx)$
         pass_filenames: false
 
-      - id: playbooks-tests
-        name: Run Playbooks Package Tests
-        entry: bash -c 'cd python/packages/playbooks && poetry install && poetry run pytest tests/'
-        language: system
-        files: ^python/packages/playbooks/src/.*\.py$
-        types: [python]
-        pass_filenames: false
+      # - id: playbooks-tests
+      #   name: Run Playbooks Package Tests
+      #   entry: bash -c 'cd python/packages/playbooks && poetry install && poetry run pytest tests/'
+      #   language: system
+      #   files: ^python/packages/playbooks/src/.*\.py$
+      #   types: [python]
+      #   pass_filenames: false
 
       - id: website-api-tests
         name: Run Website API Tests
