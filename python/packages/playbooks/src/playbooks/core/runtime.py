@@ -1,40 +1,27 @@
-import os
-from dataclasses import dataclass
-from typing import AsyncIterator, List, Optional, Union
+import uuid
+from typing import AsyncIterator, List, Union
 
-from litellm import acompletion
-from md2py import md2py
-
-from playbooks.config import DEFAULT_MODEL
+from playbooks.config import RuntimeConfig
+from playbooks.core.agents import Agent, AIAgent
+from playbooks.core.db.runtime_session import RuntimeSession
+from playbooks.core.exceptions import PlaybookError
+from playbooks.core.llm_helper import get_completion
+from playbooks.core.runtime_log_node import (
+    LoadPlaybooksRuntimeLogNode,
+    MessageRuntimeLogNode,
+    PreprocessPlaybooksRuntimeLogNode,
+    RuntimeLogNode,
+)
+from playbooks.markdown_to_ast import markdown_to_ast
 
 from .loader import load
-
-
-class PlaybooksAgent:
-    # static method factory that takes in playbooks ast and creates a PlaybooksAgent for
-    # each H1 header
-    @staticmethod
-    def from_ast(ast):
-        # Use visitor pattern to find all H1 headers
-        # Create an agent for each H1 header
-        return [PlaybooksAgent(str(h1)) for h1 in ast.h1s]
-
-    def __init__(self, name: str):
-        self.name = name
-
-
-@dataclass
-class RuntimeConfig:
-    model: str = None
-    api_key: Optional[str] = None
-
-    def __post_init__(self):
-        self.model = self.model or os.environ.get("MODEL") or DEFAULT_MODEL
-        self.api_key = self.api_key or os.environ.get("ANTHROPIC_API_KEY")
+from .message_router import MessageRouter
 
 
 class PlaybooksRuntime:
     def __init__(self, config: RuntimeConfig = None):
+        self.id = uuid.uuid4()
+
         self.config = config or RuntimeConfig()
         # Markdown content of all playbooks
         self.playbooks_content: str = None
@@ -43,97 +30,145 @@ class PlaybooksRuntime:
         self.ast: dict = None
 
         # List of agents
-        self.agents: List[PlaybooksAgent] = []
+        self.agents: List[Agent] = []
 
-        # List of events
-        self.events: List[dict] = []
+        # List of runtime log nodes
+        self.runtime_log_nodes: List[RuntimeLogNode] = []
+
+        # Runtime session
+        self._session = RuntimeSession(runtime=self)
+        # save session to DB
+        self._session.save()
+
+        # Track previous log node for parent relationship
+        self._previous_log_node: RuntimeLogNode = None
 
         # Mock LLM response
         self._mock_llm_response = None
 
-    def load(self, playbook_path: str, mock_llm_response: str = None) -> None:
-        # Load playbook content using the loader
-        self.playbooks_content = load([playbook_path])
+        # Message router
+        self.router = MessageRouter(self)
 
-        # Load playbooks
-        self.load_playbooks(self.playbooks_content, mock_llm_response)
+    def add_runtime_log(self, log_node: RuntimeLogNode) -> RuntimeLogNode:
+        """Add a log node and update parent relationship."""
+        if self._previous_log_node:
+            log_node.parent_log_node_id = self._previous_log_node.id
+        self.runtime_log_nodes.append(log_node)
+        self._previous_log_node = log_node
+        return log_node
 
-    def load_playbooks(self, playbooks_content: str, mock_llm_response: str = None):
-        self.playbooks_content = playbooks_content
-        self.events.append({"type": "load", "playbooks": self.playbooks_content})
-
-        self.ast = md2py(self.playbooks_content)
-        self.events.append(
-            {
-                "type": "parse_to_ast",
-                "playbooks": self.playbooks_content,
-                "ast": self.ast,
-            }
+    def load_playbooks(self, playbooks: str) -> None:
+        self.playbooks_content = playbooks
+        self.add_runtime_log(
+            LoadPlaybooksRuntimeLogNode.create(
+                playbooks_paths=None,
+                playbooks=playbooks,
+            )
         )
 
-        self.agents = PlaybooksAgent.from_ast(self.ast)
+    def load_from_paths(self, playbooks_paths: List[str]) -> None:
+        for playbooks_path in playbooks_paths:
+            self.load_from_path(playbooks_path)
+
+    def load_from_path(
+        self, playbooks_path: str, mock_llm_response: str = None
+    ) -> None:
+        # Load playbook content using the loader
+        log_node = LoadPlaybooksRuntimeLogNode.create(
+            playbooks_path=playbooks_path,
+            playbooks="",
+        )
+        self.add_runtime_log(log_node)
+
+        try:
+            self.playbooks_content = load([playbooks_path])
+            log_node.set_playbooks(self.playbooks_content)
+        except FileNotFoundError as e:
+            log_node.set_error(f"Playbook not found: {str(e)}")
+            raise PlaybookError(f"Playbook not found: {str(e)}") from e
+        except (OSError, IOError) as e:
+            log_node.set_error(f"Error reading playbook: {str(e)}")
+            raise PlaybookError(f"Error reading playbook: {str(e)}") from e
+
+        # Load playbooks
+        self.preprocess_playbooks(mock_llm_response)
+
+    def preprocess_playbooks(self, mock_llm_response: str = None):
+        self.ast = markdown_to_ast(self.playbooks_content)
+
+        self.add_runtime_log(
+            PreprocessPlaybooksRuntimeLogNode.create(
+                playbooks=self.playbooks_content,
+                metadata={"ast": self.ast},
+            )
+        )
+
+        self.agents = [
+            AIAgent.from_h1(h1)
+            for h1 in self.ast.get("children", [])
+            if h1.get("type") == "h1"
+        ]
         self._mock_llm_response = mock_llm_response
 
     async def _get_completion(self, stream=False, **kwargs):
-        if self._mock_llm_response is not None:
-            if stream:
-
-                async def mock_stream():
-                    for chunk in self._mock_llm_response.split():
-                        yield {"choices": [{"delta": {"content": chunk}}]}
-
-                return mock_stream()
-            return {"choices": [{"message": {"content": self._mock_llm_response}}]}
-
-        # Remove conversation from kwargs if present since Anthropic doesn't accept it
-        kwargs.pop("conversation", None)
-        return await acompletion(stream=stream, **kwargs)
+        return await get_completion(
+            config=self.config.llm_config,
+            mock_response=self._mock_llm_response,
+            stream=stream,
+            **kwargs,
+        )
 
     async def run(
-        self, playbooks: str, user_message: str = None, stream: bool = False, **kwargs
+        self, user_message: str = None, stream: bool = False, **kwargs
     ) -> Union[str, AsyncIterator[str]]:
         """Run playbooks using the configured model"""
         if user_message:
-            self.events.append({"type": "user_message", "message": user_message})
+            self.add_runtime_log(
+                MessageRuntimeLogNode.create(
+                    message=user_message,
+                    role="user",
+                )
+            )
         if stream:
-            return self.stream(playbooks, user_message, **kwargs)
+            return self.stream(self.playbooks_content, user_message, **kwargs)
 
         # Get conversation history from kwargs if present, otherwise create initial messages
         messages = kwargs.pop(
             "conversation",
             [
-                {"role": "system", "content": playbooks},
-                {"role": "user", "content": user_message or playbooks},
+                {"role": "system", "content": self.playbooks_content},
+                {"role": "user", "content": user_message or self.playbooks_content},
             ],
         )
 
         raw_response = await self._get_completion(
-            model=self.config.model,
             messages=messages,
-            api_key=self.config.api_key,
             **kwargs,
         )
         response = raw_response["choices"][0]["message"]["content"]
-        self.events.append({"type": "agent_message", "message": response})
+        self.add_runtime_log(
+            MessageRuntimeLogNode.create(
+                message=response,
+                role="agent",
+            )
+        )
         return response
 
     async def stream(
-        self, playbooks: str, user_message: str = None, **kwargs
+        self, system_prompt: str, user_message: str = None, **kwargs
     ) -> AsyncIterator[str]:
         """Run playbooks using the configured model with streaming enabled"""
         # Get conversation history from kwargs if present, otherwise create initial messages
         messages = kwargs.pop(
             "conversation",
             [
-                {"role": "system", "content": playbooks},
-                {"role": "user", "content": user_message or playbooks},
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message or ""},
             ],
         )
 
         response = await self._get_completion(
-            model=self.config.model,
             messages=messages,
-            api_key=self.config.api_key,
             stream=True,
             **kwargs,
         )
@@ -145,13 +180,44 @@ class PlaybooksRuntime:
                 yield content
 
         # log event after streaming is complete with accumulated message
-        self.events.append({"type": "agent_message", "message": complete_message})
+        self.add_runtime_log(
+            MessageRuntimeLogNode.create(
+                message=complete_message,
+                role="agent",
+            )
+        )
+
+    async def get_llm_completion(self, messages: List[dict]):
+        """Get completion from LLM using runtime's config."""
+        response_gen = await get_completion(
+            config=self.config.llm_config,
+            messages=messages,
+            mock_response=self._mock_llm_response,
+            stream=True,  # Always stream internally
+        )
+        async for chunk in response_gen:
+            if chunk["choices"][0]["delta"].get("content"):
+                yield chunk["choices"][0]["delta"]["content"]
+
+    @property
+    def conversation(self) -> List[dict]:
+        conversation = []
+        print("[DEBUG] Building conversation history from log nodes")
+        for log_node in self.runtime_log_nodes:
+            if log_node.isinstance(MessageRuntimeLogNode):
+                if log_node.role == "user":
+                    conversation.append({"role": "user", "content": log_node.message})
+                elif log_node.role == "agent":
+                    conversation.append(
+                        {"role": "assistant", "content": log_node.message}
+                    )
+        return conversation
 
 
 class SingleThreadedPlaybooksRuntime(PlaybooksRuntime):
-    async def run(self, playbooks: str = None, **kwargs) -> str:
+    async def run(self, config: RuntimeConfig = None) -> str:
         """Run playbooks."""
-        return await super().run(playbooks or self.playbooks_content, **kwargs)
+        return await super().run(config=config or RuntimeConfig())
 
 
 async def run(playbooks: str, **kwargs) -> str:
@@ -160,4 +226,5 @@ async def run(playbooks: str, **kwargs) -> str:
     api_key = kwargs.pop("api_key", None)
     config = RuntimeConfig(model=model, api_key=api_key)
     runtime = SingleThreadedPlaybooksRuntime(config)
-    return await runtime.run(playbooks, **kwargs)
+    runtime.load_playbooks(playbooks)
+    return await runtime.run(**kwargs)
