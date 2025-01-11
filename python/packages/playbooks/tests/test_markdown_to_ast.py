@@ -11,9 +11,16 @@ class TestMarkdownToAst(unittest.TestCase):
         markdown = "# Hello World"
         ast = markdown_to_ast(markdown)
         expected = {
-            "type": "h1",
-            "text": "Hello World",
-            "children": [],
+            "type": "document",
+            "text": "",
+            "children": [
+                {
+                    "type": "h1",
+                    "text": "Hello World",
+                    "children": [],
+                    "markdown": "# Hello World",
+                }
+            ],
             "markdown": "# Hello World",
         }
         self.assertEqual(ast, expected)
@@ -24,21 +31,28 @@ class TestMarkdownToAst(unittest.TestCase):
 ### Sub-subtitle"""
         ast = markdown_to_ast(markdown)
         expected = {
-            "type": "h1",
-            "text": "Main Title",
+            "type": "document",
+            "text": "",
             "children": [
                 {
-                    "type": "h2",
-                    "text": "Subtitle",
+                    "type": "h1",
+                    "text": "Main Title",
                     "children": [
                         {
-                            "type": "h3",
-                            "text": "Sub-subtitle",
-                            "children": [],
-                            "markdown": "### Sub-subtitle",
+                            "type": "h2",
+                            "text": "Subtitle",
+                            "children": [
+                                {
+                                    "type": "h3",
+                                    "text": "Sub-subtitle",
+                                    "children": [],
+                                    "markdown": "### Sub-subtitle",
+                                }
+                            ],
+                            "markdown": "## Subtitle\n### Sub-subtitle",
                         }
                     ],
-                    "markdown": "## Subtitle\n### Sub-subtitle",
+                    "markdown": "# Main Title\n## Subtitle\n### Sub-subtitle",
                 }
             ],
             "markdown": "# Main Title\n## Subtitle\n### Sub-subtitle",
@@ -51,7 +65,8 @@ class TestMarkdownToAst(unittest.TestCase):
 - Item 3"""
         ast = markdown_to_ast(markdown)
         expected = {
-            "type": "root",
+            "type": "document",
+            "text": "",
             "children": [
                 {
                     "type": "list",
@@ -73,7 +88,8 @@ class TestMarkdownToAst(unittest.TestCase):
 3. Third"""
         ast = markdown_to_ast(markdown)
         expected = {
-            "type": "root",
+            "type": "document",
+            "text": "",
             "children": [
                 {
                     "type": "list",
@@ -97,7 +113,8 @@ class TestMarkdownToAst(unittest.TestCase):
         markdown = "This is a simple paragraph."
         ast = markdown_to_ast(markdown)
         expected = {
-            "type": "root",
+            "type": "document",
+            "text": "",
             "children": [
                 {
                     "type": "paragraph",
@@ -112,43 +129,49 @@ class TestMarkdownToAst(unittest.TestCase):
     def test_mixed_content(self):
         markdown = """# Title
 This is a paragraph.
-
 ## Subtitle
 - List item 1
 - List item 2"""
         ast = markdown_to_ast(markdown)
         expected = {
-            "type": "h1",
-            "text": "Title",
+            "type": "document",
+            "text": "",
             "children": [
                 {
-                    "type": "paragraph",
-                    "text": "This is a paragraph.",
-                    "markdown": "This is a paragraph.",
-                },
-                {
-                    "type": "h2",
-                    "text": "Subtitle",
+                    "type": "h1",
+                    "text": "Title",
                     "children": [
                         {
-                            "type": "list",
+                            "type": "paragraph",
+                            "text": "This is a paragraph.",
+                            "markdown": "This is a paragraph.",
+                        },
+                        {
+                            "type": "h2",
+                            "text": "Subtitle",
                             "children": [
                                 {
-                                    "type": "list-item",
-                                    "text": "List item 1",
-                                    "markdown": "- List item 1",
-                                },
-                                {
-                                    "type": "list-item",
-                                    "text": "List item 2",
-                                    "markdown": "- List item 2",
-                                },
+                                    "type": "list",
+                                    "children": [
+                                        {
+                                            "type": "list-item",
+                                            "text": "List item 1",
+                                            "markdown": "- List item 1",
+                                        },
+                                        {
+                                            "type": "list-item",
+                                            "text": "List item 2",
+                                            "markdown": "- List item 2",
+                                        },
+                                    ],
+                                    "markdown": "- List item 1\n- List item 2",
+                                }
                             ],
-                            "markdown": "- List item 1\n- List item 2",
-                        }
+                            "markdown": "## Subtitle\n- List item 1\n- List item 2",
+                        },
                     ],
-                    "markdown": "## Subtitle\n- List item 1\n- List item 2",
-                },
+                    "markdown": "# Title\nThis is a paragraph.\n## Subtitle\n- List item 1\n- List item 2",
+                }
             ],
             "markdown": "# Title\nThis is a paragraph.\n## Subtitle\n- List item 1\n- List item 2",
         }
@@ -169,63 +192,134 @@ When the user starts a conversation or asks for a greeting.
 - Say goodbye to the user."""
         ast = markdown_to_ast(markdown)
         expected = {
-            "type": "h1",
-            "text": "HelloWorld Agent",
+            "type": "document",
+            "text": "",
+            "children": [
+                {
+                    "type": "h1",
+                    "text": "HelloWorld Agent",
+                    "children": [
+                        {
+                            "type": "paragraph",
+                            "text": "This is a simple Hello World agent.",
+                            "markdown": "This is a simple Hello World agent.",
+                        },
+                        {
+                            "type": "h2",
+                            "text": "HelloWorld",
+                            "children": [
+                                {
+                                    "type": "h3",
+                                    "text": "Trigger",
+                                    "children": [
+                                        {
+                                            "type": "paragraph",
+                                            "text": "When the user starts a conversation or asks for a greeting.",
+                                            "markdown": "When the user starts a conversation or asks for a greeting.",
+                                        }
+                                    ],
+                                    "markdown": "### Trigger\nWhen the user starts a conversation or asks for a greeting.",
+                                },
+                                {
+                                    "type": "h3",
+                                    "text": "Steps",
+                                    "children": [
+                                        {
+                                            "type": "list",
+                                            "children": [
+                                                {
+                                                    "type": "list-item",
+                                                    "text": 'Greet the user with a friendly "Hello, World!" message.',
+                                                    "markdown": '- Greet the user with a friendly "Hello, World!" message.',
+                                                },
+                                                {
+                                                    "type": "list-item",
+                                                    "text": "Explain that this is a demonstration of a simple Hello World playbook.",
+                                                    "markdown": "- Explain that this is a demonstration of a simple Hello World playbook.",
+                                                },
+                                                {
+                                                    "type": "list-item",
+                                                    "text": "Say goodbye to the user.",
+                                                    "markdown": "- Say goodbye to the user.",
+                                                },
+                                            ],
+                                            "markdown": '- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
+                                        }
+                                    ],
+                                    "markdown": '### Steps\n- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
+                                },
+                            ],
+                            "markdown": '## HelloWorld\n### Trigger\nWhen the user starts a conversation or asks for a greeting.\n### Steps\n- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
+                        },
+                    ],
+                    "markdown": '# HelloWorld Agent\nThis is a simple Hello World agent.\n## HelloWorld\n### Trigger\nWhen the user starts a conversation or asks for a greeting.\n### Steps\n- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
+                }
+            ],
+            "markdown": """# HelloWorld Agent
+This is a simple Hello World agent.
+
+## HelloWorld
+
+### Trigger
+When the user starts a conversation or asks for a greeting.
+
+### Steps
+- Greet the user with a friendly "Hello, World!" message.
+- Explain that this is a demonstration of a simple Hello World playbook.
+- Say goodbye to the user.""",
+        }
+        self.assertEqual(ast, expected)
+
+    def test_multiple_root_nodes(self):
+        markdown = """This is some text
+- item 1
+- item 2
+# Heading 1
+# Another Heading 1"""
+        ast = markdown_to_ast(markdown)
+        expected = {
+            "type": "document",
+            "text": "",
             "children": [
                 {
                     "type": "paragraph",
-                    "text": "This is a simple Hello World agent.",
-                    "markdown": "This is a simple Hello World agent.",
+                    "text": "This is some text",
+                    "markdown": "This is some text",
                 },
                 {
-                    "type": "h2",
-                    "text": "HelloWorld",
+                    "type": "list",
                     "children": [
                         {
-                            "type": "h3",
-                            "text": "Trigger",
-                            "children": [
-                                {
-                                    "type": "paragraph",
-                                    "text": "When the user starts a conversation or asks for a greeting.",
-                                    "markdown": "When the user starts a conversation or asks for a greeting.",
-                                }
-                            ],
-                            "markdown": "### Trigger\nWhen the user starts a conversation or asks for a greeting.",
+                            "type": "list-item",
+                            "text": "item 1",
+                            "markdown": "- item 1",
                         },
                         {
-                            "type": "h3",
-                            "text": "Steps",
-                            "children": [
-                                {
-                                    "type": "list",
-                                    "children": [
-                                        {
-                                            "type": "list-item",
-                                            "text": 'Greet the user with a friendly "Hello, World!" message.',
-                                            "markdown": '- Greet the user with a friendly "Hello, World!" message.',
-                                        },
-                                        {
-                                            "type": "list-item",
-                                            "text": "Explain that this is a demonstration of a simple Hello World playbook.",
-                                            "markdown": "- Explain that this is a demonstration of a simple Hello World playbook.",
-                                        },
-                                        {
-                                            "type": "list-item",
-                                            "text": "Say goodbye to the user.",
-                                            "markdown": "- Say goodbye to the user.",
-                                        },
-                                    ],
-                                    "markdown": '- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
-                                }
-                            ],
-                            "markdown": '### Steps\n- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
+                            "type": "list-item",
+                            "text": "item 2",
+                            "markdown": "- item 2",
                         },
                     ],
-                    "markdown": '## HelloWorld\n### Trigger\nWhen the user starts a conversation or asks for a greeting.\n### Steps\n- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
+                    "markdown": "- item 1\n- item 2",
+                },
+                {
+                    "type": "h1",
+                    "text": "Heading 1",
+                    "children": [],
+                    "markdown": "# Heading 1",
+                },
+                {
+                    "type": "h1",
+                    "text": "Another Heading 1",
+                    "children": [],
+                    "markdown": "# Another Heading 1",
                 },
             ],
-            "markdown": '# HelloWorld Agent\nThis is a simple Hello World agent.\n## HelloWorld\n### Trigger\nWhen the user starts a conversation or asks for a greeting.\n### Steps\n- Greet the user with a friendly "Hello, World!" message.\n- Explain that this is a demonstration of a simple Hello World playbook.\n- Say goodbye to the user.',
+            "markdown": """This is some text
+- item 1
+- item 2
+# Heading 1
+# Another Heading 1""",
         }
         self.assertEqual(ast, expected)
 
