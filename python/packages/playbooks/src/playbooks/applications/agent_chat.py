@@ -1,4 +1,4 @@
-import asyncio
+import logging
 from dataclasses import dataclass
 from typing import List, Optional
 
@@ -7,12 +7,17 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Prompt
 
-from playbooks.cli.output import print_markdown, print_streaming_markdown
+from playbooks.cli.output import print_markdown
 from playbooks.core.agents import AIAgent, HumanAgent
 from playbooks.core.exceptions import RuntimeError
 from playbooks.core.runtime import PlaybooksRuntime, RuntimeConfig
 
 load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
 
 app = typer.Typer()
 console = Console()
@@ -52,20 +57,48 @@ class AgentChat:
     def human_agent(self):
         return self.runtime.agents[1]
 
-    async def run(self):
+    def run(self):
         # Run each AI agent in the runtime
         # Only AI agents should be run
         for agent in self.runtime.agents:
             if isinstance(agent, AIAgent):
-                async for chunk in agent.run(runtime=self.runtime):
+                for chunk in agent.run(runtime=self.runtime):
                     yield chunk
 
-    async def process_user_message(self, message: str):
+    def process_user_message(self, message: str):
         return self.runtime.router.send_message(
             message=message,
             from_agent=self.human_agent,
             to_agent=self.ai_agent,
         )
+
+
+def _process_buffer(buffer: str) -> tuple[str, str]:
+    """Process buffer and return tuple of (text_to_print, remaining_buffer).
+    Handles both newlines and code blocks."""
+    if "```" not in buffer:
+        last_newline = buffer.rfind("\n")
+        if last_newline != -1:
+            return buffer[: last_newline + 1], buffer[last_newline + 1 :]
+        return "", buffer
+
+    # Find first ``` and check if we have a closing ```
+    start = buffer.find("```")
+    end = buffer.find("```", start + 3)
+    if end == -1:
+        # No closing ```, check if we can print anything before the opening ```
+        last_newline = buffer[:start].rfind("\n")
+        if last_newline != -1:
+            return buffer[: last_newline + 1], buffer[last_newline + 1 :]
+        return "", buffer
+
+    # We have a complete code block, find the next newline after it
+    next_newline = buffer[end + 3 :].find("\n")
+    if next_newline != -1:
+        print_until = end + 3 + next_newline + 1
+        return buffer[:print_until], buffer[print_until:]
+
+    return "", buffer
 
 
 @app.command()
@@ -81,23 +114,24 @@ def main(
     stream: bool = typer.Option(True, help="Enable streaming output from LLM"),
 ):
     """Start an interactive chat session using the specified playbooks and LLM"""
-    asyncio.run(_async_chat(playbooks_paths, llm, model, api_key, stream))
+    _chat(playbooks_paths, llm, model, api_key, stream)
 
 
-async def _async_chat(
+def _chat(
     playbooks_paths: List[str],
     llm: Optional[str],
     model: Optional[str],
     api_key: Optional[str],
     stream: bool,
 ):
-    """Run the async chat session"""
+    """Run the chat session"""
     config = AgentChatConfig(
         playbooks_paths=playbooks_paths,
         llm=llm,
         model=model,
         api_key=api_key,
     )
+
     agent_chat = AgentChat(config)
 
     try:
@@ -109,31 +143,52 @@ async def _async_chat(
         )
         console.print("\nRuntime initialized successfully")
 
-        # Run application
-        console.print("\n[yellow]Agent: [/yellow]")
-        response = agent_chat.run()
+        # Print initial response from AI agent
         if stream:
-            await print_streaming_markdown(response)
+            buffer = ""
+            for chunk in agent_chat.run():
+                buffer += chunk
+                to_print, buffer = _process_buffer(buffer)
+                if to_print:
+                    print_markdown(to_print)
+            # Print any remaining content in the buffer
+            if buffer:
+                print_markdown(buffer)
         else:
-            print_markdown(response)
+            response = "".join(agent_chat.run())
+            print(f"""response: "{response}" """)
+            # print_markdown(response)
 
+        # Start interactive chat loop
         while True:
             try:
-                user_input = Prompt.ask("\n[blue]User[/blue]")
-                if user_input.lower() in ["exit", "quit"]:
-                    console.print("\nExiting chat loop...")
-                    return
+                # Get user input
+                user_message = Prompt.ask("\n[blue]User[/blue]")
+                if not user_message:
+                    continue
 
-                console.print("\n[yellow]Agent: [/yellow]")
-                response = await agent_chat.process_user_message(user_input)
+                # Process user message
                 if stream:
-                    await print_streaming_markdown(response)
+                    buffer = ""
+                    for chunk in agent_chat.process_user_message(user_message):
+                        buffer += chunk
+                        to_print, buffer = _process_buffer(buffer)
+                        if to_print:
+                            print_markdown(to_print)
+                    # Print any remaining content in the buffer
+                    if buffer:
+                        print_markdown(buffer)
                 else:
-                    print_markdown(response)
+                    response = "".join(agent_chat.process_user_message(user_message))
+                    print(response)
 
+            except (KeyboardInterrupt, EOFError):
+                break
             except Exception as e:
-                console.print(f"\n[red]Error in chat loop:[/red] {str(e)}")
-                raise
+                console.print(f"\n[red]Error: {str(e)}[/red]")
+                break
+
+        console.print("\n[yellow]Goodbye![/yellow]")
 
     except KeyboardInterrupt:
         console.print("\n[yellow]Goodbye![/yellow]")

@@ -16,7 +16,7 @@ services:
       - PYTHONPATH=/app
       - ENVIRONMENT=development
     env_file:
-      - .env
+      - ./website/api/.env
     depends_on:
       - redis
 
@@ -33,7 +33,7 @@ services:
     environment:
       - NODE_ENV=development
     env_file:
-      - .env
+      - ./website/frontend/.env
     depends_on:
       - api
 

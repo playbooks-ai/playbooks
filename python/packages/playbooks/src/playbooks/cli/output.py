@@ -1,5 +1,6 @@
 """Output formatting utilities for the CLI."""
-from typing import AsyncIterator
+
+from typing import Iterator
 
 from rich.console import Console
 from rich.live import Live
@@ -14,10 +15,10 @@ def print_markdown(text: str):
     console.print(md)
 
 
-async def print_streaming_markdown(stream_iterator: AsyncIterator[str]):
+def print_streaming_markdown(stream_iterator: Iterator[str]):
     """Print streaming markdown content"""
     content = ""
     with Live(Markdown(content), refresh_per_second=10) as live:
-        async for chunk in stream_iterator:
+        for chunk in stream_iterator:
             content += chunk
             live.update(Markdown(content))
