@@ -1,7 +1,7 @@
 """Load playbooks runtime log node."""
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from .base import RuntimeLogNode
 
@@ -12,7 +12,7 @@ class LoadPlaybooksRuntimeLogNode(RuntimeLogNode):
     @classmethod
     def create(
         cls,
-        playbook_paths: List[str],
+        playbooks_path: str,
         playbooks: str,
         parent_log_node_id: Optional[int] = None,
     ) -> "LoadPlaybooksRuntimeLogNode":
@@ -20,7 +20,7 @@ class LoadPlaybooksRuntimeLogNode(RuntimeLogNode):
             parent_log_node_id=parent_log_node_id,
             type="load_playbooks",
             info={
-                "playbook_paths": playbook_paths,
+                "playbooks_path": playbooks_path,
             },
         )
         instance.set_playbooks(playbooks)
