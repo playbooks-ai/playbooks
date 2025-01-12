@@ -1,30 +1,25 @@
 {
-    "python.testing.pytestEnabled": true,
-    "python.testing.unittestEnabled": false,
-    "python.testing.nosetestsEnabled": false,
-    "python.testing.autoTestDiscoverOnSaveEnabled": true,
-    "python.testing.pytestArgs": [
-        "-v"
-    ],
-    "files.exclude": {
-        "**/.git": true,
-        "**/.svn": true,
-        "**/.hg": true,
-        "**/CVS": true,
-        "**/.DS_Store": true,
-        "**/__pycache__": true,
-        "**/.pytest_cache": true,
-        "**/*.pyc": true,
-        "**/.coverage": true,
-        "**/htmlcov": true,
-        "**/.tox": true,
-        "**/.eggs": true,
-        "**/*.egg-info": true,
-        "**/build": true,
-        "**/dist": true,
-        "**/.mypy_cache": true,
-        "**/.ruff_cache": true,
-        "**/node_modules": true
-    },
-    "python.logging.level": "debug"
+  "files.exclude": {
+    "**/.git": true,
+    "**/.svn": true,
+    "**/.hg": true,
+    "**/CVS": true,
+    "**/.DS_Store": true,
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/*.pyc": true,
+    "**/.coverage": true,
+    "**/htmlcov": true,
+    "**/.tox": true,
+    "**/.eggs": true,
+    "**/*.egg-info": true,
+    "**/build": true,
+    "**/dist": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true,
+    "**/node_modules": true
+  },
+  "editor.defaultFormatter": "mikoz.black-py",
+  "editor.formatOnSave": true,
+  "notebook.formatOnSave.enabled": true
 }
