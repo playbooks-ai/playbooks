@@ -1,6 +1,7 @@
 """Playbooks package"""
 
-from playbooks.core.loader import load
-from playbooks.core.runtime import run
+from playbooks.core.agents import AIAgent
+from playbooks.core.playbook import Playbook
+from playbooks.core.runtime import PlaybooksRuntime, SingleThreadedPlaybooksRuntime
 
-__all__ = ["load", "run"]
+__all__ = ["Playbook", "SingleThreadedPlaybooksRuntime", "AIAgent", "PlaybooksRuntime"]
