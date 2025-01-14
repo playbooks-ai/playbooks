@@ -106,17 +106,25 @@ class PlaybooksRuntime:
             if h1.get("type") == "h1"
         ]
 
-    def _get_completion(self, stream=False, **kwargs):
-        return get_completion(
-            config=self.config.llm_config,
-            stream=stream,
-            **kwargs,
-        )
-
     def run(
-        self, user_message: str = None, stream: bool = False, **kwargs
+        self,
+        user_message: str = None,
+        stream: bool = True,
+        use_cache: bool = True,
+        **kwargs,
     ) -> Union[str, Iterator[str]]:
-        """Run playbooks using the configured model"""
+        """Run playbooks using the configured model.
+
+        Args:
+            user_message: Optional message from user to process
+            stream: If True, returns an iterator of response chunks
+            use_cache: If True and caching is enabled, will try to use cached responses
+            **kwargs: Additional arguments passed to get_completion
+
+        Returns:
+            If stream=True, returns an iterator of response chunks
+            If stream=False, returns the complete response as a string
+        """
         if user_message:
             self.add_runtime_log(
                 MessageRuntimeLogNode.create(
@@ -124,8 +132,6 @@ class PlaybooksRuntime:
                     role="user",
                 )
             )
-        if stream:
-            return self.stream(self.playbooks_content, user_message, **kwargs)
 
         # Get conversation history from kwargs if present, otherwise create initial messages
         messages = kwargs.pop(
@@ -136,45 +142,24 @@ class PlaybooksRuntime:
             ],
         )
 
-        raw_response = self._get_completion(
-            messages=messages,
-            **kwargs,
-        )
-        response = raw_response["choices"][0]["message"]["content"]
-        self.add_runtime_log(
-            MessageRuntimeLogNode.create(
-                message=response,
-                role="agent",
-            )
-        )
-        return response
-
-    def stream(
-        self, system_prompt: str, user_message: str = None, **kwargs
-    ) -> Iterator[str]:
-        """Run playbooks using the configured model with streaming enabled"""
-        # Get conversation history from kwargs if present, otherwise create initial messages
-        messages = kwargs.pop(
-            "conversation",
-            [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message or ""},
-            ],
-        )
-
-        response = self._get_completion(
+        # Always use streaming internally for consistent behavior
+        response = get_completion(
+            config=self.config.llm_config,
             messages=messages,
             stream=True,
+            use_cache=use_cache,
             **kwargs,
         )
+
         complete_message = ""
         for chunk in response:
             if chunk["choices"][0]["delta"].get("content"):
                 content = chunk["choices"][0]["delta"]["content"]
                 complete_message += content
-                yield content
+                if stream:
+                    yield content
 
-        # log event after streaming is complete with accumulated message
+        # Log the complete message
         self.add_runtime_log(
             MessageRuntimeLogNode.create(
                 message=complete_message,
@@ -182,14 +167,27 @@ class PlaybooksRuntime:
             )
         )
 
-    def get_llm_completion(self, messages: List[dict]):
-        """Get completion from LLM using runtime's config."""
-        response_gen = get_completion(
+        if not stream:
+            return complete_message
+
+    def get_llm_completion(
+        self, messages: List[dict], use_cache: bool = True
+    ) -> Iterator[str]:
+        """Get completion from LLM using runtime's config.
+
+        Args:
+            messages: List of message dictionaries to send to LLM
+            use_cache: If True and caching is enabled, will try to use cached responses
+
+        Returns:
+            Iterator of response chunks
+        """
+        for chunk in get_completion(
             config=self.config.llm_config,
             messages=messages,
-            stream=True,  # Always stream internally
-        )
-        for chunk in response_gen:
+            stream=True,
+            use_cache=use_cache,
+        ):
             if chunk["choices"][0]["delta"].get("content"):
                 yield chunk["choices"][0]["delta"]["content"]
 

@@ -1,7 +1,6 @@
 import hashlib
 import os
-from typing import Iterator
-
+from typing import Iterator, Union
 import litellm
 from litellm import completion
 from litellm.caching.caching import Cache
@@ -48,22 +47,30 @@ configure_litellm()
 
 
 def get_completion(
-    config: LLMConfig, mock_response: str = None, stream: bool = False, **kwargs
-) -> Iterator[str]:
-    """Get completion from LLM with optional streaming support."""
-    if mock_response is not None:
-        if stream:
+    config: LLMConfig, stream: bool = False, use_cache: bool = True, **kwargs
+) -> Union[dict, Iterator[dict]]:
+    """Get completion from LLM with optional streaming and caching support.
 
-            def mock_stream():
-                for chunk in mock_response.split():
-                    yield {"choices": [{"delta": {"content": chunk}}]}
+    Args:
+        config: LLM configuration containing model and API key
+        stream: If True, returns an iterator of response chunks
+        use_cache: If True and caching is enabled, will try to use cached responses
+        **kwargs: Additional arguments passed to litellm.completion
 
-            return mock_stream()
-        return {"choices": [{"message": {"content": mock_response}}]}
+    Returns:
+        If stream=True, returns an iterator of response chunks
+        If stream=False, returns the complete response
+    """
+    if not use_cache:
+        litellm.disable_cache()
 
-    return completion(
-        model=config.model,
-        api_key=config.api_key,
-        stream=stream,
-        **kwargs,
-    )
+    try:
+        return completion(
+            model=config.model,
+            api_key=config.api_key,
+            stream=stream,
+            **kwargs,
+        )
+    finally:
+        if not use_cache:
+            litellm.enable_cache()
