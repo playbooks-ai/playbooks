@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from playbooks.core.agents.ai_agent import AIAgent
     from playbooks.core.runtime import PlaybooksRuntime
 
+from playbooks.constants import INTERPRETER_TRACE_HEADER
 from playbooks.core.playbook import Playbook
 
 
@@ -46,8 +47,7 @@ Pseudocode will be written as "playbooks", which are function-like objects writt
 As you execute each line, output code on the line with instruction pointer, e.g. "[MyPlaybook:4] Say hello to the user", then explain how it was executed and then say what the result was. Do not output anything else.
 
 For example, if call stack is [CallerHello:4] -
-```
-# Playbooks interpreter trace
+# {{INTERPRETER_TRACE_HEADER}}
 ## [Hello:1] Greet the user with welcome to the Agentic AI world
 - Say("Hello, Welcome to the Agentic AI World!")
 
@@ -61,7 +61,7 @@ For example, if call stack is [CallerHello:4] -
 
 Example where execution is paused due to function call -
 ```
-# Playbooks interpreter trace
+# {{INTERPRETER_TRACE_HEADER}}
 ## [Hello:1] Greet the user with welcome to the Agentic AI world
 - Say("Hello, Welcome to the Agentic AI World!")
 
@@ -95,7 +95,9 @@ External functions -
 {{playbooks}}
 ```
         """
-
+        prompt = prompt.replace(
+            "{{INTERPRETER_TRACE_HEADER}}", INTERPRETER_TRACE_HEADER
+        )
         prompt = prompt.replace("{{playbooks}}", playbooks)
 
         return prompt
