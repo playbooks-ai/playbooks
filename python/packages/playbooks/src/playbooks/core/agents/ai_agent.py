@@ -6,7 +6,7 @@ from playbooks.core.exceptions import (
     AgentConfigurationError,
     AgentError,
 )
-from playbooks.core.playbooks import Playbook
+from playbooks.core.playbook import Playbook
 from playbooks.enums import AgentType
 
 if TYPE_CHECKING:
