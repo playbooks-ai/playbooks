@@ -156,8 +156,7 @@ def _chat(
                 print_markdown(buffer)
         else:
             response = "".join(agent_chat.run())
-            print(f"""response: "{response}" """)
-            # print_markdown(response)
+            print_markdown(response)
 
         # Start interactive chat loop
         while True:

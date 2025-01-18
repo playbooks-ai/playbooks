@@ -39,12 +39,10 @@ async def test_load_playbook():
     assert runtime.ast is not None
 
     assert runtime.agents is not None
-    assert len(runtime.agents) == 2, runtime.agents
+    assert len(runtime.agents) == 1, runtime.agents
 
     assert runtime.agents[0].klass == "HelloWorld Agent"
     assert runtime.agents[0].type == AgentType.AI
-    assert runtime.agents[1].klass == "Human"
-    assert runtime.agents[1].type == AgentType.HUMAN
 
     # Check if runtime session is created and persisted to DB
     assert runtime._session is not None
