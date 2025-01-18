@@ -43,9 +43,6 @@ class PlaybooksRuntime:
         # Track previous log node for parent relationship
         self._previous_log_node: RuntimeLogNode = None
 
-        # Mock LLM response
-        self._mock_llm_response = None
-
         # Message router
         self.router = MessageRouter(self)
 
@@ -108,12 +105,10 @@ class PlaybooksRuntime:
             for h1 in self.ast.get("children", [])
             if h1.get("type") == "h1"
         ]
-        self._mock_llm_response = mock_llm_response
 
     def _get_completion(self, stream=False, **kwargs):
         return get_completion(
             config=self.config.llm_config,
-            mock_response=self._mock_llm_response,
             stream=stream,
             **kwargs,
         )
@@ -192,7 +187,6 @@ class PlaybooksRuntime:
         response_gen = get_completion(
             config=self.config.llm_config,
             messages=messages,
-            mock_response=self._mock_llm_response,
             stream=True,  # Always stream internally
         )
         for chunk in response_gen:
