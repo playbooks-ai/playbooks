@@ -32,6 +32,7 @@ pyright = "*"
 pytest_asyncio = "*"
 autogen_core = "^0.4.0.dev13"
 mypy = "*"
+pytest-mock = "^3.14.0"
 
 [build-system]
 requires = ["poetry-core"]
