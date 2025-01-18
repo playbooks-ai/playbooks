@@ -1,5 +1,6 @@
 """Command-line interface for playbooks."""
 
+import asyncio
 from typing import List, Optional
 
 import typer
@@ -7,7 +8,8 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Prompt
 
-from playbooks.cli.session import ChatSession
+from playbooks.cli.output import print_markdown, print_streaming_markdown
+from playbooks.core.db.runtime_session import RuntimeSession
 
 load_dotenv()
 
@@ -30,8 +32,6 @@ def chat(
     stream: bool = typer.Option(True, help="Enable streaming output from LLM"),
 ):
     """Start an interactive chat session using the specified playbooks and LLM"""
-    import asyncio
-
     asyncio.run(_async_chat(playbook_paths, llm, model, api_key, stream))
 
 
@@ -43,20 +43,40 @@ async def _async_chat(
     stream: bool,
 ):
     """Run the async chat session"""
-    session = ChatSession(playbook_paths, llm, model, api_key, stream)
+    session = RuntimeSession(playbook_paths, llm, model, api_key, stream)
 
     try:
+        console.print(f"\nLoading playbooks from: {playbook_paths}")
         await session.initialize()
+        console.print("\nLoaded playbooks successfully")
+        console.print(
+            f"\nInitializing runtime with model={model}, "
+            f"api_key={'*' * len(api_key) if api_key else None}"
+        )
+        console.print("\nRuntime initialized successfully")
 
         # Process initial "Begin" message
-        await session.process_user_input("Begin")
+        console.print("\n[yellow]Agent: [/yellow]")
+        response = await session.process_user_input("Begin")
+        if stream:
+            await print_streaming_markdown(response)
+        else:
+            print_markdown(response)
 
         while True:
             try:
                 user_input = Prompt.ask("\n[blue]User[/blue]")
+                if user_input.lower() in ["exit", "quit"]:
+                    console.print("\nExiting chat loop...")
+                    session.cleanup()
+                    return
 
-                if not await session.process_user_input(user_input):
-                    break
+                console.print("\n[yellow]Agent: [/yellow]")
+                response = await session.process_user_input(user_input)
+                if stream:
+                    await print_streaming_markdown(response)
+                else:
+                    print_markdown(response)
 
             except Exception as e:
                 console.print(f"\n[red]Error in chat loop:[/red] {str(e)}")

@@ -7,7 +7,7 @@ class MessageRouter:
     def __init__(self, runtime):
         self.runtime = runtime
 
-    async def send_message(self, message: str, from_agent: Agent, to_agent: Agent):
+    def send_message(self, message: str, from_agent: Agent, to_agent: Agent):
         """Send a message from one agent to another."""
         routing_type = RoutingType.DIRECT
 
@@ -27,7 +27,7 @@ class MessageRouter:
         self.runtime.add_runtime_log(message_node)
 
         # Process the message using the recipient agent's process_message method
-        async for chunk in to_agent.process_message(
+        for chunk in to_agent.process_message(
             message=message,
             from_agent=from_agent,
             routing_type=routing_type,

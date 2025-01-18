@@ -1,5 +1,5 @@
 import uuid
-from typing import AsyncIterator, List, Union
+from typing import Iterator, List, Union
 
 from playbooks.config import RuntimeConfig
 from playbooks.core.agents import Agent, AIAgent
@@ -110,17 +110,17 @@ class PlaybooksRuntime:
         ]
         self._mock_llm_response = mock_llm_response
 
-    async def _get_completion(self, stream=False, **kwargs):
-        return await get_completion(
+    def _get_completion(self, stream=False, **kwargs):
+        return get_completion(
             config=self.config.llm_config,
             mock_response=self._mock_llm_response,
             stream=stream,
             **kwargs,
         )
 
-    async def run(
+    def run(
         self, user_message: str = None, stream: bool = False, **kwargs
-    ) -> Union[str, AsyncIterator[str]]:
+    ) -> Union[str, Iterator[str]]:
         """Run playbooks using the configured model"""
         if user_message:
             self.add_runtime_log(
@@ -141,7 +141,7 @@ class PlaybooksRuntime:
             ],
         )
 
-        raw_response = await self._get_completion(
+        raw_response = self._get_completion(
             messages=messages,
             **kwargs,
         )
@@ -154,9 +154,9 @@ class PlaybooksRuntime:
         )
         return response
 
-    async def stream(
+    def stream(
         self, system_prompt: str, user_message: str = None, **kwargs
-    ) -> AsyncIterator[str]:
+    ) -> Iterator[str]:
         """Run playbooks using the configured model with streaming enabled"""
         # Get conversation history from kwargs if present, otherwise create initial messages
         messages = kwargs.pop(
@@ -167,13 +167,13 @@ class PlaybooksRuntime:
             ],
         )
 
-        response = await self._get_completion(
+        response = self._get_completion(
             messages=messages,
             stream=True,
             **kwargs,
         )
         complete_message = ""
-        async for chunk in response:
+        for chunk in response:
             if chunk["choices"][0]["delta"].get("content"):
                 content = chunk["choices"][0]["delta"]["content"]
                 complete_message += content
@@ -187,15 +187,15 @@ class PlaybooksRuntime:
             )
         )
 
-    async def get_llm_completion(self, messages: List[dict]):
+    def get_llm_completion(self, messages: List[dict]):
         """Get completion from LLM using runtime's config."""
-        response_gen = await get_completion(
+        response_gen = get_completion(
             config=self.config.llm_config,
             messages=messages,
             mock_response=self._mock_llm_response,
             stream=True,  # Always stream internally
         )
-        async for chunk in response_gen:
+        for chunk in response_gen:
             if chunk["choices"][0]["delta"].get("content"):
                 yield chunk["choices"][0]["delta"]["content"]
 
@@ -215,16 +215,16 @@ class PlaybooksRuntime:
 
 
 class SingleThreadedPlaybooksRuntime(PlaybooksRuntime):
-    async def run(self, config: RuntimeConfig = None) -> str:
+    def run(self, config: RuntimeConfig = None) -> str:
         """Run playbooks."""
-        return await super().run(config=config or RuntimeConfig())
+        return super().run(config=config or RuntimeConfig())
 
 
-async def run(playbooks: str, **kwargs) -> str:
+def run(playbooks: str, **kwargs) -> str:
     """Convenience function to run playbooks"""
     model = kwargs.pop("model", None)
     api_key = kwargs.pop("api_key", None)
     config = RuntimeConfig(model=model, api_key=api_key)
     runtime = SingleThreadedPlaybooksRuntime(config)
     runtime.load_playbooks(playbooks)
-    return await runtime.run(**kwargs)
+    return runtime.run(**kwargs)

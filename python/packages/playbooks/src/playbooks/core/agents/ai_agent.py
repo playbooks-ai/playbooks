@@ -39,7 +39,7 @@ class AIAgent(Agent):
         self.playbooks: list[Playbook] = []
         self.main_thread: Optional[Any] = None
 
-    async def run(self, runtime: "PlaybooksRuntime" = None):
+    def run(self, runtime: "PlaybooksRuntime" = None):
         """Run the agent."""
         # raise custom exception AgentConfigurationError if no playbooks are defined
         if len(self.playbooks) == 0:
@@ -58,14 +58,14 @@ class AIAgent(Agent):
 
         # run the main thread
         # TODO: add support for filtering playbooks
-        async for chunk in self.main_thread.run(
+        for chunk in self.main_thread.run(
             runtime=runtime,
             included_playbooks=self.playbooks,
             instruction="Begin",
         ):
             yield chunk
 
-    async def process_message(
+    def process_message(
         self,
         message: str,
         from_agent: "Agent",
@@ -73,7 +73,7 @@ class AIAgent(Agent):
         runtime: "PlaybooksRuntime",
     ):
         # Process the message on main thread
-        async for chunk in self.main_thread.run(
+        for chunk in self.main_thread.run(
             runtime=runtime,
             included_playbooks=self.playbooks,
             instruction=f"Received the following message from {from_agent.klass}: {message}",
@@ -85,7 +85,7 @@ class AIAgentThread:
     def __init__(self, agent: AIAgent):
         self.agent = agent
 
-    async def run(
+    def run(
         self,
         runtime: "PlaybooksRuntime",
         included_playbooks: List[Playbook],
@@ -100,7 +100,8 @@ class AIAgentThread:
             {"role": "user", "content": instruction},
         ]
 
-        async for chunk in runtime.get_llm_completion(messages=messages):
+        # Get response from LLM
+        for chunk in runtime.get_llm_completion(messages=messages):
             yield chunk
 
     def get_system_prompt(self, include_playbooks: List["Playbook"]) -> str:
@@ -125,8 +126,11 @@ For example, if call stack is [CallerHello:4] -
 - Say("Hello, Welcome to the Agentic AI World!")
 
 ## [Hello:2] return positive message
-- Return("Awesome")
+- return "Awesome"
 - Returning to [CallerHello:4]
+
+## [CallerHello:5] Say the positive message
+- Say("Awesome")
 ```
 
 Example where execution is paused due to function call -
@@ -139,11 +143,6 @@ Example where execution is paused due to function call -
 - Say("What is your name?")
 - Paused at [Hello:2]
 ```
-
-Built-in functions -
-- Say($message): Send a message to the user
-- Return($value): Return a value to the caller
-- FireEvent($event): Fire an event to another agent
 
 At the end of the execution, output the following -
 ```
@@ -158,6 +157,13 @@ At the end of the execution, output the following -
 ```
 
 Handle any exceptions gracefully. If a generated playbook is failing at its task or isn't resilient against exceptions, you may regenerate an improved playbook and repeat processing.
+
+Built-in functions -
+- Say($message): Send a message to the user
+- FireEvent($event): Fire an event to another agent, e.g. FireEvent("Ask Validator agent if X Æ A-12 is a valid name")
+
+External functions -
+- GetWeather($location): Call an external function to get weather for a location, e.g. GetWeather("San Francisco")
 
 ```playbooks
 {{playbooks}}

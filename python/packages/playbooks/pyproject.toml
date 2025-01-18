@@ -20,6 +20,8 @@ md2py = "*"
 sqlalchemy = "^2.0.36"
 alembic = "^1.14.0"
 markdown-it-py = "^3.0.0"
+redis = "^5.2.1"
+diskcache = "^5.6.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.0"
