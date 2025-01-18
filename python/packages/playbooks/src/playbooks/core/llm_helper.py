@@ -1,3 +1,4 @@
+import hashlib
 import os
 from typing import Iterator
 
@@ -9,15 +10,15 @@ from playbooks.config import LLMConfig
 
 
 def custom_get_cache_key(*args, **kwargs):
-    # return key to use for your cache:
-    key = (
+    # Create a string combining all relevant parameters
+    key_str = (
         kwargs.get("model", "")
         + str(kwargs.get("messages", ""))
         + str(kwargs.get("temperature", ""))
         + str(kwargs.get("logit_bias", ""))
     )
-    # print("key for cache", key)
-    return key
+    # Create SHA-256 hash and return first 32 characters (128 bits) of the hex digest
+    return hashlib.sha256(key_str.encode()).hexdigest()[:32]
 
 
 def configure_litellm():

@@ -121,7 +121,7 @@ As you execute each line, output code on the line with instruction pointer, e.g.
 
 For example, if call stack is [CallerHello:4] -
 ```
-# Pseudocode interpreter trace
+# Playbooks interpreter trace
 ## [Hello:1] Greet the user with welcome to the Agentic AI world
 - Say("Hello, Welcome to the Agentic AI World!")
 
@@ -135,7 +135,7 @@ For example, if call stack is [CallerHello:4] -
 
 Example where execution is paused due to function call -
 ```
-# Pseudocode interpreter trace
+# Playbooks interpreter trace
 ## [Hello:1] Greet the user with welcome to the Agentic AI world
 - Say("Hello, Welcome to the Agentic AI World!")
 
