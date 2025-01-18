@@ -19,4 +19,5 @@ class HumanAgent(Agent):
         runtime: "PlaybooksRuntime",
         stream: bool = True,
     ):
-        print(message)
+        # We don't know yet what it means for human agent to receive a message
+        raise NotImplementedError
