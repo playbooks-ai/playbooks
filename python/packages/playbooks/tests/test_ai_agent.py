@@ -1,5 +1,7 @@
-import pytest
+import os
 from unittest.mock import Mock
+
+import pytest
 
 from playbooks.core.agents.ai_agent import AIAgent, AIAgentThread
 from playbooks.core.exceptions import (
@@ -42,10 +44,19 @@ def sample_h1_node_no_children():
 
 
 @pytest.fixture
-def mock_runtime():
+def mock_runtime(hello_world_response):
     runtime = Mock()
-    runtime.get_llm_completion.return_value = iter(["Test response"])
+    runtime.get_llm_completion.return_value = iter([hello_world_response])
     return runtime
+
+
+@pytest.fixture
+def hello_world_response():
+    fixture_path = os.path.join(
+        os.path.dirname(__file__), "fixtures", "hello_world_response.txt"
+    )
+    with open(fixture_path) as f:
+        return f.read()
 
 
 def test_ai_agent_init():
@@ -90,14 +101,14 @@ def test_run_no_runtime(sample_h1_node):
         next(agent.run(None))
 
 
-def test_run_success(sample_h1_node, mock_runtime):
+def test_run_success(sample_h1_node, mock_runtime, hello_world_response):
     agent = AIAgent.from_h1(sample_h1_node)
     response = list(agent.run(mock_runtime))
-    assert response == ["Test response"]
+    assert response == [hello_world_response]
     assert isinstance(agent.main_thread, AIAgentThread)
 
 
-def test_process_message(sample_h1_node, mock_runtime):
+def test_process_message(sample_h1_node, mock_runtime, hello_world_response):
     agent = AIAgent.from_h1(sample_h1_node)
     from_agent = AIAgent(klass="SenderAgent", description="Test sender")
 
@@ -106,7 +117,7 @@ def test_process_message(sample_h1_node, mock_runtime):
 
     # Reset the mock to ensure we get a fresh response
     mock_runtime.get_llm_completion.reset_mock()
-    mock_runtime.get_llm_completion.return_value = iter(["Test response"])
+    mock_runtime.get_llm_completion.return_value = iter([hello_world_response])
 
     response = list(
         agent.process_message(
@@ -116,7 +127,7 @@ def test_process_message(sample_h1_node, mock_runtime):
             runtime=mock_runtime,
         )
     )
-    assert response == ["Test response"]
+    assert response == [hello_world_response]
 
     # Verify the message format
     messages = mock_runtime.get_llm_completion.call_args[1]["messages"]
@@ -141,7 +152,7 @@ def test_ai_agent_thread_get_system_prompt():
     assert "# Test Playbook\n## Test Step" in prompt
 
 
-def test_ai_agent_thread_run(mock_runtime):
+def test_ai_agent_thread_run(mock_runtime, hello_world_response):
     agent = AIAgent(klass="TestAgent", description="Test description")
     thread = AIAgentThread(agent)
 
@@ -152,14 +163,14 @@ def test_ai_agent_thread_run(mock_runtime):
         thread.run(
             runtime=mock_runtime,
             included_playbooks=[mock_playbook],
-            instruction="Test instruction",
+            instruction=hello_world_response,
         )
     )
-    assert response == ["Test response"]
+    assert response == [hello_world_response]
 
     # Verify the messages passed to get_llm_completion
     messages = mock_runtime.get_llm_completion.call_args[1]["messages"]
     assert len(messages) == 2
     assert messages[0]["role"] == "system"
     assert messages[1]["role"] == "user"
-    assert messages[1]["content"] == "Test instruction"
+    assert messages[1]["content"] == hello_world_response

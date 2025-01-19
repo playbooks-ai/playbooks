@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import subprocess
 import sys
 from pathlib import Path
 from diskcache import Cache
@@ -19,6 +20,35 @@ def get_cache_keys(cache_dir):
         return keys
     finally:
         cache.close()
+
+
+def revert_cache_changes(cache_dir):
+    """Revert changes to cache files if they were staged."""
+    try:
+        # Get the relative path to cache dir from repo root
+        repo_root = cache_dir.parent.parent.parent.parent.parent
+        rel_cache_dir = cache_dir.relative_to(repo_root)
+        
+        # Reset any staged changes in the cache directory
+        subprocess.run(
+            ["git", "reset", "HEAD", f"{rel_cache_dir}/*"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+        )
+        
+        # Restore the files to their original state
+        subprocess.run(
+            ["git", "checkout", "--", f"{rel_cache_dir}/*"],
+            cwd=repo_root,
+            check=True,
+            capture_output=True,
+        )
+        print("Reverted cache file changes")
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to revert cache changes: {e.stderr.decode()}")
+    except Exception as e:
+        print(f"Error reverting cache changes: {e}")
 
 
 def main():
@@ -46,8 +76,9 @@ def main():
     # Check if any new keys were added
     new_keys = current_keys - previous_keys
     if not new_keys:
-        print("No new cache keys were added")
-        sys.exit(1)  # Exit with error to prevent commit
+        print("No new cache keys were added, reverting cache file changes")
+        revert_cache_changes(cache_dir)
+        sys.exit(0)  # Allow commit to proceed
 
     # Update the keys file with current keys
     keys_file.write_text("\n".join(sorted(current_keys)))

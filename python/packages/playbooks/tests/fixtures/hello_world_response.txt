@@ -1,0 +1,20 @@
+# Playbooks interpreter trace
+## [HelloWorld:1] Greet the user with a friendly "Hello, World!" message.
+- Say("Hello, World!")
+
+## [HelloWorld:2] Explain that this is a demonstration of a simple Hello World playbook.
+- Say("This is a demonstration of a simple Hello World playbook.")
+
+## [HelloWorld:3] Say goodbye to the user.
+- Say("Goodbye!")
+
+```state.json
+{
+"thread_id": "main",
+"variables": {},
+"event_to_fire": [],
+"paused_at": null,
+"call_stack": [],
+"call": null
+}
+```
