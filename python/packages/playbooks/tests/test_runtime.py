@@ -2,6 +2,8 @@ import pytest
 
 from playbooks.config import DEFAULT_MODEL
 from playbooks.constants import INTERPRETER_TRACE_HEADER
+from playbooks.core.agents import AIAgent
+from playbooks.core.agents.ai_agent_thread import AIAgentThread
 from playbooks.core.db import Database
 from playbooks.core.runtime import (
     RuntimeConfig,
@@ -73,6 +75,11 @@ def test_load_playbook():
 def test_run_playbook():
     runtime = SingleThreadedPlaybooksRuntime()
     runtime.load_from_path("examples/playbooks/hello.md")
-    response = "".join(list(runtime.agents[0].run(runtime=runtime)))
+    agent = runtime.agents[0]
+    assert isinstance(agent, AIAgent)
 
+    response = "".join(list(agent.run(runtime=runtime)))
     assert INTERPRETER_TRACE_HEADER in response
+
+    assert agent.main_thread is not None
+    assert isinstance(agent.main_thread, AIAgentThread)
