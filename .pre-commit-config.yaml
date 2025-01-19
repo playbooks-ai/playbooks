@@ -18,6 +18,13 @@ repos:
 
   - repo: local
     hooks:
+      - id: litellm-cache-check
+        name: Check LiteLLM Cache Changes
+        entry: bash scripts/check_litellm_cache.sh
+        language: system
+        files: ^python/packages/playbooks/\.litellm_cache/
+        pass_filenames: false
+
       - id: prettier
         name: Run Formatter (Prettier)
         entry: bash -c 'cd website/frontend && npm run format'
