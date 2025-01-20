@@ -12,7 +12,9 @@
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/python/packages/playbooks/src/playbooks/applications/agent_chat.py",
-            "args": ["${workspaceFolder}/python/packages/playbooks/examples/playbooks/hello.md"]
+            "args": [
+                "${workspaceFolder}/python/packages/playbooks/examples/playbooks/hello.md"
+            ]
         }
     ]
 }

@@ -7,10 +7,12 @@ from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Prompt
 
-from playbooks.cli.output import print_markdown
-from playbooks.core.agents import AIAgent, HumanAgent
-from playbooks.core.exceptions import RuntimeError
-from playbooks.core.runtime import PlaybooksRuntime, RuntimeConfig
+from playbooks.agent_factory import AgentFactory
+from playbooks.config import LLMConfig
+from playbooks.exceptions import AgentConfigurationError
+from playbooks.human_agent import HumanAgent
+from playbooks.message_router import MessageRouter
+from playbooks.utils.cli import print_markdown
 
 load_dotenv()
 
@@ -26,50 +28,38 @@ console = Console()
 @dataclass
 class AgentChatConfig:
     playbooks_paths: List[str]
-    model: Optional[str] = None
-    api_key: Optional[str] = None
-    llm: Optional[str] = None
-
-    def to_runtime_config(self) -> RuntimeConfig:
-        return RuntimeConfig(model=self.model, api_key=self.api_key, llm_config=None)
+    main_model_config: LLMConfig = None
 
 
 class AgentChat:
     def __init__(self, config: AgentChatConfig = None):
-        self.runtime = PlaybooksRuntime(
-            config.to_runtime_config() if config else RuntimeConfig()
-        )
-        if config and config.playbooks_paths:
-            self.runtime.load_from_paths(config.playbooks_paths)
+        self.config = config or AgentChatConfig()
 
-        if len(self.runtime.agents) != 1:
-            raise RuntimeError(
-                f"Expected 1 agent, but found {len(self.runtime.agents)}"
+        if config and config.playbooks_paths:
+            self.agents = AgentFactory.from_playbooks_paths(config.playbooks_paths)
+
+        if len(self.agents) != 1:
+            raise AgentConfigurationError(
+                f"Expected 1 agent, but found {len(self.agents)}"
             )
 
-        self.runtime.agents.append(HumanAgent(klass="User"))
+        self.ai_agent_class = self.agents[list(self.agents.keys())[0]]
+        self.ai_agent = self.ai_agent_class()
+        self.human_agent = self.agents["User"] = HumanAgent(klass="User")
 
-    @property
-    def ai_agent(self):
-        return self.runtime.agents[0]
+    def run(self, stream: bool = False):
+        for chunk in self.ai_agent.run(
+            llm_config=self.config.main_model_config, stream=stream
+        ):
+            yield chunk
 
-    @property
-    def human_agent(self):
-        return self.runtime.agents[1]
-
-    def run(self):
-        # Run each AI agent in the runtime
-        # Only AI agents should be run
-        for agent in self.runtime.agents:
-            if isinstance(agent, AIAgent):
-                for chunk in agent.run(runtime=self.runtime):
-                    yield chunk
-
-    def process_user_message(self, message: str):
-        return self.runtime.router.send_message(
+    def process_user_message(self, message: str, stream: bool = False):
+        return MessageRouter.send_message(
             message=message,
             from_agent=self.human_agent,
             to_agent=self.ai_agent,
+            llm_config=self.config.main_model_config,
+            stream=stream,
         )
 
 
@@ -111,15 +101,14 @@ def main(
     ),
     model: str = typer.Option(None, help="Model name for the selected LLM"),
     api_key: Optional[str] = typer.Option(None, help="API key for the selected LLM"),
-    stream: bool = typer.Option(True, help="Enable streaming output from LLM"),
+    stream: bool = typer.Option(False, help="Enable streaming output from LLM"),
 ):
     """Start an interactive chat session using the specified playbooks and LLM"""
-    _chat(playbooks_paths, llm, model, api_key, stream)
+    _chat(playbooks_paths=playbooks_paths, model=model, api_key=api_key, stream=stream)
 
 
 def _chat(
     playbooks_paths: List[str],
-    llm: Optional[str],
     model: Optional[str],
     api_key: Optional[str],
     stream: bool,
@@ -127,9 +116,7 @@ def _chat(
     """Run the chat session"""
     config = AgentChatConfig(
         playbooks_paths=playbooks_paths,
-        llm=llm,
-        model=model,
-        api_key=api_key,
+        main_model_config=LLMConfig(model=model, api_key=api_key),
     )
 
     agent_chat = AgentChat(config)
@@ -146,8 +133,9 @@ def _chat(
         # Print initial response from AI agent
         if stream:
             buffer = ""
-            for chunk in agent_chat.run():
-                buffer += chunk
+            for chunk in agent_chat.run(stream=stream):
+                if chunk:
+                    buffer += chunk
                 to_print, buffer = _process_buffer(buffer)
                 if to_print:
                     print_markdown(to_print)
@@ -169,7 +157,9 @@ def _chat(
                 # Process user message
                 if stream:
                     buffer = ""
-                    for chunk in agent_chat.process_user_message(user_message):
+                    for chunk in agent_chat.process_user_message(
+                        user_message, stream=stream
+                    ):
                         buffer += chunk
                         to_print, buffer = _process_buffer(buffer)
                         if to_print:
@@ -179,12 +169,14 @@ def _chat(
                         print_markdown(buffer)
                 else:
                     response = "".join(agent_chat.process_user_message(user_message))
-                    print(response)
+                    print_markdown(response)
 
             except (KeyboardInterrupt, EOFError):
                 break
             except Exception as e:
+                # show error message and stack trace
                 console.print(f"\n[red]Error: {str(e)}[/red]")
+                raise e
                 break
 
         console.print("\n[yellow]Goodbye![/yellow]")

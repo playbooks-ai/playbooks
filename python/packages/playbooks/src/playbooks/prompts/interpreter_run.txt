@@ -1,40 +1,3 @@
-from typing import TYPE_CHECKING, List
-
-if TYPE_CHECKING:
-    from playbooks.core.agents.ai_agent import AIAgent
-    from playbooks.core.runtime import PlaybooksRuntime
-
-from playbooks.constants import INTERPRETER_TRACE_HEADER
-from playbooks.core.playbook import Playbook
-
-
-class AIAgentThread:
-    def __init__(self, agent: "AIAgent"):
-        self.agent = agent
-
-    def run(
-        self,
-        runtime: "PlaybooksRuntime",
-        included_playbooks: List[Playbook],
-        instruction: str,
-    ):
-        # TODO: track and add conversation history
-        messages = [
-            {
-                "role": "system",
-                "content": self.get_system_prompt(included_playbooks),
-            },
-            {"role": "user", "content": instruction},
-        ]
-
-        # Get response from LLM
-        for chunk in runtime.get_llm_completion(messages=messages):
-            yield chunk
-
-    def get_system_prompt(self, include_playbooks: List["Playbook"]) -> str:
-        playbooks = "\n".join([playbook.markdown for playbook in include_playbooks])
-
-        prompt = """
 You are a pseudocode interpreter. Faithfully execute provided pseudocode.
 Pseudocode will be written as "playbooks", which are function-like objects written in markdown.
 
@@ -94,10 +57,3 @@ External functions -
 ```playbooks
 {{playbooks}}
 ```
-        """
-        prompt = prompt.replace(
-            "{{INTERPRETER_TRACE_HEADER}}", INTERPRETER_TRACE_HEADER
-        )
-        prompt = prompt.replace("{{playbooks}}", playbooks)
-
-        return prompt
