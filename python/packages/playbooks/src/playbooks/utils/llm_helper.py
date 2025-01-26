@@ -96,7 +96,8 @@ def get_completion(
             else:
                 yield cache_value
         else:
-            # print("Cache miss")
+            print("Cache miss for key:", cache_key)
+            print("     Existing keys:", list(cache.iterkeys()))
             # Get response from LLM
             full_response = []
             try:
