@@ -41,7 +41,7 @@ At the end of the execution, output the following -
 "event_to_fire": [list any events to be fired, if any],
 "paused_at": current instruction pointer e.g. "PlaybookOne:4" if paused, otherwise None,
 "call_stack": if paused then call stack  e.g. [PlaybookOne:4, GoodPlaybook:2], otherwise [],
-"call": python code for external function calls, if any, e.g. `ExternalFunction(param1=10, p2="hello")`
+"external_calls": python code for external function calls, if any, e.g. [`Say("Hello")`, `GetWeather(location="San Francisco")`],
 }
 ```
 
