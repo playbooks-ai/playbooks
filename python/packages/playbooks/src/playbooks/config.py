@@ -16,4 +16,8 @@ class LLMConfig:
 
     def __post_init__(self):
         self.model = self.model or os.environ.get("MODEL") or DEFAULT_MODEL
-        self.api_key = self.api_key or os.environ.get("ANTHROPIC_API_KEY")
+        if self.api_key is None:
+            if "claude" in self.model:
+                self.api_key = os.environ.get("ANTHROPIC_API_KEY")
+            elif "gemini" in self.model:
+                self.api_key = os.environ.get("GEMINI_API_KEY")

@@ -2,7 +2,9 @@ import glob
 from pathlib import Path
 from typing import List
 
+from .config import LLMConfig
 from .exceptions import PlaybookError
+from .transpiler import Transpiler
 from .utils.markdown_to_ast import markdown_to_ast
 
 
@@ -10,7 +12,7 @@ class PlaybookLoader:
     """Handles loading playbook files and parsing them into Markdown AST."""
 
     @staticmethod
-    def load_and_parse(playbooks_paths: List[str]) -> dict:
+    def load_and_parse(playbooks_paths: List[str], llm_config: LLMConfig) -> dict:
         """
         Load playbooks from files and parse them into AST.
 
@@ -30,7 +32,10 @@ class PlaybookLoader:
         except (OSError, IOError) as e:
             raise PlaybookError(f"Error reading playbook: {str(e)}") from e
 
-        return markdown_to_ast(playbooks_content)
+        # Transpile playbooks
+        transpiler = Transpiler(llm_config=llm_config)
+        transpiled_content = transpiler.process(playbooks_content)
+        return markdown_to_ast(transpiled_content)
 
     @staticmethod
     def gather_playbooks(paths: List[str]) -> str:

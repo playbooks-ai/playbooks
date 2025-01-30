@@ -4,6 +4,7 @@ if TYPE_CHECKING:
     from .agent import Agent
 
 from .interpreter import Interpreter
+from .types import AgentResponseChunk, ToolResponse
 
 
 class AgentThread:
@@ -12,7 +13,7 @@ class AgentThread:
         self.interpreter = Interpreter()
         self.history: List[Dict[str, Any]] = []
 
-    def get_context_history(self, max_items: int = 10) -> str:
+    def get_context_history(self, max_items: int = 20) -> str:
         """Get a compacted form of history for context.
 
         Args:
@@ -27,14 +28,11 @@ class AgentThread:
         recent_history = self.history[-max_items:]
         context = []
         for item in recent_history:
-            msg_from = item["from_agent"].klass if item["from_agent"] else "system"
-            context.append(
-                f"Received {item['routing_type']} message from {msg_from}: {item['message']}\n"
-            )
-            context.append(item["response"])
-            context.append("\n")
-            context.append("-" * 20)
-            context.append("\n")
+            if "from_agent" in item and item["from_agent"] is not None:
+                msg_from = item["from_agent"].klass
+            else:
+                msg_from = "System"
+            context.append(f"- {msg_from}: {item['message']}")
 
         return "\n".join(context)
 
@@ -48,27 +46,62 @@ class AgentThread:
     ):
         instruction = f"Received {routing_type} message from {from_agent.klass if from_agent is not None else 'system'}: {message}"
 
-        # Add context from history if available
-        context = self.get_context_history()
-        if context:
-            instruction = f"**Previous context** -\n{context}\n\n**Current context** -\n{instruction}"
-
-        response_chunks = []
-        for chunk in self.interpreter.run(
-            included_playbooks=self.agent.playbooks,
-            instruction=instruction,
-            llm_config=llm_config,
-            stream=stream,
-        ):
-            response_chunks.append(chunk)
-            yield chunk
-
         # Store in history
         self.history.append(
             {
                 "message": message,
                 "from_agent": from_agent,
-                "routing_type": routing_type,
-                "response": "".join(response_chunks),
             }
         )
+
+        waiting_for_user_input = False
+        while not waiting_for_user_input:
+            # TODO: Fix instruction and context history for looping on tool call
+
+            # Add context from history if available
+            session_context = self.get_context_history()
+            if session_context:
+                session_context = "Session log:\n" + session_context
+
+            chunks = []
+            for chunk in self.interpreter.run(
+                included_playbooks=self.agent.playbooks,
+                instruction=instruction,
+                session_context=session_context,
+                llm_config=llm_config,
+                stream=stream,
+            ):
+                chunks.append(chunk)
+                yield chunk
+
+            tool_calls = [chunk.tool_call for chunk in chunks if chunk.tool_call]
+
+            # Execute tools
+            external_call_made = False
+            instruction = []
+            for tool_call in tool_calls:
+                if tool_call.fn == "Say":
+                    yield AgentResponseChunk(agent_response=tool_call.args[0])
+                    self.history.append(
+                        {
+                            "message": tool_call.args[0],
+                            "from_agent": self.agent,
+                        }
+                    )
+                else:
+                    retval = self.agent.execute_tool(tool_call)
+                    external_call_made = True
+                    tool_call_message = f"{tool_call.fn}() returned {retval}"
+                    instruction.append(tool_call_message)
+                    yield AgentResponseChunk(
+                        tool_response=ToolResponse(tool_call.fn, retval)
+                    )
+                    self.history.append(
+                        {
+                            "message": tool_call_message,
+                        }
+                    )
+
+            instruction = "\n".join(instruction)
+            if self.interpreter.yield_requested_on_say or not external_call_made:
+                waiting_for_user_input = True

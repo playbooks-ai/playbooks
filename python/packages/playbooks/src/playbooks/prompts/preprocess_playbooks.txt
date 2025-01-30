@@ -17,7 +17,7 @@
   - **3-Letter Command Codes:**
     - `EXE`: Execute internal logic or assignments (e.g., `$x = Reverse($y)`).  
     - `INT`: Playbook invocation (e.g., `AnotherPlaybook()`).  
-    - `EXT`: External function call, e.g., `Say("Hello")` or `GetWeather("San Francisco")`
+    - `EXT` or `YLD`: External function call, without yielding control back to system (e.g., `EXT Say("Hello")`) or with yielding control back to system (e.g., `YLD $weather = GetWeather("San Francisco")`
     - `CND`: A conditional or if or an else statement (e.g., `CND If user is unhappy`).  
     - `CHK`: A check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`).  
     - `RET`: Return from current playbook, optionally returning a value.  
@@ -33,130 +33,117 @@
    - Maintain atomic actions—one instruction per line.
    - Convert assignment from external function call to EXT (make external call), YLD (yield for external call) and EXE (assign variable from external call result) lines
    - Add sub-steps if an `if` block is needed (e.g., `01:CND If $firstName == "Steve"  01.01:RET return "Steverleon"`).  
+   - Use `YLD` where we need to pause for external call. Some external calls like Say() don't require a pause.
 
 6. **Notes**  
    - Prefix notes with `N1.`, `N2.`, etc. Keep them in a separate “### Notes” section.  
    - To reference a note from a step, use `CHK N1. ...` or similar.  
 
 **Output**  
-- Produce one contiguous processed playbook text, preserving the original headings but adding your new line-numbered instructions.  
-- Separate playbooks with `====`.  
+- Produce one contiguous processed playbook text, preserving the original headings but adding your new line-numbered instructions.
 - Do NOT add extra commentary: output just the processed markdown.
+- Each Python tool function becomes a EXT playbook. Add the playbook with the same name as the function and a description using function documentation, noting it is external call. Include the code in a `### Code` section.
+- Each non-python playbooks is an INT playbook. Add description if not already present.
+- Minimize YLDs, e.g. ask user for multiple inputs in one step instead of separate YLD for each input.
+- If not WordCase already, convert agent and playbook names to WordCase.
 
-**Example**  
-Transform this raw input:
+Example --
+**Start input**  
 
+# ExampleAgent
+
+```tools
+def Tool1(param1:int):
+    """
+    Call this tool for this specific reason.
+
+    Args:
+        param1 (int): The input parameter for Tool1.
+
+    Returns:
+        dict{retval: int}: A dictionary containing the key 'retval'.
+    """
+    return {"retval": 1}
 ```
-# HelloWorld
 
-## SayHello
+## Playbook 1
 
 ### Trigger
-- When you want to say hello to the user
+- When agent starts
 
 ### Steps
-- Say("Hello, Welcome to the Agentic AI World!")
+- get $name using "Ask user for name"
+- Greet user with name
+- $weather = GetWeather("San Francisco")
+- Tell user what the weather is in San Francisco.
 
-## AskName
+## Ask user for name
 
 ### Steps
 - $firstName = Ask user what you should call them
 - return $firstName
 
 ### Notes
-- Ensure the name is valid and not empty
+- If the name is invalid, ask the user again
 
-## MakePokemonName($firstName)
+**End input**  
 
-### Steps
-- Construct a name that rhymes with "pikachoo"
-- Reverse and return the name
+**Start output**
 
-### Notes
-- Always ensure the final name “rhymes with pikachoo.”
-- If name is "Steve" then use "Steverleon"
+# ExampleAgent
 
-------
+## EXT Tool1($param1: int) -> dict{retval: int}
+External call this tool for this specific reason. $param1 is integer input parameter for Tool1. Return a dictionary containing integer 'retval'.
 
-## Main
-
-### Trigger
-When the user starts a conversation
-
-### Steps
-- Explain that this is a demonstration of a simple playbook.
-- Say hello to the user
-- $firstName = AskName()
-- $pokemonName = MakePokemonName($firstName)
-- Say "Hello {$firstName}, I shall call you {$pokemonName}"
+### Code
+```python
+def Tool1(param1: int) -> dict:
+    return {"retval": 1}
 ```
-
-into:
-
-```
-# HelloWorld
-
-## SayHello() -> None
-
-### Trigger
-01:CND When you want to say hello to the user
-
-### Steps
-01:EXT Say("Hello, Welcome to the Agentic AI World!")
-02:YLD
 
 ====
 
-## AskName -> $firstName
-
-### Steps
-01:EXT Say("What should I call you?")
-02:YLD
-03:EXE $firstName = Get first name from user message
-04:CHK N1 If $firstName is empty or invalid
-  04.01:EXT Say(Tell user that the name doesn't look right and ask for name again)
-  04.02:YLD
-  04.03:JMP Try again a couple of times by going back to step 03
-05:RET return $firstName
-
-### Notes
-N1 Ensure the name is valid and not empty
-
-====
-
-## MakePokemonName($firstName) -> $pokemonName
-
-### Steps
-01:CHK N2 If $firstName == "Steve"
-  01.01:RET return "Steverleon"
-02:EXE $pokemonName = Make a funny pokemon sounding $pokemonName from $firstName
-03:CHK N1 If $pokemonName does not rhyme with "pikachoo"
-  03.01:JMP Try again by going back to step 02
-04:EXE $pokemonName = reverse $pokemonName
-05:RET return $pokemonName
-
-### Notes
-N1 Always ensure the final name “rhymes with pikachoo.”
-N2 If name is "Steve" then use "Steverleon"
-
-====
-
-## Main -> None
+## INT Playbook1() -> None
+Gets user's name and provides San Francisco weather information
 
 ### Trigger
-01:BGN When the user starts a conversation
+01:BGN When agent starts
 
 ### Steps
-01:EXE Say(Explain that this is a demonstration of a simple playbook)
-02:EXE Say(Say hello to the user)
-03:INT $firstName = AskName()
-04:INT $pokemonName = MakePokemonName($firstName)
-05:EXE Say("Hello {$firstName}, I shall call you {$pokemonName}")
-06:END
-```
+01:EXE $name = AskUserForName()
+02:EXT Say(Greet user with name)
+03:YLD $weather = GetWeather("San Francisco")
+04:EXT Say(Tell user what the weather is in San Francisco.)
 
-Follow these instructions exactly to transform the entire input.
+====
 
-```
+## INT AskUserForName() -> str
+Prompts for and validates user's preferred name
+
+### Steps
+01:YLD $firstName = Say(Ask user what you should call them)
+02:CHK N1 If $firstName is empty or invalid
+  02.01:EXE Say(Tell user that the name doesn't look right and ask for name again)
+  02.02:JMP Try again a couple of times by going back to step 02
+03:RET $firstName
+
+### Notes
+N1 If the name is invalid, ask the user again
+
+**End output**
+
+====
+
+Follow these instructions exactly to transform the entire input. Output only the transformed text, nothing else.
+
+**Start input**
+
 {{PLAYBOOKS}}
-```
+
+**End input**
+
+Make sure that external tools have proper descriptions and a code block.
+Minimize YLDs and use them only to wait for input from user or for external calls.
+Insert proper line numbers, headings, trigger/step codes, etc.
+
+**Start output**

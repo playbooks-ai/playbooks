@@ -100,7 +100,7 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
     return root
 
 
-def add_markdown_attributes(node: Dict[str, Any]) -> str:
+def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     """
     Performs a DFS walk on the node tree to add markdown attributes.
     Returns the markdown string for the current node and all its children.
@@ -109,7 +109,7 @@ def add_markdown_attributes(node: Dict[str, Any]) -> str:
     children_markdown = ""
     if "children" in node:
         for child in node["children"]:
-            add_markdown_attributes(child)
+            refresh_markdown_attributes(child)
 
     # Generate markdown for current node
     current_markdown = ""
@@ -148,12 +148,10 @@ def add_markdown_attributes(node: Dict[str, Any]) -> str:
     node.pop("_ordered", None)
     node.pop("_number", None)
 
-    return node
-
 
 def markdown_to_ast(markdown: str) -> Dict[str, Any]:
     tree = parse_markdown_to_dict(markdown)
-    add_markdown_attributes(tree)
+    refresh_markdown_attributes(tree)
 
     # If tree is already a root/document node, just change its type and add text field
     if tree.get("type") == "root":
