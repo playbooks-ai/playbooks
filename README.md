@@ -29,7 +29,7 @@
 </div>
 
 <div align="center">
-  <h2 align="center">Train AI Agents Like Humans</h2>
+  <h2 align="center">Train AI Agents with Human Readable Playbooks</h2>
 </div>
 
 Playbooks AI is a framework for creating AI agents using human-readable and LLM-executed playbooks.
@@ -40,14 +40,14 @@ Playbooks AI is a framework for creating AI agents using human-readable and LLM-
 
 1. Visit [runplaybooks.ai](https://runplaybooks.ai) and try out the demo playground
 
-<!-- 2. On command line:
+2. On command line
 
 ```bash
 pip install playbooks
 playbooks run hello.md
-``` -->
+```
 
-2. In Python REPL
+3. Alternatively, in Python REPL
 
    a. Install the playbooks Python package
    ```bash
@@ -115,6 +115,11 @@ Playbooks is the perfect middle ground. Agent behavior is written in an easily r
 
 Not only that, business users can use a copilot that can transparently make changes to the playbooks on their behalf, enabling them to easily make changes to agent behavior, such as listing caveats and special cases, adding new business logic, and so on.
 
+## TODOs
+
+- [ ] Create a VSCode extension for Playbooks debugging
+
+
 ## Contributing
 
 Welcome to the Playbooks community! We're excited to have you contribute. 
@@ -130,7 +135,7 @@ If you want to help, checkout some of the issues marked as `good-first-issue` or
    ```
 
 2. **Environment Variables**
-   Set up environment variables for the playbooks package (`python/packages/playbooks/.env`):
+   Set up environment variables for the playbooks package (`.env`):
    ```bash
    # LLM Configuration
    DEFAULT_MODEL=claude-3-5-sonnet-20241022
@@ -148,33 +153,10 @@ If you want to help, checkout some of the issues marked as `good-first-issue` or
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    
    # Install playbooks Python package in development mode
-   cd python/packages/playbooks
    pip install poetry
    poetry install
    cd ../../..
    ```
-
-4. **Website Setup**
-   ```bash
-   # Install foreman (process manager)
-   sudo gem install foreman
-   
-   # Set up API
-   cd website/api
-   pip install -r requirements.txt
-   cd ..
-   
-   # Set up Frontend
-   cd frontend
-   npm install
-   cd ../..
-
-   # Run the website
-   cd website
-   foreman start
-   ```
-
-   For detailed website development instructions, see `website/README.md`.
    
 ### Testing
 
@@ -182,7 +164,6 @@ We use pytest for testing. Here's how to run the tests:
 
 1. **Run playbooks Python Package Tests**
    ```bash
-   cd python/packages/playbooks
    pytest
    ```
 

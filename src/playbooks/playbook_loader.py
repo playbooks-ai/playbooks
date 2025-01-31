@@ -54,7 +54,7 @@ class PlaybookLoader:
         all_files = []
 
         for path in paths:
-            if any(char in path for char in ["*", "?", "["]):
+            if any(char in str(path) for char in ["*", "?", "["]):
                 # Handle glob pattern
                 all_files.extend(glob.glob(path, recursive=True))
             else:

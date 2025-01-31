@@ -13,5 +13,7 @@ class AgentFactory:
             ast = PlaybookLoader.load_and_parse(playbooks_paths, llm_config)
         except PlaybookError as e:
             raise e
+        except ValueError as e:
+            raise PlaybookError(f"Failed to parse playbook: {str(e)}") from e
 
         return AgentBuilder.create_agents_from_ast(ast)
