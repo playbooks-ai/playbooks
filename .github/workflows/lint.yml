@@ -28,14 +28,3 @@ jobs:
       run: |
         poetry run ruff check .
         poetry run black --check .
-
-    - name: (Website API) Install dependencies
-      run: |
-        cd website/api
-        pip install -r requirements.txt
-        
-    - name: (Website API) Run linting
-      run: |
-        cd website/api
-        ruff check .
-        black --check .
