@@ -108,6 +108,7 @@ updated_vars:
 
 Yield control back on YLD steps unless not necessary. Process the message listed below. 
 Output yaml in triple backticks with all top level keys (thread_id, initial, prologue, trace, stack, updated_vars).
+Variables should only type boolean, strings, numbers and null.
 Don't call external function if system log shows that function was already invoked successfully.
 After calling external function, put the next line in the stack.
 Answer any chitchat professionally, bring conversation to a topic that can be addressed by a playbook.

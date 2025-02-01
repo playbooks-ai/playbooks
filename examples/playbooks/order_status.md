@@ -65,11 +65,8 @@ def CheckOrderStatus(orderId):
 - $authToken = AuthenticateUser($email, $pin)
 - If $authToken is invalid, try once by asking to verify $email and $pin
 - If $authToken is still invalid:
-  - Ask user for $ssn and date of birth $dob
-  - $authToken = AuthenticateUser2($ssn, $dob)
-  - If still invalid:
-    - Say(Apologize and ask user to contact support.)
-    - return (Not authenticated)
+  - Say(Apologize and ask user to contact support.)
+  - return (Not authenticated)
 - return $authToken
 
 ### Notes
