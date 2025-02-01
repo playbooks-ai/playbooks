@@ -1,0 +1,17 @@
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        name: Run Formatter (Black)
+        files: .
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.7
+    hooks:
+      - id: ruff
+        name: Run Linter Check (Ruff)
+        args: [ --fix ]
+        files: .
+      - id: ruff-format
+        name: Run Formatter (Ruff)
+        files: .
