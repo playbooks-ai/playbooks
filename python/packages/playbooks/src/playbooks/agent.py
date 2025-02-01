@@ -2,11 +2,13 @@ from typing import Any, Optional
 
 from .agent_thread import AgentThread
 from .base_agent import BaseAgent
+from .enums import PlaybookExecutionType
 from .exceptions import (
     AgentAlreadyRunningError,
     AgentConfigurationError,
 )
 from .playbook import Playbook
+from .types import ToolCall
 
 
 class Agent(BaseAgent):
@@ -14,7 +16,12 @@ class Agent(BaseAgent):
     Base class for AI agents.
     """
 
-    def __init__(self, klass: str, description: str, playbooks: list[Playbook] = []):
+    def __init__(
+        self,
+        klass: str,
+        description: str,
+        playbooks: list[Playbook] = [],
+    ):
         self.klass = klass
         self.description = description
         self.playbooks: list[Playbook] = playbooks
@@ -63,3 +70,23 @@ class Agent(BaseAgent):
             stream=stream,
         ):
             yield chunk
+
+    def execute_tool(self, tool_call: ToolCall):
+        # Look up an EXT playbook with the same name as the tool call
+        ext_playbook = next(
+            (
+                p
+                for p in self.playbooks
+                if p.execution_type == PlaybookExecutionType.EXT
+                and p.klass == tool_call.fn
+            ),
+            None,
+        )
+
+        if ext_playbook is None:
+            raise Exception(f"EXT playbook {tool_call.fn} not found")
+
+        # If found, run the playbook
+        func = ext_playbook.func
+        retval = func(*tool_call.args, **tool_call.kwargs)
+        return retval

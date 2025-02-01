@@ -4,6 +4,7 @@ from typing import Dict, Type
 from .agent import Agent
 from .exceptions import AgentConfigurationError
 from .playbook import Playbook
+from .utils.markdown_to_ast import refresh_markdown_attributes
 
 
 class AgentBuilder:
@@ -54,6 +55,11 @@ class AgentBuilder:
             if h2.get("type") == "h2"
         ]
 
+        # Python code blocks were removed from EXT playbooks,
+        # so we need to refresh the markdown attributes to ensure that
+        # python code is not sent to the LLM with playbooks
+        refresh_markdown_attributes(h1)
+
         if not playbooks:
             raise AgentConfigurationError(f"No playbooks defined for AI agent {klass}")
 
@@ -68,7 +74,7 @@ class AgentBuilder:
         def __init__(self):
             Agent.__init__(self, klass, description, playbooks)
 
-        print(f'Creating agent class {agent_class_name} for agent "{klass}"')
+        # print(f'Creating agent class {agent_class_name} for agent "{klass}"')
         return type(
             agent_class_name,
             (Agent,),

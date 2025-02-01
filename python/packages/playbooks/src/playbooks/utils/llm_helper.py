@@ -11,7 +11,7 @@ from playbooks.config import LLMConfig
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
 if llm_cache_enabled:
     llm_cache_type = os.getenv("LLM_CACHE_TYPE", "disk").lower()
-    print(f"Using LLM cache type: {llm_cache_type}")
+    # print(f"Using LLM cache type: {llm_cache_type}")
 
     if llm_cache_type == "disk":
         from diskcache import Cache
@@ -21,7 +21,7 @@ if llm_cache_enabled:
             or tempfile.TemporaryDirectory(prefix="llm_cache_").name
         )
         cache = Cache(directory=cache_dir)
-        print(f"Using LLM cache directory: {cache_dir}")
+        # print(f"Using LLM cache directory: {cache_dir}")
 
     elif llm_cache_type == "redis":
         from redis import Redis
@@ -84,6 +84,13 @@ def get_completion(
         **kwargs,
     }
 
+    print()
+    print("=" * 20 + " LLM CALL " + "=" * 20)
+    print(messages[0]["content"])
+    print(messages[1]["content"] if len(messages) > 1 else "")
+    print("=" * 40)
+    print()
+
     if llm_cache_enabled and use_cache:
         cache_key = custom_get_cache_key(**completion_kwargs)
         cache_value = cache.get(cache_key)
@@ -96,8 +103,8 @@ def get_completion(
             else:
                 yield cache_value
         else:
-            print("Cache miss for key:", cache_key)
-            print("     Existing keys:", list(cache.iterkeys()))
+            # print("Cache miss for key:", cache_key)
+            # print("     Existing keys:", list(cache.iterkeys()))
             # Get response from LLM
             full_response = []
             try:
@@ -107,7 +114,7 @@ def get_completion(
                         full_response.append(chunk["text"])
                         yield chunk["text"]
                 else:
-                    full_response = [response["choices"][0]["message"]["content"]]
+                    full_response = response["choices"][0]["message"]["content"]
                     yield full_response
             finally:
                 if use_cache:

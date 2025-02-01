@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Iterable, List, Optional
 
 import typer
 from dotenv import load_dotenv
@@ -12,6 +12,7 @@ from playbooks.config import LLMConfig
 from playbooks.exceptions import AgentConfigurationError
 from playbooks.human_agent import HumanAgent
 from playbooks.message_router import MessageRouter
+from playbooks.types import AgentResponseChunk
 from playbooks.utils.cli import print_markdown
 
 load_dotenv()
@@ -36,7 +37,9 @@ class AgentChat:
         self.config = config or AgentChatConfig()
 
         if config and config.playbooks_paths:
-            self.agents = AgentFactory.from_playbooks_paths(config.playbooks_paths)
+            self.agents = AgentFactory.from_playbooks_paths(
+                config.playbooks_paths, config.main_model_config
+            )
 
         if len(self.agents) != 1:
             raise AgentConfigurationError(
@@ -47,13 +50,28 @@ class AgentChat:
         self.ai_agent = self.ai_agent_class()
         self.human_agent = self.agents["User"] = HumanAgent(klass="User")
 
-    def run(self, stream: bool = False):
+    def run(self, stream: bool):
+        """Run the agent and return both raw chunks and agent responses.
+
+        Returns:
+            AgentResponse: Object containing two independent streams:
+                - raw_stream: yields raw LLM chunks
+                - agent_response_stream: yields messages from Say() calls
+        """
+
+        chunks = []
         for chunk in self.ai_agent.run(
             llm_config=self.config.main_model_config, stream=stream
         ):
-            yield chunk
+            if stream:
+                yield chunk
+            else:
+                chunks.append(chunk)
 
-    def process_user_message(self, message: str, stream: bool = False):
+        if not stream:
+            yield from chunks
+
+    def process_user_message(self, message: str, stream: bool):
         return MessageRouter.send_message(
             message=message,
             from_agent=self.human_agent,
@@ -107,6 +125,56 @@ def main(
     _chat(playbooks_paths=playbooks_paths, model=model, api_key=api_key, stream=stream)
 
 
+def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
+    if stream:
+        buffer = ""
+        agent_responses = []
+        tool_responses = []
+        for chunk in response_generator:
+            if chunk:
+                if chunk.raw:
+                    buffer += chunk.raw
+                    to_print, buffer = _process_buffer(buffer)
+                    if to_print:
+                        print_markdown(to_print)
+                if chunk.agent_response:
+                    agent_responses.append(chunk.agent_response)
+                if chunk.tool_response:
+                    tool_responses.append(chunk.tool_response)
+        # Print any remaining content in the buffer
+        if buffer:
+            print_markdown(buffer)
+
+        if tool_responses:
+            for tool_response in tool_responses:
+                print_markdown(
+                    "Tool: "
+                    + tool_response.code
+                    + " returned "
+                    + str(tool_response.output)
+                )
+        if agent_responses:
+            for agent_response in agent_responses:
+                print_markdown("Agent: " + agent_response)
+    else:
+        chunks = list(response_generator)
+        print_markdown("".join(chunk.raw for chunk in chunks if chunk.raw))
+        print()
+        agent_responses = []
+        tool_responses = []
+        for chunk in chunks:
+            if chunk.agent_response:
+                agent_responses.append(chunk.agent_response)
+            if chunk.tool_response:
+                tool_responses.append(chunk.tool_response)
+        for tool_response in tool_responses:
+            print_markdown(
+                "Tool: " + tool_response.code + " returned " + str(tool_response.output)
+            )
+        for agent_response in agent_responses:
+            print_markdown("Agent: " + agent_response)
+
+
 def _chat(
     playbooks_paths: List[str],
     model: Optional[str],
@@ -131,20 +199,7 @@ def _chat(
         console.print("\nRuntime initialized successfully")
 
         # Print initial response from AI agent
-        if stream:
-            buffer = ""
-            for chunk in agent_chat.run(stream=stream):
-                if chunk:
-                    buffer += chunk
-                to_print, buffer = _process_buffer(buffer)
-                if to_print:
-                    print_markdown(to_print)
-            # Print any remaining content in the buffer
-            if buffer:
-                print_markdown(buffer)
-        else:
-            response = "".join(agent_chat.run())
-            print_markdown(response)
+        output(stream=stream, response_generator=agent_chat.run(stream=stream))
 
         # Start interactive chat loop
         while True:
@@ -155,21 +210,12 @@ def _chat(
                     continue
 
                 # Process user message
-                if stream:
-                    buffer = ""
-                    for chunk in agent_chat.process_user_message(
+                output(
+                    stream=stream,
+                    response_generator=agent_chat.process_user_message(
                         user_message, stream=stream
-                    ):
-                        buffer += chunk
-                        to_print, buffer = _process_buffer(buffer)
-                        if to_print:
-                            print_markdown(to_print)
-                    # Print any remaining content in the buffer
-                    if buffer:
-                        print_markdown(buffer)
-                else:
-                    response = "".join(agent_chat.process_user_message(user_message))
-                    print_markdown(response)
+                    ),
+                )
 
             except (KeyboardInterrupt, EOFError):
                 break
