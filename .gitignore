@@ -29,6 +29,7 @@ ENV/
 
 # IDE
 .idea/
+.vscode/
 *.swp
 *.swo
 
@@ -40,10 +41,7 @@ coverage.xml
 *.cover
 .pytest_cache/
 htmlcov/
-playwright-report/
-test-results/
 
 # OS
 .DS_Store
 Thumbs.db 
-*.db
