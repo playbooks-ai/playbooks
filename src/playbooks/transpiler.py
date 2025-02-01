@@ -1,6 +1,7 @@
 import os
 
 from playbooks.config import LLMConfig
+from playbooks.exceptions import PlaybookError
 from playbooks.utils.llm_helper import get_completion
 
 
@@ -18,7 +19,32 @@ class Transpiler:
 
         Returns:
             str: Transpiled content of the playbooks
+
+        Raises:
+            PlaybookError: If the playbook format is invalid
         """
+        # Basic validation of playbook format
+        if not playbooks_content.strip():
+            raise PlaybookError("Empty playbook content")
+
+        # Check for required H1 and H2 headers
+        lines = playbooks_content.split("\n")
+        found_h1 = False
+        found_h2 = False
+        for line in lines:
+            if line.startswith("# "):
+                found_h1 = True
+            elif line.startswith("## "):
+                found_h2 = True
+
+        if not found_h1:
+            raise PlaybookError(
+                "Failed to parse playbook: Missing H1 header (Agent name)"
+            )
+        if not found_h2:
+            raise PlaybookError(
+                "Failed to parse playbook: Missing H2 header (Playbook definition)"
+            )
 
         prompt = open(
             os.path.join(os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"),
@@ -33,9 +59,4 @@ class Transpiler:
         )
 
         processed_content = list(response)[0]
-
-        # print("Processed content:")
-        # print(processed_content)
-        # print("=" * 40)
-
         return processed_content

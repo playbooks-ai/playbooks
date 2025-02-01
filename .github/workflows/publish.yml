@@ -25,6 +25,5 @@ jobs:
       env:
         POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
       run: |
-        cd python/packages/playbooks
         poetry build
         poetry publish
