@@ -3,7 +3,6 @@ from dataclasses import dataclass
 from typing import Iterable, List, Optional
 
 import typer
-from dotenv import load_dotenv
 from rich.console import Console
 from rich.prompt import Prompt
 
@@ -14,8 +13,6 @@ from playbooks.human_agent import HumanAgent
 from playbooks.message_router import MessageRouter
 from playbooks.types import AgentResponseChunk
 from playbooks.utils.cli import print_markdown
-
-load_dotenv()
 
 # Configure logging
 logging.basicConfig(
