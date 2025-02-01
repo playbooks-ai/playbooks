@@ -31,41 +31,11 @@ jobs:
       run: |
         poetry run pytest tests/ --cov=src/playbooks --cov-report=xml
 
-    - name: (Website API) Install dependencies
-      run: |
-        cd website/api
-        pip install -r requirements.txt
-        pip install pytest pytest-cov
-
-    - name: (Website API) Run tests
-      run: |
-        cd website/api
-        pytest tests/ --cov=. --cov-report=xml -v
-
     - name: Set up Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
         
-    - name: (Website Frontend) Install dependencies
-      run: |
-        cd website/frontend
-        npm ci
-        
-    - name: (Website Frontend) Run tests
-      run: |
-        cd website/frontend
-        npm test -- --coverage
-
-    - name: Upload Frontend coverage
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        slug: playbooks-ai/playbooks
-        file: ./website/frontend/coverage/coverage-final.json
-        fail_ci_if_error: true
-        flags: website-frontend
-
     - name: Upload Playbooks package coverage
       uses: codecov/codecov-action@v5
       with:
@@ -74,12 +44,3 @@ jobs:
         file: coverage.xml
         fail_ci_if_error: true
         flags: playbooks-package
-
-    - name: Upload API coverage
-      uses: codecov/codecov-action@v5
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }}
-        slug: playbooks-ai/playbooks
-        file: ./website/api/coverage.xml
-        fail_ci_if_error: true
-        flags: website-api

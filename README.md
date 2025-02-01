@@ -167,11 +167,6 @@ We use pytest for testing. Here's how to run the tests:
    pytest
    ```
 
-2. **Run Website API Tests**
-   ```bash
-   cd website/api
-   pytest
-
 ### Getting Help
 
 - Join our [Discord community](https://discord.com/channels/1320659147133423667/1320659147133423670)
