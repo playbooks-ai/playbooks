@@ -145,5 +145,6 @@ Follow these instructions exactly to transform the entire input. Output only the
 Make sure that external tools have proper descriptions and a code block.
 Minimize YLDs and use them only to wait for input from user or for external calls.
 Insert proper line numbers, headings, trigger/step codes, etc.
+Each playbook must have a name that is alphanumeric and starts with a letter.
 
 **Start output**

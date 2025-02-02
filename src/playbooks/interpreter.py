@@ -85,8 +85,8 @@ class Interpreter:
                 tool_calls.append(
                     ToolCall(
                         fn=step["ext"]["fn"],
-                        args=step["ext"]["args"],
-                        kwargs=step["ext"]["kwargs"],
+                        args=step["ext"].get("args", []),
+                        kwargs=step["ext"].get("kwargs", {}),
                     )
                 )
                 if "yield" in step and step["ext"]["fn"] == "Say":

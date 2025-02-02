@@ -1,11 +1,14 @@
 # Friendly Chat Agent
 
-## FriendlyChat
+## Main
 
 ### Trigger
-When the user wants to have a casual conversation.
+When the agent starts
 
 ### Steps
 - Introduce yourself as a friendly AI assistant
-- Ask the user how their day is going
-- Listen and respond empathetically to their response 
+- Ask how the user is doing and what you can help with
+- As long as the user wants to continue the conversation
+    - Respond to the user with a friendly, professional response and wait for the user to say something
+- Say goodbye to the user
+

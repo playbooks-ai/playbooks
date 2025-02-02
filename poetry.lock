@@ -3185,6 +3185,22 @@ pymysql = ["pymysql"]
 sqlcipher = ["sqlcipher3_binary"]
 
 [[package]]
+name = "tavily-python"
+version = "0.5.0"
+description = "Python wrapper for the Tavily API"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "tavily_python-0.5.0-py3-none-any.whl", hash = "sha256:e874f6a04a56cdda80a505fe0b4f5d61d25372bd52a83e6773926fb297dcaa29"},
+    {file = "tavily_python-0.5.0.tar.gz", hash = "sha256:2c60b88203b630e1b37fc711913a1090ced6719b3f21089f25ec06e9e1602822"},
+]
+
+[package.dependencies]
+httpx = "*"
+requests = "*"
+tiktoken = ">=0.5.1"
+
+[[package]]
 name = "tiktoken"
 version = "0.8.0"
 description = "tiktoken is a fast BPE tokeniser for use with OpenAI's models"
@@ -3596,4 +3612,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "0133ef9f22698218f233f20fbe1bb8a608c56d9ce53f99afd21e75921fbb11b8"
+content-hash = "8ab421ac47d78b73e5bd75e5c7e5631fcffd6b697064db949cad81d13bc642b2"
