@@ -30,11 +30,6 @@ jobs:
     - name: (Playbooks package) Run tests
       run: |
         poetry run pytest tests/ --cov=src/playbooks --cov-report=xml
-
-    - name: Set up Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '20'
         
     - name: Upload Playbooks package coverage
       uses: codecov/codecov-action@v5
