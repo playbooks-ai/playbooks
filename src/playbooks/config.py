@@ -2,11 +2,11 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from dotenv import load_dotenv
+from playbooks.utils.env_loader import load_environment
 
 from .constants import DEFAULT_MODEL
 
-load_dotenv()
+load_environment()
 
 
 @dataclass

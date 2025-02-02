@@ -6,14 +6,14 @@
     "configurations": [
         // poetry run python -m playbooks.applications.agent_chat examples/playbooks/hello.md
         {
-            "envFile": "${workspaceFolder}/python/packages/playbooks/.env",
-            "cwd": "${workspaceFolder}/python/packages/playbooks",
+            "envFile": "${workspaceFolder}/.env",
+            "cwd": "${workspaceFolder}",
             "name": "Agent Chat",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/python/packages/playbooks/src/playbooks/applications/agent_chat.py",
+            "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
             "args": [
-                "${workspaceFolder}/python/packages/playbooks/examples/playbooks/order_status.md"
+                "${workspaceFolder}/examples/playbooks/order_status.md"
             ]
         }
     ]
