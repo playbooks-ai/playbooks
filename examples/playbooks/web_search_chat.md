@@ -31,12 +31,9 @@ When the agent starts
 
 ## Search Web Flow
 
-### Trigger
-When the user asks for information about a topic
-
 ### Steps
-- until we have all the information we need to answer the user's question
-    - list one or more precise web search queries that can together gather various aspects of the information we need to answer the user's question
+- until you have all the information we need to answer the user's question
+    - list one or more precise web search queries that can together gather various aspects of the information you need to answer the user's question
     - for each search query
         - call SearchWeb for search query
     - gather relevant information from all search results
