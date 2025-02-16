@@ -12,7 +12,29 @@ class PlaybookLoader:
     """Handles loading playbook files and parsing them into Markdown AST."""
 
     @staticmethod
-    def load_and_parse(playbooks_paths: List[str], llm_config: LLMConfig) -> dict:
+    def load(playbooks_content: str, llm_config: LLMConfig) -> dict:
+        """
+        Load playbooks from content and parse them into AST.
+
+        Args:
+            playbooks_content: Content of the playbook files
+            llm_config: LLM configuration for transpilation
+
+        Returns:
+            dict: Parsed AST representation of the playbooks
+
+        Raises:
+            PlaybookError: If there are issues reading or parsing the playbooks
+        """
+        # Transpile playbooks
+        transpiler = Transpiler(llm_config=llm_config)
+        transpiled_content = transpiler.process(playbooks_content)
+
+        # Parse transpiled content
+        return PlaybookLoader.parse_intermediate_format(transpiled_content, llm_config)
+
+    @staticmethod
+    def load_from_files(playbooks_paths: List[str], llm_config: LLMConfig) -> dict:
         """
         Load playbooks from files and parse them into AST.
 
@@ -35,6 +57,14 @@ class PlaybookLoader:
         # Transpile playbooks
         transpiler = Transpiler(llm_config=llm_config)
         transpiled_content = transpiler.process(playbooks_content)
+
+        # Parse transpiled content
+        return PlaybookLoader.parse_intermediate_format(transpiled_content, llm_config)
+
+    @staticmethod
+    def parse_intermediate_format(
+        transpiled_content: str, llm_config: LLMConfig
+    ) -> dict:
         return markdown_to_ast(transpiled_content)
 
     @staticmethod

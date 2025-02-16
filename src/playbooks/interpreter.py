@@ -65,14 +65,20 @@ class Interpreter:
             yield AgentResponseChunk(tool_call=tool_call)
 
     def parse_response(self, response):
-        # Parse response as yaml after stripping quotes and extract trace, external calls to be made, updated calls stack and variables
-        # Extract yaml content between triple backticks
+        # First try to extract yaml content between triple backticks
         yaml_match = re.search(r"```yaml\n(.*?)```", response, re.DOTALL)
-        if not yaml_match:
-            raise ValueError("No YAML content found in response")
+        if yaml_match:
+            yaml_content = yaml_match.group(1)
+        else:
+            # If no triple backticks found, try to parse the entire response as YAML
+            yaml_content = response
 
-        yaml_content = yaml_match.group(1)
-        parsed = yaml.safe_load(yaml_content)
+        try:
+            parsed = yaml.safe_load(yaml_content)
+            if not parsed or not isinstance(parsed, dict):
+                raise ValueError("Empty YAML content")
+        except yaml.YAMLError as err:
+            raise ValueError(f"Invalid YAML content: {yaml_content}") from err
 
         # Initialize tool calls list
         tool_calls = []
@@ -82,23 +88,28 @@ class Interpreter:
         self.yield_requested_on_say = False
         for step in parsed["trace"]:
             if "ext" in step and "result" not in step:
-                tool_calls.append(
-                    ToolCall(
-                        fn=step["ext"]["fn"],
-                        args=step["ext"].get("args", []),
-                        kwargs=step["ext"].get("kwargs", {}),
+                ext = step["ext"]
+                if isinstance(ext, dict):
+                    ext = [ext]
+                for e in ext:
+                    tool_calls.append(
+                        ToolCall(
+                            fn=e["fn"],
+                            args=e.get("args", []),
+                            kwargs=e.get("kwargs", {}),
+                        )
                     )
-                )
-                if "yield" in step and step["ext"]["fn"] == "Say":
-                    self.yield_requested_on_say = (
-                        self.yield_requested_on_say or step["yield"]
-                    )
+
+                    if "yield" in step and e["fn"] == "Say":
+                        self.yield_requested_on_say = (
+                            self.yield_requested_on_say or step["yield"]
+                        )
 
         # Update final state
         self.call_stack = parsed["stack"]
 
-        if "updated_vars" in parsed:
-            self.variables.update(parsed["updated_vars"])
+        if "vars" in parsed:
+            self.variables.update(parsed["vars"])
 
         return tool_calls
 

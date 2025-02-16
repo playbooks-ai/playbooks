@@ -1,4 +1,16 @@
-from typing import NamedTuple
+from typing import AsyncIterator, NamedTuple, Protocol
+
+
+class Agent(Protocol):
+    """Protocol for agents that can process messages."""
+
+    async def run(self, message: str) -> str:
+        """Process a message and return a response."""
+        ...
+
+    async def stream(self, message: str) -> AsyncIterator[str]:
+        """Process a message and stream the response."""
+        ...
 
 
 class ToolCall(NamedTuple):

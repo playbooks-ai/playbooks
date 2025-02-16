@@ -1,10 +1,12 @@
 import hashlib
 import os
 import tempfile
-from typing import Iterator, List, Union
+import time
+from functools import wraps
+from typing import Any, Callable, Iterator, List, TypeVar, Union
 
 import litellm
-from litellm import completion
+from litellm import BadRequestError, completion
 
 from playbooks.config import LLMConfig
 
@@ -57,13 +59,64 @@ def configure_litellm():
 configure_litellm()
 
 
+T = TypeVar("T")
+
+
+def retry_on_overload(
+    max_retries: int = 3, base_delay: float = 1.0
+) -> Callable[[Callable[..., T]], Callable[..., T]]:
+    """Decorator that retries a function on Anthropic overload errors with exponential backoff.
+
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Initial delay between retries in seconds
+    """
+
+    def decorator(func: Callable[..., T]) -> Callable[..., T]:
+        @wraps(func)
+        def wrapper(*args: Any, **kwargs: Any) -> T:
+            for attempt in range(max_retries):
+                try:
+                    return func(*args, **kwargs)
+                except BadRequestError as e:
+                    if "Overloaded" in str(e) and attempt < max_retries - 1:
+                        delay = base_delay * (2**attempt)
+                        time.sleep(delay)
+                        continue
+                    raise
+            return func(*args, **kwargs)  # Final attempt
+
+        return wrapper
+
+    return decorator
+
+
+@retry_on_overload()
+def _make_completion_request(
+    completion_kwargs: dict, stream: bool = False
+) -> Union[str, Iterator[str]]:
+    """Make a completion request to the LLM with automatic retries on overload.
+
+    Args:
+        completion_kwargs: Arguments to pass to the completion function
+        stream: If True, stream the response
+
+    Returns:
+        Either the complete response or an iterator of response chunks
+    """
+    response = completion(**completion_kwargs)
+    if stream:
+        return (chunk["text"] for chunk in response.completion_stream)
+    return response["choices"][0]["message"]["content"]
+
+
 def get_completion(
     llm_config: LLMConfig,
     messages: List[dict],
     stream: bool = False,
     use_cache: bool = True,
     **kwargs,
-) -> Union[dict, Iterator[dict]]:
+) -> Iterator[str]:
     """Get completion from LLM with optional streaming and caching support.
 
     Args:
@@ -85,7 +138,7 @@ def get_completion(
     }
 
     print()
-    print("=" * 20 + " LLM CALL " + "=" * 20)
+    print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
     print(messages[0]["content"])
     print(messages[1]["content"] if len(messages) > 1 else "")
     print("=" * 40)
@@ -102,21 +155,24 @@ def get_completion(
                     yield chunk
             else:
                 yield cache_value
+
+            # cache.close()
+            return
+
+    # print("Cache miss for key:", cache_key)
+    # print("     Existing keys:", list(cache.iterkeys()))
+    # Get response from LLM
+    full_response = []
+    try:
+        if stream:
+            for chunk in _make_completion_request(completion_kwargs, stream=True):
+                full_response.append(chunk)
+                yield chunk
+            full_response = "".join(full_response)
         else:
-            # print("Cache miss for key:", cache_key)
-            # print("     Existing keys:", list(cache.iterkeys()))
-            # Get response from LLM
-            full_response = []
-            try:
-                response = completion(**completion_kwargs)
-                if stream:
-                    for chunk in response.completion_stream:
-                        full_response.append(chunk["text"])
-                        yield chunk["text"]
-                else:
-                    full_response = response["choices"][0]["message"]["content"]
-                    yield full_response
-            finally:
-                if use_cache:
-                    cache.set(cache_key, "".join(full_response))
-                    cache.close()
+            full_response = _make_completion_request(completion_kwargs, stream=False)
+            yield full_response
+    finally:
+        if llm_cache_enabled and use_cache:
+            cache.set(cache_key, full_response)
+            # cache.close()

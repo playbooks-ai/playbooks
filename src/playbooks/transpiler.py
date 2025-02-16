@@ -58,5 +58,6 @@ class Transpiler:
             stream=False,
         )
 
-        processed_content = list(response)[0]
+        response = list(response)
+        processed_content = response[0]
         return processed_content

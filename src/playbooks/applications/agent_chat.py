@@ -25,7 +25,8 @@ console = Console()
 
 @dataclass
 class AgentChatConfig:
-    playbooks_paths: List[str]
+    playbooks_paths: List[str] = None
+    playbooks_content: Optional[str] = None
     main_model_config: LLMConfig = None
 
 
@@ -33,10 +34,19 @@ class AgentChat:
     def __init__(self, config: AgentChatConfig = None):
         self.config = config or AgentChatConfig()
 
-        if config and config.playbooks_paths:
-            self.agents = AgentFactory.from_playbooks_paths(
-                config.playbooks_paths, config.main_model_config
-            )
+        if config:
+            if config.playbooks_paths:
+                self.agents = AgentFactory.from_playbooks_paths(
+                    config.playbooks_paths, config.main_model_config
+                )
+            elif config.playbooks_content:
+                self.agents = AgentFactory.from_playbooks_content(
+                    config.playbooks_content, config.main_model_config
+                )
+            else:
+                raise AgentConfigurationError(
+                    "Expected either playbooks_paths or playbooks_content to be set"
+                )
 
         if len(self.agents) != 1:
             raise AgentConfigurationError(
@@ -110,9 +120,6 @@ def _process_buffer(buffer: str) -> tuple[str, str]:
 def main(
     playbooks_paths: List[str] = typer.Argument(  # noqa: B008
         ..., help="One or more paths to playbook files. Supports glob patterns"
-    ),
-    llm: str = typer.Option(
-        None, help="LLM provider to use (openai, anthropic, vertexai)"
     ),
     model: str = typer.Option(None, help="Model name for the selected LLM"),
     api_key: Optional[str] = typer.Option(None, help="API key for the selected LLM"),
