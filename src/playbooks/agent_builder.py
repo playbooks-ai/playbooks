@@ -72,13 +72,17 @@ class AgentBuilder:
             )
 
         def __init__(self):
-            Agent.__init__(self, klass=klass, description=description, playbooks=playbooks)
+            Agent.__init__(
+                self, klass=klass, description=description, playbooks=playbooks
+            )
 
         # print(f'Creating agent class {agent_class_name} for agent "{klass}"')
         return type(
             agent_class_name,
             (Agent,),
-            {"__init__": __init__},
+            {
+                "__init__": __init__,
+            },
         )
 
     @staticmethod

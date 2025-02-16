@@ -91,44 +91,102 @@ def Tool1(param1:int):
 **Start output**
 
 # ExampleAgent
-
 ## EXT Tool1($param1: int) -> dict{retval: int}
 External call this tool for this specific reason. $param1 is integer input parameter for Tool1. Return a dictionary containing integer 'retval'.
-
 ### Code
 ```python
 def Tool1(param1: int) -> dict:
     return {"retval": 1}
 ```
-
-====
-
 ## INT Playbook1() -> None
 Gets user's name and provides San Francisco weather information
-
 ### Trigger
 01:BGN When agent starts
-
 ### Steps
 01:EXE $name = AskUserForName()
 02:EXT Say(Greet user with name)
 03:YLD $weather = GetWeather("San Francisco")
 04:EXT Say(Tell user what the weather is in San Francisco.)
-
-====
-
 ## INT AskUserForName() -> str
 Prompts for and validates user's preferred name
-
 ### Steps
 01:YLD $firstName = Say(Ask user what you should call them)
 02:CHK N1 If $firstName is empty or invalid
   02.01:EXE Say(Tell user that the name doesn't look right and ask for name again)
   02.02:JMP Try again a couple of times by going back to step 02
 03:RET $firstName
-
 ### Notes
 N1 If the name is invalid, ask the user again
+**End output**
+
+====
+
+Example --
+
+**Start input**
+# Search Agent
+
+```tools
+def SearchWeb(query: str):
+    """
+    Search the web for the given query.
+    """
+    from tavily import TavilyClient
+    tavily_client = TavilyClient(api_key="tvly-[key]")
+    search_result = tavily_client.search(query, limit=1)
+    return search_result
+```
+
+## Search Web Flow
+
+### Trigger
+When the user asks for information about a topic
+
+### Steps
+- until we have all the information we need to answer the user's question
+    - list one or more precise web search queries that can together gather various aspects of the information we need to answer the user's question
+    - for each search query
+        - call SearchWeb for search query
+    - gather relevant information from all search results
+- return all relevant information
+
+### Notes
+- Make SearchWeb calls in parallel, then wait for all of them to complete
+
+**End input**
+
+**Start output**
+# Search Agent
+## EXT SearchWeb($query: str) -> dict
+External web search using Tavily API. Takes a search query string and returns search results.
+### Code
+```python
+def SearchWeb(query: str) -> dict:
+    """
+    Search the web for the given query.
+    """
+    from tavily import TavilyClient
+    tavily_client = TavilyClient(api_key="tvly-[key]")
+    search_result = tavily_client.search(query, limit=1)
+    return search_result
+```
+## INT SearchWebFlow() -> dict
+Performs web searches to gather comprehensive information for user query
+### Trigger
+01:CND When the user asks for information about a topic
+### Steps
+01:EXE $information = ""
+02:EXE $sufficientInfo = False
+02:CND Loop until we have $sufficientInfo, max 3 times
+  02.01:EXE $searchQueries = list one or more precise web search queries that can together gather various aspects of the information we need to answer the user's question
+  02.02:CND For each $searchQuery in $searchQueries
+    02.02.01:EXT $searchResult = SearchWeb($searchQuery)
+  02.03:YLD wait for SearchWeb calls
+  02.04:EXE gather relevant $information from all $searchResults
+  02.05:EXE $sufficientInfo = check if $information is sufficient to answer the user's question
+03:RET $information
+### Notes
+N1 Make SearchWeb calls in parallel, then wait for all of them to complete
 
 **End output**
 
@@ -143,7 +201,7 @@ Follow these instructions exactly to transform the entire input. Output only the
 **End input**
 
 Make sure that external tools have proper descriptions and a code block.
-Minimize YLDs and use them only to wait for input from user or for external calls.
+YLD only at steps where we need to pause for user input or wait for external calls to complete.
 Insert proper line numbers, headings, trigger/step codes, etc.
 Each playbook must have a name that is alphanumeric and starts with a letter.
 

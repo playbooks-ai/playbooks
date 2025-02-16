@@ -13,7 +13,7 @@
             "request": "launch",
             "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
             "args": [
-                "${workspaceFolder}/examples/playbooks/order_status.md"
+                "${workspaceFolder}/examples/playbooks/customer_support.md"
             ]
         }
     ]

@@ -56,8 +56,6 @@ class AgentThread:
 
         waiting_for_user_input = False
         while not waiting_for_user_input:
-            # TODO: Fix instruction and context history for looping on tool call
-
             # Add context from history if available
             session_context = self.get_context_history()
             if session_context:
@@ -79,29 +77,42 @@ class AgentThread:
             # Execute tools
             external_call_made = False
             instruction = []
-            for tool_call in tool_calls:
-                if tool_call.fn == "Say":
-                    yield AgentResponseChunk(agent_response=tool_call.args[0])
-                    self.history.append(
-                        {
-                            "message": tool_call.args[0],
-                            "from_agent": self.agent,
-                        }
-                    )
-                else:
-                    retval = self.agent.execute_tool(tool_call)
-                    external_call_made = True
-                    tool_call_message = f"{tool_call.fn}() returned {retval}"
-                    instruction.append(tool_call_message)
-                    yield AgentResponseChunk(
-                        tool_response=ToolResponse(tool_call.fn, retval)
-                    )
-                    self.history.append(
-                        {
-                            "message": tool_call_message,
-                        }
-                    )
+            if tool_calls:
+                for tool_call in tool_calls:
+                    if tool_call.fn == "Say":
+                        yield AgentResponseChunk(
+                            agent_response=tool_call.args[0] + "\n"
+                        )
+                        self.history.append(
+                            {
+                                "message": tool_call.args[0],
+                                "from_agent": self.agent,
+                            }
+                        )
+                    else:
+                        retval = self.agent.execute_tool(tool_call)
+                        external_call_made = True
+                        tool_call_message = f"{tool_call.fn}() returned {retval}"
+                        instruction.append(tool_call_message)
+                        yield AgentResponseChunk(
+                            tool_response=ToolResponse(tool_call.fn, retval)
+                        )
+                        self.history.append(
+                            {
+                                "message": tool_call_message,
+                            }
+                        )
 
-            instruction = "\n".join(instruction)
-            if self.interpreter.yield_requested_on_say or not external_call_made:
-                waiting_for_user_input = True
+                instruction = "\n".join(instruction)
+                if self.interpreter.yield_requested_on_say or not external_call_made:
+                    waiting_for_user_input = True
+            else:
+                # if no tools were invoked and the call stack is not empty,
+                # that means the LLM prematurely ended execution
+                # Ask it to continue execution
+                if self.interpreter.call_stack:
+                    instruction = "Continue execution"
+                else:
+                    # If call stack is empty, the program has ended
+                    # and we should return control to the application
+                    waiting_for_user_input = True
