@@ -6,7 +6,8 @@ def SearchWeb(query: str):
     Search the web for the given query.
     """
     from tavily import TavilyClient
-    tavily_client = TavilyClient(api_key="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")
+    import os
+    tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
     search_result = tavily_client.search(query, limit=1)
     return search_result
 ```
