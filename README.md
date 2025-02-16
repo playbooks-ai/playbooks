@@ -1,29 +1,21 @@
 <div align="center">
-  <img src="./website/frontend/public/playbooks-logo-only.png" alt="Logo" width="300">
   <h1 align="center">Playbooks AI</h1>
 </div>
 
-
 <div align="center">
    <a href="https://pypi.org/project/playbooks/">
-      <img src="https://img.shields.io/pypi/v/playbooks?logo=pypi&style=plastic&color=blue" alt="PyPI Version"></a>
-
+      <img src="https://img.shields.io/pypi/v/playbooks?logo=pypi&style=plastic&color=blue" alt="PyPI Version"/></a>
    <a href="https://www.python.org/">
       <img src="https://img.shields.io/badge/Python-3.10-blue?style=plastic&logo=python" alt="Python Version"></a>
-
-  <a href="https://github.com/playbooks-ai/playbooks/blob/master/LICENSE">
+   <a href="https://github.com/playbooks-ai/playbooks/blob/master/LICENSE">
       <img src="https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github&style=plastic&color=green" alt="GitHub License"></a>   
-   
    <a href="https://github.com/playbooks-ai/playbooks/tree/master/docs">
       <img src="https://img.shields.io/badge/Docs-GitHub-blue?logo=github&style=plastic&color=red" alt="Documentation"></a>
    <br>
-
    <a href="https://github.com/playbooks-ai/playbooks/actions/workflows/test.yml">
       <img src="https://github.com/playbooks-ai/playbooks/actions/workflows/test.yml/badge.svg", alt="Test"></a>
-
    <a href="https://github.com/playbooks-ai/playbooks/actions/workflows/lint.yml">
       <img src="https://github.com/playbooks-ai/playbooks/actions/workflows/lint.yml/badge.svg", alt="Lint"></a>
-   
    <a href="https://runplaybooks.ai/">
       <img src="https://img.shields.io/badge/Homepage-runplaybooks.ai-green?style=plastic&logo=google-chrome" alt="Homepage"></a>
 </div>
@@ -32,7 +24,21 @@
   <h2 align="center">Train AI Agents with Human Readable Playbooks</h2>
 </div>
 
-Playbooks AI is a framework for creating AI agents using human-readable and LLM-executed playbooks.
+Playbooks AI™ is a framework for creating AI agents using human-readable and LLM-executed playbooks. It uses a patent-pending natural language program execution engine.
+
+**Status**: Playbooks AI is still in early development. It is not yet ready for production use. We are working hard and would love to get your feedback and contributions.
+
+## Table of Contents
+
+- [Quick start](#quick-start)
+- [Why Playbooks?](#why-playbooks)
+- [Features](#features)
+- [How it works](#how-it-works)
+- [Who Should Use Playbooks?](#who-should-use-playbooks)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contributors](#contributors)
 
 ## Quick start
 
@@ -44,59 +50,8 @@ Playbooks AI is a framework for creating AI agents using human-readable and LLM-
 
 ```bash
 pip install playbooks
-playbooks run hello.md
+poetry run python src/playbooks/applications/agent_chat.py examples/playbooks/chat.md --stream
 ```
-
-3. Alternatively, in Python REPL
-
-   a. Install the playbooks Python package
-   ```bash
-   pip install playbooks
-   ```
-
-   b. Try running a simple playbook
-   Start Python REPL -
-
-   ```bash
-   python
-   ```
-
-   Paste the following code with your Anthropic API key -
-
-   ```python
-   import asyncio
-   import playbooks
-
-   playbook = """
-   # HelloWorld Agent
-   This is a simple Hello World agent.
-
-   ## HelloWorld
-
-   ### Trigger
-   When the user starts a conversation or asks for a greeting.
-
-   ### Steps
-   - Greet the user with a friendly "Hello, World!" message.
-   - Explain that this is a demonstration of a simple Hello World playbook.
-   - Say goodbye to the user. 
-   """
-
-   print(
-      asyncio.run(
-         playbooks.run(
-               playbook,
-               model="claude-3-5-sonnet-20241022",
-               api_key="<YOUR ANTHROPIC API KEY>",
-         )
-      )
-   )
-   ```
-
-
-Now, try modifying the hello.md playbook to greet the user with "Hello Playbooks!" instead and give it a try. Easy, right?
-
-Now take a look at some example playbooks in examples folder. Try writing your own playbooks. Don't worry, the syntax is quite flexible and forgiving.
 
 ## Why playbooks?
 
@@ -115,10 +70,68 @@ Playbooks is the perfect middle ground. Agent behavior is written in an easily r
 
 Not only that, business users can use a copilot that can transparently make changes to the playbooks on their behalf, enabling them to easily make changes to agent behavior, such as listing caveats and special cases, adding new business logic, and so on.
 
-## TODOs
+## Features
 
-- [ ] Create a VSCode extension for Playbooks debugging
+### Anyone can build AI agents!
+- Write AI agent behavior using natural language playbooks instead of using code or using a UI builder
+- Non-technical business users can understand and modify agent behavior as business realities change
+- Talk with a copilot to modify playbooks and review changes
 
+### Powerful agentic behavior
+- Playbooks AI agents faithfully follow your instructions, overcoming LLM limitations
+- Build complex agent behavior using 100s or 1000s of playbooks
+- Easy to create multi-agent systems
+- Easy to call external tools
+- Magical dynamic triggering of playbooks to handle validations, caveats, special cases, and so on
+- External event triggered playbooks
+
+### Infinite possibilities
+
+- Playbooks AI agent can be used to build agentic AI applications like:
+  - Chatbots
+  - Customer support agents
+  - Virtual assistants
+  - Virtual team members
+  - Intelligent workflow automation
+- Easy to use for simple and complex use cases, both standalone and integrated with other systems
+
+What will you build with Playbooks AI?
+
+## Who Should Use Playbooks?
+
+Playbooks AI is designed for anyone looking to build and control AI agents with ease. It is ideal for:
+R9
+✅ Developers & AI Engineers – Create, test, and deploy LLM-powered agents with structured, human-readable playbooks.
+
+✅ Businesses & Enterprises – Configure AI agents without coding while maintaining full control over behavior and workflows.
+
+✅ AI Researchers & Experimenters – Prototype and iterate on multi-agent collaboration and reasoning models efficiently.
+
+✅ Product Teams & No-Code Enthusiasts – Modify agent behavior without diving into complex prompts or code.
+
+✅ Automation Specialists – Use Playbooks AI for process automation, API integrations, and intelligent workflows.
+
+If you want a flexible, scalable, and human-readable way to define AI agent behavior, Playbooks AI is the right tool for you! 🚀
+
+
+## Roadmap
+
+We're continuously improving Playbooks AI to make it the best framework for building AI agents. Here’s what’s coming next:
+
+- VSCode extension for Playbooks debugging
+- Dynamic filtering of playbooks
+- Interop with other AI agent frameworks
+- Playbooks evaluation dataset
+- Inference speed optimizations
+- Running tools in a sandbox
+- Command line tooling improvements
+- PlaybooksLM fine-tuned model for executing playbooks
+- Multi-agent natural language communication
+- Expanded set of examples
+- Documentation generation
+- Playbooks Observer for monitoring and debugging
+- Playbooks Platform with enterprise-grade features
+- Playbooks Hub for community playbooks and agents
 
 ## Contributing
 
@@ -137,15 +150,11 @@ If you want to help, checkout some of the issues marked as `good-first-issue` or
 2. **Environment Variables**
    Set up environment variables for the playbooks package (`.env`):
    ```bash
-   # LLM Configuration
-   DEFAULT_MODEL=claude-3-5-sonnet-20241022
-   ANTHROPIC_API_KEY=your-anthropic-api-key
-   OPENAI_API_KEY=your-openai-api-key  # Optional
-
-   # API Configuration
-   PORT=8000
-   HOST=0.0.0.0
+   cp .env.example .env
    ```
+
+   Edit `.env` to configure LLM and API settings.
+
 3. **playbooks Python package Setup**
    ```bash
    # Create and activate a virtual environment (recommended)
@@ -155,7 +164,6 @@ If you want to help, checkout some of the issues marked as `good-first-issue` or
    # Install playbooks Python package in development mode
    pip install poetry
    poetry install
-   cd ../../..
    ```
    
 ### Testing
@@ -177,9 +185,9 @@ We appreciate your contributions to making Playbooks better! If you have any que
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-# Contributors
+## Contributors
 
 <!-- ALL-CONTRIBUTORS-LIST:START - Do not remove or modify this section -->
 <!-- prettier-ignore-start -->
@@ -193,3 +201,5 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <a href="https://github.com/playbooks-ai/playbooks/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=playbooks-ai/playbooks" />
 </a>
+
+This project is maintained by [Playbooks AI](https://runplaybooks.ai).
