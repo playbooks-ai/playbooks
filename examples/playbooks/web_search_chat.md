@@ -32,10 +32,10 @@ When the agent starts
 ## Search Web Flow
 
 ### Steps
-- until you have all the information we need to answer the user's question
-    - list one or more precise web search queries that can together gather various aspects of the information you need to answer the user's question
-    - for each search query
-        - call SearchWeb for search query
+- until you have all the information you need to answer the user's question
+    - list one or more precise web search queries to gather various pieces of information you need to answer the user's question
+    - go through each search query
+        - search the web with that query
     - gather relevant information from all search results
 - return all relevant information
 
