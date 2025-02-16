@@ -59,9 +59,17 @@ At the beginning of a conversation
 
 Simple, right?
 
-Here's a more complex example... It defines a safe, comprehensive web search chat agent - uses external tool, a few playbooks, parallel tool calling and an iterative, complex RAG flow, trigger-driven playbook execution and a lot more. See the [Web Search Chat](examples/playbooks/web_search_chat.md) Playbooks AI agent.
+Now a more complex example. Let's see how to create a safe, comprehensive web search chat agent that:
 
-Now take a look at the LangGraph implementation of the same agent: [LangGraph implementation](examples/langgraph/web_search_chat.py). Crazy, right? And despite the complex implementation, it is still more [rigid and brittle](examples/langgraph/web_search_chat.md) compared to the Playbooks AI agent!
+- uses external tools
+- implements an iterative, complex RAG flow
+- uses a few playbooks
+- demonstrates parallel tool calling
+- demonstrates trigger-driven playbook execution
+
+See the [Web Search Chat](examples/playbooks/web_search_chat.md) Playbooks AI agent.
+
+Now, take a look at the equivalent LangGraph implementation: [LangGraph implementation](examples/langgraph/web_search_chat.py). Crazy, right? And despite the highly complex implementation, it is still more [rigid and brittle](examples/langgraph/web_search_chat.md) compared to the Playbooks AI agent!
 
 ## Why playbooks?
 
