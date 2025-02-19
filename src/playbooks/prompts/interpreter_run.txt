@@ -264,10 +264,9 @@ trace:
       - 1 and its square 1
 
   - step: "Main:01.03:JMP 01"
-    thought: Go back to number loop
 
   - step: "Main:01:LOP For $number from 1 to 3"
-    thought: Starting number loop
+    thought: 1 < 3 so continue loop with next number
     vars:
       $number: 2
 
@@ -277,13 +276,12 @@ trace:
       $square: 4
 
   - step: "Main:01.02:CND If $square % 2 == 1"
-    thought: 2 % 2 is equal to 0, so condition is not satisfied
+    thought: 4 % 2 is equal to 0, so condition is not satisfied
 
   - step: "Main:01.03:JMP 01"
-    thought: Go back to number loop
 
   - step: "Main:01:LOP For $number from 1 to 3"
-    thought: Starting number loop
+    thought: 2 < 3 so continue loop with next number
     vars:
       $number: 3
 
@@ -303,10 +301,9 @@ trace:
       - 3 and its square 9
 
   - step: "Main:01.03:JMP 01"
-    thought: Go back to number loop
 
   - step: "Main:01:LOP For $number from 1 to 3"
-    thought: $number is 3 already so loop is done
+    thought: We already are at 3, so loop is done
 
   - step: "Main:01:YLD $favorite_number = Say(ask user what their favorite number is)"
     thought: Getting user's favorite number
