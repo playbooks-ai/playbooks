@@ -22,7 +22,7 @@
     - `CND`: A conditional or if or an else statement (e.g., `CND If user is unhappy`).  
     - `CHK`: A check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`).  
     - `RET`: Return from current playbook, optionally returning a value.  
-    - `JMP`: Jump to a different line (if absolutely needed).  
+    - `JMP`: Jump to a different line.  
     - `YLD`: Yield/pause (LLM must return control) to wait for external call or event.
 
   - **Line Numbering:**  
@@ -180,8 +180,9 @@ Performs web searches to gather comprehensive information for user query
 02:EXE $sufficientInfo = False
 02:CND Loop until we have $sufficientInfo, max 3 times
   02.01:EXE $searchQueries = list one or more precise web search queries that can together gather various aspects of the information we need to answer the user's question
-  02.02:CND For each $searchQuery in $searchQueries
+  02.02:LOP For each $searchQuery in $searchQueries
     02.02.01:EXT $searchResult = SearchWeb($searchQuery)
+    02.02.02:JMP 02.02
   02.03:YLD wait for SearchWeb calls
   02.04:EXE gather relevant $information from all $searchResults
   02.05:EXE $sufficientInfo = check if $information is sufficient to answer the user's question
@@ -222,7 +223,7 @@ Demonstrates loop patterns with country info and number squares.
 02:LOP For each $country in $countries
   02.01:EXT Say($country name)
   02.02:EXT Say(one special thing about $country)
-  02.03:EXE Continue loop
+  02.03:JMP 02
 03:YLD $country = Say(ask user what country they are from)
 **End output**
 ====
