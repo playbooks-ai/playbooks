@@ -12,7 +12,6 @@ from playbooks.exceptions import AgentConfigurationError
 from playbooks.human_agent import HumanAgent
 from playbooks.message_router import MessageRouter
 from playbooks.types import AgentResponseChunk
-from playbooks.utils.cli import print_markdown
 
 # Configure logging
 logging.basicConfig(
@@ -88,34 +87,6 @@ class AgentChat:
         )
 
 
-def _process_buffer(buffer: str) -> tuple[str, str]:
-    """Process buffer and return tuple of (text_to_print, remaining_buffer).
-    Handles both newlines and code blocks."""
-    if "```" not in buffer:
-        last_newline = buffer.rfind("\n")
-        if last_newline != -1:
-            return buffer[: last_newline + 1], buffer[last_newline + 1 :]
-        return "", buffer
-
-    # Find first ``` and check if we have a closing ```
-    start = buffer.find("```")
-    end = buffer.find("```", start + 3)
-    if end == -1:
-        # No closing ```, check if we can print anything before the opening ```
-        last_newline = buffer[:start].rfind("\n")
-        if last_newline != -1:
-            return buffer[: last_newline + 1], buffer[last_newline + 1 :]
-        return "", buffer
-
-    # We have a complete code block, find the next newline after it
-    next_newline = buffer[end + 3 :].find("\n")
-    if next_newline != -1:
-        print_until = end + 3 + next_newline + 1
-        return buffer[:print_until], buffer[print_until:]
-
-    return "", buffer
-
-
 @app.command()
 def main(
     playbooks_paths: List[str] = typer.Argument(  # noqa: B008
@@ -131,27 +102,20 @@ def main(
 
 def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
     if stream:
-        buffer = ""
         agent_responses = []
         tool_responses = []
         for chunk in response_generator:
             if chunk:
                 if chunk.raw:
-                    buffer += chunk.raw
-                    to_print, buffer = _process_buffer(buffer)
-                    if to_print:
-                        print_markdown(to_print)
+                    print(chunk.raw, end="")
                 if chunk.agent_response:
                     agent_responses.append(chunk.agent_response)
                 if chunk.tool_response:
                     tool_responses.append(chunk.tool_response)
-        # Print any remaining content in the buffer
-        if buffer:
-            print_markdown(buffer)
 
         if tool_responses:
             for tool_response in tool_responses:
-                print_markdown(
+                print(
                     "Tool: "
                     + tool_response.code
                     + " returned "
@@ -159,10 +123,10 @@ def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
                 )
         if agent_responses:
             for agent_response in agent_responses:
-                print_markdown("Agent: " + agent_response)
+                print("Agent: " + agent_response)
     else:
         chunks = list(response_generator)
-        print_markdown("".join(chunk.raw for chunk in chunks if chunk.raw))
+        print("".join(chunk.raw for chunk in chunks if chunk.raw))
         print()
         agent_responses = []
         tool_responses = []
@@ -172,11 +136,11 @@ def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
             if chunk.tool_response:
                 tool_responses.append(chunk.tool_response)
         for tool_response in tool_responses:
-            print_markdown(
+            print(
                 "Tool: " + tool_response.code + " returned " + str(tool_response.output)
             )
         for agent_response in agent_responses:
-            print_markdown("Agent: " + agent_response)
+            print("Agent: " + agent_response)
 
 
 def _chat(

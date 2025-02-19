@@ -161,8 +161,6 @@ trace:
     thought: User is requesting order status, so triggering CheckOrderStatusMain
     call:
       fn: CheckOrderStatusMain
-      args: []
-      kwargs: {}
     stack: [CheckOrderStatusMain:01]
 
   - step: "CheckOrderStatusMain:01:CND If user is not authenticated"
@@ -176,8 +174,6 @@ trace:
     thought: Need to authenticate user
     call:
       fn: AuthenticateUserFlow
-      args: []
-      kwargs: {}
     stack: [CheckOrderStatusMain:01.01, AuthenticateUserFlow:01]
 
   - thought: Email already provided in message
@@ -189,8 +185,10 @@ trace:
     thought: Have email, need PIN to complete authentication
     ext:
       fn: Say
-      args: ["To authenticate your account, please provide your 4-digit PIN."]
-      kwargs: {}
+      args:
+      - |
+      To authenticate your account, 
+      please provide your 4-digit PIN.
     yield: true
     thought: Waiting for user to provide PIN
 
@@ -243,8 +241,6 @@ trace:
     thought: Starting Main playbook
     call:
       fn: Main
-      args: []
-      kwargs: {}
     stack: [Main:01]
 
   - step: "Main:01:LOP For $number from 1 to 3"
@@ -264,8 +260,8 @@ trace:
     thought: Printing 1 and its square 1
     ext:
       fn: Say
-      args: ["1 and its square 1"]
-      kwargs: {}
+      args:
+      - 1 and its square 1
 
   - step: "Main:01.03:JMP 01"
     thought: Go back to number loop
@@ -303,8 +299,8 @@ trace:
     thought: Printing 3 and its square 9
     ext:
       fn: Say
-      args: ["3 and its square 9"]
-      kwargs: {}
+      args:
+      - 3 and its square 9
 
   - step: "Main:01.03:JMP 01"
     thought: Go back to number loop
@@ -316,10 +312,13 @@ trace:
     thought: Getting user's favorite number
     vars:
       $favorite_number: None
-    yield:
+    ext:
       fn: Say
-      args: ["What is your favorite number?"]
-      kwargs: {}
+      args: 
+      - |
+        What is your favorite number?
+        and why is it your favorite?
+    yield: true
 ```
 
 ========
@@ -327,7 +326,6 @@ trace:
 **Actual inputs (playbooks, initial state, session context)**
 ```playbooks
 {{PLAYBOOKS_CONTENT}}
-```
 
 {{INITIAL_STATE}}
 
