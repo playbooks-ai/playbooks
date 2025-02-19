@@ -92,22 +92,34 @@ def retry_on_overload(
 
 
 @retry_on_overload()
-def _make_completion_request(
-    completion_kwargs: dict, stream: bool = False
-) -> Union[str, Iterator[str]]:
-    """Make a completion request to the LLM with automatic retries on overload.
+def _make_completion_request(completion_kwargs: dict) -> Union[str, Iterator[str]]:
+    """Make a non-streaming completion request to the LLM with automatic retries on overload.
 
     Args:
         completion_kwargs: Arguments to pass to the completion function
-        stream: If True, stream the response
 
     Returns:
         Either the complete response or an iterator of response chunks
     """
     response = completion(**completion_kwargs)
-    if stream:
-        return (chunk["text"] for chunk in response.completion_stream)
     return response["choices"][0]["message"]["content"]
+
+
+@retry_on_overload()
+def _make_completion_request_stream(
+    completion_kwargs: dict,
+) -> Union[str, Iterator[str]]:
+    """Make a streaming completion request to the LLM with automatic retries on overload.
+
+    Args:
+        completion_kwargs: Arguments to pass to the completion function
+
+    Returns:
+        Either the complete response or an iterator of response chunks
+    """
+    response = completion(**completion_kwargs)
+    for chunk in response.completion_stream:
+        yield chunk["text"]
 
 
 def get_completion(
@@ -165,12 +177,12 @@ def get_completion(
     full_response = []
     try:
         if stream:
-            for chunk in _make_completion_request(completion_kwargs, stream=True):
+            for chunk in _make_completion_request_stream(completion_kwargs):
                 full_response.append(chunk)
                 yield chunk
             full_response = "".join(full_response)
         else:
-            full_response = _make_completion_request(completion_kwargs, stream=False)
+            full_response = _make_completion_request(completion_kwargs)
             yield full_response
     finally:
         if llm_cache_enabled and use_cache:
