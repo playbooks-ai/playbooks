@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, List
 import yaml
 
 from .types import AgentResponseChunk, ToolCall
-from .utils.llm_helper import get_completion
+from .utils.llm_helper import get_completion, get_messages_for_prompt
 
 if TYPE_CHECKING:
     from .playbook import Playbook
@@ -41,18 +41,13 @@ class Interpreter:
                     playbook.signature + ": " + playbook.description
                 )
 
-        llm_messages = [
-            {
-                "role": "system",
-                "content": self.get_system_prompt(included_playbooks, session_context),
-            },
-            {"role": "user", "content": instruction},
-        ]
+        prompt = self.get_prompt(included_playbooks, session_context, instruction)
+        messages = get_messages_for_prompt(prompt)
 
         # Get response from LLM
         response = []
         for chunk in get_completion(
-            llm_config=llm_config, messages=llm_messages, stream=stream
+            llm_config=llm_config, messages=messages, stream=stream
         ):
             if chunk is not None:
                 response.append(chunk)
@@ -114,10 +109,13 @@ class Interpreter:
 
         return tool_calls
 
-    def get_system_prompt(
-        self, include_playbooks: List["Playbook"], session_context: str
+    def get_prompt(
+        self,
+        included_playbooks: List["Playbook"],
+        session_context: str,
+        instruction: str,
     ) -> str:
-        playbooks = "\n".join([playbook.markdown for playbook in include_playbooks])
+        playbooks = "\n".join([playbook.markdown for playbook in included_playbooks])
 
         prompt = open(
             os.path.join(os.path.dirname(__file__), "prompts/interpreter_run.txt"),
@@ -152,5 +150,6 @@ class Interpreter:
         prompt = prompt.replace("{{PLAYBOOKS_CONTENT}}", playbooks)
         prompt = prompt.replace("{{SESSION_CONTEXT}}", session_context)
         prompt = prompt.replace("{{INITIAL_STATE}}", initial_state)
+        prompt = prompt.replace("{{INSTRUCTION}}", instruction)
 
         return prompt

@@ -2,7 +2,7 @@ import os
 
 from playbooks.config import LLMConfig
 from playbooks.exceptions import PlaybookError
-from playbooks.utils.llm_helper import get_completion
+from playbooks.utils.llm_helper import get_completion, get_messages_for_prompt
 
 
 class Transpiler:
@@ -51,10 +51,10 @@ class Transpiler:
             "r",
         ).read()
         prompt = prompt.replace("{{PLAYBOOKS}}", playbooks_content)
-
+        messages = get_messages_for_prompt(prompt)
         response = get_completion(
             llm_config=self.llm_config,
-            messages=[{"role": "user", "content": prompt}],
+            messages=messages,
             stream=False,
         )
 
