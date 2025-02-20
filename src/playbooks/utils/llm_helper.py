@@ -118,8 +118,8 @@ def _make_completion_request_stream(
         Either the complete response or an iterator of response chunks
     """
     response = completion(**completion_kwargs)
-    for chunk in response.completion_stream:
-        yield chunk["text"]
+    for chunk in response:
+        yield chunk.choices[0].delta.content
 
 
 def get_completion(
@@ -145,7 +145,7 @@ def get_completion(
         "model": llm_config.model,
         "api_key": llm_config.api_key,
         "messages": messages,
-        "max_completion_tokens": 2000,
+        "max_completion_tokens": 10000,
         "stream": stream,
         **kwargs,
     }
@@ -179,8 +179,9 @@ def get_completion(
     try:
         if stream:
             for chunk in _make_completion_request_stream(completion_kwargs):
-                full_response.append(chunk)
-                yield chunk
+                if chunk is not None:
+                    full_response.append(chunk)
+                    yield chunk
             full_response = "".join(full_response)
         else:
             full_response = _make_completion_request(completion_kwargs)
