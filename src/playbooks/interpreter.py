@@ -28,10 +28,10 @@ class Interpreter:
         llm_config: dict = None,
         stream: bool = False,
     ):
-        print("*" * 20)
-        print("Interpreter.run()")
-        print("session_context:", session_context)
-        print("instruction:", instruction)
+        # print("*" * 20)
+        # print("Interpreter.run()")
+        # print("session_context:", session_context)
+        # print("instruction:", instruction)
 
         # Update available_external_functions from EXT playbooks
         self.available_external_functions = []
@@ -83,8 +83,8 @@ class Interpreter:
         self.trace.extend(parsed["trace"])
         self.yield_requested_on_say = False
         for step in parsed["trace"]:
-            if "ext" in step and "result" not in step:
-                ext = step["ext"]
+            if "queue_ext" in step and "result" not in step:
+                ext = step["queue_ext"]
                 if isinstance(ext, dict):
                     ext = [ext]
                 for e in ext:

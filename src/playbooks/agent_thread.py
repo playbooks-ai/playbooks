@@ -58,8 +58,6 @@ class AgentThread:
         while not waiting_for_user_input:
             # Add context from history if available
             session_context = self.get_context_history()
-            if session_context:
-                session_context = "Session log:\n" + session_context
 
             chunks = []
             for chunk in self.interpreter.run(

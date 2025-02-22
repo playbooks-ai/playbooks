@@ -17,13 +17,12 @@
   - **3-Letter Command Codes:**
     - `EXE`: Execute internal logic or assignments (e.g., `$x = Reverse($y)`).  
     - `INT`: Playbook invocation (e.g., `AnotherPlaybook()`).  
-    - `EXT` or `YLD`: External function call, without yielding control back to system (e.g., `EXT Say("Hello")`) or with yielding control back to system (e.g., `YLD $weather = GetWeather("San Francisco")`
+    - `EXT`: External function call (e.g., `EXT Say("Hello")` or `EXT $weather = GetWeather("San Francisco")`)
     - `LOP`: Loop (e.g., `LOP For each $item in $list`)
     - `CND`: A conditional or if or an else statement (e.g., `CND If user is unhappy`).  
     - `CHK`: A check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`).  
     - `RET`: Return from current playbook, optionally returning a value.  
     - `JMP`: Jump to a different line.  
-    - `YLD`: Yield/pause (LLM must return control) to wait for external call or event.
 
   - **Line Numbering:**  
     - Use two-digit line numbers: `01:`, `02:`, etc.  
@@ -32,9 +31,8 @@
 5. **Splitting and Reformulating Steps**  
    - Convert compound steps (e.g. “If X then do Y else do Z” or “construct a name and return it”) into multiple lines with the correct commands.  
    - Maintain atomic actions—one instruction per line.
-   - Convert assignment from external function call to EXT (make external call), YLD (yield for external call) and EXE (assign variable from external call result) lines
+   - Convert assignment from external function call to EXT (make external call)
    - Add sub-steps if an `if` block is needed (e.g., `01:CND If $firstName == "Steve"  01.01:RET return "Steverleon"`).  
-   - Use `YLD` where we need to pause for external call. Some external calls like Say() don't require a pause.
 
 6. **Notes**  
    - Prefix notes with `N1.`, `N2.`, etc. Keep them in a separate “### Notes” section.  
@@ -45,7 +43,6 @@
 - Do NOT add extra commentary: output just the processed markdown.
 - Each Python tool function becomes a EXT playbook. Add the playbook with the same name as the function and a description using function documentation, noting it is external call. Include the code in a `### Code` section.
 - Each non-python playbooks is an INT playbook. Add description if not already present.
-- Minimize YLDs, e.g. ask user for multiple inputs in one step instead of separate YLD for each input.
 - If not WordCase already, convert agent and playbook names to WordCase.
 
 Example --
@@ -106,12 +103,12 @@ Gets user's name and provides San Francisco weather information
 ### Steps
 01:EXE $name = AskUserForName()
 02:EXT Say(Greet user with name)
-03:YLD $weather = GetWeather("San Francisco")
+03:EXT $weather = GetWeather("San Francisco")
 04:EXT Say(Tell user what the weather is in San Francisco.)
 ## INT AskUserForName() -> str
 Prompts for and validates user's preferred name
 ### Steps
-01:YLD $firstName = Say(Ask user what you should call them)
+01:EXT $firstName = Say(Ask user what you should call them)
 02:CHK N1 If $firstName is empty or invalid
   02.01:EXE Say(Tell user that the name doesn't look right and ask for name again)
   02.02:JMP Try again a couple of times by going back to step 02
@@ -183,7 +180,7 @@ Performs web searches to gather comprehensive information for user query
   02.02:LOP For each $searchQuery in $searchQueries
     02.02.01:EXT $searchResult = SearchWeb($searchQuery)
     02.02.02:JMP 02.02
-  02.03:YLD wait for SearchWeb calls
+  02.03:EXE wait for SearchWeb calls
   02.04:EXE gather relevant $information from all $searchResults
   02.05:EXE $sufficientInfo = check if $information is sufficient to answer the user's question
 03:RET $information
@@ -224,7 +221,7 @@ Demonstrates loop patterns with country info and number squares.
   02.01:EXT Say($country name)
   02.02:EXT Say(one special thing about $country)
   02.03:JMP 02
-03:YLD $country = Say(ask user what country they are from)
+03:EXT $country = Say(ask user what country they are from)
 **End output**
 ====
 
@@ -239,7 +236,6 @@ Follow these instructions exactly to transform the entire input. Output only the
 **End input**
 
 Make sure that external tools have proper descriptions and a code block.
-YLD only at steps where we need to pause for user input or wait for external calls to complete.
 Insert proper line numbers, headings, trigger/step codes, etc.
 Each playbook must have a name that is alphanumeric and starts with a letter.
 
