@@ -30,28 +30,38 @@ Playbooks AI™ is a framework for creating AI agents using human-readable and L
 
 ## Table of Contents
 
-- [Quick start](#quick-start)
+- [Show me!](#show-me)
 - [Why Playbooks?](#why-playbooks)
 - [Features](#features)
 - [How it works](#how-it-works)
+- [Quick start](#quick-start)
 - [Who Should Use Playbooks?](#who-should-use-playbooks)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
 - [License](#license)
 - [Contributors](#contributors)
 
-## Quick start
+## Show me!
 
-3 easy ways to try out playbooks:
+Well, here is a hello world agent that uses a single playbook:
 
-1. Visit [runplaybooks.ai](https://runplaybooks.ai) and try out the demo playground
+```playbooks
+# Hello World Agent
 
-2. On command line
+## HelloWorldPlaybook
 
-```bash
-pip install playbooks
-poetry run python src/playbooks/applications/agent_chat.py examples/playbooks/chat.md --stream
+### Trigger
+At the beginning of a conversation
+
+### Steps
+- Greet the user with a friendly "Hello, World!" message.
 ```
+
+Simple, right?
+
+Here's a more complex example... It defines a safe, comprehensive web search chat agent - uses external tool, a few playbooks, parallel tool calling and an iterative, complex RAG flow: [Web Search Chat](examples/playbooks/web_search_chat.md)
+
+Now take a look at the LangGraph implementation of the same agent: [LangGraph implementation](examples/langgraph/web_search_chat.py). Crazy, right? And despite the complex implementation, it is still more [rigid and brittle](examples/langgraph/web_search_chat.md) compared to the Playbooks AI agent!
 
 ## Why playbooks?
 
@@ -72,7 +82,7 @@ Not only that, business users can use a copilot that can transparently make chan
 
 ## Features
 
-### Anyone can build AI agents!
+### Everyone can build AI agents with playbooks
 - Write AI agent behavior using natural language playbooks instead of using code or using a UI builder
 - Non-technical business users can understand and modify agent behavior as business realities change
 - Talk with a copilot to modify playbooks and review changes
@@ -97,10 +107,23 @@ Not only that, business users can use a copilot that can transparently make chan
 
 What will you build with Playbooks AI?
 
+## Quick start
+
+3 easy ways to try out playbooks:
+
+1. Visit [runplaybooks.ai](https://runplaybooks.ai) and try out the demo playground
+
+2. On command line
+
+```bash
+pip install playbooks
+poetry run python src/playbooks/applications/agent_chat.py examples/playbooks/chat.md --stream
+```
+
 ## Who Should Use Playbooks?
 
 Playbooks AI is designed for anyone looking to build and control AI agents with ease. It is ideal for:
-R9
+
 ✅ Developers & AI Engineers – Create, test, and deploy LLM-powered agents with structured, human-readable playbooks.
 
 ✅ Businesses & Enterprises – Configure AI agents without coding while maintaining full control over behavior and workflows.
@@ -116,22 +139,22 @@ If you want a flexible, scalable, and human-readable way to define AI agent beha
 
 ## Roadmap
 
-We're continuously improving Playbooks AI to make it the best framework for building AI agents. Here’s what’s coming next:
+We're just getting started! There's a lot we are planning to do to make Playbooks AI the best way to build and run AI agents. Here’s what’s coming next:
 
+- Playbooks Observer for monitoring and debugging
+- Playbooks Hub for community playbooks and agents
 - VSCode extension for Playbooks debugging
 - Dynamic filtering of playbooks
 - Interop with other AI agent frameworks
+- Multi-agent natural language communication
 - Playbooks evaluation dataset
 - Inference speed optimizations
 - Running tools in a sandbox
 - Command line tooling improvements
 - PlaybooksLM fine-tuned model for executing playbooks
-- Multi-agent natural language communication
 - Expanded set of examples
 - Documentation generation
-- Playbooks Observer for monitoring and debugging
 - Playbooks Platform with enterprise-grade features
-- Playbooks Hub for community playbooks and agents
 
 ## Contributing
 
@@ -158,7 +181,9 @@ If you want to help, checkout some of the issues marked as `good-first-issue` or
 3. **playbooks Python package Setup**
    ```bash
    # Create and activate a virtual environment (recommended)
+   
    python -m venv venv # or conda create -n venv python, or pyenv virtualenv venv
+
    source venv/bin/activate  # On Windows: venv\Scripts\activate
    
    # Install playbooks Python package in development mode
