@@ -43,7 +43,7 @@ Playbooks AI™ is a framework for creating AI agents using human-readable and L
 
 ## Show me!
 
-Well, here is a hello world agent that uses a single playbook:
+Let’s start simple. Here’s a Hello World AI agent written in Playbooks AI:
 
 ```playbooks
 # Hello World Agent
@@ -57,48 +57,56 @@ At the beginning of a conversation
 - Greet the user with a friendly "Hello, World!" message.
 ```
 
-Simple, right?
+Simple, right? Just plain English defining AI behavior, no code required.
 
-Now a more complex example. Let's see how to create a safe, comprehensive web search chat agent that:
+Now, let’s take it further. Imagine building a real-world AI agent that:
+
+- Uses web search when needed
+- Performs iterative deep research to gather and present information
+- Rejects unsavory conversation topics
+
+See [Playbooks AI implementation](examples/playbooks/web_search_chat.md) of a Web Search Chat agent — about **50 lines of English instructions**. This agent:
 
 - uses external tools
 - implements an iterative, complex RAG flow
-- uses a few playbooks
 - demonstrates parallel tool calling
 - demonstrates trigger-driven playbook execution
 
-See the [Web Search Chat](examples/playbooks/web_search_chat.md) Playbooks AI agent.
+Now compare that with an equivalent [LangGraph implementation](examples/langgraph/web_search_chat.py) — about **200 lines of complex code** that is hard to understand and modify, and yet, the resulting agent behavior is less flexible than the Playbooks AI agent!
 
-Now, take a look at the equivalent LangGraph implementation: [LangGraph implementation](examples/langgraph/web_search_chat.py). Crazy, right? And despite the highly complex implementation, it is still more [rigid and brittle](examples/langgraph/web_search_chat.md) compared to the Playbooks AI agent!
+🔗 Want to build your AI application using playbooks? [Get started here](#quick-start).
 
-I'll offer a few refinements to make the content even more impactful while maintaining its flow:
+## Why Playbooks?
 
-## Why Playbooks? 🤔
+Ever tried configuring an AI agent and thought, *"This is way harder than it should be"*? You’re not alone.
 
-It all started with a simple question - Why can't we train AI agents the same way we train human agents? Think about how a customer support agent learns: they get documentation covering common scenarios, tips and tricks gained from experience, and specific playbooks to follow (like "when a customer reports a billing issue, first verify their account details, then..."). These playbooks guide them while leaving room for judgment. Shouldn't AI agents be trained the same way?
+Building AI agents today requires choosing between **three frustrating options**:
+1. **Code-based frameworks** (LangGraph, CrewAI, AutoGen, etc.) → Powerful but require deep technical expertise.
+2. **No-code UI-based agent builders** (Voiceflow, Botpress, Vertex AI, Copilot Studio, Kore.ai, etc.) → Easy to start but quickly become a tangled mess.
+3. **Direct prompting** (Chain-of-Thought, Self-Consistency, Tree-of-Thoughts, etc.) → Seem intuitive but resulting behavior is unpredictable and brittle.
 
-One of the biggest headaches in working with AI agents today is getting them to behave exactly the way we want. Here's the problem:
-- If you configure agents with code, business users can't understand the expected behavior, let alone make changes as business needs evolve. Current AI agent frameworks like LangGraph, AutoGen, and CrewAI require writing complex Python code with deep knowledge of async programming, state machines, and prompt engineering. Even experienced developers need significant time to understand and modify agent behavior.
-- If you use a UI-based workflow automation or AI agent builder system, the initial simplicity is deceiving. Real-world workflows quickly turn into complex, jumbled graphs that are a nightmare to build, understand, and maintain. Companies spend months building these workflow graphs only to discover they need highly skilled specialists just to make simple changes.
-- If you try implementing workflows using complex step-by-step prompts that look like playbooks, well... LLMs aren't great at following those faithfully. You'll get unreliable, incomplete, and sometimes hallucinated behavior.
+We thought: *Why not train AI agents like we train human agents?* 
 
-Can't use code, can't use UIs, can't use complex prompts - now what? 🤷
+Imagine **onboarding** a customer support agent. Instead of writing thousands of lines of Python or dragging boxes in a UI, **you give them playbooks** to follow — structured, human-readable guides that include step-by-step procedures, caveats, and tips & tricks. What if you could do the same for onboarding an AI agent? **Now you can do that with Playbooks AI.** 
 
-We need something that's:
-- Easy to understand and modify ✍️
-- Leverages LLMs' smart decision-making abilities 🧠
-- Actually ensures your workflow instructions are followed ✅
+✅ **Define AI behavior in plain English**  
+✅ Business users can read, modify, and adapt workflows  
+✅ Handles step-by-step execution, external API calls, and multi-agent collaboration  
 
-That's where Playbooks AI comes in! Think of it as writing agent behavior in English-like pseudocode. The framework handles all the complex stuff behind the scenes:
-- Proper step-by-step control flow
-- Calling external tools and APIs at the right time
-- Managing complex behaviors across hundreds or thousands of playbooks
-- System complexities like multi-agent communication
-- External event-triggered behaviors
+Think of it as writing pseudocode that actually runs — without complex state machines or hidden LLM hallucinations.
 
-But here's the best part: business users can actually read and understand playbooks. They also get a copilot that can transparently modify playbooks on their behalf. Need to add caveats? Special cases? New business logic? No problem! The copilot helps make those changes and presents them for your approval. 🎯
+### **Playbooks AI vs. other approaches for building AI agents**
 
-The result? A practical middle ground that makes powerful AI agents truly accessible and customizable for enterprise use. 🚀
+| Feature                 | **Playbooks AI** 🏆 | **Code-Based Frameworks** | **UI-Based Agent builders** | **Direct Prompting** |
+|-------------------------|------------------|-------------------------------|-------------------------------|-------------------------------|
+| **Ease of Use**         | ✅ Simple, human-readable playbooks | ❌ Requires Python & async expertise | ✅ No-code UI, but complex flows are hard to maintain | ✅ Easiest — just type a prompt |
+| **Behavior Tunability** | ✅ Easily modify agent behavior | ❌ Requires coding expertise to modify | ❌ Hard to translate requirements into UI workflows | ❌ Difficult to get the right behavior |
+| **Workflow Complexity** | ✅ Handles simple & complex logic | ✅ Handles complex logic, but requires coding expertise | ❌ Hard to scale beyond simple workflows | ❌ No structured execution, LLM follows instructions loosely |
+| **External API Calls**  | ✅ Simple, declarative tool calling | ✅ Explicit tool calling | ✅ Often requires prebuilt integrations | ❌ Needs manual copy-pasting of results, no automation |
+| **Workflow Scalability** | ✅ Designed to handle 100s-1000s of playbooks | ✅ No limit, but code complexity grows exponentially | ❌ UI-based logic becomes unmanageable for large workflows | ❌ Cannot scale beyond one-off conversations |
+| **Business User Usability**     | ✅ Yes | ❌ No, complex code | ❌ No, complex workflow graphs | ❌ No, complex prompt engineering |
+
+---
 
 ## Features
 
@@ -154,14 +162,14 @@ Playbooks AI is designed for anyone looking to build and control AI agents with 
 
 ✅ Automation Specialists – Use Playbooks AI for process automation, API integrations, and intelligent workflows.
 
-If you want a flexible, scalable, and human-readable way to define AI agent behavior, Playbooks AI is the right tool for you! 🚀
-
 
 ## Roadmap
 
 We're just getting started! There's a lot we are planning to do to make Playbooks AI the best way to build and run AI agents. Here’s what’s coming next:
 
-- Playbooks Observer for monitoring and debugging
+- Playbooks Observer for observability and debugging
+- Online planning by generating playbooks
+- Process multiple trigger matches simultaneously
 - Playbooks Hub for community playbooks and agents
 - VSCode extension for Playbooks debugging
 - Dynamic filtering of playbooks
