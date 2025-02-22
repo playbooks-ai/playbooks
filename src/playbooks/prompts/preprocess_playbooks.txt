@@ -18,6 +18,7 @@
     - `EXE`: Execute internal logic or assignments (e.g., `$x = Reverse($y)`).  
     - `INT`: Playbook invocation (e.g., `AnotherPlaybook()`).  
     - `EXT` or `YLD`: External function call, without yielding control back to system (e.g., `EXT Say("Hello")`) or with yielding control back to system (e.g., `YLD $weather = GetWeather("San Francisco")`
+    - `LOP`: Loop (e.g., `LOP For each $item in $list`)
     - `CND`: A conditional or if or an else statement (e.g., `CND If user is unhappy`).  
     - `CHK`: A check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`).  
     - `RET`: Return from current playbook, optionally returning a value.  
@@ -190,6 +191,40 @@ N1 Make SearchWeb calls in parallel, then wait for all of them to complete
 
 **End output**
 
+====
+
+Example --
+
+**Start input**
+# Loop Demo
+
+## Main
+
+### Trigger
+At the beginning
+
+### Steps
+- make a list of 10 countries near USA
+- take each country
+    - say the country's name
+    - tell one special thing about the country
+- ask user what country they are from
+**End input**
+
+**Start output**
+# Loop Demo
+## INT Main() -> None
+Demonstrates loop patterns with country info and number squares.
+### Trigger
+01:BGN At the beginning
+### Steps
+01:EXE $countries = make a list of 10 countries near USA
+02:LOP For each $country in $countries
+  02.01:EXT Say($country name)
+  02.02:EXT Say(one special thing about $country)
+  02.03:EXE Continue loop
+03:YLD $country = Say(ask user what country they are from)
+**End output**
 ====
 
 Follow these instructions exactly to transform the entire input. Output only the transformed text, nothing else.
