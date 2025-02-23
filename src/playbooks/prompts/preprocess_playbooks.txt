@@ -230,6 +230,8 @@ Demonstrates loop patterns with country info and number squares.
 
 Follow these instructions exactly to transform the entire input. Output only the transformed text, nothing else.
 
+====SYSTEM_PROMPT_DELIMITER====
+
 **Start input**
 
 {{PLAYBOOKS}}

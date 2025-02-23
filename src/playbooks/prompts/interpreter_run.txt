@@ -318,7 +318,7 @@ trace:
     yield: true
 ```
 
-========
+====SYSTEM_PROMPT_DELIMITER====
 
 **Actual inputs (playbooks, initial state, session context)**
 ```playbooks
@@ -329,6 +329,7 @@ trace:
 {{SESSION_CONTEXT}}
 
 Yield only for YLD or when waiting for user input or external calls. Continue executing till yield is necessary. Execute LOP loops completely step by step till the end, no brevity, no shortcuts.
-Output valid yaml only and nothing else.
+Output valid yaml only and nothing else. Must output keys thread_id, initial, prologue, trace, stack, vars, status.
 
+{{INSTRUCTION}}
 **Actual output**

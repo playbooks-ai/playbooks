@@ -9,6 +9,7 @@ import litellm
 from litellm import BadRequestError, completion
 
 from playbooks.config import LLMConfig
+from playbooks.constants import SYSTEM_PROMPT_DELIMITER
 
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
 if llm_cache_enabled:
@@ -190,3 +191,14 @@ def get_completion(
         if llm_cache_enabled and use_cache:
             cache.set(cache_key, full_response)
             # cache.close()
+
+
+def get_messages_for_prompt(prompt: str) -> List[dict]:
+    """Get messages for a prompt"""
+    if SYSTEM_PROMPT_DELIMITER in prompt:
+        system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
+        return [
+            {"role": "system", "content": system.strip()},
+            {"role": "user", "content": user.strip()},
+        ]
+    return [{"role": "system", "content": prompt.strip()}]
