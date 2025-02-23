@@ -21,3 +21,5 @@ class LLMConfig:
                 self.api_key = os.environ.get("ANTHROPIC_API_KEY")
             elif "gemini" in self.model:
                 self.api_key = os.environ.get("GEMINI_API_KEY")
+            else:
+                self.api_key = os.environ.get("OPENAI_API_KEY")

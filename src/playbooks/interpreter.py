@@ -54,8 +54,9 @@ class Interpreter:
         for chunk in get_completion(
             llm_config=llm_config, messages=llm_messages, stream=stream
         ):
-            response.append(chunk)
-            yield AgentResponseChunk(raw=chunk)
+            if chunk is not None:
+                response.append(chunk)
+                yield AgentResponseChunk(raw=chunk)
 
         yield AgentResponseChunk(raw="\n")
 

@@ -60,4 +60,7 @@ class Transpiler:
 
         response = list(response)
         processed_content = response[0]
+        print("*" * 20)
+        print("Intermediate format:")
+        print(processed_content)
         return processed_content
