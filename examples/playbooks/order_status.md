@@ -7,10 +7,10 @@ def Handoff():
     return "Successfully handed off to a human agent"
 
 def AuthenticateUser(email, pin):
-    return {"authToken": "1234"}
+    return {"success": False, "error": "Account not found"}
 
 def AuthenticateUser2(ssn, dob):
-    return {"authToken": "1234"}
+    return {"success": True, "authToken": "1234"}
 
 def CheckOrderStatus(orderId):
     return {"orderStatus": "pending", "expectedDeliveryDate": "2025-03-01"}

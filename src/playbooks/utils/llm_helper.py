@@ -148,15 +148,16 @@ def get_completion(
         "messages": messages,
         "max_completion_tokens": 10000,
         "stream": stream,
+        "temperature": 0.0,
         **kwargs,
     }
 
-    print()
-    print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
-    print(messages[0]["content"])
-    print(messages[1]["content"] if len(messages) > 1 else "")
-    print("=" * 40)
-    print()
+    # print()
+    # print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
+    # print(messages[0]["content"])
+    # print(messages[1]["content"] if len(messages) > 1 else "")
+    # print("=" * 40)
+    # print()
 
     if llm_cache_enabled and use_cache:
         cache_key = custom_get_cache_key(**completion_kwargs)
