@@ -43,18 +43,18 @@ Playbooks AI™ lets you program AI agents using plain English instead of code. 
 Here's the simplest Natural Language Program you can write — a Hello World agent:
 
 ```playbooks
-# Hello World Agent
+# Hello World!
 
-## HelloWorldPlaybook
+## Say Hello
 
 ### Trigger
-At the beginning of a conversation
+At the beginning
 
 ### Steps
 - Greet the user with a friendly "Hello, World!" message.
 ```
 
-That's it! Just plain English that both humans and AI can understand.
+That's it! Just plain English that both humans and AI can understand. Here "Hello World!" is name of the AI agent, while "Say Hello" is a playbook. A playbook is executed as soon as its trigger condition is satisfied.
 
 Now, let's look at something more powerful. Here's a web search agent that:
 
