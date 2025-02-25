@@ -59,7 +59,7 @@ class InterpreterExecution(TraceMixin):
             A tuple of tool calls, the last executed step, and updated variables.
         """
         # First try to extract yaml content between triple backticks
-        yaml_match = re.search(r"```(?:yaml)?\n(.*?)```", response, re.DOTALL)
+        yaml_match = re.search(r"```(?:yaml)?(.*?)```", response, re.DOTALL)
         if yaml_match:
             yaml_content = yaml_match.group(1)
         else:
@@ -323,8 +323,8 @@ class InterpreterExecution(TraceMixin):
             response_chunks = []
             raw_response = []
             for chunk in self._get_llm_response(prepared_instruction):
-                # Only add to raw_response if it's an actual content chunk, not a formatting newline
-                if hasattr(chunk, "raw") and chunk.raw and chunk.raw != "\n":
+                # Only add to raw_response if it's an actual content chunk
+                if hasattr(chunk, "raw") and chunk.raw:
                     raw_response.append(chunk.raw)
                 response_chunks.append(chunk)
                 yield chunk
