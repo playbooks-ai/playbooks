@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from playbooks.agent_factory import AgentFactory
-from playbooks.config import LLMConfig
 from playbooks.exceptions import PlaybookError
+from playbooks.utils.llm_helper import LLMConfig
 
 
 def test_create_agents(test_data_dir):

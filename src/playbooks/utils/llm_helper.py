@@ -9,6 +9,7 @@ import litellm
 from litellm import BadRequestError, completion
 
 from playbooks.config import LLMConfig
+from playbooks.constants import SYSTEM_PROMPT_DELIMITER
 
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
 if llm_cache_enabled:
@@ -118,8 +119,8 @@ def _make_completion_request_stream(
         Either the complete response or an iterator of response chunks
     """
     response = completion(**completion_kwargs)
-    for chunk in response.completion_stream:
-        yield chunk["text"]
+    for chunk in response:
+        yield chunk.choices[0].delta.content
 
 
 def get_completion(
@@ -145,17 +146,18 @@ def get_completion(
         "model": llm_config.model,
         "api_key": llm_config.api_key,
         "messages": messages,
-        "max_completion_tokens": 2000,
+        "max_completion_tokens": 7500,
         "stream": stream,
+        "temperature": 0.0,
         **kwargs,
     }
 
-    print()
-    print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
-    print(messages[0]["content"])
-    print(messages[1]["content"] if len(messages) > 1 else "")
-    print("=" * 40)
-    print()
+    # print()
+    # print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
+    # print(messages[0]["content"])
+    # print(messages[1]["content"] if len(messages) > 1 else "")
+    # print("=" * 40)
+    # print()
 
     if llm_cache_enabled and use_cache:
         cache_key = custom_get_cache_key(**completion_kwargs)
@@ -179,8 +181,9 @@ def get_completion(
     try:
         if stream:
             for chunk in _make_completion_request_stream(completion_kwargs):
-                full_response.append(chunk)
-                yield chunk
+                if chunk is not None:
+                    full_response.append(chunk)
+                    yield chunk
             full_response = "".join(full_response)
         else:
             full_response = _make_completion_request(completion_kwargs)
@@ -189,3 +192,14 @@ def get_completion(
         if llm_cache_enabled and use_cache:
             cache.set(cache_key, full_response)
             # cache.close()
+
+
+def get_messages_for_prompt(prompt: str) -> List[dict]:
+    """Get messages for a prompt"""
+    if SYSTEM_PROMPT_DELIMITER in prompt:
+        system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
+        return [
+            {"role": "system", "content": system.strip()},
+            {"role": "user", "content": user.strip()},
+        ]
+    return [{"role": "system", "content": prompt.strip()}]
