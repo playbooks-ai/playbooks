@@ -205,7 +205,7 @@ Here's the execution:
                 stream=True,
             )
             mock_llm_call.execute.assert_called_once()
-            mock_parse_response.assert_called_once_with("Test response")
+            mock_parse_response.assert_called_once_with("Test response\n")
 
             # Check that the wait_for_external_event flag was set correctly
             assert interpreter_execution.wait_for_external_event is True
