@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "playbooks"
-version = "0.1.0"
+version = "0.2.0"
 license = "LICENSE-CODE"
-description = "A framework for creating AI agents using human-readable playbooks"
+description = "A framework for creating AI agents using natural language programming"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 readme = "README.md"
 packages = [{include = "playbooks", from = "src"}]
