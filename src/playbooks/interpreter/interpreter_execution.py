@@ -329,7 +329,7 @@ class InterpreterExecution(TraceMixin):
                 self.response_chunks.append(AgentResponseChunk(tool_call=call))
             elif call.is_internal_playbook_call:
                 self.playbook_calls.append(call.fn)
-            elif call.fn not in self.playbooks:
+            elif call.is_external_playbook_call:
                 # External tool call
                 has_external_tool_call = True
                 # Import here to avoid circular imports
