@@ -1,8 +1,12 @@
 import os
 
+from rich.console import Console
+
 from playbooks.config import LLMConfig
 from playbooks.exceptions import PlaybookError
 from playbooks.utils.llm_helper import get_completion, get_messages_for_prompt
+
+console = Console()
 
 
 class Transpiler:
@@ -62,5 +66,5 @@ class Transpiler:
         processed_content = response[0]
         # print("*" * 20)
         # print("Intermediate format:")
-        # print(processed_content)
+        console.print("[pink]" + processed_content + "[/pink]")
         return processed_content

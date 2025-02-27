@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import yaml
 
-from ..trace_mixin import TraceMixin
+from playbooks.trace_mixin import TraceMixin
 
 
 class StepExecution(TraceMixin):

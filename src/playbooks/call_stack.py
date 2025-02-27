@@ -1,5 +1,7 @@
 from typing import List
 
+from playbooks.trace_mixin import TraceItem
+
 
 class InstructionPointer:
     def __init__(self, playbook: str, line_number: str):
@@ -39,10 +41,20 @@ class CallStack:
         return self.frames[-1] if self.frames else None
 
     def __repr__(self):
-        return f"CallStack(frames={self.frames})"
+        frames = ", ".join(self.to_dict())
+        return f"Call Stack({frames})"
 
     def __str__(self):
         return self.__repr__()
 
     def to_dict(self):
         return [str(frame.instruction_pointer) for frame in self.frames]
+
+    def to_trace_item(self):
+        return TraceItem(
+            item=self.__repr__(),
+            metadata={"call_stack": self.to_dict()},
+        )
+
+    def to_trace(self):
+        return self.__repr__()
