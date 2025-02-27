@@ -20,6 +20,7 @@
     - `QUE`: Queue an external function call
     - `LOP`: Loop (e.g., `LOP For each $item in $list`)
     - `CND`: A conditional or if or an else statement (e.g., `CND If user is unhappy`).  
+    - `ELS`: Else statement (e.g., `ELS Otherwise`).
     - `CHK`: A check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`).  
     - `RET`: Return from current playbook, optionally returning a value.  
     - `JMP`: Jump to a different line.  
@@ -118,7 +119,7 @@ Prompts for and validates user's preferred name
 02:YLD ForUserInput("Waiting for name")
 03:CHK N1 If $firstName is empty or invalid
   03.01:QUE Say(Tell user that the name doesn't look right and ask for name again)
-  03.02:JMP Try again a couple of times by going back to step 02
+  03.02:JMP 02 to try again a couple of times
 04:RET $firstName
 ### Notes
 N1 If the name is invalid, ask the user again
@@ -184,14 +185,15 @@ Performs web searches to gather comprehensive information for user query
 01:EXE $information = ""
 02:EXE $sufficientInfo = False
 03:EXE $plan = think step by step how you would use web searches to get relevant information, e.g. to answer who was the maratha ruler when the Taj Mahal was built, I will first search when Taj Mahal was built, then who was the maratha ruler at that time
-04:CND Loop until we have $sufficientInfo, max 3 times
+04:LOP Loop until we have $sufficientInfo, max 3 times
   04.01:EXE $searchQueries = list one or more precise web search queries that can together gather various aspects of the information we need to answer the user's question
   04.02:LOP For each $searchQuery in $searchQueries
     04.02.01:QUE $searchResult = SearchWeb($searchQuery)
-    04.02.02:JMP 02.02
+    04.02.02:JMP 02.02 to process other search queries
   04.03:YLD ForCallComplete("Waiting for search results")
   04.04:EXE gather relevant $information from all $searchResults
   04.05:EXE $sufficientInfo = check if $information is sufficient to answer the user's question
+  04.06:JMP 04 to check if we have enough information
 05:RET $information
 ### Notes
 N1 Make SearchWeb calls in parallel, then wait for all of them to complete
@@ -214,7 +216,10 @@ At the beginning
 - make a list of 10 countries near USA
 - take each country
     - say the country's name
-    - tell one special thing about the country
+    - if country is in the north hemisphere
+      - tell one special thing about the country in English
+    - otherwise
+      - tell one special thing about the country in Spanish
 - ask user what country they are from
 **End input**
 
@@ -228,8 +233,11 @@ Demonstrates loop patterns with country info and number squares.
 01:EXE $countries = make a list of 10 countries near USA
 02:LOP For each $country in $countries
   02.01:QUE Say($country name)
-  02.02:QUE Say(one special thing about $country)
-  02.03:JMP 02
+  02.02:CND If $country is in the north hemisphere
+    02.02.01:EXT Say(one special thing about $country in English)
+  02.03:ELS Otherwise
+    02.03.01:EXT Say(one special thing about $country in Spanish)
+  02.04:JMP 02
 03:EXE $country = Say(ask user what country they are from)
 04:YLD ForUserInput("Waiting for user's country")
 **End output**
