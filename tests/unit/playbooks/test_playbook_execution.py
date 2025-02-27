@@ -18,6 +18,7 @@ def mock_interpreter():
         playbook="TestPlaybook", line_number="01"
     )
     interpreter.call_stack.peek.return_value = frame
+    interpreter.handle_empty_call_stack.return_value = (False, None)
     return interpreter
 
 
