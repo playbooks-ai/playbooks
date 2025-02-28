@@ -1,10 +1,9 @@
 """Interpreter execution module for the interpreter."""
 
 import contextlib
+import json
 import re
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Tuple
-
-import yaml
 
 from playbooks.call_stack import CallStackFrame, InstructionPointer
 from playbooks.llm_call import LLMCall
@@ -157,20 +156,21 @@ class InterpreterExecution(TraceMixin):
         Returns:
             A tuple of tool calls, the last executed step, and updated variables.
         """
-        # First try to extract yaml content between triple backticks
-        yaml_match = re.search(r"```(?:yaml)?(.*?)```", response, re.DOTALL)
-        if yaml_match:
-            yaml_content = yaml_match.group(1)
+        # First try to extract json content between triple backticks
+        json_match = re.search(r"```(?:json)?(.*?)```", response, re.DOTALL)
+        if json_match:
+            json_content = json_match.group(1)
         else:
-            # If no triple backticks found, try to parse the entire response as YAML
-            yaml_content = response
+            # If no triple backticks found, try to parse the entire response as JSON
+            json_content = response
 
         try:
-            parsed = yaml.safe_load(yaml_content)
+            parsed = json.loads(json_content)
+            parsed = parsed["trace"]
             if not parsed or not isinstance(parsed, list):
-                raise ValueError("Empty YAML content")
-        except yaml.YAMLError as err:
-            raise ValueError(f"Invalid YAML content: {yaml_content}") from err
+                raise ValueError("Empty JSON content")
+        except json.JSONDecodeError as err:
+            raise ValueError(f"Invalid JSON content: {json_content}") from err
 
         tool_calls = []
         last_executed_step = None
@@ -257,7 +257,10 @@ class InterpreterExecution(TraceMixin):
         messages = get_messages_for_prompt(prompt)
 
         llm_call = LLMCall(
-            llm_config=self.llm_config, messages=messages, stream=self.stream
+            llm_config=self.llm_config,
+            messages=messages,
+            stream=self.stream,
+            json_mode=True,  # Enable JSON mode for all interpreter calls
         )
         self.trace(llm_call)
 
