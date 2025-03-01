@@ -6,7 +6,7 @@ from functools import wraps
 from typing import Any, Callable, Iterator, List, TypeVar, Union
 
 import litellm
-from litellm import BadRequestError, completion
+from litellm import BadRequestError, completion, get_supported_openai_params
 
 from playbooks.config import LLMConfig
 from playbooks.constants import SYSTEM_PROMPT_DELIMITER
@@ -128,14 +128,17 @@ def get_completion(
     messages: List[dict],
     stream: bool = False,
     use_cache: bool = True,
+    json_mode: bool = False,
     **kwargs,
 ) -> Iterator[str]:
     """Get completion from LLM with optional streaming and caching support.
 
     Args:
         llm_config: LLM configuration containing model and API key
+        messages: List of message dictionaries to send to the LLM
         stream: If True, returns an iterator of response chunks
         use_cache: If True and caching is enabled, will try to use cached responses
+        json_mode: If True, instructs the model to return a JSON response
         **kwargs: Additional arguments passed to litellm.completion
 
     Returns:
@@ -151,6 +154,13 @@ def get_completion(
         "temperature": 0.0,
         **kwargs,
     }
+
+    # Add response_format for JSON mode if supported by the model
+    if json_mode:
+        params = get_supported_openai_params(model=llm_config.model)
+
+        if "response_format" in params:
+            completion_kwargs["response_format"] = {"type": "json_object"}
 
     print()
     print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)

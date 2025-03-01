@@ -13,7 +13,7 @@ Playbooks format -
 - Variables
   - Allowed types are boolean, strings, numbers and null
 - Output
-  - Parsable, valid yaml in triple backticks and nothing else
+  - Parsable, valid json in triple backticks and nothing else
 - Say()
   - Whatever you Say() will be shown to the user
   - When queuing multiple Say() calls, make sure they all connect conversationally
@@ -33,47 +33,99 @@ Example playbook
 ```
 
 ** Output **
-- "prologue": |
-  User hasn't interacted yet and session log is empty, so no context to consider.
-  Starting HelloExample playbook from line 01.
-  I will greet the user and provide population information about two countries near USA.
-- "HelloWorld:01:QUE":
-  - call:
-      fn: "Say"
-      args:
-      - Hello there!
-      kwargs: {}
-- "HelloWorld:02:LOP":
-  - think: |
-    2 countries near USA are Canada, Mexico
-    I will loop through them and get population projection for each.
-  - updated_vars:
-    $countries:
-    - "Canada"
-    - "Mexico"
-  - think: Start loop with Canada
-  - updated_vars:
-    $country: "Canada"
-- "HelloWorld:02.01:QUE":
-  - call:
-      fn: "SearchWeb"
-      args:
-      - 2030 population projection for Canada
-      kwargs: {}
-- "HelloWorld:02:LOP":
-  - think: Continue loop with Mexico
-  - updated_vars:
-    $country: "Mexico"
-- "HelloWorld:02.01:QUE":
-  - call:
-      fn: "SearchWeb"
-      args:
-      - 2030 population projection for Mexico
-      kwargs: {}
-- "HelloWorld:03:YLD":
-  - think: Yield control back to the system to get search results
-  - yield_type: ForCallComplete
-
+```json
+{
+  "trace": [
+    {
+      "prologue": "User hasn't interacted yet and session log is empty, so no context to consider.\nStarting HelloExample playbook from line 01.\nI will greet the user and provide population information about two countries near USA.\n"
+    }, 
+    {
+      "HelloWorld:01:QUE": [
+        {
+          "call": {
+            "fn": "Say", 
+            "args": [
+              "Hello there!"
+            ], 
+            "kwargs": {}
+          }
+        }
+      ]
+    }, 
+    {
+      "HelloWorld:02:LOP": [
+        {
+          "think": "2 countries near USA are Canada, Mexico\nI will loop through them and get population projection for each.\n"
+        }, 
+        {
+          "updated_vars": {
+            "$countries": [
+              "Canada", 
+              "Mexico"
+            ]
+          }
+        }, 
+        {
+          "think": "Start loop with Canada"
+        }, 
+        {
+          "updated_vars": {
+            "$country": "Canada"
+          }
+        }
+      ]
+    }, 
+    {
+      "HelloWorld:02.01:QUE": [
+        {
+          "call": {
+            "fn": "SearchWeb", 
+            "args": [
+              "2030 population projection for Canada"
+            ], 
+            "kwargs": {}
+          }
+        }
+      ]
+    }, 
+    {
+      "HelloWorld:02:LOP": [
+        {
+          "think": "Continue loop with Mexico"
+        }, 
+        {
+          "updated_vars": {
+            "$country": "Mexico"
+          }
+        }
+      ]
+    }, 
+    {
+      "HelloWorld:02.01:QUE": [
+        {
+          "call": {
+            "fn": "SearchWeb", 
+            "args": [
+              "2030 population projection for Mexico"
+            ], 
+            "kwargs": {}
+          }
+        }
+      ]
+    }, 
+    {
+      "HelloWorld:03:YLD": [
+        {
+          "think": "Yield control back to the system to get search results"
+        }, 
+        {
+          "yield_type": "ForCallComplete"
+        }
+      ]
+    }
+  ]
+}
+```
 ** End Examples **
 
 ====SYSTEM_PROMPT_DELIMITER====
@@ -92,20 +144,34 @@ Example playbook
 ```
 
 Example output format -
-```
-- "prologue": |
-  ...
-- "...:..:...": # must be real playbook, line number, and type
-  - think: |
-  ...
-  - call:
-      fn: "..."
-      args:
-      - ...
-      kwargs: {...}
+```json
+{
+  "trace": [
+    {
+      "prologue": ...,
+    },
+    {
+      "...:..:...": [
+        {
+          "think": ...,
+        },
+        {
+          "updated_vars": {...}
+        },
+        {
+          "call": {
+            "fn": "...",
+            "args": [...],
+            "kwargs": {...}
+          }
+        },
+      ]
+    },
+  ]
+}
 ```
 
-```session_context.yaml
+```session_context.txt
 {{SESSION_CONTEXT}}
 ```
 
@@ -116,6 +182,6 @@ Don't blindly follow the playbook - be highly intelligent and adapt as needed to
 
 {{INSTRUCTION}}
 
-Output yaml only and nothing else.
+Output json only and nothing else.
 
 ** Output **

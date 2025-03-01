@@ -9,11 +9,18 @@ from .utils.llm_helper import get_completion
 
 
 class LLMCall(TraceMixin):
-    def __init__(self, llm_config: LLMConfig, messages: List[dict], stream: bool):
+    def __init__(
+        self,
+        llm_config: LLMConfig,
+        messages: List[dict],
+        stream: bool,
+        json_mode: bool = False,
+    ):
         super().__init__()
         self.llm_config: LLMConfig = llm_config
         self.messages: List[dict] = messages
         self.stream: bool = stream
+        self.json_mode: bool = json_mode
 
     def __repr__(self):
         return f"LLMCall({self.llm_config.model})"
@@ -25,7 +32,10 @@ class LLMCall(TraceMixin):
         token_usage = 0
 
         for chunk in get_completion(
-            llm_config=self.llm_config, messages=self.messages, stream=self.stream
+            llm_config=self.llm_config,
+            messages=self.messages,
+            stream=self.stream,
+            json_mode=self.json_mode,
         ):
             if chunk is not None:
                 if first_token_time is None:
