@@ -54,14 +54,15 @@ class AgentBuilder:
             for h2 in h1.get("children", [])
             if h2.get("type") == "h2"
         ]
+        if not playbooks:
+            raise AgentConfigurationError(f"No playbooks defined for AI agent {klass}")
+
+        playbooks = {playbook.klass: playbook for playbook in playbooks}
 
         # Python code blocks were removed from EXT playbooks,
         # so we need to refresh the markdown attributes to ensure that
         # python code is not sent to the LLM with playbooks
         refresh_markdown_attributes(h1)
-
-        if not playbooks:
-            raise AgentConfigurationError(f"No playbooks defined for AI agent {klass}")
 
         agent_class_name = AgentBuilder.make_agent_class_name(klass)
 

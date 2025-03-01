@@ -17,7 +17,7 @@
   - **3-Letter Command Codes:**
     - `EXE`: Execute internal logic or assignments (e.g., `$x = Reverse($y)`).  
     - `INT`: Playbook invocation (e.g., `AnotherPlaybook()`).  
-    - `EXT` or `YLD`: External function call, without yielding control back to system (e.g., `EXT Say("Hello")`) or with yielding control back to system (e.g., `YLD $weather = GetWeather("San Francisco")`
+    - `QUE`: Queue an external function call
     - `LOP`: Loop (e.g., `LOP For each $item in $list`)
     - `CND`: A conditional or if or an else statement (e.g., `CND If user is unhappy`).  
     - `CHK`: A check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`).  
@@ -44,7 +44,7 @@
 - Produce one contiguous processed playbook text, preserving the original headings but adding your new line-numbered instructions.
 - Do NOT add extra commentary: output just the processed markdown.
 - Each Python tool function becomes a EXT playbook. Add the playbook with the same name as the function and a description using function documentation, noting it is external call. Include the code in a `### Code` section.
-- Each non-python playbooks is an INT playbook. Add description if not already present.
+- Each non-python playbooks is an playbook. Add description if not already present.
 - Minimize YLDs, e.g. ask user for multiple inputs in one step instead of separate YLD for each input.
 - If not WordCase already, convert agent and playbook names to WordCase.
 
@@ -92,30 +92,34 @@ def Tool1(param1:int):
 **Start output**
 
 # ExampleAgent
-## EXT Tool1($param1: int) -> dict{retval: int}
+## Tool1($param1: int) -> dict{retval: int}
 External call this tool for this specific reason. $param1 is integer input parameter for Tool1. Return a dictionary containing integer 'retval'.
 ### Code
 ```python
 def Tool1(param1: int) -> dict:
     return {"retval": 1}
 ```
-## INT Playbook1() -> None
+## Playbook1() -> None
 Gets user's name and provides San Francisco weather information
 ### Trigger
 01:BGN When agent starts
 ### Steps
-01:EXE $name = AskUserForName()
-02:EXT Say(Greet user with name)
-03:YLD $weather = GetWeather("San Francisco")
-04:EXT Say(Tell user what the weather is in San Francisco.)
-## INT AskUserForName() -> str
+01:QUE $name = AskUserForName()
+02:YLD Yield("Waiting for name")
+03:QUE Say(Greet user with name)
+05:QUE $weather = GetWeather("San Francisco")
+06:YLD Yield("Waiting for weather")
+07:QUE Say(Tell user what the weather is in San Francisco., waitForUserInput=true)
+08:YLD Yield("Waiting for user input")
+## AskUserForName() -> str
 Prompts for and validates user's preferred name
 ### Steps
-01:YLD $firstName = Say(Ask user what you should call them)
-02:CHK N1 If $firstName is empty or invalid
-  02.01:EXE Say(Tell user that the name doesn't look right and ask for name again)
-  02.02:JMP Try again a couple of times by going back to step 02
-03:RET $firstName
+01:QUE $firstName = Say(Ask user what you should call them, waitForUserInput=true)
+02:YLD Yield("Waiting for name")
+03:CHK N1 If $firstName is empty or invalid
+  03.01:QUE Say(Tell user that the name doesn't look right and ask for name again, waitForUserInput=true)
+  03.02:JMP Try again a couple of times by going back to step 02
+04:RET $firstName
 ### Notes
 N1 If the name is invalid, ask the user again
 **End output**
@@ -158,7 +162,7 @@ When the user asks for information about a topic
 
 **Start output**
 # Search Agent
-## EXT SearchWeb($query: str) -> dict
+## SearchWeb($query: str) -> dict
 External web search using Tavily API. Takes a search query string and returns search results.
 ### Code
 ```python
@@ -171,7 +175,7 @@ def SearchWeb(query: str) -> dict:
     search_result = tavily_client.search(query, limit=1)
     return search_result
 ```
-## INT SearchWebFlow() -> dict
+## SearchWebFlow() -> dict
 Performs web searches to gather comprehensive information for user query
 ### Trigger
 01:CND When the user asks for information about a topic
@@ -181,9 +185,9 @@ Performs web searches to gather comprehensive information for user query
 02:CND Loop until we have $sufficientInfo, max 3 times
   02.01:EXE $searchQueries = list one or more precise web search queries that can together gather various aspects of the information we need to answer the user's question
   02.02:LOP For each $searchQuery in $searchQueries
-    02.02.01:EXT $searchResult = SearchWeb($searchQuery)
+    02.02.01:QUE $searchResult = SearchWeb($searchQuery)
     02.02.02:JMP 02.02
-  02.03:YLD wait for SearchWeb calls
+  02.03:YLD Yield("Waiting for search results")
   02.04:EXE gather relevant $information from all $searchResults
   02.05:EXE $sufficientInfo = check if $information is sufficient to answer the user's question
 03:RET $information
@@ -214,21 +218,24 @@ At the beginning
 
 **Start output**
 # Loop Demo
-## INT Main() -> None
+## Main() -> None
 Demonstrates loop patterns with country info and number squares.
 ### Trigger
 01:BGN At the beginning
 ### Steps
 01:EXE $countries = make a list of 10 countries near USA
 02:LOP For each $country in $countries
-  02.01:EXT Say($country name)
-  02.02:EXT Say(one special thing about $country)
+  02.01:QUE Say($country name)
+  02.02:QUE Say(one special thing about $country)
   02.03:JMP 02
-03:YLD $country = Say(ask user what country they are from)
+03:YLD $country = Say(ask user what country they are from, waitForUserInput=true)
+04:YLD Yield("Waiting for user's country")
 **End output**
 ====
 
 Follow these instructions exactly to transform the entire input. Output only the transformed text, nothing else.
+
+====SYSTEM_PROMPT_DELIMITER====
 
 **Start input**
 

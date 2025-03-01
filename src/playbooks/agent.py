@@ -1,14 +1,12 @@
-from typing import Any, Optional
+from typing import Dict, Optional
 
 from .agent_thread import AgentThread
 from .base_agent import BaseAgent
-from .enums import PlaybookExecutionType
 from .exceptions import (
     AgentAlreadyRunningError,
     AgentConfigurationError,
 )
 from .playbook import Playbook
-from .types import ToolCall
 
 
 class Agent(BaseAgent):
@@ -20,12 +18,12 @@ class Agent(BaseAgent):
         self,
         klass: str,
         description: str,
-        playbooks: list[Playbook] = [],
+        playbooks: Dict[str, Playbook] = {},
     ):
         self.klass = klass
         self.description = description
-        self.playbooks: list[Playbook] = playbooks
-        self.main_thread: Optional[Any] = None
+        self.playbooks = playbooks
+        self.main_thread: Optional[AgentThread] = None
         self.run()
 
     def run(self, llm_config: dict = None, stream: bool = False):
@@ -71,22 +69,8 @@ class Agent(BaseAgent):
         ):
             yield chunk
 
-    def execute_tool(self, tool_call: ToolCall):
-        # Look up an EXT playbook with the same name as the tool call
-        ext_playbook = next(
-            (
-                p
-                for p in self.playbooks
-                if p.execution_type == PlaybookExecutionType.EXT
-                and p.klass == tool_call.fn
-            ),
-            None,
-        )
+    def __repr__(self):
+        return self.klass
 
-        if ext_playbook is None:
-            raise Exception(f"EXT playbook {tool_call.fn} not found")
-
-        # If found, run the playbook
-        func = ext_playbook.func
-        retval = func(*tool_call.args, **tool_call.kwargs)
-        return retval
+    def __str__(self):
+        return self.klass

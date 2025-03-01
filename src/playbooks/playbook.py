@@ -21,12 +21,11 @@ class Playbook:
             ValueError: If the H2 structure is invalid or required sections are missing
         """
         cls._validate_h2_structure(h2)
-        execution_type, signature, klass = cls.parse_title(h2.get("text", "").strip())
+        signature, klass = cls.parse_title(h2.get("text", "").strip())
         description, h3s = cls._extract_description_and_h3s(h2)
 
-        if execution_type == PlaybookExecutionType.INT:
-            return cls._create_int_playbook(h2, klass, signature, description, h3s)
-        else:  # PlaybookExecutionType.EXT
+        # If there is a Code h3, then this is an EXT playbook
+        if any(h3.get("text", "").strip().lower() == "code" for h3 in h3s):
             ext_playbook = cls._create_ext_playbook(
                 h2, klass, signature, description, h3s
             )
@@ -35,6 +34,9 @@ class Playbook:
             refresh_markdown_attributes(h2)
             ext_playbook.markdown = h2["markdown"]
             return ext_playbook
+
+        else:
+            return cls._create_int_playbook(h2, klass, signature, description, h3s)
 
     @staticmethod
     def _validate_h2_structure(h2):
@@ -109,11 +111,11 @@ class Playbook:
             h3_title = h3.get("text", "").strip().lower()
 
             if h3_title == "trigger":
-                trigger = h3["markdown"]
+                trigger = h3
             elif h3_title == "steps":
-                steps = h3["markdown"]
+                steps = h3
             elif h3_title == "notes":
-                notes = h3["markdown"]
+                notes = h3
             elif h3_title == "code":
                 raise ValueError("LLM executed playbooks should not have a code block")
             else:
@@ -178,39 +180,22 @@ class Playbook:
         """Parse the title of a playbook.
 
         Args:
-            title: The title of the playbook, e.g. "INT CheckOrderStatusFlow($authToken: str) -> None"
+            title: The title of the playbook, e.g. "CheckOrderStatusFlow($authToken: str) -> None"
 
         Returns:
-            A tuple containing the execution type (INT or EXT) and the class name (e.g. "CheckOrderStatusFlow")
+            A tuple containing the class name (e.g. "CheckOrderStatusFlow") and the signature (e.g. "CheckOrderStatusFlow($authToken: str)")
         """
-        parts = title.split(" ")
-        if len(parts) < 2:
-            raise Exception(
-                "Playbook title must have at least 2 parts (INT/EXT execution type and playbook signature)"
-            )
-
-        execution_type = parts[0].upper()
-        if execution_type not in ["INT", "EXT"]:
-            raise Exception(
-                f"Execution type must be one of [INT, EXT], got {execution_type}"
-            )
-        execution_type = PlaybookExecutionType[execution_type]
-
-        signature = " ".join(
-            parts[1:]
-        )  # e.g. "CheckOrderStatusFlow($authToken: str) -> None" or "Playbook1" or "Playbook1 -> None" or "Playbook1()"
-
         # klass is the name of the playbook class, e.g. "CheckOrderStatusFlow" or "Playbook1"
         # klass is alphanumeric and starts with a letter. Find first non-alphanumeric character, if any, and split on that.
-        match = re.match(r"^[A-Za-z][A-Za-z0-9]*", signature)
+        match = re.match(r"^[A-Za-z][A-Za-z0-9]*", title)
         if not match:
             raise Exception(
-                f"Playbook class name must be alphanumeric and start with a letter, got {signature}"
+                f"Playbook class name must be alphanumeric and start with a letter, got {title}"
             )
 
         klass = match.group(0)
 
-        return execution_type, signature, klass
+        return title, klass
 
     def __init__(
         self,
@@ -218,9 +203,9 @@ class Playbook:
         execution_type: str,
         signature: str,
         description: str,
-        trigger: str,
-        steps: str,
-        notes: str,
+        trigger: dict,
+        steps: dict,
+        notes: dict,
         code: str,
         func: Callable,
         markdown: str,
@@ -235,3 +220,9 @@ class Playbook:
         self.code = code
         self.func = func
         self.markdown = markdown
+
+    def __repr__(self):
+        return f"Playbook({self.klass})"
+
+    def __str__(self):
+        return self.markdown

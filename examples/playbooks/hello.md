@@ -4,7 +4,7 @@ This is a simple Hello World agent.
 ## HelloWorld
 
 ### Trigger
-When the user starts a conversation or asks for a greeting.
+At the beginning
 
 ### Steps
 - Greet the user with a friendly "Hello, World!" message.
