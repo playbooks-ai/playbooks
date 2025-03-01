@@ -1,5 +1,6 @@
 <div align="center">
   <h1 align="center">Playbooks AI</h1>
+  <h2 align="center">Finally, Natural Language Programming is here!</h2>
 </div>
 
 <div align="center">
@@ -20,18 +21,14 @@
       <img src="https://img.shields.io/badge/Homepage-runplaybooks.ai-green?style=plastic&logo=google-chrome" alt="Homepage"></a>
 </div>
 
-<div align="center">
-  <h2 align="center">Train AI Agents with Human Readable Playbooks</h2>
-</div>
+Playbooks AI™ lets you program AI agents using plain English instead of code. Our patent-pending engine turns human-readable instructions into executable AI behavior — no coding required.
 
-Playbooks AI™ is a framework for creating AI agents using human-readable and LLM-executed playbooks. It uses a patent-pending natural language program execution engine.
-
-**Status**: Playbooks AI is still in early development. It is not yet ready for production use. We are working hard and would love to get your feedback and contributions.
+**Status**: Playbooks AI is still in early development. We're working hard and would love your feedback and contributions.
 
 ## Table of Contents
 
 - [Show me!](#show-me)
-- [Why Playbooks?](#why-playbooks)
+- [What is Natural Language Programming?](#what-is-natural-language-programming)
 - [Features](#features)
 - [How it works](#how-it-works)
 - [Quick start](#quick-start)
@@ -43,7 +40,7 @@ Playbooks AI™ is a framework for creating AI agents using human-readable and L
 
 ## Show me!
 
-Let’s start simple. Here’s a Hello World AI agent written in Playbooks AI:
+Here's the simplest Natural Language Program you can write — a Hello World agent:
 
 ```playbooks
 # Hello World Agent
@@ -57,87 +54,75 @@ At the beginning of a conversation
 - Greet the user with a friendly "Hello, World!" message.
 ```
 
-Simple, right? Just plain English defining AI behavior, no code required.
+That's it! Just plain English that both humans and AI can understand.
 
-Now, let’s take it further. Imagine building a real-world AI agent that:
+Now, let's look at something more powerful. Here's a web search agent that:
 
-- Uses web search when needed
-- Performs iterative deep research to gather and present information
-- Rejects unsavory conversation topics
+- Uses search engines when needed
+- Performs deep research to gather information
+- Filters out inappropriate topics
 
-See [Playbooks AI implementation](examples/playbooks/web_search_chat.md) of a Web Search Chat agent — about **50 lines of English instructions**. This agent:
+See [Playbooks AI implementation](examples/playbooks/web_search_chat.md) of a Web Search Chat agent — about **50 lines of English instructions**. 
 
-- uses external tools
-- implements an iterative, complex RAG flow
-- demonstrates parallel tool calling
-- demonstrates trigger-driven playbook execution
+Now compare that with an equivalent [LangGraph implementation](examples/langgraph/web_search_chat.py) — about **200 lines of complex code** that's harder to understand and modify.
 
-Now compare that with an equivalent [LangGraph implementation](examples/langgraph/web_search_chat.py) — about **200 lines of complex code** that is hard to understand and modify, and yet, the resulting agent behavior is less flexible than the Playbooks AI agent!
+🔗 Ready to write your first Natural Language Program? [Get started here](#quick-start).
 
-🔗 Want to build your AI application using playbooks? [Get started here](#quick-start).
+## What is Natural Language Programming?
 
-## Why Playbooks?
+Natural Language Programming lets you create AI applications by writing instructions in plain English. Think of it as pseudocode that actually runs.
 
-Ever tried configuring an AI agent and thought, *"This is way harder than it should be"*? You’re not alone.
+Building AI agents today forces you to choose between three frustrating options:
 
-Building AI agents today requires choosing between **three frustrating options**:
-1. **Code-based frameworks** (LangGraph, CrewAI, AutoGen, etc.) → Powerful but require deep technical expertise.
-2. **No-code UI-based agent builders** (Voiceflow, Botpress, Vertex AI, Copilot Studio, Kore.ai, etc.) → Easy to start but quickly become a tangled mess.
-3. **Direct prompting** (Chain-of-Thought, Self-Consistency, Tree-of-Thoughts, etc.) → Seem intuitive but resulting behavior is unpredictable and brittle.
+1. **Writing complex code** → Requires technical expertise
+2. **Using no-code UI builders** → Gets messy for complex workflows
+3. **Direct prompting** → Results in unpredictable behavior
 
-We thought: *Why not train AI agents like we train human agents?* 
+With Playbooks AI, you simply write clear instructions in a playbook format that:
+- Business people can read and modify
+- AI can execute reliably
+- Handles complex logic, tool usage, and multi-agent collaboration
 
-Imagine **onboarding** a customer support agent. Instead of writing thousands of lines of Python or dragging boxes in a UI, **you give them playbooks** to follow — structured, human-readable guides that include step-by-step procedures, caveats, and tips & tricks. What if you could do the same for onboarding an AI agent? **Now you can do that with Playbooks AI.** 
-
-✅ **Define AI behavior in plain English**  
-✅ Business users can read, modify, and adapt workflows  
-✅ Handles step-by-step execution, external API calls, and multi-agent collaboration  
-
-Think of it as writing pseudocode that actually runs — without complex state machines or hidden LLM hallucinations.
-
-### **Playbooks AI vs. other approaches for building AI agents**
+### **Natural Language Programming vs. Traditional Approaches**
 
 | Feature                 | **Playbooks AI** 🏆 | **Code-Based Frameworks** | **UI-Based Agent builders** | **Direct Prompting** |
 |-------------------------|------------------|-------------------------------|-------------------------------|-------------------------------|
-| **Ease of Use**         | ✅ Simple, human-readable playbooks | ❌ Requires Python & async expertise | ✅ No-code UI, but complex flows are hard to maintain | ✅ Easiest — just type a prompt |
-| **Behavior Tunability** | ✅ Easily modify agent behavior | ❌ Requires coding expertise to modify | ❌ Hard to translate requirements into UI workflows | ❌ Difficult to get the right behavior |
-| **Workflow Complexity** | ✅ Handles simple & complex logic | ✅ Handles complex logic, but requires coding expertise | ❌ Hard to scale beyond simple workflows | ❌ No structured execution, LLM follows instructions loosely |
-| **External API Calls**  | ✅ Simple, declarative tool calling | ✅ Explicit tool calling | ✅ Often requires prebuilt integrations | ❌ Needs manual copy-pasting of results, no automation |
-| **Workflow Scalability** | ✅ Designed to handle 100s-1000s of playbooks | ✅ No limit, but code complexity grows exponentially | ❌ UI-based logic becomes unmanageable for large workflows | ❌ Cannot scale beyond one-off conversations |
-| **Business User Usability**     | ✅ Yes | ❌ No, complex code | ❌ No, complex workflow graphs | ❌ No, complex prompt engineering |
-
----
+| **Ease of Use**         | ✅ Write in plain English | ❌ Requires Python expertise | ✅ No-code UI, but gets messy | ✅ Just type a prompt |
+| **Behavior Control** | ✅ Easily modify agent behavior | ❌ Requires coding to change | ❌ Hard to translate requirements into UI | ❌ Unpredictable results |
+| **Workflow Complexity** | ✅ Handles simple & complex logic | ✅ Handles complex logic, but requires coding | ❌ Hard to scale beyond simple workflows | ❌ No structured execution |
+| **External API Calls**  | ✅ Simple tool calling | ✅ Explicit tool calling | ✅ Often requires prebuilt integrations | ❌ Manual copy-pasting, no automation |
+| **Scalability** | ✅ Designed for 100s-1000s of playbooks | ✅ No limit, but code complexity grows | ❌ UI becomes unmanageable at scale | ❌ Cannot scale beyond one-off conversations |
+| **Business User Friendly**     | ✅ Yes | ❌ No, requires coding | ❌ No, complex workflow graphs | ❌ No, requires prompt engineering |
 
 ## Features
 
-### Anyone can build AI agents with playbooks
-- Write AI agent behavior using natural language playbooks instead of using code or using a UI builder
-- Non-technical business users can understand and modify agent behavior as business realities change
-- Talk with a copilot to modify playbooks and review changes
+### Write programs in plain English
+- Define AI agent behavior using natural language instead of code
+- Let non-technical team members understand and modify agent behavior
+- Talk with a copilot to improve your natural language programs
 
-### Powerful agentic behavior
-- Playbooks AI agents faithfully follow your instructions, overcoming LLM limitations
-- Build complex agent behavior using 100s or 1000s of playbooks
-- Easy to create multi-agent systems
-- Easy to call external tools
-- Magical dynamic triggering of playbooks to handle validations, caveats, special cases, and so on
-- External event triggered playbooks
+### Powerful execution engine
+- Playbooks AI faithfully follows your instructions
+- Build complex behavior using hundreds or thousands of playbooks
+- Easily create multi-agent systems
+- Call external tools with simple language
+- Dynamic triggering to handle special cases and validations
+- Respond to external events
 
-### Infinite possibilities
+### Build any AI application
 
-- Playbooks AI agent can be used to build agentic AI applications like:
-  - Chatbots
+- Create a wide range of applications:
+  - Intelligent chatbots
   - Customer support agents
   - Virtual assistants
-  - Virtual team members
-  - Intelligent workflow automation
-- Easy to use for simple and complex use cases, both standalone and integrated with other systems
+  - Team automation tools
+  - Workflow automation
 
-What will you build with Playbooks AI?
+What will you build with Natural Language Programming?
 
 ## Quick start
 
-3 easy ways to try out playbooks:
+3 easy ways to try Playbooks AI:
 
 1. Visit [runplaybooks.ai](https://runplaybooks.ai) and try out the demo playground
 
@@ -150,40 +135,33 @@ poetry run python src/playbooks/applications/agent_chat.py examples/playbooks/ch
 
 ## Who Should Use Playbooks?
 
-Playbooks AI is designed for anyone looking to build and control AI agents with ease. It is ideal for:
+Natural Language Programming with Playbooks AI is perfect for:
 
-✅ Developers & AI Engineers – Create, test, and deploy LLM-powered agents with structured, human-readable playbooks.
+✅ **Developers & Engineers** – Create AI agents without writing complex state machines
 
-✅ Businesses & Enterprises – Configure AI agents without coding while maintaining full control over behavior and workflows.
+✅ **Business Teams** – Modify AI behavior without coding or technical expertise
 
-✅ AI Researchers & Experimenters – Prototype and iterate on multi-agent collaboration and reasoning models efficiently.
+✅ **Product Managers** – Quickly prototype and iterate on AI features
 
-✅ Product Teams & No-Code Enthusiasts – Modify agent behavior without diving into complex prompts or code.
+✅ **AI Researchers** – Experiment with multi-agent systems more efficiently
 
-✅ Automation Specialists – Use Playbooks AI for process automation, API integrations, and intelligent workflows.
-
+✅ **Automation Specialists** – Build intelligent workflows with API integrations
 
 ## Roadmap
 
-We're just getting started! There's a lot we are planning to do to make Playbooks AI the best way to build and run AI agents. Here’s what’s coming next:
+We're just getting started! Here's what's coming next:
 
 - Playbooks Observer for observability and debugging
 - Online planning by generating playbooks
 - Process multiple trigger matches simultaneously
-- Playbooks Hub for community playbooks and agents
-- VSCode extension for Playbooks debugging
-- Dynamic filtering of playbooks
-- Copilot for conversationally understanding and modifying playbooks
-- Interop with other AI agent frameworks
-- Multi-agent natural language communication
-- Playbooks evaluation dataset
+- Playbooks Hub for community sharing
+- VSCode extension for debugging
+- Copilot for conversational playbook creation
+- Multi-agent communication
 - Inference speed optimizations
-- Running tools in a sandbox
-- Command line tooling improvements
-- PlaybooksLM fine-tuned model for executing playbooks
-- Expanded set of examples
-- Documentation generation
-- Playbooks Platform with enterprise-grade features
+- Tool sandboxing
+- PlaybooksLM fine-tuned model
+- Playbooks Platform with enterprise features
 
 ## Contributing
 
