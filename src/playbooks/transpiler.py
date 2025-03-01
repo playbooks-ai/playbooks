@@ -67,4 +67,11 @@ class Transpiler:
         # print("*" * 20)
         # print("Intermediate format:")
         console.print("[pink]" + processed_content + "[/pink]")
+
+        # Save processed content to a fixed file
+        output_file = "/tmp/transpiled_content.md"
+        with open(output_file, "w") as f:
+            f.write(processed_content)
+        console.print(f"[green]Processed content saved to: {output_file}[/green]")
+
         return processed_content
