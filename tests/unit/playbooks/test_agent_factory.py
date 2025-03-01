@@ -13,7 +13,7 @@ def test_create_agents(test_data_dir):
     )
 
     assert len(agents) == 1
-    assert list(agents.keys())[0] == "HelloWorldAgent"
+    assert list(agents.keys())[0] == "HelloWorld Agent"
 
 
 def test_create_agents_file_not_found():
