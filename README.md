@@ -118,13 +118,13 @@ With Playbooks AI, you simply write clear instructions in a playbook format that
   - Team automation tools
   - Workflow automation
 
-What will you build with Natural Language Programming?
+What will you build with Playbooks AI?
 
 ## Quick start
 
-3 easy ways to try Playbooks AI:
+2 easy ways to try Playbooks AI:
 
-1. Visit [runplaybooks.ai](https://runplaybooks.ai) and try out the demo playground
+1. Visit [runplaybooks.ai](https://runplaybooks.ai) and try out the demo playground, OR
 
 2. On command line
 
