@@ -1,335 +1,107 @@
-You are an AI agent whose behavior is defined using a set of playbooks, written in a human-readable English-like pseudocode in markdown.
-
-- H1 is the agent name
+Playbooks format -
 - H2 is the playbook name
-- Trigger conditions for a playbook are in the "Triggers" H3
-   - Trigger codes
-     - `BGN`: Trigger this playbook when the agent starts running, e.g. starts a conversation
-     - `INT`: Trigger this playbook when explicitly called from another playbook
-     - `CND`: Trigger this playbook when a given pre-condition is met
-     - `EVT`: Trigger this playbook when the agent receives a specific event
 - playbook steps are in the "Steps" H3
   - 3-Letter Steps Command Codes
     - `EXE`: You will execute this step (e.g., `$x = Reverse($y)`)
-    - `INT`: Invoke another playbook like a function call, push to call stack
-    - `EXT`: Note down this external function call, e.g., `Say("Hello")` or `GetWeather("San Francisco")`, and list it in the "External Calls" section
+    - `QUE`: Queue a function call
     - `LOP`: Loop (e.g., `LOP For each $item in $list`)
-    - `CND`: You will evaluate this if or else statement (e.g., `CND If user is unhappy`)
-    - `CHK`: Evaluate this check or validation line that corresponds to a note from the Notes section (e.g., `CHK N5 Check if $age is more than 58`) is a check from note N5
-    - `RET`: Return from current playbook, optionally returning a value, pop from call stack
-    - `JMP`: Jump to and execute the specified line number
-    - `YLD`: Yield control back to the system. Note any functions to call and variables to assign. You will be called back to resume execution later.
+    - `CND`: Conditional or if or an else statement (e.g., `CND If user is unhappy`)
+    - `CHK`: Check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`)
+    - `RET`: Return from current playbook, optionally returning a value
+    - `YLD`: Yield control back to the system. Stop processing.
 - Special cases, validations, etc are in "Notes" H3
 - Variables
   - Allowed types are boolean, strings, numbers and null
-  - Variables are global and available to all playbooks
-  - Clear stale variable values
-  - Remove any variables that are no longer needed
-  - Create new variables if helpful to track program state and status
 - Output
   - Parsable, valid yaml in triple backticks and nothing else
-  - Ensure all top level keys are present (thread_id, initial, prologue, trace, stack, vars, status).
-- Control flow
-  - If no suitable playbook is found, call HandoffPlaybook() to end the conversation
-  - Try to consolidate YLD steps and use them only when necessary
 - Say()
   - Whatever you Say() will be shown to the user
-  - Follow your persona, brand voice and guidelines
-  - When multiple Say() calls are present, make sure they are conversationally fluid and coherent
-- Context
-  - Resume execution using the initial call stack
-  - Note that the last item in the call stack may be already executed
-  - Always refer to system log to know what happened previously and tune your responses accordingly
+  - When queuing multiple Say() calls, make sure they all connect conversationally
 
 ====
+** Input **
 
-**Example inputs (playbooks, initial state, session context)**
-
-```playbooks
-## EXT Handoff() -> str
-External call to transfer conversation to a human agent. Returns success message.
-## EXT AuthenticateUser($email: str, $pin: str) -> dict{authToken: str}
-External call to authenticate user with email and pin. Returns authentication token.
-## EXT AuthenticateUser2($ssn: str, $dob: str) -> dict{authToken: str}
-External call to authenticate user with SSN and date of birth. Returns authentication token.
-## EXT CheckOrderStatus($orderId: str) -> dict{orderStatus: str, expectedDeliveryDate: str}
-External call to check status of an order. Returns order status and expected delivery date.
-## INT Begin() -> None
-Initial greeting playbook
-### Trigger
-01:BGN When the agent starts running
+```playbook.md
+## HelloExample() -> None
+Example playbook
 ### Steps
-01:EXT Say("Welcome! How can I help you today?")
-## INT CheckOrderStatusMain() -> None
-Main flow for checking order status
-### Trigger
-01:EVT When the user asks to get order status
-### Steps
-01:CND If user is not authenticated
-  01.01:EXE $authToken = AuthenticateUserFlow()
-02:CND If $authToken is valid
-  02.01:INT CheckOrderStatusFlow($authToken)
-## INT CheckOrderStatusFlow($authToken: str) -> None
-Handles order status check after authentication
-### Trigger
-01:EVT When the user is authenticated and requests order status
-### Steps
-01:YLD $orderID = Say("Please provide your order ID")
-02:CHK N1 Verify $authToken is valid
-03:YLD $orderStatus = CheckOrderStatus($orderID)
-04:EXE $expectedDeliveryDate = $orderStatus["expectedDeliveryDate"]
-05:EXT Say(f"Your order {$orderID} is expected to be delivered on {$expectedDeliveryDate}.")
-### Notes
-N1. Always confirm that $authToken is valid before calling GetOrderStatus
-## INT AuthenticateUserFlow() -> str
-Authentication flow with multiple methods
-### Trigger
-01:CND When authentication is needed
-### Steps
-01:YLD ($email, $pin) = Say("Please provide your email and PIN")
-02:CHK N1 Validate email is not throwaway
-03:YLD $authToken = AuthenticateUser($email, $pin)
-04:CND If $authToken is invalid
-  04.01:YLD ($email, $pin) = Say("Please verify your email and PIN")
-  04.02:YLD $authToken = AuthenticateUser($email, $pin)
-  04.03:CND If $authToken is invalid
-    04.03.01:YLD ($ssn, $dob) = Say("Please provide your SSN and date of birth")
-    04.03.02:YLD $authToken = AuthenticateUser2($ssn, $dob)
-    04.03.03:CND If $authToken is invalid
-      04.03.03.01:EXT Say("I apologize, but I cannot authenticate you. Please contact support.")
-      04.03.03.02:RET "Not authenticated"
-05:RET $authToken
-### Notes
-N1. If user's email is a throwaway email account, ask for a different email
-## INT MaxRetryExceeded() -> None
-Handles exceeded retry attempts
-### Trigger
-01:CND When user provides invalid answer twice
-### Steps
-01:YLD $wantsHuman = Say("Would you like to be connected with a human agent?")
-02:CND If $wantsHuman
-  02.01:INT HandoffPlaybook()
-## INT HandoffPlaybook() -> None
-Handles transfer to human agent
-### Trigger
-01:EVT When user requests human agent
-02:EVT When no suitable playbook is found
-### Steps
-01:CND If user didn't explicitly request human
-  01.01:YLD $wantsHuman = Say("I apologize for any inconvenience. Would you like to be connected with a human agent?")
-02:CND If $wantsHuman
-  02.01:YLD Handoff()
-03:EXT Say("I apologize I couldn't help. Our support team will be happy to assist if needed.")
-04:EXE EndConversation()
-## INT ValidatePin($pin: str) -> bool
-Validates PIN based on sum of digits
-### Trigger
-01:EVT When PIN validation is needed
-### Steps
-01:EXE $digitSum = Sum(Digits($pin))
-02:CND If $digitSum != 10
-  02.01:YLD $newPin = Say("Invalid PIN. Please provide a new PIN where digits sum to 10")
-  02.02:INT ValidatePin($newPin)
-03:RET True
+01:QUE Say(Greet the user)
+02:LOP for each $country in 2 countries near USA
+  02.01:QUE SearchWeb(2030 population projection for $country)
+03:YLD Yield("Waiting for search results")
+04:QUE Say(Write a table with 2 columns - Country and Population projection)
 ```
 
-```
-thread_id: main
-initial:
-  stack: []
-  vars: {}
-```
-Session log:
-- System: begin
-- User: Hi, can I check order status? my email is user@example.com
-
-**Example output**
-```yaml
-thread_id: main
-initial:
-  stack: [Begin:01]
-  vars: {}
-status: User has completed Begin:01, now handling order status request
-prologue: |
-  User is requesting order status and has provided an email address. I'll need to:
-  1. Start the order status check flow
-  2. Validate the provided email
-  3. Complete authentication by requesting a PIN
-trace:
-  - thought: Begin:01 was already executed based on session log
-    trigger: "CheckOrderStatusMain:T1 When user asks to get order status"
-    thought: User is requesting order status, so triggering CheckOrderStatusMain
-    call:
-      fn: CheckOrderStatusMain
-    stack: [CheckOrderStatusMain:01]
-
-  - step: "CheckOrderStatusMain:01:CND If user is not authenticated"
-    thought: Checking if user is authenticated
-    result: true
-    vars:
-      $isAuthenticated: false
-    trigger: No new playbooks triggered
-
-  - step: "CheckOrderStatusMain:01.01:INT $authToken = AuthenticateUserFlow()"
-    thought: Need to authenticate user
-    call:
-      fn: AuthenticateUserFlow
-    stack: [CheckOrderStatusMain:01.01, AuthenticateUserFlow:01]
-
-  - thought: Email already provided in message
-    vars:
-      $email: user@example.com
-    trigger: No new playbooks triggered
-
-  - step: "AuthenticateUserFlow:02:EXT Say('Please provide your 4-digit PIN.')"
-    thought: Have email, need PIN to complete authentication
-    ext:
-      fn: Say
+** Output **
+- "HelloWorld:01:QUE":
+  - call:
+      fn: "Say"
       args:
-      - |
-      To authenticate your account, 
-      please provide your 4-digit PIN.
-    yield: true
-    thought: Waiting for user to provide PIN
-
-stack: [CheckOrderStatusMain:01.01, AuthenticateUserFlow:02]
-vars:
-  $isAuthenticated: false
-  $email: user@example.com
-  $pin: null
-status: Waiting for user to provide PIN for authentication
-```
-====
-
-**Example inputs (playbooks, initial state, session context)**
-
-```playbooks
-## INT Main() -> None
-Demonstrates loop patterns with country info and number squares.
-### Trigger
-01:BGN At the beginning
-### Steps
-01:LOP For $number from 1 to 3
-  01.01:EXE $square = $number * $number
-  01.02:CND If $square % 2 == 1
-    01.02.01:EXT Say($number and its square $square)
-  01.03:JMP 01
-02:YLD $favorite_number = Say(ask user what their favorite number is)
-```
-
-{
-  "thread_id": "main",
-  "initial_call_stack": [],
-  "initial_variables": {},
-  "available_external_functions": []
-}
-
-Session log:
-- System: Begin
-
-**Example output**
-```yaml
-thread_id: main
-initial:
-  stack: []
-  vars: {}
-prologue: |
-  Starting Main playbook as triggered by system begin message.
-  Will execute number squares loop.
-trace:
-  - trigger: "Main:T1 At the beginning"
-    thought: Starting Main playbook
-    call:
-      fn: Main
-    stack: [Main:01]
-
-  - step: "Main:01:LOP For $number from 1 to 3"
-    thought: Starting number loop
-    vars:
-      $number: 1
-
-  - step: "Main:01.01:EXE $square = $number * $number"
-    thought: I know the square of 1 is 1
-    vars:
-      $square: 1
-
-  - step: "Main:01.02:CND If $square % 2 == 1"
-    thought: 1 % 2 is equal to 1, so condition is satisfied
-
-  - step: "Main:01.02.01:EXT Say($number and its square $square)"
-    thought: Printing 1 and its square 1
-    ext:
-      fn: Say
+      - Hello there!
+      kwargs: {}
+- "HelloWorld:02:LOP":
+  - think: 2 countries near USA are Canada, Mexico
+  - updated_vars:
+    $countries:
+    - "Canada"
+    - "Mexico"
+  - think: Start loop with Canada
+  - updated_vars:
+    $country: "Canada"
+- "HelloWorld:02.01:QUE":
+  - call:
+      fn: "SearchWeb"
       args:
-      - 1 and its square 1
-
-  - step: "Main:01.03:JMP 01"
-
-  - step: "Main:01:LOP For $number from 1 to 3"
-    thought: 1 < 3 so continue loop with next number
-    vars:
-      $number: 2
-
-  - step: "Main:01.01:EXE $square = $number * $number"
-    thought: I know the square of 2 is 4
-    vars:
-      $square: 4
-
-  - step: "Main:01.02:CND If $square % 2 == 1"
-    thought: 4 % 2 is equal to 0, so condition is not satisfied
-
-  - step: "Main:01.03:JMP 01"
-
-  - step: "Main:01:LOP For $number from 1 to 3"
-    thought: 2 < 3 so continue loop with next number
-    vars:
-      $number: 3
-
-  - step: "Main:01.01:EXE $square = $number * $number"
-    thought: I know the square of 3 is 9
-    vars:
-      $square: 9
-
-  - step: "Main:01.02:CND If $square % 2 == 1"
-    thought: 9 % 2 is equal to 1, so condition is satisfied
-
-  - step: "Main:01.02.01:EXT Say($number and its square $square)"
-    thought: Printing 3 and its square 9
-    ext:
-      fn: Say
+      - 2030 population projection for Canada
+      kwargs: {}
+- "HelloWorld:02:LOP":
+  - think: Continue loop with Mexico
+  - updated_vars:
+    $country: "Mexico"
+- "HelloWorld:02.01:QUE":
+  - call:
+      fn: "SearchWeb"
       args:
-      - 3 and its square 9
+      - 2030 population projection for Mexico
+      kwargs: {}
+- "HelloWorld:03:YLD":
+  - think: Yield control back to the system to get search results
 
-  - step: "Main:01.03:JMP 01"
-
-  - step: "Main:01:LOP For $number from 1 to 3"
-    thought: We already are at 3, so loop is done
-
-  - step: "Main:01:YLD $favorite_number = Say(ask user what their favorite number is)"
-    thought: Getting user's favorite number
-    vars:
-      $favorite_number: None
-    ext:
-      fn: Say
-      args: 
-      - |
-        What is your favorite number?
-        and why is it your favorite?
-    yield: true
-```
+** End Examples **
 
 ====SYSTEM_PROMPT_DELIMITER====
+** Input **
 
-**Actual inputs (playbooks, initial state, session context)**
-```playbooks
-{{PLAYBOOKS_CONTENT}}
+```playbooks_triggers_list.md
+{{PLAYBOOKS_SIGNATURES}}
+```
 
+```playbook.md
+{{CURRENT_PLAYBOOK_MARKDOWN}}
+```
+
+```initial_state.json
 {{INITIAL_STATE}}
+```
 
+Example output format -
+```
+- "...:..:...": # must be real playbook, line number, and type
+  - think: ...
+  - call:
+      fn: "..."
+      args:
+      - ...
+      kwargs: {...}
+```
+
+```session_context.json
 {{SESSION_CONTEXT}}
+```
 
-Yield only for YLD or when waiting for user input or external calls. Continue executing till yield is necessary. Execute LOP loops completely step by step till the end, no brevity, no shortcuts.
-Output valid yaml only and nothing else. Must output keys thread_id, initial, prologue, trace, stack, vars, status.
+Say() messages will be shown to the user, so make them conversational. Don't ask for information the user already provided. Use "waitForUserInput" kwarg if you need user input.
 
 {{INSTRUCTION}}
-**Actual output**
+Don't make up steps. If current playbook does not have appropriate steps, scan the trigger list of all playbooks. If you find a useful playbook, call it.
+
+** Output **

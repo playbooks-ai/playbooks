@@ -23,3 +23,6 @@ class LLMConfig:
                 self.api_key = os.environ.get("GEMINI_API_KEY")
             else:
                 self.api_key = os.environ.get("OPENAI_API_KEY")
+
+    def to_dict(self) -> dict:
+        return {"model": self.model, "api_key": self.api_key}

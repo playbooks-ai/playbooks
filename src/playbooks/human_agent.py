@@ -15,3 +15,9 @@ class HumanAgent(BaseAgent):
     ):
         # We don't know yet what it means for human agent to receive a message
         raise NotImplementedError
+
+    def __repr__(self):
+        return "User"
+
+    def __str__(self):
+        return "User"
