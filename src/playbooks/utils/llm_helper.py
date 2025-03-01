@@ -146,7 +146,7 @@ def get_completion(
         "model": llm_config.model,
         "api_key": llm_config.api_key,
         "messages": messages,
-        "max_completion_tokens": 10000,
+        "max_completion_tokens": 7500,
         "stream": stream,
         "temperature": 0.0,
         **kwargs,
