@@ -122,6 +122,172 @@ class InterpreterExecution(TraceMixin):
 
         return tool_calls, last_executed_step, updated_variables
 
+    def _prepare_instruction(self) -> str:
+        """Prepare the instruction for the current iteration."""
+        current_line_number = (
+            self.interpreter.call_stack.peek().instruction_pointer.line_number
+        )
+
+        return (
+            f"\nResume at or after {self.current_playbook.klass}:{current_line_number} based on session log above.\n"
+            + self.instruction
+        )
+
+    def _get_llm_response(self, instruction: str) -> Generator[str, None, List[str]]:
+        """Get response from LLM and process chunks.
+
+        Args:
+            instruction: The instruction to send to the LLM.
+
+        Returns:
+            A generator that yields chunks and returns the full response.
+        """
+        prompt = self.interpreter.get_prompt(
+            self.playbooks,
+            self.current_playbook,
+            instruction,
+        )
+        messages = get_messages_for_prompt(prompt)
+
+        llm_call = LLMCall(
+            llm_config=self.llm_config, messages=messages, stream=self.stream
+        )
+        self.trace(llm_call)
+
+        response = []
+        for chunk in llm_call.execute():
+            response.append(chunk)
+            yield AgentResponseChunk(raw=chunk)
+            self.interpreter.process_chunk(chunk)
+
+        # Add a newline chunk for UI formatting, but don't include it in the response
+        # This maintains the expected number of chunks for tests
+        yield AgentResponseChunk(raw="\n")
+
+        return response
+
+    def _process_tool_calls(
+        self, tool_calls: List[ToolCall]
+    ) -> Tuple[bool, List[str], bool, List[AgentResponseChunk]]:
+        """Process tool calls and determine execution flow.
+
+        Args:
+            tool_calls: List of tool calls to process.
+
+        Returns:
+            Tuple of (done, playbook_calls, missing_say_after_external_tool_call, response_chunks)
+        """
+        done = False
+        playbook_calls = []
+        missing_say_after_external_tool_call = False
+        response_chunks = []
+
+        for tool_call in tool_calls:
+            if tool_call.fn == "Say":
+                if tool_call.kwargs.get("waitForUserInput", False):
+                    done = True
+                    self.wait_for_external_event = True
+                    self.trace(
+                        "Waiting for user input, exiting loop",
+                        metadata={"tool_call": tool_call},
+                    )
+                missing_say_after_external_tool_call = False
+
+                response_chunks.append(AgentResponseChunk(tool_call=tool_call))
+            elif tool_call.fn not in self.playbooks:
+                raise Exception(f"Playbook {tool_call.fn} not found")
+            # if tool call is for a playbook, push it to the call stack
+            elif (
+                self.playbooks[tool_call.fn].execution_type == PlaybookExecutionType.INT
+            ):
+                playbook_calls.append(tool_call.fn)
+                done = True
+                self.trace(
+                    f"Need to execute playbook: {tool_call.fn}, exiting loop",
+                    metadata={"tool_call": tool_call},
+                )
+            # else pass on the external tool call to agent thread
+            else:
+                done = True
+                # Import here to avoid circular imports
+                from .tool_execution import ToolExecution
+
+                tool_execution = ToolExecution(
+                    interpreter=self.interpreter,
+                    playbooks=self.playbooks,
+                    tool_call=tool_call,
+                )
+                # Collect all chunks from tool execution
+                for chunk in tool_execution.execute():
+                    response_chunks.append(chunk)
+                self.trace(tool_execution)
+                self.trace(
+                    "Exiting loop after executing tool call",
+                    metadata={"tool_call": tool_call},
+                )
+                missing_say_after_external_tool_call = True
+
+        return (
+            done,
+            playbook_calls,
+            missing_say_after_external_tool_call,
+            response_chunks,
+        )
+
+    def _update_call_stack(
+        self, last_executed_step: str, playbook_calls: List[str]
+    ) -> bool:
+        """Update call stack based on last executed step and playbook calls.
+
+        Args:
+            last_executed_step: The last executed step.
+            playbook_calls: List of playbook calls to add to the call stack.
+
+        Returns:
+            Boolean indicating if execution should be done.
+        """
+        (
+            last_executed_step_pb,
+            last_executed_step_ln,
+            last_executed_step_type,
+        ) = last_executed_step.split(":")
+
+        done = False
+        if last_executed_step_type == "YLD":
+            self.wait_for_external_event = True
+            done = True
+            self.trace(
+                "Waiting for external event on YLD, exiting loop",
+                metadata={"last_executed_step": last_executed_step},
+            )
+
+        # Update call stack to reflect last executed step
+        self.interpreter.call_stack.pop()
+        self.interpreter.call_stack.push(
+            CallStackFrame(
+                instruction_pointer=InstructionPointer(
+                    playbook=last_executed_step_pb,
+                    line_number=last_executed_step_ln,
+                ),
+                llm_chat_session_id=None,  # self.current_llm_session.llm_chat_session_id,
+            )
+        )
+
+        # Any requests for playbook execution are pushed to the call stack
+        if playbook_calls:
+            for playbook_call in playbook_calls:
+                self.interpreter.call_stack.push(
+                    CallStackFrame(
+                        instruction_pointer=InstructionPointer(
+                            playbook=playbook_call, line_number="01"
+                        ),
+                        llm_chat_session_id=None,
+                    )
+                )
+            done = True
+
+        return done
+
     def execute(self) -> Generator[AgentResponseChunk, None, None]:
         """Execute the interpreter.
 
@@ -140,46 +306,34 @@ class InterpreterExecution(TraceMixin):
         done = False
         while not done:
             self.wait_for_external_event = False
-            current_line_number = (
-                self.interpreter.call_stack.peek().instruction_pointer.line_number
-            )
 
-            self.instruction = (
-                f"\nResume at or after {self.current_playbook.klass}:{current_line_number} based on session log above.\n"
-                + self.instruction
-            )
+            # Prepare instruction for this iteration
+            prepared_instruction = self._prepare_instruction()
 
             self.trace(
                 "Start iteration",
                 metadata={
                     "playbook": self.current_playbook.klass,
-                    "line_number": current_line_number,
-                    "instruction": self.instruction,
+                    "line_number": self.interpreter.call_stack.peek().instruction_pointer.line_number,
+                    "instruction": prepared_instruction,
                 },
             )
-            prompt = self.interpreter.get_prompt(
-                self.playbooks,
-                self.current_playbook,
-                self.instruction,
-            )
-            messages = get_messages_for_prompt(prompt)
 
             # Get response from LLM
-            llm_call = LLMCall(
-                llm_config=self.llm_config, messages=messages, stream=self.stream
-            )
-            self.trace(llm_call)
-            response = []
-            for chunk in llm_call.execute():
-                response.append(chunk)
-                yield AgentResponseChunk(raw=chunk)
-                self.interpreter.process_chunk(chunk)
+            response_chunks = []
+            raw_response = []
+            for chunk in self._get_llm_response(prepared_instruction):
+                # Only add to raw_response if it's an actual content chunk, not a formatting newline
+                if hasattr(chunk, "raw") and chunk.raw and chunk.raw != "\n":
+                    raw_response.append(chunk.raw)
+                response_chunks.append(chunk)
+                yield chunk
 
-            yield AgentResponseChunk(raw="\n")
+            # Parse the response - use the raw_response list which excludes the newline
+            response_text = "".join(raw_response)
 
-            # TODO: parse streaming response
             tool_calls, last_executed_step, updated_variables = self.parse_response(
-                "".join(response)
+                response_text
             )
 
             self.trace(
@@ -190,102 +344,34 @@ class InterpreterExecution(TraceMixin):
                     "updated_variables": updated_variables,
                 },
             )
-            # Process playbook calls and pass on external tool calls to agent thread
+
+            # Process tool calls
             self.instruction = ""
-            playbook_calls = []
-            missing_say_after_external_tool_call = False
-            for tool_call in tool_calls:
-                if tool_call.fn == "Say":
-                    if tool_call.kwargs.get("waitForUserInput", False):
-                        done = True
-                        self.wait_for_external_event = True
-                        self.trace(
-                            "Waiting for user input, exiting loop",
-                            metadata={"tool_call": tool_call},
-                        )
-                    missing_say_after_external_tool_call = False
 
-                    yield AgentResponseChunk(tool_call=tool_call)
-                elif tool_call.fn not in self.playbooks:
-                    raise Exception(f"Playbook {tool_call.fn} not found")
-                # if tool call is for a playbook, push it to the call stack
-                elif (
-                    self.playbooks[tool_call.fn].execution_type
-                    == PlaybookExecutionType.INT
-                ):
-                    playbook_calls.append(tool_call.fn)
-                    done = True
-                    self.trace(
-                        f"Need to execute playbook: {tool_call.fn}, exiting loop",
-                        metadata={"tool_call": tool_call},
-                    )
-                # else pass on the external tool call to agent thread
-                else:
-                    done = True
-                    # Import here to avoid circular imports
-                    from .tool_execution import ToolExecution
-
-                    tool_execution = ToolExecution(
-                        interpreter=self.interpreter,
-                        playbooks=self.playbooks,
-                        tool_call=tool_call,
-                    )
-                    yield from tool_execution.execute()
-                    self.trace(tool_execution)
-                    self.trace(
-                        "Exiting loop after executing tool call",
-                        metadata={"tool_call": tool_call},
-                    )
-                    missing_say_after_external_tool_call = True
-
-            # Update call stack
+            # Process tool calls and determine execution flow
             (
-                last_executed_step_pb,
-                last_executed_step_ln,
-                last_executed_step_type,
-            ) = last_executed_step.split(":")
+                done,
+                playbook_calls,
+                missing_say_after_external_tool_call,
+                tool_response_chunks,
+            ) = self._process_tool_calls(tool_calls)
 
-            if last_executed_step_type == "YLD":
-                self.wait_for_external_event = True
-                done = True
-                self.trace(
-                    "Waiting for external event on YLD, exiting loop",
-                    metadata={"last_executed_step": last_executed_step},
-                )
+            # Yield any response chunks from tool calls
+            for chunk in tool_response_chunks:
+                yield chunk
+
+            # Update variables
+            self.interpreter.manage_variables(updated_variables)
+
+            # Update call stack and check if we need to continue execution
+            stack_done = self._update_call_stack(last_executed_step, playbook_calls)
+            done = done or stack_done
 
             # If there was no Say() after the last tool call,
             # we need to continue execution after the tool call
             if missing_say_after_external_tool_call:
                 self.trace("No Say() after external tool call, continuing loop")
                 done = False
-
-            # Update call stack to reflect last executed step
-            self.interpreter.call_stack.pop()
-            self.interpreter.call_stack.push(
-                CallStackFrame(
-                    instruction_pointer=InstructionPointer(
-                        playbook=last_executed_step_pb,
-                        line_number=last_executed_step_ln,
-                    ),
-                    llm_chat_session_id=None,  # self.current_llm_session.llm_chat_session_id,
-                )
-            )
-
-            # Update variables
-            self.interpreter.manage_variables(updated_variables)
-
-            # Any requests for playbook execution are pushed to the call stack
-            if playbook_calls:
-                for playbook_call in playbook_calls:
-                    self.interpreter.call_stack.push(
-                        CallStackFrame(
-                            instruction_pointer=InstructionPointer(
-                                playbook=playbook_call, line_number="01"
-                            ),
-                            llm_chat_session_id=None,
-                        )
-                    )
-                assert done
 
     def __repr__(self):
         """Return a string representation of the interpreter execution."""
