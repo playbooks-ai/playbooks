@@ -152,12 +152,12 @@ def get_completion(
         **kwargs,
     }
 
-    # print()
-    # print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
+    print()
+    print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
     # print(messages[0]["content"])
-    # print(messages[1]["content"] if len(messages) > 1 else "")
-    # print("=" * 40)
-    # print()
+    print(messages[1]["content"] if len(messages) > 1 else "")
+    print("=" * 40)
+    print()
 
     if llm_cache_enabled and use_cache:
         cache_key = custom_get_cache_key(**completion_kwargs)

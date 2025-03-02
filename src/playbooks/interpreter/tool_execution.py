@@ -2,12 +2,13 @@
 
 from typing import TYPE_CHECKING, Dict, Generator
 
-from ..enums import PlaybookExecutionType
-from ..trace_mixin import TraceItem, TraceMixin
-from ..types import AgentResponseChunk, ToolCall
+from playbooks.enums import PlaybookExecutionType
+from playbooks.trace_mixin import TraceItem, TraceMixin
+from playbooks.types import AgentResponseChunk, ToolCall
 
 if TYPE_CHECKING:
-    from ..playbook import Playbook
+    from playbooks.playbook import Playbook
+
     from .interpreter import Interpreter
 
 

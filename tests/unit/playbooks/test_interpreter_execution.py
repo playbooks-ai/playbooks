@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from playbooks.interpreter import InterpreterExecution
+from playbooks.playbook_step import PlaybookStep, PlaybookStepCollection
 from playbooks.types import ToolCall
 
 
@@ -231,7 +232,7 @@ Here's the execution:
 
         # Add some trace items
         interpreter_execution.trace(
-            "Start iteration",
+            "Start inner loop iteration",
             metadata={
                 "playbook": "TestPlaybook",
                 "line_number": "01",
@@ -248,3 +249,189 @@ Here's the execution:
         )
 
         assert repr(interpreter_execution) == "01, 02"
+
+    def test_update_call_stack_with_yld(self):
+        """Test updating call stack with a YLD instruction."""
+        interpreter = MagicMock()
+        interpreter.call_stack.peek.return_value = None
+
+        # Create a step collection with test steps
+        step_collection = PlaybookStepCollection()
+        step_collection.add_step(
+            PlaybookStep("01", "YLD", "ForUserInput", "01:YLD: ForUserInput")
+        )
+        step_collection.add_step(
+            PlaybookStep(
+                "02", "QUE", "Say(message='Hello')", "02:QUE: Say(message='Hello')"
+            )
+        )
+        step_collection.add_step(
+            PlaybookStep("03", "RET", "return result", "03:RET: return result")
+        )
+
+        # Mock the current playbook with step collection
+        current_playbook = MagicMock()
+        current_playbook.get_step.side_effect = lambda ln: step_collection.get_step(ln)
+        current_playbook.get_next_step.side_effect = (
+            lambda ln: step_collection.get_next_step(ln)
+        )
+
+        interpreter_execution = InterpreterExecution(
+            interpreter=interpreter,
+            playbooks={},
+            current_playbook=current_playbook,
+            instruction="Test instruction",
+        )
+
+        # Test YLD instruction advances to the next line
+        interpreter_execution._update_call_stack("TestPlaybook:01:YLD", [])
+
+        # Verify the call stack was updated correctly
+        assert interpreter.call_stack.pop.call_count == 1
+
+        # Verify a new frame was pushed with the next line number
+        assert interpreter.call_stack.push.call_count == 1
+        call_args = interpreter.call_stack.push.call_args[0][0]
+        assert call_args.instruction_pointer.playbook == "TestPlaybook"
+        assert call_args.instruction_pointer.line_number == "02"
+
+        # Test YLD at the last line of a playbook
+        step_collection = PlaybookStepCollection()
+        step_collection.add_step(
+            PlaybookStep(
+                "01", "QUE", "Say(message='Hello')", "01:QUE: Say(message='Hello')"
+            )
+        )
+        step_collection.add_step(
+            PlaybookStep("02", "YLD", "ForUserInput", "02:YLD: ForUserInput")
+        )
+
+        current_playbook.get_step.side_effect = lambda ln: step_collection.get_step(ln)
+        current_playbook.get_next_step.side_effect = (
+            lambda ln: step_collection.get_next_step(ln)
+        )
+
+        interpreter.call_stack.reset_mock()
+        interpreter_execution._update_call_stack("TestPlaybook:02:YLD", [])
+
+        # Verify the call stack was popped but no new frame was pushed
+        assert interpreter.call_stack.pop.call_count == 1
+        assert interpreter.call_stack.push.call_count == 0
+
+        # Test YLD followed by RET
+        step_collection = PlaybookStepCollection()
+        step_collection.add_step(
+            PlaybookStep(
+                "01", "QUE", "Say(message='Hello')", "01:QUE: Say(message='Hello')"
+            )
+        )
+        step_collection.add_step(
+            PlaybookStep("02", "YLD", "ForUserInput", "02:YLD: ForUserInput")
+        )
+        step_collection.add_step(
+            PlaybookStep("03", "RET", "return result", "03:RET: return result")
+        )
+
+        current_playbook.get_step.side_effect = lambda ln: step_collection.get_step(ln)
+        current_playbook.get_next_step.side_effect = (
+            lambda ln: step_collection.get_next_step(ln)
+        )
+
+        interpreter.call_stack.reset_mock()
+        interpreter_execution._update_call_stack("TestPlaybook:02:YLD", [])
+
+        # Verify a new frame was pushed with the next line number (RET)
+        assert interpreter.call_stack.pop.call_count == 1
+        assert interpreter.call_stack.push.call_count == 1
+        call_args = interpreter.call_stack.push.call_args[0][0]
+        assert call_args.instruction_pointer.playbook == "TestPlaybook"
+        assert call_args.instruction_pointer.line_number == "03"
+
+    def test_update_call_stack_with_nested_yld(self):
+        """Test updating call stack with a YLD instruction in nested lines."""
+        interpreter = MagicMock()
+        interpreter.call_stack.peek.return_value = None
+
+        # Create a step collection with nested test steps
+        step_collection = PlaybookStepCollection()
+        step_collection.add_step(
+            PlaybookStep("01", "LOP", "For each item", "01:LOP: For each item")
+        )
+        step_collection.add_step(
+            PlaybookStep(
+                "01.01",
+                "QUE",
+                "Say(message='Processing')",
+                "01.01:QUE: Say(message='Processing')",
+            )
+        )
+        step_collection.add_step(
+            PlaybookStep("01.02", "YLD", "ForUserInput", "01.02:YLD: ForUserInput")
+        )
+        step_collection.add_step(
+            PlaybookStep(
+                "01.03", "QUE", "Say(message='Done')", "01.03:QUE: Say(message='Done')"
+            )
+        )
+        step_collection.add_step(
+            PlaybookStep("02", "RET", "return result", "02:RET: return result")
+        )
+
+        # Mock the current playbook with step collection
+        current_playbook = MagicMock()
+        current_playbook.get_step.side_effect = lambda ln: step_collection.get_step(ln)
+        current_playbook.get_next_step.side_effect = (
+            lambda ln: step_collection.get_next_step(ln)
+        )
+
+        interpreter_execution = InterpreterExecution(
+            interpreter=interpreter,
+            playbooks={},
+            current_playbook=current_playbook,
+            instruction="Test instruction",
+        )
+
+        # Test nested YLD instruction advances to the next sub-line
+        interpreter_execution._update_call_stack("TestPlaybook:01.02:YLD", [])
+
+        # Verify the call stack was updated correctly
+        assert interpreter.call_stack.pop.call_count == 1
+
+        # Verify a new frame was pushed with the next line number
+        assert interpreter.call_stack.push.call_count == 1
+        call_args = interpreter.call_stack.push.call_args[0][0]
+        assert call_args.instruction_pointer.playbook == "TestPlaybook"
+        assert call_args.instruction_pointer.line_number == "01.03"
+
+        # Test YLD at the last nested line
+        step_collection = PlaybookStepCollection()
+        step_collection.add_step(
+            PlaybookStep("01", "LOP", "For each item", "01:LOP: For each item")
+        )
+        step_collection.add_step(
+            PlaybookStep(
+                "01.01",
+                "QUE",
+                "Say(message='Processing')",
+                "01.01:QUE: Say(message='Processing')",
+            )
+        )
+        step_collection.add_step(
+            PlaybookStep("01.02", "YLD", "ForUserInput", "01.02:YLD: ForUserInput")
+        )
+
+        current_playbook.get_step.side_effect = lambda ln: step_collection.get_step(ln)
+        current_playbook.get_next_step.side_effect = (
+            lambda ln: step_collection.get_next_step(ln)
+        )
+
+        interpreter.call_stack.reset_mock()
+        interpreter_execution._update_call_stack("TestPlaybook:01.02:YLD", [])
+
+        # With the new DAG-based navigation, the last step in a loop loops back to the first step
+        # Verify the call stack was popped and a new frame was pushed with the first line in the loop
+        assert interpreter.call_stack.pop.call_count == 1
+        assert interpreter.call_stack.push.call_count == 1
+        call_args = interpreter.call_stack.push.call_args[0][0]
+        assert call_args.instruction_pointer.playbook == "TestPlaybook"
+        assert call_args.instruction_pointer.line_number == "01.01"

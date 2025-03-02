@@ -24,7 +24,6 @@ class TraceMixin:
         trace_item = TraceItem(item, metadata)
         self._trace_items.append(trace_item)
         self.refresh_trace_summary()
-        yield AgentResponseChunk(trace=trace_item.to_trace())
 
     def refresh_trace_summary(self):
         self._trace_summary = self.to_trace()
@@ -49,6 +48,9 @@ class TraceMixin:
                 if item.item:
                     trace.append(f"{depth * '  '}- {item.item}")
         return "\n".join(trace)
+
+    def yield_trace(self):
+        yield AgentResponseChunk(trace=self.to_trace())
 
 
 class TraceWalker:

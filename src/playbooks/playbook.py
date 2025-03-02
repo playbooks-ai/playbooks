@@ -1,8 +1,9 @@
 import ast
 import re
-from typing import Callable, Tuple
+from typing import Callable, Optional, Tuple
 
 from .enums import PlaybookExecutionType
+from .playbook_step import PlaybookStep, PlaybookStepCollection
 from .utils.markdown_to_ast import refresh_markdown_attributes
 
 
@@ -105,26 +106,28 @@ class Playbook:
     @classmethod
     def _create_int_playbook(cls, h2, klass, signature, description, h3s):
         """Create an INT type playbook."""
-        trigger = steps = notes = None
+        trigger = None
+        steps = None
+        notes = None
+        step_collection = PlaybookStepCollection()
 
         for h3 in h3s:
             h3_title = h3.get("text", "").strip().lower()
-
             if h3_title == "trigger":
                 trigger = h3
             elif h3_title == "steps":
                 steps = h3
+                # Parse steps into PlaybookStep objects
+                for child in h3.get("children", []):
+                    lines = child.get("text", "").strip().split("\n")
+                    for line in lines:
+                        step = PlaybookStep.from_text(line)
+                        if step:
+                            step_collection.add_step(step)
             elif h3_title == "notes":
                 notes = h3
-            elif h3_title == "code":
-                raise ValueError("LLM executed playbooks should not have a code block")
             else:
-                raise ValueError(f"Unexpected h3 found for INT playbook: {h3_title}")
-
-        # If no explicit steps section, use description as steps
-        if steps is None:
-            steps = description
-            description = None
+                raise ValueError(f"Unknown H3 section: {h3_title}")
 
         return cls(
             klass=klass,
@@ -137,6 +140,7 @@ class Playbook:
             code=None,
             func=None,
             markdown=h2["markdown"],
+            step_collection=step_collection,
         )
 
     @classmethod
@@ -173,6 +177,7 @@ class Playbook:
             code=code,
             func=func,
             markdown=h2["markdown"],
+            step_collection=None,
         )
 
     @classmethod
@@ -209,6 +214,7 @@ class Playbook:
         code: str,
         func: Callable,
         markdown: str,
+        step_collection: Optional[PlaybookStepCollection] = None,
     ):
         self.klass = klass
         self.execution_type = execution_type
@@ -220,6 +226,33 @@ class Playbook:
         self.code = code
         self.func = func
         self.markdown = markdown
+        self.step_collection = step_collection
+
+    def get_step(self, line_number: str) -> Optional[PlaybookStep]:
+        """Get a step by line number.
+
+        Args:
+            line_number: The line number of the step.
+
+        Returns:
+            The step or None if not found.
+        """
+        if self.step_collection:
+            return self.step_collection.get_step(line_number)
+        return None
+
+    def get_next_step(self, line_number: str) -> Optional[PlaybookStep]:
+        """Get the next step after the given line number.
+
+        Args:
+            line_number: The line number to start from.
+
+        Returns:
+            The next step or None if there is no next step.
+        """
+        if self.step_collection:
+            return self.step_collection.get_next_step(line_number)
+        return None
 
     def __repr__(self):
         return f"Playbook({self.klass})"

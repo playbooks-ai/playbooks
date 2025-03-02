@@ -24,11 +24,11 @@ Playbooks format -
 ```playbook.md
 ## HelloExample() -> None
 Example playbook
-### Steps
+### Stepst 
 01:QUE Say(Greet the user)
 02:LOP for each $country in 2 countries near USA
   02.01:QUE SearchWeb(2030 population projection for $country)
-03:YLD Yield("Waiting for search results")
+03:YLD ForCallComplete("Waiting for search results")
 04:QUE Say(Write a table with 2 columns - Country and Population projection)
 ```
 
@@ -66,6 +66,7 @@ Example playbook
       kwargs: {}
 - "HelloWorld:03:YLD":
   - think: Yield control back to the system to get search results
+  - yield_type: ForCallComplete
 
 ** End Examples **
 
@@ -95,11 +96,11 @@ Example output format -
       kwargs: {...}
 ```
 
-```session_context.json
+```session_context.yaml
 {{SESSION_CONTEXT}}
 ```
 
-Say() messages will be shown to the user, so make them conversational. Don't ask for information the user already provided. Use "waitForUserInput" kwarg if you need user input.
+Say() messages will be shown to the user, so make them conversational. Don't ask for information the user already provided.
 
 {{INSTRUCTION}}
 Don't make up steps. If current playbook does not have appropriate steps, scan the trigger list of all playbooks. If you find a useful playbook, call it.

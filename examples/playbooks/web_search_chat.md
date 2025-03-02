@@ -30,7 +30,8 @@ At the beginning
 ## Gather relevant information
 ### Steps
 - until you have all the information you need to answer the user's question
-    - list one or more precise web search queries that will yield the most relevant information
+    - think step by step how you would use web searches to get relevant information you don't have, e.g. to answer how old was the ruler who built Taj Mahal when it was built, I will first do two search queries (When was Taj Mahal built, Who built Taj Mahal). After getting the answers, I'll construct next set of queries using the answers.
+    - list one or more web search queries to do based on your plan 
     - go through each search query
         - search the web with that query
     - gather relevant information from all search results

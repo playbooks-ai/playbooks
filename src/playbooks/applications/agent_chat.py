@@ -107,27 +107,29 @@ def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
         for chunk in response_generator:
             if chunk:
                 if chunk.raw:
-                    print(chunk.raw, end="")
+                    console.print("[green]" + chunk.raw + "[/green]", end="")
+                if chunk.trace:
+                    console.print("[yellow]" + chunk.trace + "[/yellow]")
                 if chunk.agent_response:
                     agent_responses.append(chunk.agent_response)
                 if chunk.tool_response:
                     tool_responses.append(chunk.tool_response)
 
-        if tool_responses:
-            for tool_response in tool_responses:
-                print(
-                    "Tool: "
-                    + tool_response.code
-                    + " returned "
-                    + str(tool_response.output)
-                )
+        # if tool_responses:
+        #     for tool_response in tool_responses:
+        #         console.print(
+        #             "Tool: "
+        #             + tool_response.code
+        #             + " returned "
+        #             + str(tool_response.output)
+        #         )
         if agent_responses:
             for agent_response in agent_responses:
-                print("Agent: " + agent_response)
+                console.print("[blue]Agent: " + agent_response + "[/blue]")
     else:
         chunks = list(response_generator)
-        print("".join(chunk.raw for chunk in chunks if chunk.raw))
-        print()
+        console.print("".join(chunk.raw for chunk in chunks if chunk.raw))
+        console.print()
         agent_responses = []
         tool_responses = []
         for chunk in chunks:
