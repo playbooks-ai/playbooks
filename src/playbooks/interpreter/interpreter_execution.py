@@ -166,7 +166,9 @@ class InterpreterExecution(TraceMixin):
 
         try:
             parsed = json.loads(json_content)
-            parsed = parsed["trace"]
+            # Check if the parsed content has a 'trace' key, which is used in some responses
+            if isinstance(parsed, dict) and "trace" in parsed:
+                parsed = parsed["trace"]
             if not parsed or not isinstance(parsed, list):
                 raise ValueError("Empty JSON content")
         except json.JSONDecodeError as err:
