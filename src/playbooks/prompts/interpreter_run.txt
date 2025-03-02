@@ -103,5 +103,6 @@ Say() messages will be shown to the user, so make them conversational. Don't ask
 
 {{INSTRUCTION}}
 Don't make up steps. If current playbook does not have appropriate steps, scan the trigger list of all playbooks. If you find a useful playbook, call it.
+Output yaml only and nothing else.
 
 ** Output **
