@@ -58,3 +58,4 @@ class AgentResponseChunk(NamedTuple):
     tool_call: ToolCall | None = None
     agent_response: str | None = None
     tool_response: ToolResponse | None = None
+    trace: str | None = None

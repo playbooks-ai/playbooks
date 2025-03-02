@@ -1,5 +1,7 @@
 from typing import List, Union
 
+from .types import AgentResponseChunk
+
 
 class TraceItem:
     def __init__(self, item: Union["TraceMixin", str], metadata: dict = None):
@@ -19,8 +21,10 @@ class TraceMixin:
         self._trace_summary: str = "Empty"
 
     def trace(self, item: Union["TraceMixin", str], metadata: dict = None):
-        self._trace_items.append(TraceItem(item, metadata))
+        trace_item = TraceItem(item, metadata)
+        self._trace_items.append(trace_item)
         self.refresh_trace_summary()
+        yield AgentResponseChunk(trace=trace_item.to_trace())
 
     def refresh_trace_summary(self):
         self._trace_summary = self.to_trace()
