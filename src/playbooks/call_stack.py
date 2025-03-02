@@ -42,7 +42,7 @@ class CallStack:
 
     def __repr__(self):
         frames = ", ".join(self.to_dict())
-        return f"Call Stack({frames})"
+        return f"CallStack(frames=[{frames}])"
 
     def __str__(self):
         return self.__repr__()

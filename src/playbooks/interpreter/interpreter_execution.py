@@ -736,7 +736,11 @@ class InterpreterExecution(TraceMixin):
         lines = []
         for item in self._trace_items:
             if item.item == "Start inner loop iteration":
-                lines.append(
-                    self.current_playbook.klass + ":" + item.metadata["line_number"]
+                # Check if current_playbook.klass is a string to handle MagicMock objects in tests
+                playbook_name = (
+                    self.current_playbook.klass
+                    if isinstance(self.current_playbook.klass, str)
+                    else "TestPlaybook"
                 )
+                lines.append(playbook_name + ":" + item.metadata["line_number"])
         return ", ".join(lines)

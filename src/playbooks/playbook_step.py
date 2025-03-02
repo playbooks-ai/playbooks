@@ -61,6 +61,10 @@ class PlaybookStep:
             content = match.group(3) or ""
             content = content.strip()
 
+            # Remove leading colon and space if present
+            if content.startswith(":"):
+                content = content[1:].strip()
+
             return cls(
                 line_number=line_number,
                 step_type=step_type,
