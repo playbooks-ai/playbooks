@@ -1,6 +1,6 @@
 """Tests for the StepExecution class."""
 
-import yaml
+import json
 
 from playbooks.interpreter import StepExecution
 
@@ -32,5 +32,5 @@ class TestStepExecution:
         }
         step_execution = StepExecution(step, metadata)
 
-        expected_repr = yaml.dump(metadata).strip()
+        expected_repr = json.dumps(metadata, indent=2).strip()
         assert repr(step_execution) == expected_repr
