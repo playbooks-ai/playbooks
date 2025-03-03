@@ -674,10 +674,36 @@ class InterpreterExecution(TraceMixin):
                 # Update variables
                 self.interpreter.manage_variables(updated_variables)
 
+                # Store the call stack state before updating
+                call_stack_before = self.interpreter.call_stack.to_dict()
+
                 # Update call stack and check if we need to continue execution
                 stack_exit = self._update_call_stack(
                     last_executed_step, self.playbook_calls
                 )
+
+                # Get the call stack state after updating
+                call_stack_after = self.interpreter.call_stack.to_dict()
+
+                # Check if we're returning from a playbook call
+                if (
+                    len(call_stack_before) > len(call_stack_after)
+                    and len(call_stack_after) > 0
+                    and last_executed_step.endswith(":RET")
+                ):
+                    self.trace(
+                        f"Returning from playbook call, call stack reduced from {len(call_stack_before)} to {len(call_stack_after)}",
+                        metadata={
+                            "call_stack_before": call_stack_before,
+                            "call_stack_after": call_stack_after,
+                            "last_executed_step": last_executed_step,
+                        },
+                    )
+                    # We're returning from a playbook call, so we should exit to let the calling playbook continue
+                    self.should_exit = True
+                    self.exit_reason = "Returning from playbook call"
+                    break
+
                 if stack_exit and not self.should_exit:
                     self.should_exit = True
                     self.exit_reason = "Call stack update required exit"

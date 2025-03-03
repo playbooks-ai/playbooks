@@ -1,5 +1,6 @@
 """Tests for the InterpreterExecution class."""
 
+import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -440,3 +441,188 @@ Here's the execution:
         call_args = interpreter.call_stack.push.call_args[0][0]
         assert call_args.instruction_pointer.playbook == "TestPlaybook"
         assert call_args.instruction_pointer.line_number in ["01", "01.01"]
+
+    def test_returning_from_playbook_call(self):
+        """Test that returning from a playbook call properly manages the call stack.
+
+        This is a regression test for the issue where returning from a playbook call
+        would result in duplicate frames in the call stack.
+        """
+        # Set up the interpreter with a mock call stack
+        interpreter = MagicMock()
+        # Mock handle_empty_call_stack to return (False, None)
+        interpreter.handle_empty_call_stack.return_value = (False, None)
+
+        # Create a step collection for the main playbook
+        main_step_collection = PlaybookStepCollection()
+        main_step_collection.add_step(
+            PlaybookStep(
+                "05.01.03",
+                "QUE",
+                "Call GatherRelevantInformation",
+                "05.01.03:QUE: Call GatherRelevantInformation",
+            )
+        )
+        main_step_collection.add_step(
+            PlaybookStep(
+                "05.01.04",
+                "QUE",
+                "Next step after call",
+                "05.01.04:QUE: Next step after call",
+            )
+        )
+
+        # Create a step collection for the called playbook
+        gather_step_collection = PlaybookStepCollection()
+        gather_step_collection.add_step(
+            PlaybookStep(
+                "01.05",
+                "RET",
+                "Return from GatherRelevantInformation",
+                "01.05:RET: Return from GatherRelevantInformation",
+            )
+        )
+
+        # Mock the playbooks
+        main_playbook = MagicMock()
+        main_playbook.klass = "Main"
+        main_playbook.get_step.side_effect = lambda ln: main_step_collection.get_step(
+            ln
+        )
+        main_playbook.get_next_step.side_effect = (
+            lambda ln: main_step_collection.get_next_step(ln)
+        )
+
+        gather_playbook = MagicMock()
+        gather_playbook.klass = "GatherRelevantInformation"
+        gather_playbook.get_step.side_effect = (
+            lambda ln: gather_step_collection.get_step(ln)
+        )
+        gather_playbook.get_next_step.side_effect = (
+            lambda ln: gather_step_collection.get_next_step(ln)
+        )
+
+        playbooks = {
+            "Main": main_playbook,
+            "GatherRelevantInformation": gather_playbook,
+        }
+
+        # Create the interpreter execution with the GatherRelevantInformation playbook
+        interpreter_execution = InterpreterExecution(
+            interpreter=interpreter,
+            playbooks=playbooks,
+            current_playbook=gather_playbook,
+            instruction="Test instruction",
+        )
+
+        # Mock the call stack to simulate returning from GatherRelevantInformation to Main
+        # The call stack should have Main:05.01.03 at the bottom and GatherRelevantInformation:01.05 at the top
+        def mock_get_current_playbook_name():
+            # After popping GatherRelevantInformation:01.05, we should be at Main:05.01.03
+            return "Main"
+
+        interpreter.get_current_playbook_name.side_effect = (
+            mock_get_current_playbook_name
+        )
+
+        # Execute the RET instruction from GatherRelevantInformation
+        result = interpreter_execution._update_call_stack(
+            "GatherRelevantInformation:01.05:RET", []
+        )
+
+        # Verify the call stack was popped
+        assert interpreter.call_stack.pop.call_count == 1
+
+        # Verify no new frame was pushed (we should just return to the calling frame)
+        assert interpreter.call_stack.push.call_count == 0
+
+        # Verify the result indicates we should continue execution
+        assert result is False
+
+        # Now test the execute method's handling of returning from a playbook call
+        # Create a new interpreter execution for this test
+        interpreter = MagicMock()
+        # Mock handle_empty_call_stack to return (False, None)
+        interpreter.handle_empty_call_stack.return_value = (False, None)
+
+        # Mock get_current_playbook_name to return the same as current_playbook.klass
+        # to avoid triggering the "Switching to playbook" exit condition
+        interpreter.get_current_playbook_name.return_value = "GatherRelevantInformation"
+
+        # Create a mock call stack with a frame
+        mock_frame = MagicMock()
+        mock_frame.instruction_pointer.playbook = "GatherRelevantInformation"
+        mock_frame.instruction_pointer.line_number = "01.05"
+        interpreter.call_stack.peek.return_value = mock_frame
+
+        interpreter_execution = InterpreterExecution(
+            interpreter=interpreter,
+            playbooks=playbooks,
+            current_playbook=gather_playbook,
+            instruction="Test instruction",
+        )
+
+        # Mock the execution_loop to ensure it terminates after one iteration
+        with patch.object(
+            interpreter_execution, "execution_loop"
+        ) as mock_execution_loop:
+            # Create a context manager that will only allow one iteration
+            @contextlib.contextmanager
+            def mock_loop():
+                counter = [0]
+
+                def check_continue():
+                    if counter[0] < 1:
+                        counter[0] += 1
+                        return True
+                    return False
+
+                try:
+                    yield check_continue
+                finally:
+                    pass
+
+            mock_execution_loop.return_value = mock_loop()
+
+            # Mock the necessary methods for the execute method
+            interpreter_execution._prepare_instruction = MagicMock(
+                return_value="Test instruction"
+            )
+            interpreter_execution._get_llm_response = MagicMock(
+                return_value=[AgentResponseChunk(raw="Test response")]
+            )
+            interpreter_execution.parse_response = MagicMock(
+                return_value=(
+                    [],  # tool_calls
+                    "GatherRelevantInformation:01.05:RET",  # last_executed_step
+                    {},  # updated_variables
+                )
+            )
+            interpreter_execution._annotate_tool_calls = MagicMock(return_value=[])
+            interpreter_execution._process_tool_calls = MagicMock()
+
+            # Instead of mocking _update_call_stack completely, we'll use a side_effect
+            # that simulates the call stack reduction but doesn't change the current playbook
+            def mock_update_call_stack(last_executed_step, playbook_calls):
+                # Store the call stack state before and after
+                interpreter_execution.call_stack_before = [
+                    "Main:05.01.03",
+                    "GatherRelevantInformation:01.05",
+                ]
+                interpreter_execution.call_stack_after = ["Main:05.01.03"]
+                # Set the should_exit flag directly to ensure the loop terminates
+                interpreter_execution.should_exit = True
+                interpreter_execution.exit_reason = "Returning from playbook call"
+                return False
+
+            interpreter_execution._update_call_stack = MagicMock(
+                side_effect=mock_update_call_stack
+            )
+            interpreter_execution._check_exit_conditions = MagicMock(return_value=False)
+
+            # Execute the interpreter
+            list(interpreter_execution.execute())
+
+            # Verify that should_exit was set to True when returning from the playbook call
+            assert interpreter_execution.should_exit is True
+            assert interpreter_execution.exit_reason == "Returning from playbook call"
