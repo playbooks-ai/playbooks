@@ -21,9 +21,8 @@ At the beginning
 - Ask how the user is doing and what you can help with
 - As long as the user wants to continue the conversation
     - If you don't have enough information to answer the user's question
-        - gather relevant information
-        - use the information to respond to the user
-        - wait for the user to say something
+        - Gather relevant information
+        - Respond to user with a thoghtful answer using gathered information and search results. The answer should be well written and include citations where necessary.
     - Otherwise
         - Respond to the user with a friendly, professional response and wait for the user to say something
 - Say goodbye to the user
@@ -36,8 +35,8 @@ At the beginning
     - for each query
         - search the web with that query and a "general" or "news" topic
     - wait for the search results
-    - gather relevant information from the search results
-- return all relevant information
+    - gather relevant information from the search results as a paragraph
+
 ### Notes
 - Use "news" topic for queries about recent events
 
