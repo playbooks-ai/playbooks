@@ -33,6 +33,10 @@ Example playbook
 ```
 
 ** Output **
+- "prologue": |
+  User hasn't interacted yet and session log is empty, so no context to consider.
+  Starting HelloExample playbook from line 01.
+  I will greet the user and provide population information about two countries near USA.
 - "HelloWorld:01:QUE":
   - call:
       fn: "Say"
@@ -40,7 +44,9 @@ Example playbook
       - Hello there!
       kwargs: {}
 - "HelloWorld:02:LOP":
-  - think: 2 countries near USA are Canada, Mexico
+  - think: |
+    2 countries near USA are Canada, Mexico
+    I will loop through them and get population projection for each.
   - updated_vars:
     $countries:
     - "Canada"
@@ -87,8 +93,11 @@ Example playbook
 
 Example output format -
 ```
+- "prologue": |
+  ...
 - "...:..:...": # must be real playbook, line number, and type
-  - think: ...
+  - think: |
+  ...
   - call:
       fn: "..."
       args:
@@ -102,8 +111,11 @@ Example output format -
 
 Say() messages will be shown to the user, so make them conversational. Don't ask for information the user already provided.
 
-{{INSTRUCTION}}
 Don't make up steps. If current playbook does not have appropriate steps, scan the trigger list of all playbooks. If you find a useful playbook, call it.
+Don't blindly follow the playbook - be highly intelligent and adapt as needed to ensure user success.
+
+{{INSTRUCTION}}
+
 Output yaml only and nothing else.
 
 ** Output **
