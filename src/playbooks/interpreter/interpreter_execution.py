@@ -232,9 +232,9 @@ class InterpreterExecution(TraceMixin):
             )
 
         current_line_number = self.interpreter.get_current_line_number()
-
+        step_text = self.current_playbook.get_step(current_line_number).raw_text
         return (
-            f"Continue playbook {self.current_playbook.klass} execution from line {current_line_number}.\n"
+            f'Continue playbook {self.current_playbook.klass} execution from line "{step_text}".\n'
             + self.instruction
         )
 
