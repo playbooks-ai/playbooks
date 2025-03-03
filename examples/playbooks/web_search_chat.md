@@ -1,14 +1,15 @@
 # Web Search Chat Agent
 
 ```tools
-def SearchWeb(query: str):
+def SearchWeb(query: str, topic: str="general"):
     """
     Search the web for the given query.
     """
     from tavily import TavilyClient
     import os
     tavily_client = TavilyClient(api_key=os.environ.get("TAVILY_API_KEY"))
-    search_result = tavily_client.search(query, limit=1)
+    print(f"Searching web for {query}")
+    search_result = tavily_client.search(query, limit=1, topic=topic)
     return search_result
 ```
 
@@ -31,13 +32,14 @@ At the beginning
 ### Steps
 - until you have all the information you need to answer the user's question (up to 2 attempts)
     - think step by step how you would use web searches to get relevant information you don't have, e.g. to answer how old was the ruler who built Taj Mahal when it was built, I will first do two independent search queries to get two facets of information (When was Taj Mahal built, Who built Taj Mahal). After getting the answers, I'll construct next set of queries using the answers.
-    - list a batch of up to 3 independent web search queries based on your plan; note that each query must inquire separate parts of the information you need
-    - go through each search query
-        - search the web with that query
-    - gather relevant information from all search results
+    - list a batch of 1-3 web search queries based on your plan; note that each query must inquire separate, non-overlapping parts of the information you need
+    - for each query
+        - search the web with that query and a "general" or "news" topic
+    - wait for the search results
+    - gather relevant information from the search results
 - return all relevant information
 ### Notes
-- Make SearchWeb calls in parallel, then wait for all of them to complete
+- Use "news" topic for queries about recent events
 
 ## Reject NSFW Query
 ### Trigger
