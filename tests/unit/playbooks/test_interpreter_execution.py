@@ -65,8 +65,8 @@ class TestInterpreterExecution:
         assert interpreter_execution.wait_for_external_event is False
         assert hasattr(interpreter_execution, "_trace_items")
 
-    def test_parse_response_yaml_block(self):
-        """Test parsing a response with a YAML block."""
+    def test_parse_response_json_block(self):
+        """Test parsing a response with a JSON block."""
         interpreter_execution = InterpreterExecution(
             interpreter=MagicMock(),
             playbooks={"Say": MagicMock()},
@@ -77,15 +77,27 @@ class TestInterpreterExecution:
         response = """
 Here's the execution:
 
-```yaml
-- TestPlaybook:01:CMD:
-    - call:
-        fn: Say
-        args: []
-        kwargs:
-          message: Hello, world!
-    - updated_vars:
-        $greeting: Hello, world!
+```json
+[
+  {
+    "TestPlaybook:01:CMD": [
+      {
+        "call": {
+          "fn": "Say",
+          "args": [],
+          "kwargs": {
+            "message": "Hello, world!"
+          }
+        }
+      },
+      {
+        "updated_vars": {
+          "$greeting": "Hello, world!"
+        }
+      }
+    ]
+  }
+]
 ```
 """
 
@@ -102,8 +114,8 @@ Here's the execution:
         assert last_executed_step == "TestPlaybook:01:CMD"
         assert updated_variables == {"$greeting": "Hello, world!"}
 
-    def test_parse_response_direct_yaml(self):
-        """Test parsing a response with direct YAML content."""
+    def test_parse_response_direct_json(self):
+        """Test parsing a response with direct JSON content."""
         interpreter_execution = InterpreterExecution(
             interpreter=MagicMock(),
             playbooks={"Say": MagicMock()},
@@ -112,14 +124,26 @@ Here's the execution:
         )
 
         response = """
-- TestPlaybook:01:CMD:
-    - call:
-        fn: Say
-        args: []
-        kwargs:
-          message: Hello, world!
-    - updated_vars:
-        $greeting: Hello, world!
+[
+  {
+    "TestPlaybook:01:CMD": [
+      {
+        "call": {
+          "fn": "Say",
+          "args": [],
+          "kwargs": {
+            "message": "Hello, world!"
+          }
+        }
+      },
+      {
+        "updated_vars": {
+          "$greeting": "Hello, world!"
+        }
+      }
+    ]
+  }
+]
 """
 
         (
@@ -135,8 +159,8 @@ Here's the execution:
         assert last_executed_step == "TestPlaybook:01:CMD"
         assert updated_variables == {"$greeting": "Hello, world!"}
 
-    def test_parse_response_invalid_yaml(self):
-        """Test parsing a response with invalid YAML content."""
+    def test_parse_response_invalid_json(self):
+        """Test parsing a response with invalid JSON content."""
         interpreter_execution = InterpreterExecution(
             interpreter=MagicMock(),
             playbooks={},
@@ -144,13 +168,13 @@ Here's the execution:
             instruction="Test instruction",
         )
 
-        response = "This is not valid YAML content."
+        response = "This is not valid JSON content."
 
         with pytest.raises(ValueError) as excinfo:
             interpreter_execution.parse_response(response)
 
-        # The error message could be either "Empty YAML content" or "Invalid YAML content"
-        assert "YAML content" in str(excinfo.value)
+        # The error message could be either "Empty JSON content" or "Invalid JSON content"
+        assert "JSON content" in str(excinfo.value)
 
     @patch("playbooks.interpreter.interpreter_execution.get_messages_for_prompt")
     @patch("playbooks.interpreter.interpreter_execution.LLMCall")

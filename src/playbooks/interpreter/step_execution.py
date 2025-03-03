@@ -1,8 +1,7 @@
 """Step execution module for the interpreter."""
 
+import json
 from typing import Any, Dict
-
-import yaml
 
 from playbooks.trace_mixin import TraceMixin
 
@@ -27,4 +26,4 @@ class StepExecution(TraceMixin):
 
     def __repr__(self):
         """Return a string representation of the step execution."""
-        return yaml.dump(self.metadata).strip()
+        return json.dumps(self.metadata, indent=2).strip()
