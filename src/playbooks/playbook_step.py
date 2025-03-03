@@ -33,6 +33,8 @@ class PlaybookStep:
         self.child_steps: List[PlaybookStep] = []
         self.is_in_loop = False
         self.loop_entry: Optional[PlaybookStep] = None
+        self.else_step: Optional[PlaybookStep] = None
+        self.cnd_step: Optional[PlaybookStep] = None
 
     @classmethod
     def from_text(cls, text: str) -> Optional["PlaybookStep"]:
@@ -85,6 +87,14 @@ class PlaybookStep:
     def is_loop(self) -> bool:
         """Check if this step is a loop step."""
         return self.step_type == "LOP"
+
+    def is_conditional(self) -> bool:
+        """Check if this step is a conditional step."""
+        return self.step_type == "CND"
+
+    def is_else(self) -> bool:
+        """Check if this step is an else step."""
+        return self.step_type == "ELS"
 
     def get_parent_line_number(self) -> Optional[str]:
         """Get the parent line number for a nested line.
@@ -207,6 +217,26 @@ class PlaybookStepCollection:
         # They're equal
         return 0
 
+    def _get_next_line_number_at_same_level(self, line_number: str) -> str:
+        """Get the next line number at the same level.
+
+        For example, for "01", the next line is "02".
+        For "01.01", the next line is "01.02".
+
+        Args:
+            line_number: The current line number.
+
+        Returns:
+            The next line number at the same level.
+        """
+        if "." in line_number:
+            # For nested line numbers like "01.01"
+            parent_line, sub_line = line_number.rsplit(".", 1)
+            return f"{parent_line}.{int(sub_line) + 1:02d}"
+        else:
+            # For simple line numbers like "01"
+            return f"{int(line_number) + 1:02d}"
+
     def _build_dag(self) -> None:
         """Build the directed acyclic graph (DAG) for navigation.
 
@@ -214,6 +244,7 @@ class PlaybookStepCollection:
         - Parent-child relationships for nested steps
         - Next step relationships for sequential execution
         - Loop relationships for loop navigation
+        - Conditional (CND) and else (ELS) relationships
         """
         if self._dag_built or not self.steps:
             return
@@ -225,6 +256,8 @@ class PlaybookStepCollection:
             step.child_steps = []
             step.is_in_loop = False
             step.loop_entry = None
+            step.else_step = None
+            step.cnd_step = None
 
         # Set the entry point to the first step
         if self.ordered_line_numbers:
@@ -286,7 +319,32 @@ class PlaybookStepCollection:
                             # (this will be used when the loop condition is false)
                             step.next_steps.append(after_loop)
 
+        # Identify CND-ELS relationships
+        self._build_conditional_relationships()
+
         self._dag_built = True
+
+    def _build_conditional_relationships(self) -> None:
+        """Build relationships between CND and ELS steps."""
+        # Find all CND steps
+        cnd_steps = [step for step in self.steps.values() if step.is_conditional()]
+
+        # For each CND step, find its corresponding ELS step (if any)
+        for cnd_step in cnd_steps:
+            # Get the next line number at the same level
+            next_line = self._get_next_line_number_at_same_level(cnd_step.line_number)
+
+            # Check if the next line is an ELS step
+            if next_line in self.steps and self.steps[next_line].is_else():
+                els_step = self.steps[next_line]
+                cnd_step.else_step = els_step
+                els_step.cnd_step = cnd_step
+
+                # Update the next step of the last step in the if branch
+                last_in_if = self._find_last_step_in_conditional(cnd_step)
+                if last_in_if:
+                    last_in_else = self._find_last_step_in_conditional(els_step)
+                    last_in_if.next_steps = last_in_else.next_steps
 
     def _mark_descendants_in_loop(
         self, step: PlaybookStep, loop_step: PlaybookStep
@@ -355,6 +413,91 @@ class PlaybookStepCollection:
 
         return None
 
+    def _find_last_step_in_conditional(
+        self, cnd_or_els_step: PlaybookStep
+    ) -> Optional[PlaybookStep]:
+        """Find the last step in a conditional or else block.
+
+        Args:
+            cnd_or_els_step: The conditional or else step
+
+        Returns:
+            The last step in the conditional/else block or None if not found
+        """
+        # Get all steps in the conditional/else block
+        block_steps = []
+        for _, step in self.steps.items():
+            if step.parent_step == cnd_or_els_step:
+                block_steps.append(step)
+
+                # Also include any nested steps
+                for nested_step in self.steps.values():
+                    if (
+                        nested_step.get_parent_line_number()
+                        and nested_step.get_parent_line_number().startswith(
+                            step.line_number
+                        )
+                    ):
+                        block_steps.append(nested_step)
+
+        if not block_steps:
+            return None
+
+        # Sort by line number and return the last one
+        return sorted(block_steps, key=lambda s: s.line_number)[-1]
+
+    def _find_step_after_conditional(
+        self, cnd_step: PlaybookStep
+    ) -> Optional[PlaybookStep]:
+        """Find the step that comes after a conditional block (including its else branch if any).
+
+        Args:
+            cnd_step: The conditional step
+
+        Returns:
+            The step after the conditional block or None if not found
+        """
+        # If there's an else step, find the step after the else block
+        if cnd_step.else_step:
+            # Find the last step in the else block
+            last_in_else = self._find_last_step_in_conditional(cnd_step.else_step)
+            if last_in_else:
+                # Get the next line number at the same level as the else step
+                next_line = self._get_next_line_number_at_same_level(
+                    cnd_step.else_step.line_number
+                )
+
+                # Check if the next line exists
+                if next_line in self.steps:
+                    return self.steps[next_line]
+        else:
+            # Find the last step in the conditional block
+            last_in_cnd = self._find_last_step_in_conditional(cnd_step)
+            if last_in_cnd:
+                # Get the next line number at the same level as the conditional step
+                next_line = self._get_next_line_number_at_same_level(
+                    cnd_step.line_number
+                )
+
+                # Check if the next line exists
+                if next_line in self.steps:
+                    # Skip the else step if there is one
+                    if (
+                        self.steps[next_line].is_else()
+                        and self.steps[next_line].cnd_step == cnd_step
+                    ):
+                        # Get the next line after the else step
+                        next_after_else = self._get_next_line_number_at_same_level(
+                            next_line
+                        )
+
+                        if next_after_else in self.steps:
+                            return self.steps[next_after_else]
+                    else:
+                        return self.steps[next_line]
+
+        return None
+
     def get_step(self, line_number: str) -> Optional[PlaybookStep]:
         """Get a step by line number.
 
@@ -397,6 +540,33 @@ class PlaybookStepCollection:
                     loop_entry.child_steps, key=lambda s: s.line_number
                 )[0]
                 return first_in_loop
+
+        # If we're in a conditional, check if we should go to the else branch
+        if current_step.is_conditional() and current_step.else_step:
+            # If the condition is false, go to the else branch
+            # Note: The actual condition evaluation happens at runtime
+            # Here we're just setting up the navigation paths
+            return current_step.else_step
+
+        # If we're at the end of a conditional branch, go to the step after the conditional
+        if current_step.parent_step and current_step.parent_step.is_conditional():
+            # Find the step after the conditional
+            after_cnd = self._find_step_after_conditional(current_step.parent_step)
+            if after_cnd:
+                return after_cnd
+
+        # If we're at the end of an else branch, go to the step after the conditional
+        if (
+            current_step.parent_step
+            and current_step.parent_step.is_else()
+            and current_step.parent_step.cnd_step
+        ):
+            # Find the step after the conditional
+            after_cnd = self._find_step_after_conditional(
+                current_step.parent_step.cnd_step
+            )
+            if after_cnd:
+                return after_cnd
 
         # Fall back to the original behavior
         if line_number not in self.ordered_line_numbers:
