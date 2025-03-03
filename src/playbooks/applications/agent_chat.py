@@ -57,14 +57,16 @@ class AgentChat:
         self.human_agent = self.agents["User"] = HumanAgent(klass="User")
 
     def run(self, stream: bool):
-        """Run the agent and return both raw chunks and agent responses.
+        """Run the agent and return chunks.
+
+        Args:
+            stream: Whether to stream the response chunks or collect them all.
 
         Returns:
-            AgentResponse: Object containing two independent streams:
-                - raw_stream: yields raw LLM chunks
-                - agent_response_stream: yields messages from Say() calls
+            An iterable of AgentResponseChunk objects. When stream=True, yields chunks
+            one by one as they're generated. When stream=False, collects all chunks
+            and then yields them.
         """
-
         chunks = []
         for chunk in self.ai_agent.run(
             llm_config=self.config.main_model_config, stream=stream
@@ -78,6 +80,16 @@ class AgentChat:
             yield from chunks
 
     def process_user_message(self, message: str, stream: bool):
+        """Process a user message and return response chunks.
+
+        Args:
+            message: The user message to process.
+            stream: Whether to stream the response chunks or collect them all.
+
+        Returns:
+            An iterable of AgentResponseChunk objects. The behavior depends on the
+            MessageRouter implementation, but generally follows the stream parameter.
+        """
         return MessageRouter.send_message(
             message=message,
             from_agent=self.human_agent,

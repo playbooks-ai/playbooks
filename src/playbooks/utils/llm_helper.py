@@ -148,7 +148,7 @@ def get_completion(
     completion_kwargs = {
         "model": llm_config.model,
         "api_key": llm_config.api_key,
-        "messages": messages,
+        "messages": messages.copy(),
         "max_completion_tokens": 7500,
         "stream": stream,
         "temperature": 0.0,
