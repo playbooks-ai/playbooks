@@ -1,7 +1,6 @@
-# Design considerations
 This document outlines the design considerations for the Playbooks system. As we develop the system, we will keep adding to this document to refine the design.
 
-## February 22, 2025
+# February 22, 2025
 Based on extensive experimentation, we learn what things LLMs are good at and not. Recent LLMs are exceptionally good at procedural thinking. They can make and execute plans that look like a single procedure. We find them weak at nested control flows, managing variables, concurrency, reliably finding triggers to execute, etc. They also get lost in the weeds and lose site of the larger picture when instructed to log their thinking in full detail.
 
 So far, a single LLM call was expected to recurse into playbooks, manage call stack, manage variables, decisions on when the yield control (see the [no-yld](https://github.com/playbooks-ai/playbooks/tree/no-yld) branch where to attempt to give even more yield decision responsibility to the LLM), etc. The interpreter only read the state from the LLM output and executed external calls and called LLM back. With the above understanding of LLM limitations, we will reduce the responsibilities of the LLM and have the interpreter take care of more. Specifically, 
@@ -66,3 +65,19 @@ This is a bit wasteful as we wasted rest of the LLM's execution, but that is som
 
 ## Epilogue
 This design is also better aligned with the LLM tool calling ReAct paradigm, where the LLM is given some instructions and may ask for execution of one or more external functions (tools). This approach can be thought of as generalization of tool calling to enable complex program execution, which would be a significant result.
+
+# March 1, 2025
+We now have a working implementation of the single playbook execution mode. A lot of complexities exist in organizing all the processing, with 3 nested loops with progressively narrower scopes. We have figured out a ton of different exit conditions and in the process, have built a DAG representation of the playbook steps. We have also refined the step codes, adding CND and ELS to represent if and else statements, etc.
+
+The transpilation process has also been refined. For instance, we now insert YLD steps to represent playbook/tool calls and also conditionally add YLD steps after Say() calls that ask user for information.
+
+Things mostly work, but we still see several instances where 
+- the execution is too literal, e.g. asking a question to the user as instructed even when the user has already provided the information,
+- the LLM makes incorrect decisions, e.g. executing a step other than the one specified to continue from, 
+- the output being too verbose, e.g. outputting long variable values multiple times while executing steps, and so on.
+
+Here are some of the changes we will make to improve the situation:
+- Rather than step by step execution, ask LLM to proceed and only output certain information. This will reduce observability of the execution.
+- We will analyze the prompt to understand what components are impacting the LLM's performance. For instance, as conversation progresses, the session log gets very long.
+- Progressively compact session log using summarization
+
