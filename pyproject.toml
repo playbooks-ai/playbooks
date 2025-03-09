@@ -35,10 +35,17 @@ mypy = "*"
 pytest-mock = "^3.14.0"
 pre-commit = "^4.0.1"
 tavily-python = "^0.5.0"
+sphinx = "^7.2.6"
+sphinx-rtd-theme = "^2.0.0"
+sphinx-autodoc-typehints = "^2.0.0"
+myst-parser = "^2.0.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.setuptools.package-data]
+"" = ["examples/playbooks/**/*"]
 
 [tool.ruff]
 select = ["E", "F", "B"]
