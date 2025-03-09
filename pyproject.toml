@@ -44,9 +44,6 @@ myst-parser = "^2.0.0"
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
-[tool.setuptools.package-data]
-"" = ["examples/playbooks/**/*"]
-
 [tool.ruff]
 select = ["E", "F", "B"]
 ignore = ["B006", "B018", "E501"]
