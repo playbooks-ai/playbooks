@@ -16,7 +16,7 @@ This will install Sphinx and other required packages specified in the `pyproject
 
 ## Building the Documentation
 
-To build the documentation, run:
+To build the documentation locally, run:
 
 ```bash
 cd docs
@@ -25,18 +25,33 @@ make html
 
 This will generate HTML files in the `build/html` directory.
 
-## Building and Copying to Website
+## Documentation Hosting
 
-To build the documentation and copy it to the website's public directory, run:
+The documentation is hosted on GitHub Pages, providing a dedicated documentation site that is automatically updated when changes are pushed to the repository.
 
-```bash
-./build_docs.sh
+### GitHub Pages URL
+
+Once deployed, the documentation will be available at:
+```
+https://playbooks-ai.github.io/playbooks/
 ```
 
-This script will:
-1. Build the documentation using Sphinx
-2. Create the `public/docs` directory in the website project if it doesn't exist
-3. Copy the built documentation to the website's `public/docs` directory
+You can also set up a custom domain for your documentation if desired.
+
+## Automated Documentation Updates
+
+The documentation is automatically updated through GitHub Actions workflows:
+
+### GitHub Pages Deployment
+
+When changes are pushed to the `main` branch that affect the documentation or source code, the `docs-gh-pages.yml` workflow will:
+1. Build the documentation
+2. Deploy it to GitHub Pages
+3. Make it available at the GitHub Pages URL
+
+### Manual Updates
+
+You can also manually trigger the documentation update workflow from the GitHub Actions tab.
 
 ## Documentation Structure
 
@@ -62,6 +77,6 @@ The API documentation is automatically generated from docstrings in the Python c
 
 ## Viewing the Documentation
 
-After building, you can view the documentation by opening `build/html/index.html` in your browser.
+After building locally, you can view the documentation by opening `build/html/index.html` in your browser.
 
-When deployed to the website, the documentation will be available at `/docs/index.html`. 
+When deployed, the documentation will be available at the GitHub Pages URL. 
