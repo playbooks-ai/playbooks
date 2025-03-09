@@ -2,7 +2,7 @@ name: Build and Deploy Documentation to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ master ]
     paths:
       - 'src/playbooks/**'
       - 'docs/**'
