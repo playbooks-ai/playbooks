@@ -3,7 +3,7 @@
 from typing import TYPE_CHECKING, Dict, Generator
 
 from playbooks.enums import PlaybookExecutionType
-from playbooks.trace_mixin import TraceItem, TraceMixin
+from playbooks.trace_mixin import StringTrace, TraceMixin
 from playbooks.types import AgentResponseChunk, ToolCall
 
 if TYPE_CHECKING:
@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from .interpreter import Interpreter
 
 
-class ToolExecutionResult(TraceItem):
+class ToolExecutionResult(StringTrace):
     """Result of a tool execution."""
 
     def __init__(self, message: str, tool_call: ToolCall):
@@ -22,12 +22,13 @@ class ToolExecutionResult(TraceItem):
             message: The message from the tool execution.
             tool_call: The tool call that was executed.
         """
-        super().__init__(item=message, metadata={"tool_call": tool_call})
-        self.tool_call = tool_call
+        super().__init__(message=message)
+        self._trace_metadata["tool_call"] = tool_call
+        self.tool_call = tool_call  # Add direct access to tool_call
 
     def __repr__(self):
         """Return a string representation of the tool execution result."""
-        return self.tool_call.__repr__() + ": " + self.item
+        return self._trace_metadata["tool_call"].__repr__() + ": " + self.message
 
 
 class ToolExecution(TraceMixin):

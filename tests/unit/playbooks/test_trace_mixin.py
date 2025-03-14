@@ -1,171 +1,166 @@
-from playbooks.trace_mixin import TraceItem, TraceMixin, TraceWalker
+import uuid
+from unittest.mock import MagicMock, patch
+
+from playbooks.trace_mixin import StringTrace, TraceMixin, TraceWalker, indent
+from playbooks.types import AgentResponseChunk
 
 
-class TestTraceItem:
-    def test_initialization(self):
-        # Test with string item
-        item = TraceItem("test item")
-        assert item.item == "test item"
-        assert item.metadata is None
+class TestIndent:
+    def test_indent_single_line(self):
+        """Test indenting a single line string."""
+        result = indent("test", 2)
+        assert result == "    test"
 
-        # Test with metadata
-        metadata = {"key": "value"}
-        item_with_metadata = TraceItem("test item", metadata)
-        assert item_with_metadata.item == "test item"
-        assert item_with_metadata.metadata == metadata
+    def test_indent_multiple_lines(self):
+        """Test indenting a multi-line string."""
+        result = indent("line1\nline2", 1)
+        assert result == "  line1\n  line2"
 
-    def test_repr(self):
-        item = TraceItem("test item")
-        # The actual implementation wraps strings in quotes
-        assert repr(item) == "'test item'"
-
-        # Test with TraceMixin object
-        class MockTraceMixin(TraceMixin):
-            def __repr__(self):
-                return "MockTraceMixin"
-
-        mock_trace = MockTraceMixin()
-        item_with_trace = TraceItem(mock_trace)
-        assert repr(item_with_trace) == "MockTraceMixin"
-
-    def test_str(self):
-        item = TraceItem("test item")
-        assert str(item) == "test item"
-
-        # Test with TraceMixin object
-        class MockTraceMixin(TraceMixin):
-            def __str__(self):
-                return "MockTraceMixin String"
-
-        mock_trace = MockTraceMixin()
-        item_with_trace = TraceItem(mock_trace)
-        assert str(item_with_trace) == "MockTraceMixin String"
+    def test_indent_zero_level(self):
+        """Test indenting with zero level."""
+        result = indent("test", 0)
+        assert result == "test"
 
 
 class TestTraceMixin:
     def test_initialization(self):
-        trace = TraceMixin()
-        assert trace._trace_items == []
-        assert trace._trace_summary == "Empty"
+        """Test TraceMixin initialization."""
+        with patch(
+            "uuid.uuid4", return_value=uuid.UUID("12345678-1234-5678-1234-567812345678")
+        ):
+            trace = TraceMixin()
+            assert trace._trace_id == "12345678-1234-5678-1234-567812345678"
+            assert trace._trace_metadata == {}
+            assert trace._trace_items == []
 
     def test_trace_with_string(self):
+        """Test adding a string to trace."""
         trace = TraceMixin()
-        trace.trace("test trace")
+        trace.trace("test message")
 
         assert len(trace._trace_items) == 1
-        assert trace._trace_items[0].item == "test trace"
-        assert trace._trace_items[0].metadata is None
-
-    def test_trace_with_metadata(self):
-        trace = TraceMixin()
-        metadata = {"key": "value"}
-        trace.trace("test trace", metadata)
-
-        assert len(trace._trace_items) == 1
-        assert trace._trace_items[0].item == "test trace"
-        assert trace._trace_items[0].metadata == metadata
+        assert isinstance(trace._trace_items[0], StringTrace)
+        assert trace._trace_items[0].message == "test message"
+        assert trace._trace_items[0]._trace_metadata["parent_id"] == trace._trace_id
 
     def test_trace_with_trace_mixin(self):
-        parent_trace = TraceMixin()
-        child_trace = TraceMixin()
-
-        parent_trace.trace(child_trace)
-
-        assert len(parent_trace._trace_items) == 1
-        assert parent_trace._trace_items[0].item == child_trace
-
-    def test_refresh_trace_summary(self):
-        trace = TraceMixin()
-        trace.trace("test trace")
-
-        # Mock to_trace method
-        original_to_trace = trace.to_trace
-        trace.to_trace = lambda depth=1: "Mocked trace summary"
-
-        trace.refresh_trace_summary()
-        assert trace._trace_summary == "Mocked trace summary"
-
-        # Restore original method
-        trace.to_trace = original_to_trace
-
-    def test_str(self):
-        trace = TraceMixin()
-        trace._trace_summary = "Test summary"
-        assert str(trace) == "Test summary"
-
-    def test_to_trace_empty(self):
-        trace = TraceMixin()
-        # The actual implementation returns an empty string for empty trace
-        assert trace.to_trace() == ""
-
-    def test_to_trace_with_strings(self):
-        trace = TraceMixin()
-        trace.trace("item 1")
-        trace.trace("item 2")
-
-        expected = "  - item 1\n  - item 2"
-        assert trace.to_trace() == expected
-
-    def test_to_trace_with_nested_trace(self):
+        """Test adding a TraceMixin instance to trace."""
         parent = TraceMixin()
         child = TraceMixin()
-        child.trace("child item")
 
         parent.trace(child)
-        parent.trace("parent item")
 
-        # The exact format depends on the __repr__ implementation
-        result = parent.to_trace()
-        assert "child item" in result
-        assert "parent item" in result
+        assert len(parent._trace_items) == 1
+        assert parent._trace_items[0] == child
+        assert child._trace_metadata["parent_id"] == parent._trace_id
+
+    def test_trace_with_metadata(self):
+        """Test adding trace with metadata."""
+        trace = TraceMixin()
+        child = TraceMixin()
+
+        trace.trace(child, metadata={"key": "value"})
+
+        assert child._trace_metadata["parent_id"] == trace._trace_id
+
+    def test_to_trace(self):
+        """Test converting trace to list representation."""
+        trace = TraceMixin()
+        trace.trace("message1")
+        trace.trace("message2")
+
+        result = trace.to_trace()
+
+        assert isinstance(result, list)
+        assert len(result) == 2
+        assert result[0] == "message1"
+        assert result[1] == "message2"
+
+    def test_yield_trace(self):
+        """Test yielding trace as AgentResponseChunk."""
+        trace = TraceMixin()
+        trace.trace("test message")
+
+        chunks = list(trace.yield_trace())
+
+        assert len(chunks) == 1
+        assert isinstance(chunks[0], AgentResponseChunk)
+        assert chunks[0].trace == ["test message"]
+
+
+class TestStringTrace:
+    def test_initialization(self):
+        """Test StringTrace initialization."""
+        trace = StringTrace("test message")
+
+        assert trace.message == "test message"
+        assert isinstance(trace, TraceMixin)
+
+    def test_to_trace(self):
+        """Test converting StringTrace to string representation."""
+        trace = StringTrace("test message")
+
+        result = trace.to_trace()
+
+        assert result == "test message"
 
 
 class TestTraceWalker:
-    def test_walk_with_trace_mixin(self):
+    def test_walk_with_empty_trace(self):
+        """Test walking an empty trace."""
         trace = TraceMixin()
-        trace.trace("item 1")
-        trace.trace("item 2")
-
-        visited_items = []
-
-        def visitor(item):
-            visited_items.append(item.item)
+        visitor = MagicMock()
 
         TraceWalker.walk(trace, visitor)
 
-        assert visited_items == ["item 1", "item 2"]
+        visitor.assert_not_called()
 
-    def test_walk_with_nested_trace(self):
-        parent = TraceMixin()
-        child = TraceMixin()
-        child.trace("child item 1")
-        child.trace("child item 2")
+    def test_walk_with_nested_traces(self):
+        """Test walking nested traces."""
+        root = TraceMixin()
+        child1 = TraceMixin()
+        child2 = TraceMixin()
+        grandchild = TraceMixin()
 
-        parent.trace(child)
-        parent.trace("parent item")
+        root.trace(child1)
+        root.trace(child2)
+        child1.trace(grandchild)
 
-        visited_items = []
-
-        def visitor(item):
-            visited_items.append(item.item)
-
-        TraceWalker.walk(parent, visitor)
-
-        # Should visit child first, then its items, then parent item
-        assert len(visited_items) == 4
-        assert child in visited_items
-        assert "child item 1" in visited_items
-        assert "child item 2" in visited_items
-        assert "parent item" in visited_items
-
-    def test_walk_with_trace_item(self):
-        trace_item = TraceItem("test item")
-
-        visited_items = []
+        visited = []
 
         def visitor(item):
-            visited_items.append(item.item)
+            visited.append(item)
 
-        TraceWalker.walk(trace_item, visitor)
+        TraceWalker.walk(root, visitor)
 
-        assert visited_items == ["test item"]
+        assert len(visited) == 3
+        assert child1 in visited
+        assert child2 in visited
+        assert grandchild in visited
+
+    def test_walk_with_string_traces(self):
+        """Test walking traces with string items."""
+        root = TraceMixin()
+        root.trace("message1")
+        root.trace("message2")
+
+        visited = []
+
+        def visitor(item):
+            visited.append(item)
+
+        TraceWalker.walk(root, visitor)
+
+        assert len(visited) == 2
+        assert all(isinstance(item, StringTrace) for item in visited)
+        assert visited[0].message == "message1"
+        assert visited[1].message == "message2"
+
+    def test_walk_with_non_trace_item(self):
+        """Test walking with a non-TraceMixin item."""
+        visitor = MagicMock()
+
+        # Should not raise an exception
+        TraceWalker.walk("not a trace", visitor)
+
+        visitor.assert_not_called()

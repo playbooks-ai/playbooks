@@ -307,7 +307,7 @@ class Interpreter(TraceMixin):
             indent=2,
         )
 
-        print(initial_state)
+        # print(initial_state)
 
         prompt = prompt.replace("{{PLAYBOOKS_SIGNATURES}}", playbooks_signatures)
         prompt = prompt.replace(

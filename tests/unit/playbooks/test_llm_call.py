@@ -65,8 +65,8 @@ class TestLLMCall:
 
         # Verify trace was called with correct metadata
         assert len(llm_call._trace_items) == 1
-        assert llm_call._trace_items[0].item == "Success"
-        metadata = llm_call._trace_items[0].metadata
+        assert llm_call._trace_items[0].message == "Success"
+        metadata = llm_call._trace_items[0]._trace_metadata
         assert metadata["llm_config"] == llm_config.to_dict()
         assert metadata["messages"] == messages
         assert metadata["stream"] is True
@@ -123,7 +123,7 @@ class TestLLMCall:
 
         # Verify trace was called with correct metadata
         assert len(llm_call._trace_items) == 1
-        metadata = llm_call._trace_items[0].metadata
+        metadata = llm_call._trace_items[0]._trace_metadata
         assert metadata["time_to_first_token_ms"] is None  # No first token
         assert metadata["response"] == ""
         assert metadata["total_time_ms"] == 1000.0  # (101.0 - 100.0) * 1000

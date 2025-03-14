@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, Generator, List, Tuple
 
 from playbooks.call_stack import CallStackFrame, InstructionPointer
 from playbooks.llm_call import LLMCall
-from playbooks.trace_mixin import TraceMixin
+from playbooks.trace_mixin import StringTrace, TraceMixin
 from playbooks.types import AgentResponseChunk, ToolCall
 from playbooks.utils.llm_helper import get_messages_for_prompt
 
@@ -766,12 +766,15 @@ class InterpreterExecution(TraceMixin):
         # Get list of playbook:line_number pairs from "Start iteration" trace items
         lines = []
         for item in self._trace_items:
-            if item.item == "Start inner loop iteration":
+            if (
+                isinstance(item, StringTrace)
+                and item.message == "Start inner loop iteration"
+            ):
                 # Check if current_playbook.klass is a string to handle MagicMock objects in tests
                 playbook_name = (
                     self.current_playbook.klass
                     if isinstance(self.current_playbook.klass, str)
                     else "TestPlaybook"
                 )
-                lines.append(playbook_name + ":" + item.metadata["line_number"])
+                lines.append(playbook_name + ":" + item._trace_metadata["line_number"])
         return ", ".join(lines)
