@@ -62,9 +62,9 @@ Now, let's look at something more powerful. Here's a web search agent that:
 - Performs deep research to gather information
 - Filters out inappropriate topics
 
-See [Playbooks AI implementation](examples/playbooks/web_search_chat.md) of a Web Search Chat agent — about **50 lines of English instructions**. 
+See [Playbooks AI implementation](src/playbooks/examples/playbooks/web_search_chat.md) of a Web Search Chat agent — about **50 lines of English instructions**. 
 
-Now compare that with an equivalent [LangGraph implementation](examples/langgraph/web_search_chat.py) — about **200 lines of complex code** that's harder to understand and modify.
+Now compare that with an equivalent [LangGraph implementation](src/playbooks/examples/langgraph/web_search_chat.py) — about **200 lines of complex code** that's harder to understand and modify.
 
 🔗 Ready to write your first Natural Language Program? [Get started here](#quick-start).
 
@@ -130,7 +130,7 @@ What will you build with Playbooks AI?
 
 ```bash
 pip install playbooks
-poetry run python src/playbooks/applications/agent_chat.py examples/playbooks/chat.md --stream
+poetry run python src/playbooks/applications/agent_chat.py src/playbooks/examples/playbooks/chat.md --stream
 ```
 
 ## Who Should Use Playbooks?
