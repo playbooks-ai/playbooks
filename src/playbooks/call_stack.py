@@ -1,6 +1,6 @@
-from typing import List
+from typing import List, Union
 
-from playbooks.trace_mixin import TraceItem
+from playbooks.trace_mixin import TraceMixin
 
 
 class InstructionPointer:
@@ -24,8 +24,10 @@ class CallStackFrame:
         self.llm_chat_session_id = llm_chat_session_id
 
 
-class CallStack:
+class CallStack(TraceMixin):
     def __init__(self):
+        super().__init__()
+        self._trace_metadata["frames"] = []
         self.frames: List[CallStackFrame] = []
 
     def is_empty(self) -> bool:
@@ -50,11 +52,6 @@ class CallStack:
     def to_dict(self):
         return [str(frame.instruction_pointer) for frame in self.frames]
 
-    def to_trace_item(self):
-        return TraceItem(
-            item=self.__repr__(),
-            metadata={"call_stack": self.to_dict()},
-        )
-
-    def to_trace(self):
-        return self.__repr__()
+    def to_trace(self) -> Union[str, List]:
+        self._trace_metadata["frames"] = self.to_dict()
+        return "CallStack"

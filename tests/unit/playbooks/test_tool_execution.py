@@ -40,9 +40,10 @@ class TestToolExecutionResult:
         message = "Tool execution result"
         result = ToolExecutionResult(message, tool_call)
 
-        assert result.item == message
+        assert result.message == message
         assert result.tool_call == tool_call
-        assert result.metadata == {"tool_call": tool_call}
+        assert "tool_call" in result._trace_metadata
+        assert result._trace_metadata["tool_call"] == tool_call
 
     def test_repr(self, tool_call):
         """Test that the __repr__ method returns the expected string."""

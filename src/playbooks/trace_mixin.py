@@ -1,71 +1,57 @@
+import uuid
 from typing import List, Union
 
 from .types import AgentResponseChunk
 
 
-class TraceItem:
-    def __init__(self, item: Union["TraceMixin", str], metadata: dict = None):
-        self.item = item
-        self.metadata = metadata
-
-    def __repr__(self):
-        return self.item.__repr__()
-
-    def __str__(self):
-        return self.item.__str__()
+def indent(string: str, level: int) -> str:
+    return "\n".join(f"{'  ' * level}{line}" for line in string.split("\n"))
 
 
 class TraceMixin:
     def __init__(self):
-        self._trace_items: List[TraceItem] = []
-        self._trace_summary: str = "Empty"
+        self._trace_id = str(uuid.uuid4())
+        self._trace_metadata = {}
+        self._trace_items: List[TraceMixin] = []
 
     def trace(self, item: Union["TraceMixin", str], metadata: dict = None):
-        trace_item = TraceItem(item, metadata)
-        self._trace_items.append(trace_item)
-        self.refresh_trace_summary()
+        if isinstance(item, str):
+            item = StringTrace(item)
 
-    def refresh_trace_summary(self):
-        self._trace_summary = self.to_trace()
+        item._trace_metadata["parent_id"] = self._trace_id
 
-    def __str__(self):
-        return self._trace_summary
+        # Add any additional metadata
+        if metadata:
+            item._trace_metadata.update(metadata)
 
-    def to_trace(self, depth: int = 1) -> str:
-        if depth <= 0:
-            return self._trace_summary
+        self._trace_items.append(item)
 
-        trace = []
-        for item in self._trace_items:
-            if isinstance(item.item, TraceMixin):
-                lines = item.item.__repr__().split("\n")
-                trace.append(f"{depth * '  '}- {lines[0]}")
-                if len(lines) > 1:
-                    for line in lines[1:]:
-                        trace.append(f"{depth * '  '}  {line}")
-                trace.append(item.item.to_trace(depth + 1))
-            else:
-                if item.item:
-                    trace.append(f"{depth * '  '}- {item.item}")
-        return "\n".join(trace)
+    def to_trace(self) -> Union[str, List]:
+        return [item.to_trace() for item in self._trace_items]
 
     def yield_trace(self):
         yield AgentResponseChunk(trace=self.to_trace())
 
 
+class StringTrace(TraceMixin):
+    def __init__(self, message: str):
+        super().__init__()
+        self.message = message
+
+    def to_trace(self) -> Union[str, List]:
+        return self.message
+
+
 class TraceWalker:
     @staticmethod
-    def walk(trace_item: Union[TraceMixin, TraceItem], visitor_fn):
+    def walk(trace_item: TraceMixin, visitor_fn):
         """Performs a depth-first walk of trace items and calls the visitor function on each item.
 
         Args:
             trace_item: The trace item or TraceMixin instance to walk
-            visitor_fn: Lambda function to call on each item. Should accept a TraceItem as argument.
+            visitor_fn: Lambda function to call on each item. Should accept a TraceMixin as argument.
         """
         if isinstance(trace_item, TraceMixin):
             for item in trace_item._trace_items:
+                visitor_fn(item)
                 TraceWalker.walk(item, visitor_fn)
-        elif isinstance(trace_item, TraceItem):
-            visitor_fn(trace_item)
-            if isinstance(trace_item.item, TraceMixin):
-                TraceWalker.walk(trace_item.item, visitor_fn)
