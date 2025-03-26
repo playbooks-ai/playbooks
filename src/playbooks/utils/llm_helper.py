@@ -3,18 +3,24 @@ import os
 import tempfile
 import time
 from functools import wraps
-from typing import Any, Callable, Iterator, List, TypeVar, Union
+from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 
 import litellm
 from litellm import BadRequestError, completion, get_supported_openai_params
 
 from playbooks.config import LLMConfig
 from playbooks.constants import SYSTEM_PROMPT_DELIMITER
+from playbooks.utils.langfuse_helper import LangfuseHelper
 
+# Configure litellm based on environment variable
+litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
+
+# Initialize cache if enabled
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
+cache = None
+
 if llm_cache_enabled:
     llm_cache_type = os.getenv("LLM_CACHE_TYPE", "disk").lower()
-    # print(f"Using LLM cache type: {llm_cache_type}")
 
     if llm_cache_type == "disk":
         from diskcache import Cache
@@ -24,7 +30,6 @@ if llm_cache_enabled:
             or tempfile.TemporaryDirectory(prefix="llm_cache_").name
         )
         cache = Cache(directory=cache_dir)
-        # print(f"Using LLM cache directory: {cache_dir}")
 
     elif llm_cache_type == "redis":
         from redis import Redis
@@ -37,27 +42,22 @@ if llm_cache_enabled:
         raise ValueError(f"Invalid LLM cache type: {llm_cache_type}")
 
 
-def custom_get_cache_key(*args, **kwargs):
-    # Create a string combining all relevant parameters
+def custom_get_cache_key(**kwargs) -> str:
+    """Generate a deterministic cache key based on request parameters.
+
+    Args:
+        **kwargs: The completion request parameters
+
+    Returns:
+        A unique hash string to use as cache key
+    """
     key_str = (
         kwargs.get("model", "")
         + str(kwargs.get("messages", ""))
         + str(kwargs.get("temperature", ""))
         + str(kwargs.get("logit_bias", ""))
     )
-    # print("Custom cache key:", key_str)
-
-    # Create SHA-256 hash and return first 32 characters (128 bits) of the hex digest
-    key_hash = hashlib.sha256(key_str.encode()).hexdigest()[:32]
-    # print("Custom cache key hash:", key_hash)
-    return key_hash
-
-
-def configure_litellm():
-    litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
-
-
-configure_litellm()
+    return hashlib.sha256(key_str.encode()).hexdigest()[:32]
 
 
 T = TypeVar("T")
@@ -71,6 +71,9 @@ def retry_on_overload(
     Args:
         max_retries: Maximum number of retry attempts
         base_delay: Initial delay between retries in seconds
+
+    Returns:
+        A decorator function that adds retry logic
     """
 
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
@@ -93,34 +96,34 @@ def retry_on_overload(
 
 
 @retry_on_overload()
-def _make_completion_request(completion_kwargs: dict) -> Union[str, Iterator[str]]:
+def _make_completion_request(completion_kwargs: dict) -> str:
     """Make a non-streaming completion request to the LLM with automatic retries on overload.
 
     Args:
         completion_kwargs: Arguments to pass to the completion function
 
     Returns:
-        Either the complete response or an iterator of response chunks
+        The completion text response
     """
     response = completion(**completion_kwargs)
     return response["choices"][0]["message"]["content"]
 
 
 @retry_on_overload()
-def _make_completion_request_stream(
-    completion_kwargs: dict,
-) -> Union[str, Iterator[str]]:
+def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
     """Make a streaming completion request to the LLM with automatic retries on overload.
 
     Args:
         completion_kwargs: Arguments to pass to the completion function
 
     Returns:
-        Either the complete response or an iterator of response chunks
+        An iterator of response chunks
     """
     response = completion(**completion_kwargs)
     for chunk in response:
-        yield chunk.choices[0].delta.content
+        content = chunk.choices[0].delta.content
+        if content is not None:
+            yield content
 
 
 def get_completion(
@@ -129,6 +132,8 @@ def get_completion(
     stream: bool = False,
     use_cache: bool = True,
     json_mode: bool = False,
+    session_id: Optional[str] = None,
+    langfuse_span: Optional[Any] = None,
     **kwargs,
 ) -> Iterator[str]:
     """Get completion from LLM with optional streaming and caching support.
@@ -139,11 +144,12 @@ def get_completion(
         stream: If True, returns an iterator of response chunks
         use_cache: If True and caching is enabled, will try to use cached responses
         json_mode: If True, instructs the model to return a JSON response
+        session_id: Optional session ID to associate with the generation
+        langfuse_span: Optional parent span for Langfuse tracing
         **kwargs: Additional arguments passed to litellm.completion
 
     Returns:
-        If stream=True, returns an iterator of response chunks
-        If stream=False, returns the complete response
+        An iterator of response text (single item for non-streaming)
     """
     completion_kwargs = {
         "model": llm_config.model,
@@ -151,61 +157,97 @@ def get_completion(
         "messages": messages.copy(),
         "max_completion_tokens": 7500,
         "stream": stream,
-        "temperature": 0.0,
+        "temperature": 0.01,
         **kwargs,
     }
 
     # Add response_format for JSON mode if supported by the model
     if json_mode:
         params = get_supported_openai_params(model=llm_config.model)
-
         if "response_format" in params:
             completion_kwargs["response_format"] = {"type": "json_object"}
 
-    # print()
-    # print("=" * 20 + f" LLM CALL: {llm_config.model} " + "=" * 20)
-    # # print(messages[0]["content"])
-    # print(messages[1]["content"] if len(messages) > 1 else "")
-    # print("=" * 40)
-    # print()
+    # Initialize Langfuse tracing if available
+    langfuse_span_obj = None
+    if langfuse_span is None:
+        langfuse_helper = LangfuseHelper.instance()
+        if langfuse_helper is not None:
+            langfuse_span_obj = langfuse_helper.trace(
+                name="llm_call",
+                metadata={"model": llm_config.model, "session_id": session_id},
+            )
+    else:
+        langfuse_span_obj = langfuse_span
 
-    if llm_cache_enabled and use_cache:
+    langfuse_generation = None
+    if langfuse_span_obj is not None:
+        langfuse_generation = langfuse_span_obj.generation(
+            model=llm_config.model,
+            model_parameters={
+                "maxTokens": completion_kwargs["max_completion_tokens"],
+                "temperature": completion_kwargs["temperature"],
+            },
+            input=messages,
+            session_id=session_id,
+            metadata={"stream": stream},
+        )
+
+    # Try to get response from cache if enabled
+    if llm_cache_enabled and use_cache and cache:
         cache_key = custom_get_cache_key(**completion_kwargs)
         cache_value = cache.get(cache_key)
-        # print("Looking for cache key:", cache_key)
+
         if cache_value is not None:
-            # print("Cache hit:", cache_value)
+            if langfuse_generation:
+                langfuse_generation.update(metadata={"cache_hit": True})
+                langfuse_generation.end(output=str(cache_value))
+                langfuse_generation.update(cost_details={"input": 0, "output": 0})
+                LangfuseHelper.flush()
+
             if stream:
                 for chunk in cache_value:
                     yield chunk
             else:
                 yield cache_value
 
-            # cache.close()
             return
 
-    # print("Cache miss for key:", cache_key)
-    # print("     Existing keys:", list(cache.iterkeys()))
     # Get response from LLM
-    full_response = []
+    full_response: Union[str, List[str]] = [] if stream else ""
     try:
+        if langfuse_generation:
+            langfuse_generation.update(metadata={"cache_hit": False})
+
         if stream:
             for chunk in _make_completion_request_stream(completion_kwargs):
-                if chunk is not None:
-                    full_response.append(chunk)
-                    yield chunk
-            full_response = "".join(full_response)
+                full_response.append(chunk)  # type: ignore
+                yield chunk
+            full_response = "".join(full_response)  # type: ignore
         else:
             full_response = _make_completion_request(completion_kwargs)
             yield full_response
     finally:
-        if llm_cache_enabled and use_cache:
+        # Update cache and Langfuse
+        if llm_cache_enabled and use_cache and cache:
             cache.set(cache_key, full_response)
-            # cache.close()
+
+        if langfuse_generation:
+            langfuse_generation.end(output=str(full_response))
+            LangfuseHelper.flush()
 
 
 def get_messages_for_prompt(prompt: str) -> List[dict]:
-    """Get messages for a prompt"""
+    """Convert a raw prompt into a properly formatted message list.
+
+    If the prompt contains a system prompt delimiter, it will be split into
+    separate system and user messages. Otherwise, treated as a system message.
+
+    Args:
+        prompt: The raw prompt text, potentially containing a system/user split
+
+    Returns:
+        A list of message dictionaries formatted for LLM API calls
+    """
     if SYSTEM_PROMPT_DELIMITER in prompt:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
         return [

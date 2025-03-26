@@ -17,7 +17,7 @@ def CheckOrderStatus(orderId):
 
 ```
 ## Begin
-d
+
 ### Trigger
 - When the agent starts running
 
@@ -95,18 +95,25 @@ d
 - When no suitable playbook is found to help user
 
 ### Steps
-- Apologize for any inconvience and ask user if they want to be connected with a human, unless they already said asked for it explicitly.
-- If they want to be connected with a human
+- Apologize for any inconvience
+- If use has not explicitly asked to be connected with a human
+  - Ask if they want to be connected with a human or how you can help
+- If user wants to be connected with a human
   - Handoff()
-- else
+  - End conversation
+- If user wants help about something else
+  - Check if any other playbook can help
+- Else
   - Apologize that you were not able to help them and the support team will be happy to help if needed.
-- End conversation
+  - Ask if you can help with anything else
 
 ====
 
 ## Validate pin
+Check if the pin is valid.
+
 ### Trigger
-- When the user provides a pin
+- As soon as user provides a pin
 
 ### Steps
 - $pin is valid if the digits add up to 10

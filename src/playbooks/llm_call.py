@@ -1,74 +1,82 @@
-import time
-from typing import List
+from typing import Dict, Generator, List, Optional
 
-from litellm import token_counter
-
-from .config import LLMConfig
-from .trace_mixin import TraceMixin
-from .utils.llm_helper import get_completion
+from playbooks.interpreter.output_item import OutputItem
+from playbooks.trace_mixin import TraceMixin
+from playbooks.types import AgentResponseChunk
+from playbooks.utils.llm_helper import get_completion
 
 
 class LLMCall(TraceMixin):
+    """Represents a call to an LLM.
+
+    This class encapsulates a call to an LLM, including the configuration,
+    messages, and execution parameters. It provides methods for executing
+    the call and tracing the results.
+    """
+
     def __init__(
         self,
-        llm_config: LLMConfig,
-        messages: List[dict],
-        stream: bool,
+        llm_config,
+        messages: List[Dict[str, str]],
+        stream: bool = False,
         json_mode: bool = False,
+        session_id: Optional[str] = None,
     ):
+        """Initialize an LLM call.
+
+        Args:
+            llm_config: The LLM configuration.
+            messages: The messages to send to the LLM.
+            stream: Whether to stream the response.
+            json_mode: Whether to use JSON mode.
+        """
         super().__init__()
-        self.llm_config: LLMConfig = llm_config
-        self.messages: List[dict] = messages
-        self.stream: bool = stream
-        self.json_mode: bool = json_mode
+        self.llm_config = llm_config
+        self.messages = messages
+        self.stream = stream
+        self.json_mode = json_mode
+        self._trace_items: List[OutputItem] = []
+        self.session_id = session_id
+        self.response = None
 
-    def __repr__(self):
-        return f"LLMCall({self.llm_config.model})"
+    def get_trace_items(self) -> List[OutputItem]:
+        return {}
 
-    def execute(self):
-        response = []
-        start_time = time.time()
-        first_token_time = None
-        token_usage = 0
+    def execute(self) -> Generator[AgentResponseChunk, None, None]:
+        """Execute the LLM call.
+
+        Returns:
+            A generator of agent response chunks.
+        """
+        # Execute the LLM call
+        response_chunks = []
 
         for chunk in get_completion(
-            llm_config=self.llm_config,
-            messages=self.messages,
+            self.llm_config,
+            self.messages,
             stream=self.stream,
             json_mode=self.json_mode,
+            session_id=self.session_id,
+            langfuse_span=self.langfuse_span,
         ):
-            if chunk is not None:
-                if first_token_time is None:
-                    first_token_time = time.time()
-                response.append(chunk)
-                token_usage += len(chunk.split())
-                yield chunk
+            response_chunks.append(chunk)
+            yield AgentResponseChunk(raw=chunk)
 
-        end_time = time.time()
-        time_to_first_token = (
-            first_token_time - start_time if first_token_time else None
-        )
-        total_time = end_time - start_time
-        response_str = "".join(response)
+        # Move token counting outside the loop
+        self.response = "".join(response_chunks)
 
-        self.trace(
-            "Success",
-            metadata={
-                "llm_config": self.llm_config.to_dict(),
-                "messages": self.messages,
-                "stream": self.stream,
-                "time_to_first_token_ms": (
-                    time_to_first_token * 1000 if time_to_first_token else None
-                ),
-                "response": response_str,
-                "total_time_ms": total_time * 1000,
-                "input_tokens": token_counter(
-                    model=self.llm_config.model, messages=self.messages
-                ),
-                "output_tokens": token_counter(
-                    model=self.llm_config.model,
-                    messages=[{"content": response_str}],
-                ),
-            },
-        )
-        return response
+    def to_session_context(self) -> str:
+        """Return a session context representation of the LLM call.
+
+        Returns:
+            A session context representation of the LLM call.
+        """
+        return self.response
+
+    def __repr__(self) -> str:
+        """Return a string representation of the LLM call.
+
+        Returns:
+            A string representation of the LLM call.
+        """
+        return f"LLMCall({self.llm_config.model})"

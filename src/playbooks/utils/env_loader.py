@@ -8,23 +8,25 @@ def load_environment(env_name: str = None) -> None:
     """
     Load environment variables from .env files with proper precedence.
 
+    First loads the base .env file (if it exists), then overrides with
+    environment-specific variables from .env.[environment] file.
+
     Args:
-        env_name: Optional environment name ('development', 'test', 'production')
-                 If None, will try to use ENV or ENVIRONMENT environment variable,
-                 falling back to 'development'
+        env_name: Environment name ('development', 'test', 'production').
+                 If None, uses ENV or ENVIRONMENT variable, defaulting to 'development'
     """
-    base_path = Path(__file__).parent.parent.parent.parent
+    # Find root project directory (4 levels up from this file)
+    root_dir = Path(__file__).parents[3]
 
-    # First load the base .env file if it exists
-    base_env = base_path / ".env"
-    if base_env.exists():
-        load_dotenv(base_env)
+    # Load base .env file if it exists
+    base_env_path = root_dir / ".env"
+    if base_env_path.exists():
+        load_dotenv(base_env_path)
 
-    # Determine environment
-    if not env_name:
-        env_name = os.getenv("ENV") or os.getenv("ENVIRONMENT") or "development"
+    # Determine environment name
+    env_name = env_name or os.getenv("ENV") or os.getenv("ENVIRONMENT") or "development"
 
-    # Load environment-specific file if it exists
-    env_file = base_path / f".env.{env_name}"
-    if env_file.exists():
-        load_dotenv(env_file, override=True)  # Override any existing variables
+    # Load environment-specific file with higher precedence
+    env_specific_path = root_dir / f".env.{env_name}"
+    if env_specific_path.exists():
+        load_dotenv(env_specific_path, override=True)
