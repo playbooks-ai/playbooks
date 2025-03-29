@@ -26,6 +26,10 @@ class Variables:
     def __init__(self):
         self.variables: Dict[str, Variable] = {}
 
+    def update(self, vars: Dict[str, any]):
+        for name, value in vars.items():
+            self[name] = value
+
     def __getitem__(self, name: str) -> Variable:
         return self.variables.get(name, None)
 
@@ -47,3 +51,6 @@ class Variables:
 
     def to_dict(self):
         return {name: variable.value for name, variable in self.variables.items()}
+
+    def __repr__(self) -> str:
+        return f"Variables({self.to_dict()})"

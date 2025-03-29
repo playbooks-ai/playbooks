@@ -1,214 +1,177 @@
 """Playbook execution module for the interpreter."""
 
-import contextlib
-import time
-from typing import TYPE_CHECKING, Dict, Generator
+# Type hints for external imports
+from typing import TYPE_CHECKING, Any, Dict, Generator, Optional
 
+from playbooks.config import LLMConfig
+from playbooks.interpreter.execution_state import ExecutionState
+from playbooks.interpreter.exit_conditions import (
+    EmptyCallStackExitCondition,
+    MaxExecutionTimeExitCondition,
+    MaxIterationsExitCondition,
+    NoProgressExitCondition,
+    PlaybookSwitchExitCondition,
+    WaitForExternalEventExitCondition,
+)
 from playbooks.trace_mixin import TraceMixin
 from playbooks.types import AgentResponseChunk
 
 if TYPE_CHECKING:
     from playbooks.playbook import Playbook
 
-    from .interpreter import Interpreter
+
+class PlaybookExitConditions(TraceMixin):
+    """Manages exit conditions for playbook execution loops."""
+
+    def __init__(self, state: ExecutionState, current_playbook_klass: Optional[str]):
+        """Initialize playbook exit conditions.
+
+        Args:
+            state: The current execution state
+            current_playbook_klass: The current playbook class name
+        """
+        super().__init__()
+        self.state = state
+        self.current_playbook_klass = current_playbook_klass
+        self.exit_condition_reason = None
+        self.iteration_count = 0
+
+        # Initialize exit conditions
+        self.wait_for_external_event_condition = WaitForExternalEventExitCondition()
+        self.playbook_switch_condition = PlaybookSwitchExitCondition()
+        self.max_iterations_condition = MaxIterationsExitCondition(
+            self.state.max_iterations
+        )
+        self.max_execution_time_condition = MaxExecutionTimeExitCondition(
+            self.state.max_execution_time
+        )
+        self.no_progress_condition = NoProgressExitCondition(state=self.state)
+        self.empty_call_stack_condition = EmptyCallStackExitCondition()
+
+    def should_continue(self) -> bool:
+        """Check if the playbook execution should continue.
+
+        Returns:
+            bool: True if execution should continue, False otherwise
+        """
+        # Increment iteration count
+        self.iteration_count += 1
+
+        # List of conditions to check with their required arguments
+        conditions = [
+            (self.wait_for_external_event_condition, [self.state]),
+            (self.playbook_switch_condition, [self.state, self.current_playbook_klass]),
+            (self.max_iterations_condition, [self.iteration_count]),
+            (self.max_execution_time_condition, []),
+            (self.empty_call_stack_condition, [self.state.call_stack]),
+            (self.no_progress_condition, [self.state]),
+        ]
+
+        # Check each condition
+        for condition, args in conditions:
+            if condition.check(*args):
+                self.trace(f"{condition.reason}, exiting playbook loop")
+                self.exit_condition_reason = condition.reason
+                return False
+
+        self.trace("No exit conditions met, continuing playbook loop")
+        return True
 
 
 class PlaybookExecution(TraceMixin):
-    """Represents the execution of a playbook."""
+    """Manages the execution of a playbook.
+
+    This class executes a playbook by repeatedly running the interpreter
+    until an exit condition is met.
+
+    Attributes:
+        state: The execution state
+        current_playbook: The playbook being executed
+        playbook_klass: The class name of the playbook
+        playbook_content: The markdown content of the playbook
+    """
 
     def __init__(
         self,
-        interpreter: "Interpreter",
-        playbooks: Dict[str, "Playbook"],
-        current_playbook: "Playbook",
-        instruction: str,
-        llm_config=None,
-        stream=False,
+        state: ExecutionState,
+        current_playbook: Optional["Playbook"] = None,
     ):
-        """Initialize a playbook execution.
+        """Initialize playbook execution.
 
         Args:
-            interpreter: The interpreter executing the playbook.
-            playbooks: The available playbooks.
-            current_playbook: The current playbook being executed.
-            instruction: The instruction to execute.
-            llm_config: The LLM configuration.
-            stream: Whether to stream the response.
+            state: The execution state
+            current_playbook: The current playbook being executed
         """
         super().__init__()
-        self.interpreter: "Interpreter" = interpreter
-        self.playbooks = playbooks
+        self.state = state
         self.current_playbook = current_playbook
-        self.instruction = instruction
-        self.llm_config = llm_config
-        self.stream = stream
 
-        # Execution state
-        self.should_exit = False
-        self.exit_reason = None
-        self.wait_for_external_event = False
+        # Set playbook-specific attributes
+        if current_playbook:
+            self.playbook_klass = current_playbook.klass
+            self.playbook_content = current_playbook.markdown
+        else:
+            self.playbook_klass = None
+            self.playbook_content = None
 
-        # Configuration
-        self.max_iterations = 100
-        self.max_execution_time = 60  # seconds
+    def execute(
+        self,
+        playbooks: Dict[str, "Playbook"],
+        instruction: str,
+        llm_config: LLMConfig,
+        stream: bool,
+    ) -> Generator[AgentResponseChunk, None, None]:
+        """Execute the playbook until an exit condition is met.
 
-    def _compute_state_hash(self) -> int:
-        """Compute a hash of the current execution state to detect lack of progress."""
-        state = {
-            "call_stack": str(self.interpreter.call_stack.to_dict()),
-            "variables": str(self.interpreter.local_variables.to_dict()),
-            "current_playbook": self.current_playbook.klass,
-            "line_number": self.interpreter.get_current_line_number(),
-        }
-        return hash(str(state))
+        Args:
+            playbooks: Dictionary of available playbooks
+            instruction: Initial instruction or user query
+            llm_config: LLM configuration
+            stream: Whether to stream the response
 
-    @contextlib.contextmanager
-    def execution_loop(self):
-        """Context manager for execution loops with safety limits and exit condition checks."""
-        iteration_count = 0
-        start_time = time.time()
-        last_state_hash = None
-        consecutive_no_progress = 0
+        Yields:
+            AgentResponseChunk: Response chunks from the execution
+        """
+        from .interpreter_execution import InterpreterExecution
 
-        # Reset state at the beginning of the loop
-        self.should_exit = False
-        self.exit_reason = None
-        self.wait_for_external_event = False
+        done = False
 
-        def should_continue():
-            nonlocal iteration_count, last_state_hash, consecutive_no_progress
+        while not done:
+            # Create and execute the interpreter
+            interpreter_execution = InterpreterExecution(
+                state=self.state,
+                current_playbook=self.current_playbook,
+            )
+            self.trace(interpreter_execution)
 
-            # Increment iteration count
-            iteration_count += 1
-
-            # Check if an exit condition was triggered
-            if self.should_exit:
-                return False
-
-            # Check iteration limits
-            if iteration_count >= self.max_iterations:
-                self.should_exit = True
-                self.exit_reason = f"Maximum iterations ({self.max_iterations}) reached"
-                return False
-
-            # Check time limits
-            if (time.time() - start_time) >= self.max_execution_time:
-                self.should_exit = True
-                self.exit_reason = (
-                    f"Maximum execution time ({self.max_execution_time}s) reached"
-                )
-                return False
-
-            # Check for lack of progress
-            current_state_hash = self._compute_state_hash()
-            if current_state_hash == last_state_hash:
-                consecutive_no_progress += 1
-                if consecutive_no_progress >= 3:
-                    self.should_exit = True
-                    self.exit_reason = "No progress detected after multiple iterations"
-                    self.wait_for_external_event = True  # Force waiting for user input
-                    return False
-            else:
-                consecutive_no_progress = 0
-                last_state_hash = current_state_hash
-
-            return True
-
-        try:
-            # This is what's returned by the with statement
-            yield should_continue
-
-        finally:
-            # Cleanup code - runs when exiting the with block
-            execution_time = time.time() - start_time
-            self.trace(
-                f"Loop completed after {iteration_count-1} iterations in {execution_time:.2f}s",
-                metadata={
-                    "exit_reason": self.exit_reason,
-                    "wait_for_external_event": self.wait_for_external_event,
-                },
+            # Execute the interpreter and yield response chunks
+            yield from interpreter_execution.execute(
+                playbooks=playbooks,
+                instruction=instruction,
+                llm_config=llm_config,
+                stream=stream,
             )
 
-    def execute(self) -> Generator[AgentResponseChunk, None, None]:
-        """Execute the playbook.
+            # Clear instruction after first iteration
+            instruction = ""
 
-        Returns:
-            A generator of agent response chunks.
-        """
+            # Check exit conditions
+            exit_conditions = PlaybookExitConditions(
+                state=self.state,
+                current_playbook_klass=(
+                    self.current_playbook.klass if self.current_playbook else None
+                ),
+            )
+            self.trace(exit_conditions)
+            done = not exit_conditions.should_continue()
 
-        with self.execution_loop() as should_continue:
-            while should_continue():
-                # Check if call stack is empty
-                should_exit, exit_reason = self.interpreter.handle_empty_call_stack(
-                    {"playbook": self.current_playbook.klass}
-                )
-                if should_exit:
-                    self.should_exit = should_exit
-                    self.exit_reason = exit_reason
-                    break
-
-                # Get the current frame (we know it exists because handle_empty_call_stack didn't exit)
-                current_frame = self.interpreter.call_stack.peek()
-
-                self.trace(
-                    "Start playbook session iteration",
-                    metadata={
-                        "playbook": self.current_playbook.klass,
-                        "line_number": current_frame.instruction_pointer.line_number,
-                        "instruction": self.instruction,
-                    },
-                )
-                # Import here to avoid circular imports
-                from .interpreter_execution import InterpreterExecution
-
-                interpreter_execution = InterpreterExecution(
-                    interpreter=self.interpreter,
-                    playbooks=self.playbooks,
-                    current_playbook=self.current_playbook,
-                    instruction=self.instruction,
-                    llm_config=self.llm_config,
-                    stream=self.stream,
-                )
-                self.trace(interpreter_execution)
-                yield from interpreter_execution.execute()
-
-                # Check if interpreter execution is waiting for external event
-                if interpreter_execution.wait_for_external_event:
-                    self.wait_for_external_event = True
-                    self.should_exit = True
-                    self.exit_reason = "Waiting for external event"
-                    self.trace("Waiting for external event, exiting loop")
-
-                # Check if call stack is empty after interpreter execution
-                should_exit, exit_reason = self.interpreter.handle_empty_call_stack(
-                    {"playbook": self.current_playbook.klass}
-                )
-                if should_exit:
-                    self.should_exit = should_exit
-                    self.exit_reason = exit_reason
-                    break
-
-                # Get the current frame (we know it exists because handle_empty_call_stack didn't exit)
-                current_frame = self.interpreter.call_stack.peek()
-
-                # Check if we need to switch to a new playbook
-                current_playbook_in_stack = self.interpreter.get_current_playbook_name()
-                if current_playbook_in_stack != self.current_playbook.klass:
-                    self.should_exit = True
-                    self.exit_reason = (
-                        f"Switching to new playbook {current_playbook_in_stack}"
-                    )
-                    self.trace(
-                        f"Switching to new playbook {current_playbook_in_stack}, exiting loop"
-                    )
-                    # Make sure we don't lose the current frame when switching playbooks
-                    if current_playbook_in_stack is not None:
-                        self.trace(
-                            f"Ensuring call stack contains {current_playbook_in_stack}"
-                        )
-                        # The call stack should already contain the frame for the playbook we're switching to
-                        # This is just a safety check to make sure we don't lose it
-
-    def __repr__(self):
+    def __repr__(self) -> str:
         """Return a string representation of the playbook execution."""
-        return f"{self.current_playbook.klass}()"
+        return f"PlaybookExecution({self.playbook_klass})"
+
+    def get_trace_metadata(self) -> Dict[str, Any]:
+        """Return metadata for tracing."""
+        return {
+            "id": self._trace_id,
+            "playbook_klass": self.playbook_klass,
+        }

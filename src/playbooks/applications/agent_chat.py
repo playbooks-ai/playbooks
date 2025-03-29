@@ -118,13 +118,13 @@ def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
         tool_responses = []
         for chunk in response_generator:
             if chunk:
-                if chunk.raw:
+                if hasattr(chunk, "raw") and chunk.raw:
                     console.print("[green]" + chunk.raw + "[/green]", end="")
-                if chunk.trace:
+                if hasattr(chunk, "trace") and chunk.trace:
                     console.print("[yellow]" + chunk.trace + "[/yellow]")
-                if chunk.agent_response:
+                if hasattr(chunk, "agent_response") and chunk.agent_response:
                     agent_responses.append(chunk.agent_response)
-                if chunk.tool_response:
+                if hasattr(chunk, "tool_response") and chunk.tool_response:
                     tool_responses.append(chunk.tool_response)
 
         # if tool_responses:
@@ -140,8 +140,12 @@ def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
                 console.print("[blue]Agent: " + agent_response + "[/blue]")
     else:
         chunks = list(response_generator)
-        console.print("".join(chunk.raw for chunk in chunks if chunk.raw))
-        console.print()
+        # Collect all raw content from chunks that have raw attribute
+        raw_content = "".join(chunk.raw for chunk in chunks if chunk.raw)
+        if raw_content:
+            console.print(raw_content)
+            console.print()
+
         agent_responses = []
         tool_responses = []
         for chunk in chunks:
@@ -149,6 +153,7 @@ def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
                 agent_responses.append(chunk.agent_response)
             if chunk.tool_response:
                 tool_responses.append(chunk.tool_response)
+
         for tool_response in tool_responses:
             print(
                 "Tool: " + tool_response.code + " returned " + str(tool_response.output)

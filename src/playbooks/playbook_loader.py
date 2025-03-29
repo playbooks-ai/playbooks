@@ -14,7 +14,7 @@ class PlaybookLoader:
     @staticmethod
     def load(playbooks_content: str, llm_config: LLMConfig) -> dict:
         """
-        Load playbooks from content and parse them into AST.
+        Load playbooks from content string and parse into AST.
 
         Args:
             playbooks_content: Content of the playbook files
@@ -24,22 +24,23 @@ class PlaybookLoader:
             dict: Parsed AST representation of the playbooks
 
         Raises:
-            PlaybookError: If there are issues reading or parsing the playbooks
+            PlaybookError: If there are issues parsing the playbooks
         """
         # Transpile playbooks
         transpiler = Transpiler(llm_config=llm_config)
         transpiled_content = transpiler.process(playbooks_content)
 
         # Parse transpiled content
-        return PlaybookLoader.parse_intermediate_format(transpiled_content, llm_config)
+        return markdown_to_ast(transpiled_content)
 
     @staticmethod
     def load_from_files(playbooks_paths: List[str], llm_config: LLMConfig) -> dict:
         """
-        Load playbooks from files and parse them into AST.
+        Load playbooks from files and parse into AST.
 
         Args:
             playbooks_paths: List of file paths or glob patterns
+            llm_config: LLM configuration for transpilation
 
         Returns:
             dict: Parsed AST representation of the playbooks
@@ -54,23 +55,13 @@ class PlaybookLoader:
         except (OSError, IOError) as e:
             raise PlaybookError(f"Error reading playbook: {str(e)}") from e
 
-        # Transpile playbooks
-        transpiler = Transpiler(llm_config=llm_config)
-        transpiled_content = transpiler.process(playbooks_content)
-
-        # Parse transpiled content
-        return PlaybookLoader.parse_intermediate_format(transpiled_content, llm_config)
-
-    @staticmethod
-    def parse_intermediate_format(
-        transpiled_content: str, llm_config: LLMConfig
-    ) -> dict:
-        return markdown_to_ast(transpiled_content)
+        # Use the load method to avoid code duplication
+        return PlaybookLoader.load(playbooks_content, llm_config)
 
     @staticmethod
     def gather_playbooks(paths: List[str]) -> str:
         """
-        Load playbook(s) from file paths. Supports both single files and glob patterns.
+        Load playbook content from file paths. Supports both single files and glob patterns.
 
         Args:
             paths: List of file paths or glob patterns (e.g., 'my_playbooks/**/*.md')
@@ -84,7 +75,8 @@ class PlaybookLoader:
         all_files = []
 
         for path in paths:
-            if any(char in str(path) for char in ["*", "?", "["]):
+            # Simplified glob pattern check
+            if "*" in str(path) or "?" in str(path) or "[" in str(path):
                 # Handle glob pattern
                 all_files.extend(glob.glob(path, recursive=True))
             else:
@@ -94,6 +86,7 @@ class PlaybookLoader:
         if not all_files:
             raise FileNotFoundError("No files found")
 
+        # Deduplicate files and read content
         contents = []
         for file in set(all_files):
             file_path = Path(file)
@@ -103,6 +96,6 @@ class PlaybookLoader:
         combined_contents = "\n\n".join(contents)
 
         if not combined_contents:
-            raise FileNotFoundError("No files found")
+            raise FileNotFoundError("Files found but content is empty")
 
         return combined_contents

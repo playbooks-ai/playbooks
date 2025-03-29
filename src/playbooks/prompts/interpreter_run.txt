@@ -1,187 +1,126 @@
-Playbooks format -
-- H2 is the playbook name
-- playbook steps are in the "Steps" H3
+Natural language program format -
+- H1 is the program name
+- H2 is the playbook, i.e. function, name
+- playbook steps, i.e. instructions, are in the "Steps" H3
   - 3-Letter Steps Command Codes
-    - `EXE`: You will execute this step (e.g., `$x = Reverse($y)`)
-    - `QUE`: Queue a function call
+    - `EXE`: Execute this step (e.g., `$planets =  planets in the solar system`)
+    - `QUE`: Enqueue a function call
     - `LOP`: Loop (e.g., `LOP For each $item in $list`)
     - `CND`: Conditional or if or an else statement (e.g., `CND If user is unhappy`)
     - `CHK`: Check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`)
-    - `RET`: Return from current playbook, optionally returning a value
-    - `YLD`: Yield control back to the system. Stop processing.
+    - `RET`: Return from current playbook, optionally returning a value, and stop processing
+    - `YLD`: Yield control back to the system to execute enqueued functions or for user/external input. Stop processing.
 - Special cases, validations, etc are in "Notes" H3
 - Variables
   - Allowed types are boolean, strings, numbers and null
-- Output
-  - Parsable, valid json in triple backticks and nothing else
 - Say()
   - Whatever you Say() will be shown to the user
   - When queuing multiple Say() calls, make sure they all connect conversationally
 
 ====
-** Input **
-
-```playbook.md
-## HelloExample() -> None
-Example playbook
-### Stepst 
-01:QUE Say(Greet the user)
-02:LOP for each $country in 2 countries near USA
-  02.01:QUE SearchWeb(2030 population projection for $country)
-03:YLD ForCallComplete("Waiting for search results")
-04:QUE Say(Write a table with 2 columns - Country and Population projection)
-```
-
-** Output **
+Example input -
 ```json
-{
-  "trace": [
-    {
-      "prologue": "User hasn't interacted yet and session log is empty, so no context to consider.\nStarting HelloExample playbook from line 01.\nI will greet the user and provide population information about two countries near USA.\n"
-    }, 
-    {
-      "HelloWorld:01:QUE": [
-        {
-          "call": {
-            "fn": "Say", 
-            "args": [
-              "Hello there!"
-            ], 
-            "kwargs": {}
-          }
-        }
-      ]
-    }, 
-    {
-      "HelloWorld:02:LOP": [
-        {
-          "think": "2 countries near USA are Canada, Mexico\nI will loop through them and get population projection for each.\n"
-        }, 
-        {
-          "updated_vars": {
-            "$countries": [
-              "Canada", 
-              "Mexico"
-            ]
-          }
-        }, 
-        {
-          "think": "Start loop with Canada"
-        }, 
-        {
-          "updated_vars": {
-            "$country": "Canada"
-          }
-        }
-      ]
-    }, 
-    {
-      "HelloWorld:02.01:QUE": [
-        {
-          "call": {
-            "fn": "SearchWeb", 
-            "args": [
-              "2030 population projection for Canada"
-            ], 
-            "kwargs": {}
-          }
-        }
-      ]
-    }, 
-    {
-      "HelloWorld:02:LOP": [
-        {
-          "think": "Continue loop with Mexico"
-        }, 
-        {
-          "updated_vars": {
-            "$country": "Mexico"
-          }
-        }
-      ]
-    }, 
-    {
-      "HelloWorld:02.01:QUE": [
-        {
-          "call": {
-            "fn": "SearchWeb", 
-            "args": [
-              "2030 population projection for Mexico"
-            ], 
-            "kwargs": {}
-          }
-        }
-      ]
-    }, 
-    {
-      "HelloWorld:03:YLD": [
-        {
-          "think": "Yield control back to the system to get search results"
-        }, 
-        {
-          "yield_type": "ForCallComplete"
-        }
-      ]
-    }
-  ]
-}
+{"call_stack": [], "state":{}}
 ```
-** End Examples **
+
+Example output showing multiple trigger matches -
+```md
+- Call stack empty, No vars set, Beginning program
+- Find playbooks using trigger
+- Triggered `Trigger["Begin:01:BGN"]`, `Trigger["AnotherPlaybook:03:BGN"]`
+- Enqueue `Begin()`
+- Enqueue `AnotherPlaybook()`
+- Yield to process queue
+```
+
+Example input -
+```json
+{"call_stack": ["Begin:01:QUE"], "state":{"$name": "Amol"}}
+```
+
+Example output -
+```md
+- Call stack not empty, name variable set, Continue program near "Begin:01:QUE"
+- `Step["Begin:01:QUE"]`: $name = Say(Welcome the user and ask their name)
+- $name is already set, so no need to ask again
+- Enqueue `Say("Welcome, Amol!")`
+- `Step["Begin:02:EXE"]`: $temp = Freezing temperature of water in Fahrenheit
+- `Var["$temp"] = 32`
+- `Step["Begin:03:EXE"]`: $time = GetCurrentTime()
+- Enqueue `GetCurrentTime()`
+- `Step["Begin:04:QUE"]`: Tell user the current time
+- I need results from GetCurrentTime()
+- Yield to process queue
+```
+
+Example input -
+```md
+## CheckPIN() -> bool
+Validates the user's pin based on specific criteria.
+### Trigger
+01:CND When the user provides a pin
+```
+
+```json
+{"call_stack": ["Playbook1:03:QUE"], "state":{}}
+```
+
+User said: 558866
+
+Example output -
+```md
+- Call stack not empty, no vars set, Continue program near "Playbook1:03:QUE"
+- User provided $pin 558866
+- `Var["$pin"] = "558866"`
+- The user provided a pin which triggers CheckPIN playbook using `Trigger["CheckPIN:01:CND"]`
+- Enqueue `CheckPIN($pin)`
+- Yield control back to process queue
+```
+
+Example input -
+```json
+{"call_stack": ["Auth:02:QUE","Playbook10:04.02:QUE"], "state":{}}
+```
+
+Example output showing returning from playbook -
+```md
+- Call stack not empty, no vars set, Continue program near "Playbook1:03:QUE"
+- `Step["Playbook10:05:QUE"]`: Say(Say goodbye to user)
+- No more steps in Playbook10, so return
+- `CallStack["Auth:02:QUE"]`
+- `Step["Auth:03:QUE"]`: Say(Say thank you)
+- No more steps in Auth, so return
+- `CallStack[]`
+- Call stack is now empty, so yield control back to system
+```
 
 ====SYSTEM_PROMPT_DELIMITER====
-** Input **
-
-```playbooks_triggers_list.md
-{{PLAYBOOKS_SIGNATURES}}
-```
-
-```playbook.md
+Current playbook -
+```md
 {{CURRENT_PLAYBOOK_MARKDOWN}}
 ```
 
-```initial_state.json
+====
+
+Interpret and run this natural language program step by step, showing your thinking along the way. If call stack is empty, you need to find a suitable playbook to run using triggers and queue a call to that playbook using python syntax, e.g. `Playbook1(arg1=$var1, arg2=10)`. Whenever you execute a step indicate that like this - `Step["Playbook3:02.03:CND"]`. Set a variable like this - `Var["$var1"] = "somevalue"`. When no steps are listed for a playbook, just queue a call to that playbook - the system will load and run it.
+
+Playbooks describes the preferred procedures, but you can deviate within reason to best serve the user.
+
+Triggers -
+```md
+{{TRIGGERS}}
+```
+
+Recent conversation -
+{{CONVERSATION_HISTORY}}
+
+Current state -
+```json
 {{INITIAL_STATE}}
 ```
 
-Example output format -
-```json
-{
-  "trace": [
-    {
-      "prologue": ...,
-    },
-    {
-      "...:..:...": [
-        {
-          "think": ...,
-        },
-        {
-          "updated_vars": {...}
-        },
-        {
-          "call": {
-            "fn": "...",
-            "args": [...],
-            "kwargs": {...}
-          }
-        },
-      ]
-    },
-  ]
-}
-```
-
-```session_context.txt
-{{SESSION_CONTEXT}}
-```
-
-Say() messages will be shown to the user, so make them conversational. Don't ask for information the user already provided.
-
-Don't make up steps. If current playbook does not have appropriate steps, scan the trigger list of all playbooks. If you find a useful playbook, call it.
-Don't blindly follow the playbook - be highly intelligent and adapt as needed to ensure user success.
-
+Instructions -
+{{AGENT_INSTRUCTIONS}}
 {{INSTRUCTION}}
 
-Output json only and nothing else.
-
-** Output **
+Remember to check for triggers after setting variables. Generate markdown list in triple backticks only and nothing else.

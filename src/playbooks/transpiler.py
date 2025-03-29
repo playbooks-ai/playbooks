@@ -1,4 +1,5 @@
 import os
+from typing import Iterator
 
 from rich.console import Console
 
@@ -10,13 +11,30 @@ console = Console()
 
 
 class Transpiler:
+    """
+    Transpiles Markdown playbooks into a format with line types and numbers for processing.
+
+    The Transpiler uses LLM to preprocess playbook content by adding line type codes,
+    line numbers, and other metadata that enables the interpreter to understand the
+    structure and flow of the playbook. It acts as a preprocessing step before the
+    playbook is converted to an AST and executed.
+
+    It validates basic playbook requirements before transpilation, including checking
+    for required headers that define agent name and playbook structure.
+    """
+
     def __init__(self, llm_config: LLMConfig) -> None:
+        """
+        Initialize the transpiler with LLM configuration.
+
+        Args:
+            llm_config: Configuration for the language model
+        """
         self.llm_config = llm_config
 
     def process(self, playbooks_content: str) -> str:
-        """Transpile a string of Markdown playbooks."""
         """
-        Transpiles the playbooks content by adding line type code to each line, adding line numbers, etc.
+        Transpile a string of Markdown playbooks by adding line type codes and line numbers.
 
         Args:
             playbooks_content: Content of the playbooks
@@ -35,6 +53,7 @@ class Transpiler:
         lines = playbooks_content.split("\n")
         found_h1 = False
         found_h2 = False
+
         for line in lines:
             if line.startswith("# "):
                 found_h1 = True
@@ -50,28 +69,27 @@ class Transpiler:
                 "Failed to parse playbook: Missing H2 header (Playbook definition)"
             )
 
-        prompt = open(
-            os.path.join(os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"),
-            "r",
-        ).read()
+        # Load and prepare the prompt template
+        prompt_path = os.path.join(
+            os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"
+        )
+        try:
+            with open(prompt_path, "r") as f:
+                prompt = f.read()
+        except (IOError, OSError) as e:
+            raise PlaybookError(f"Error reading prompt template: {str(e)}") from e
+
         prompt = prompt.replace("{{PLAYBOOKS}}", playbooks_content)
         messages = get_messages_for_prompt(prompt)
-        response = get_completion(
+
+        # Get the transpiled content from the LLM
+        response: Iterator[str] = get_completion(
             llm_config=self.llm_config,
             messages=messages,
             stream=False,
         )
 
-        response = list(response)
-        processed_content = response[0]
-        # print("*" * 20)
-        # print("Intermediate format:")
-        console.print("[pink]" + processed_content + "[/pink]")
-
-        # Save processed content to a fixed file
-        output_file = "/tmp/transpiled_content.md"
-        with open(output_file, "w") as f:
-            f.write(processed_content)
-        console.print(f"[green]Processed content saved to: {output_file}[/green]")
+        processed_content = next(response)
+        console.print("[dim pink]Transpiled playbook content[/dim pink]")
 
         return processed_content

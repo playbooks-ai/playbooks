@@ -4,6 +4,15 @@ from markdown_it import MarkdownIt
 
 
 def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
+    """
+    Parse markdown text into a hierarchical dictionary structure (AST).
+
+    Args:
+        markdown_text: The markdown text to parse
+
+    Returns:
+        A dictionary representing the AST of the markdown text
+    """
     # Initialize markdown parser
     md = MarkdownIt()
     tokens = md.parse(markdown_text)
@@ -46,15 +55,14 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
             i += 2  # Skip paragraph_close
 
         elif token.type == "bullet_list_open" or token.type == "ordered_list_open":
-            list_type = "list"
-            list_counter = 1  # Reset counter for ordered lists
             new_list = {
-                "type": list_type,
+                "type": "list",
                 "children": [],
                 "_ordered": token.type == "ordered_list_open",
             }
             stack[-1]["children"].append(new_list)
             stack.append(new_list)
+            list_counter = 1  # Reset counter for ordered lists
             i += 1
 
         elif token.type == "list_item_open":
@@ -94,7 +102,7 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
         else:
             i += 1
 
-    # Remove root wrapper if there's only one top-level heading
+    # Return the root node or its only child if it's a heading
     if len(root["children"]) == 1 and root["children"][0]["type"].startswith("h"):
         return root["children"][0]
     return root
@@ -102,11 +110,13 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
 
 def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     """
-    Performs a DFS walk on the node tree to add markdown attributes.
-    Returns the markdown string for the current node and all its children.
+    Performs a DFS walk on the node tree to add markdown attributes to each node.
+    This adds a 'markdown' field to each node with the markdown representation.
+
+    Args:
+        node: The node to process and update with markdown attributes
     """
     # Process children first (DFS)
-    children_markdown = ""
     if "children" in node:
         for child in node["children"]:
             refresh_markdown_attributes(child)
@@ -114,35 +124,28 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     # Generate markdown for current node
     current_markdown = ""
     if node["type"].startswith("h"):
-        level = node["type"][1]  # Extract number from h1, h2, etc.
-        current_markdown = "#" * int(level) + " " + node["text"]
-
+        level = int(node["type"][1])  # Extract number from h1, h2, etc.
+        current_markdown = "#" * level + " " + node["text"]
     elif node["type"] == "paragraph":
         current_markdown = node["text"]
-
     elif node["type"] == "quote":
         current_markdown = "> " + node["text"]
-
     elif node["type"] == "code-block":
         current_markdown = node["text"]
-
     elif node["type"] == "list":
-        current_markdown = children_markdown.strip()
-
+        # List nodes don't need their own text, they're containers
+        pass
     elif node["type"] == "list-item":
-        if "_number" in node:  # Ordered list item
-            current_markdown = f"{node['_number']}. {node['text']}"
-        else:  # Unordered list item
-            current_markdown = f"- {node['text']}"
+        prefix = f"{node['_number']}. " if "_number" in node else "- "
+        current_markdown = prefix + node["text"]
 
     # Combine current node's markdown with children's markdown
-    full_markdown = [current_markdown]
+    markdown_parts = [current_markdown] if current_markdown else []
     for child in node.get("children", []):
-        full_markdown.append(child["markdown"])
-    full_markdown = "\n".join(full_markdown)
+        if "markdown" in child:
+            markdown_parts.append(child["markdown"])
 
-    # Add markdown attribute to node
-    node["markdown"] = full_markdown.strip()
+    node["markdown"] = "\n".join(markdown_parts).strip()
 
     # Clean up internal attributes
     node.pop("_ordered", None)
@@ -150,10 +153,19 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
 
 
 def markdown_to_ast(markdown: str) -> Dict[str, Any]:
+    """
+    Convert markdown text to an Abstract Syntax Tree (AST) representation.
+
+    Args:
+        markdown: The markdown text to convert
+
+    Returns:
+        A dictionary representing the AST of the markdown text with a 'document' root
+    """
     tree = parse_markdown_to_dict(markdown)
     refresh_markdown_attributes(tree)
 
-    # If tree is already a root/document node, just change its type and add text field
+    # If tree is already a root node, convert it to a document node
     if tree.get("type") == "root":
         tree["type"] = "document"
         tree["text"] = ""
