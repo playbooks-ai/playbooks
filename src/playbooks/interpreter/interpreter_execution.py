@@ -289,7 +289,7 @@ class InterpreterExecution(TraceMixin):
 
         # Process the annotated tool calls (execute external, handle internal/say)
         # This also updates self.state (e.g., playbook_calls, tool_executions, conversation_history)
-        yield from self._process_tool_calls(tool_calls=tool_calls)
+        yield from self._process_tool_calls(tool_calls=tool_calls, playbooks=playbooks)
 
         # Note: self.state.tool_executions now holds results of *external* calls executed above.
         # These results will be used as input for the *next* LLM call in the main execute loop.
@@ -502,7 +502,7 @@ class InterpreterExecution(TraceMixin):
             return [], None, {}
 
     def _process_tool_calls(
-        self, tool_calls: List[ToolCall]
+        self, tool_calls: List[ToolCall], playbooks: Dict[str, "Playbook"]
     ) -> Generator[AgentResponseChunk, None, None]:
         """Process annotated tool calls: execute external, handle internal/say, update state.
 
@@ -542,17 +542,12 @@ class InterpreterExecution(TraceMixin):
                 has_external_tool_call = True
                 # Import here to avoid circular imports
                 from playbooks.interpreter.tool_execution import ToolExecution
-                from playbooks.playbook_library import (
-                    PlaybookLibrary,  # Assuming this exists
-                )
 
                 tool_execution = ToolExecution(tool_call=call)
 
                 # Find the actual playbook function to execute
                 # TODO: Refactor playbook loading/access if PlaybookLibrary changes
-                playbook_instance = PlaybookLibrary.get_playbook_instance(
-                    call.fn
-                )  # Example access
+                playbook_instance = playbooks[call.fn]
 
                 if (
                     not playbook_instance
