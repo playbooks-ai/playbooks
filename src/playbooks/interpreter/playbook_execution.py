@@ -135,6 +135,13 @@ class PlaybookExecution(TraceMixin):
         from .interpreter_execution import InterpreterExecution
 
         done = False
+        # Check exit conditions
+        exit_conditions = PlaybookExitConditions(
+            state=self.state,
+            current_playbook_klass=(
+                self.current_playbook.klass if self.current_playbook else None
+            ),
+        )
 
         while not done:
             # Create and execute the interpreter
@@ -155,13 +162,6 @@ class PlaybookExecution(TraceMixin):
             # Clear instruction after first iteration
             instruction = ""
 
-            # Check exit conditions
-            exit_conditions = PlaybookExitConditions(
-                state=self.state,
-                current_playbook_klass=(
-                    self.current_playbook.klass if self.current_playbook else None
-                ),
-            )
             self.trace(exit_conditions)
             done = not exit_conditions.should_continue()
 

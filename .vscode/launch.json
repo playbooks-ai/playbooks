@@ -4,6 +4,7 @@
     // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
     "version": "0.2.0",
     "configurations": [
+        {"name":"pytest","type":"debugpy","request":"launch","module":"pytest"},
         // poetry run python -m playbooks.applications.agent_chat examples/playbooks/hello.md
         {
             "envFile": "${workspaceFolder}/.env",

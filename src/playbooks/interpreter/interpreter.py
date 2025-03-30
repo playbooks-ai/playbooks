@@ -135,6 +135,8 @@ class Interpreter(TraceMixin):
                 stream=stream,
             )
 
+            instruction = ""
+
             # If the execution resulted in a request to call another playbook, push it
             if len(self.state.playbook_calls) > 0:
                 # Assuming only one call is queued per step for now
