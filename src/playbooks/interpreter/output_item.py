@@ -4,6 +4,7 @@ This module contains the OutputItem class, which represents a single item in the
 interpreter output and provides methods for parsing and formatting output items.
 """
 
+import ast
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -50,145 +51,111 @@ class OutputItem:
         This method uses regular expressions to find and extract steps, variables,
         triggers, tool calls, and call stack information embedded within the text.
         The extracted metadata is stored in the corresponding instance attributes.
+
+        Examples:
+            >>> item = OutputItem('`Tool(key1=$var1, key2="value")`')
+            >>> item.tool_calls[0]["kwargs"]
+            {'key1': '$var1', 'key2': 'value'}
+
+            >>> item = OutputItem('`MyTool(10, "someval", kwarg1="value", kwarg2=$my_var)`')
+            >>> item.tool_calls[0]["args"]
+            [10, 'someval']
+            >>> item.tool_calls[0]["kwargs"]
+            {'kwarg1': 'value', 'kwarg2': '$my_var'}
         """
         # Extract Step metadata, e.g., `Step["auth_step"]`
         self.steps = re.findall(r'`Step\["([^"]+)"\]`', self.text)
 
-        # Extract Var metadata, e.g., `Var["user_email"] = test@example.com`
-        # Note: The value part (.*?) is captured non-greedily.
-        self.vars = re.findall(r'`Var\["([^"]+)"\] = (.+?)`', self.text)
+        # Extract Var metadata, e.g., `Var[$user_email, "test@example.com"]` or `Var[$pin, 1234]`
+        # Captures the variable name (with $) and its value, parsing the value as a Python expression
+        var_matches = re.findall(r"`Var\[(\$[^,\]]+),\s*([^\]]+)\]`", self.text)
+        self.vars = []
+        for var_name, var_value_str in var_matches:
+            # Parse the value as a Python expression safely
+            parsed_value = self._parse_arg_value(var_value_str.strip())
+            self.vars.append((var_name, parsed_value))
 
         # Extract Trigger metadata, e.g., `Trigger["user_auth_failed"]`
         self.triggers = re.findall(r'`Trigger\["([^"]+)"\]`', self.text)
 
         # Extract CallStack metadata, e.g. `CallStack["Auth:02:QUE", "Playbook10:04.02:QUE"]`
-        # This regex assumes the entire list is within one `CallStack[...]` block.
-        # If multiple identifiers are present, they need further splitting if needed elsewhere.
-        # Currently, it captures the full inner string "id1", "id2", ...
-        # TODO(nic): Consider if splitting the captured string is needed here.
         self.call_stack = re.findall(r'`CallStack\["([^"]+)"\]`', self.text)
 
         # Extract tool calls (playbook calls) enclosed in backticks.
-        # e.g., `MyTool(arg1, arg2, kwarg1="value")`
-        tool_call_matches = re.findall(r"`([A-Za-z0-9_]+)\((.*?)\)`", self.text)
+        # e.g., `MyTool(arg1, arg2, kwarg1="value")` or `Tool(key1=$var1)`
+        # or `MyTool(10, "someval", kwarg1="value", kwarg2=$my_var)`
+        tool_call_matches = re.findall(r"`([A-Za-z0-9_]+\(.*?\))`", self.text)
 
-        for function_name, args_str in tool_call_matches:
-            self.tool_calls.append(
-                {
-                    "function_name": function_name,
-                    "args": self._parse_args(args_str),
-                    "kwargs": self._parse_kwargs(args_str),
-                }
-            )
+        for function_call in tool_call_matches:
+            self.tool_calls.append(self._parse_function_call(function_call))
 
-    def _parse_args(self, args_str: str) -> List[Any]:
-        """Parse positional arguments from an argument string.
+    def _parse_function_call(self, function_call: str) -> Dict[str, Any]:
+        """Parse a function call using Python's AST parser.
 
-        This method parses positional arguments from a comma-separated argument string,
-        handling nested structures and string literals appropriately.
+        This method parses a function call string into a dictionary containing the function name,
+        positional arguments, and keyword arguments, handling both literal values and variable
+        references (starting with $).
 
         Args:
-            args_str: The argument string to parse.
+            function_call: The complete function call string (e.g., "MyTool(arg1, kwarg='val')").
 
         Returns:
-            A list of parsed positional arguments.
-        """
-        if not args_str.strip():
-            return []
+            A dictionary containing:
+                - function_name: The name of the function
+                - args: List of positional arguments
+                - kwargs: Dictionary of keyword arguments
 
+        Raises:
+            ValueError: If the parsed expression is not a function call.
+            SyntaxError: If the function call string is not valid Python syntax.
+        """
+        # Create a valid Python expression by properly handling $variables
+        # First, find all $variables and replace them with __substituted__ prefix
+        expr = function_call
+        # Handle keyword argument names by removing $ prefix
+        expr = re.sub(r"\$([a-zA-Z_][a-zA-Z0-9_]*)\s*=", r"\1=", expr)
+        # Handle remaining $variables by replacing with __substituted__ prefix
+        for match in re.finditer(r"\$[a-zA-Z_][a-zA-Z0-9_]*", expr):
+            var = match.group(0)
+            expr = expr.replace(var, f"__substituted__{var[1:]}")
+
+        # Parse the expression
+        tree = ast.parse(expr, mode="eval")
+        if not isinstance(tree.body, ast.Call):
+            raise ValueError("Expected a function call")
+
+        # Extract function name
+        function_name = tree.body.func.id
+
+        # Extract positional arguments
         args = []
-        # Split by commas, but respect strings and nested structures
-        parts = self._split_args(args_str)
-
-        for part in parts:
-            # Skip keyword arguments
-            if "=" in part and not (part.startswith('"') or part.startswith("'")):
-                continue
-            args.append(self._parse_arg_value(part.strip()))
-
-        return args
-
-    def _parse_kwargs(self, args_str: str) -> Dict[str, Any]:
-        """Parse keyword arguments from an argument string.
-
-        This method parses keyword arguments from a comma-separated argument string,
-        handling nested structures and string literals appropriately.
-
-        Args:
-            args_str: The argument string to parse.
-
-        Returns:
-            A dictionary of parsed keyword arguments.
-        """
-        if not args_str.strip():
-            return {}
-
-        kwargs = {}
-        # Split by commas, but respect strings and nested structures
-        parts = self._split_args(args_str)
-
-        for part in parts:
-            # Only process keyword arguments
-            if "=" in part and not (part.startswith('"') or part.startswith("'")):
-                key, value = part.split("=", 1)
-                kwargs[key.strip()] = self._parse_arg_value(value.strip())
-
-        return kwargs
-
-    def _split_args(self, args_str: str) -> List[str]:
-        """Split an argument string by commas, respecting strings and nested structures.
-
-        This method manually parses a comma-separated argument string into individual
-        argument parts. It handles:
-        - Strings enclosed in single (') or double (") quotes.
-        - Nested parentheses `()` to correctly identify arguments within function calls
-          or tuple-like structures passed as arguments.
-
-        Example:
-            Input:  `"hello, world", 123, func(a, b), key="val,ue"`
-            Output: [`"hello, world"`, ` 123`, ` func(a, b)`, ` key="val,ue"`]
-
-        Args:
-            args_str: The argument string to split.
-
-        Returns:
-            A list of argument parts (strings).
-        """
-        parts = []
-        current_part = ""
-        in_string = False
-        string_char = None  # Stores the type of quote (' or ") that started the string
-        paren_level = 0  # Tracks nesting level of parentheses
-
-        for char in args_str:
-            # Handle string literals
-            if char in ('"', "'") and (not string_char or char == string_char):
-                in_string = not in_string
-                if in_string:
-                    string_char = char
-                else:
-                    string_char = None  # Exited string
-                current_part += char
-            # Handle nested parentheses (only outside strings)
-            elif char == "(" and not in_string:
-                paren_level += 1
-                current_part += char
-            elif char == ")" and not in_string:
-                paren_level -= 1
-                current_part += char
-            # Split by comma (only outside strings and at the top parenthesis level)
-            elif char == "," and not in_string and paren_level == 0:
-                parts.append(current_part)
-                current_part = ""  # Reset for the next part
-            # Append other characters
+        for arg in tree.body.args:
+            if isinstance(arg, ast.Name) and arg.id.startswith("__substituted__"):
+                # Convert back to $variable format
+                args.append(f"${arg.id[13:]}")
+            elif isinstance(arg, ast.Constant):
+                args.append(arg.value)
             else:
-                current_part += char
+                args.append(ast.literal_eval(ast.unparse(arg)))
 
-        # Add the last part after the loop finishes
-        if current_part:
-            parts.append(current_part)
+        # Extract keyword arguments
+        kwargs = {}
+        for keyword in tree.body.keywords:
+            if isinstance(keyword.value, ast.Name) and keyword.value.id.startswith(
+                "__substituted__"
+            ):
+                # Convert back to $variable format
+                kwargs[keyword.arg] = f"${keyword.value.id[13:]}"
+            elif isinstance(keyword.value, ast.Constant):
+                kwargs[keyword.arg] = keyword.value.value
+            else:
+                kwargs[keyword.arg] = ast.literal_eval(ast.unparse(keyword.value))
 
-        return parts
+        return {
+            "function_name": function_name,
+            "args": args,
+            "kwargs": kwargs,
+        }
 
     def _parse_arg_value(self, arg_value: str) -> Any:
         """Parse an argument value to the appropriate type.
@@ -202,34 +169,16 @@ class OutputItem:
         Returns:
             The parsed value with the appropriate type.
         """
-        # Remove quotes for string values
-        if (arg_value.startswith('"') and arg_value.endswith('"')) or (
-            arg_value.startswith("'") and arg_value.endswith("'")
-        ):
-            return arg_value[1:-1]
-
         # If it starts with $, it's a variable reference
         if arg_value.startswith("$"):
             return arg_value
 
-        # Try to parse as number
+        # Try to parse as a Python literal using ast.literal_eval
         try:
-            if "." in arg_value:
-                return float(arg_value)
-            return int(arg_value)
-        except ValueError:
-            pass
-
-        # Handle special values
-        if arg_value.lower() == "true":
-            return True
-        if arg_value.lower() == "false":
-            return False
-        if arg_value.lower() == "none":
-            return None
-
-        # Default to returning as is
-        return arg_value
+            return ast.literal_eval(arg_value)
+        except (ValueError, SyntaxError):
+            # If literal_eval fails, return as is
+            return arg_value
 
     def raw(self) -> str:
         """Return the raw text of the output item.
@@ -261,7 +210,7 @@ class OutputItem:
 
         # Add variables
         for name, value in self.vars:
-            parts.append(f"Var[{name}]={value}")
+            parts.append(f"Var[{name}, {value}]")
 
         # Add triggers
         for trigger in self.triggers:
