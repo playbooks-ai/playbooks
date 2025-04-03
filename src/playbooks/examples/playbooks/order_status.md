@@ -17,7 +17,7 @@ def CheckOrderStatus(orderId):
 
 ```
 ## Begin
-d
+
 ### Trigger
 - When the agent starts running
 
