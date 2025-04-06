@@ -31,14 +31,10 @@ def test_order_status_conversation_flow():
     steps = [
         [
             None,
-            ["Enqueue `Begin()`", '`Step["Begin:01:QUE"]`'],
+            ["`Begin()`"],
         ],
         [
-            "get me a refund",
-            ["`HandoffPlaybook()`", '`Step["HandoffPlaybook:01:QUE"]`'],
-        ],
-        [
-            "nah, help me track an order",
+            "waiting for my order, where is it?",
             [
                 "`CheckOrderStatusMain()`",
                 '`Step["CheckOrderStatusMain:01:CND"]`',
@@ -48,7 +44,6 @@ def test_order_status_conversation_flow():
             "a@abc.com 333333",
             [
                 "ValidatePin",
-                'Step["ValidatePin:01',
             ],
         ],
         [
@@ -56,6 +51,13 @@ def test_order_status_conversation_flow():
             [
                 "ValidatePin",
                 "AuthenticateUser",
+            ],
+        ],
+        [
+            "a@abc.com 2332, but first tell me what is your refund policy",
+            [
+                "CustomerSupportKnowledgeLookup",
+                "30 days",
             ],
         ],
     ]
