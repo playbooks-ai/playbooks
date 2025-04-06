@@ -272,9 +272,10 @@ class Playbook:
             A new EXT playbook instance.
 
         Raises:
-            ValueError: If EXT playbook has sections other than 'code' or the code block is invalid.
+            ValueError: If EXT playbook has sections other than 'code' or 'trigger', or if the code block is invalid.
         """
         code = None
+        trigger = None
         for h3 in h3s:
             h3_title = h3.get("text", "").strip().lower()
             if h3_title == "code":
@@ -284,13 +285,16 @@ class Playbook:
                         f"EXT playbook ### Code section can only have a code block, found: {h3.get('markdown', '')}"
                     )
                 code = code_block["text"]
+                # Remove the code block from the markdown
+                h2["children"].remove(h3)
+            elif h3_title == "trigger":
+                trigger = PlaybookTriggers(
+                    playbook_klass=klass, playbook_signature=signature, h3=h3
+                )
             else:
                 raise ValueError(
-                    f"EXT playbook can only have a code block, found: {h3_title}"
+                    f"EXT playbook can only have code and trigger sections, found: {h3_title}"
                 )
-
-            # Remove the code block from the markdown
-            h2["children"].remove(h3)
 
         code, func = cls._process_code_block(code)
 
@@ -299,7 +303,7 @@ class Playbook:
             execution_type=PlaybookExecutionType.EXT,
             signature=signature,
             description=description,
-            trigger=None,
+            trigger=trigger,
             steps=None,
             notes=None,
             code=code,
