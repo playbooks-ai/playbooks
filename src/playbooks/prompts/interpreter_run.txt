@@ -3,96 +3,52 @@ Natural language program format -
 - H2 is the playbook, i.e. function, name
 - playbook steps, i.e. instructions, are in the "Steps" H3
   - 3-Letter Steps Command Codes
-    - `EXE`: Execute this step (e.g., `$planets =  planets in the solar system`)
-    - `QUE`: Enqueue a function call
-    - `LOP`: Loop (e.g., `LOP For each $item in $list`)
-    - `CND`: Conditional or if or an else statement (e.g., `CND If user is unhappy`)
-    - `CHK`: Check or validation line that corresponds to a note from the Notes section (e.g., `CHK Check if $age is more than 58`)
+    - `EXE`: Execute this step (e.g., `$planets =  planets in the solar system`) or enqueue a call (e.g. `LookupAccount($username)`)
+    - `CND`: Conditional if, else or loop statement (e.g., `CND If user is unhappy`)
+    - `CHK`: Refer to a note and apply it (e.g., `CHK N2`)
     - `RET`: Return from current playbook, optionally returning a value, and stop processing
-    - `YLD`: Yield control back to the system to execute enqueued functions or for user/external input. Stop processing.
+    - `YLD user`: Stop processing, wait for user input
+    - `YLD call`: Stop processing, wait for playbook call execution
+    - `YLD return`: Stop processing, return from current playbook
 - Special cases, validations, etc are in "Notes" H3
-- Variables
-  - Allowed types are boolean, strings, numbers and null
-- Say()
-  - Whatever you Say() will be shown to the user
-  - When queuing multiple Say() calls, make sure they all connect conversationally
+- Variable allowed types are boolean, strings, numbers and null
+- Whatever you Say() will be shown to the user, so make ensure conversational fluidity
 
-====
-Example input -
-```json
-{"call_stack": [], "state":{}}
-```
+Output format -
+Execute the program step by step with a compact log output
+- when something unexpected happens, log it, e.g. "expected name but user asked question"
+- "trig?" means are you are checking if any new playbook needs to be triggered now. trig? `Trigger["PB1:01:CND"]` means a new trigger matched and the PB1 playbook should be invoked. "trig? no" means no triggers matched.
+- Playbook calls look like `Playbook1(arg1=$var1, arg2=10)` or "$somevar = `PB10($name)`". The function call must be within backticks for the system to register the invocation.
+- Whenever you execute a step, indicate that like this `Step["Playbook3:02.03:CND"]`
+- Set a variable like this `Var[$var1, "somevalue"]`. After setting any variable, check for relevant triggers (e.g., trig on $var1?) and handle them accordingly.
+- Show return value if appropriate when returning from a playbook, e.g. "return True".
 
-Example output showing multiple trigger matches -
-```md
-- Call stack empty, No vars set, Beginning program
-- Find playbooks using trigger
-- Triggered `Trigger["Begin:01:BGN"]`, `Trigger["AnotherPlaybook:03:BGN"]`
-- Enqueue `Begin()`
-- Enqueue `AnotherPlaybook()`
-- Yield to process queue
-```
+Example output 1 -
+recap - helped user renew subscription, user has provided name, pending refund request
+plan - will set vars for name, playbook then wants to say goodbye but process pending refund request first
+`Var[$fname, "Amol"]`
+trig on $fname? no
+`Var[$lname, "Kelkar"]`
+trig on $lname? no
+`Step["Playbook10:05:QUE"]` ignore instruction to say goodbye due to pending process refund request by user
+trig playbook for refund request handling? no
+`Say("I remember you also wanted to process refund, but I cannot handle that myself.")`
+trig for missing playbook? `Trigger["Handoff:T1:CND"]` `Handoff(name=$name)`
+yld call
 
-Example input -
-```json
-{"call_stack": ["Begin:01:QUE"], "state":{"$name": "Amol"}}
-```
+Example output 2 -
+recap - user wanted to book a flight, user provided info
+plan - will thank user and check if info is valid
+`Step["GatherInfo:05:QUE"]` `Say("Thank you for providing the information")`
+`Step["GatherInfo:06:QUE"]` $valid = `ValidateInfo(from=$from, to=$to, currency="USD")`
+yld call
 
-Example output -
-```md
-- Call stack not empty, name variable set, Continue program near "Begin:01:QUE"
-- `Step["Begin:01:QUE"]`: $name = Say(Welcome the user and ask their name)
-- $name is already set, so no need to ask again
-- Enqueue `Say("Welcome, Amol!")`
-- `Step["Begin:02:EXE"]`: $temp = Freezing temperature of water in Fahrenheit
-- `Var["$temp"] = 32`
-- `Step["Begin:03:EXE"]`: $time = GetCurrentTime()
-- Enqueue `GetCurrentTime()`
-- `Step["Begin:04:QUE"]`: Tell user the current time
-- I need results from GetCurrentTime()
-- Yield to process queue
-```
-
-Example input -
-```md
-## CheckPIN() -> bool
-Validates the user's pin based on specific criteria.
-### Trigger
-01:CND When the user provides a pin
-```
-
-```json
-{"call_stack": ["Playbook1:03:QUE"], "state":{}}
-```
-
-User said: 558866
-
-Example output -
-```md
-- Call stack not empty, no vars set, Continue program near "Playbook1:03:QUE"
-- User provided $pin 558866
-- `Var["$pin"] = "558866"`
-- The user provided a pin which triggers CheckPIN playbook using `Trigger["CheckPIN:01:CND"]`
-- Enqueue `CheckPIN($pin)`
-- Yield control back to process queue
-```
-
-Example input -
-```json
-{"call_stack": ["Auth:02:QUE","Playbook10:04.02:QUE"], "state":{}}
-```
-
-Example output showing returning from playbook -
-```md
-- Call stack not empty, no vars set, Continue program near "Playbook1:03:QUE"
-- `Step["Playbook10:05:QUE"]`: Say(Say goodbye to user)
-- No more steps in Playbook10, so return
-- `CallStack["Auth:02:QUE"]`
-- `Step["Auth:03:QUE"]`: Say(Say thank you)
-- No more steps in Auth, so return
-- `CallStack[]`
-- Call stack is now empty, so yield control back to system
-```
+Example output 3 -
+recap - task is complete, user thanked me
+plan - closing
+`Step["UpdateAccount:08:QUE"]` `Say("You are welcome!")`
+no more stpes
+yld return
 
 ====SYSTEM_PROMPT_DELIMITER====
 Current playbook -
@@ -102,9 +58,7 @@ Current playbook -
 
 ====
 
-Interpret and run this natural language program step by step, showing your thinking along the way. If call stack is empty, you need to find a suitable playbook to run using triggers and queue a call to that playbook using python syntax, e.g. `Playbook1(arg1=$var1, arg2=10)`. Whenever you execute a step indicate that like this - `Step["Playbook3:02.03:CND"]`. Set a variable like this - `Var["$var1"] = "somevalue"`. When no steps are listed for a playbook, just queue a call to that playbook - the system will load and run it.
-
-Playbooks describes the preferred procedures, but you can deviate within reason to best serve the user.
+Use playbooks as process specification. Interpret them as a human would. Try to adhere precisely, but don't blindly follow them. Use wut? to think through any unexpected situations and handle them intelligently, but never make up business processes. Don't trigger playbook that you are already executing. Always output recap and plan before steps. Reliably output Var, Step and calls where needed. Stop processing after yld or return from playbook.
 
 Triggers -
 ```md
@@ -122,5 +76,3 @@ Current state -
 Instructions -
 {{AGENT_INSTRUCTIONS}}
 {{INSTRUCTION}}
-
-Remember to check for triggers after setting variables. Generate markdown list in triple backticks only and nothing else.

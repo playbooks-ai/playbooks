@@ -157,6 +157,13 @@ class InterpreterExecution(TraceMixin):
         """
         done = False
         current_instruction = instruction  # Start with the initial instruction
+        # Check exit conditions after processing the response
+        exit_conditions = InterpreterLoopExitConditions(
+            state=self.state,
+            current_playbook_klass=(
+                self.current_playbook.klass if self.current_playbook else None
+            ),
+        )
 
         while not done:
             # Get the LLM response based on the current state and instruction
@@ -175,13 +182,6 @@ class InterpreterExecution(TraceMixin):
                 playbooks=playbooks, raw_response=raw_response
             )
 
-            # Check exit conditions after processing the response
-            exit_conditions = InterpreterLoopExitConditions(
-                state=self.state,
-                current_playbook_klass=(
-                    self.current_playbook.klass if self.current_playbook else None
-                ),
-            )
             self.trace(exit_conditions)  # Trace the exit condition checker itself
 
             done = not exit_conditions.should_continue()
@@ -195,6 +195,7 @@ class InterpreterExecution(TraceMixin):
                 current_instruction = "\n".join(tool_results)
                 # Clear tool executions now that they've been consumed
                 self.state.tool_executions.clear()
+                self.state.clear_playbook_calls()
 
     def _get_llm_response(
         self,
@@ -380,6 +381,7 @@ class InterpreterExecution(TraceMixin):
                 level="ERROR",
                 metadata={"response": response},
             )
+            raise e
             return [], None, {}, None
 
     def _extract_markdown_bullet_points(self, response: str) -> List[str]:
@@ -394,37 +396,7 @@ class InterpreterExecution(TraceMixin):
         Returns:
             A list of bullet point content strings, or an empty list if none found.
         """
-        # 1. Look inside ```md ... ```
-        md_match = re.search(r"```md\s*(.*?)\s*```", response, re.DOTALL)
-        if md_match:
-            md_content = md_match.group(1)
-            bullet_points = [
-                line.strip()[2:].strip()
-                for line in md_content.split("\n")
-                if line.strip().startswith("- ")
-            ]
-            if bullet_points:
-                return bullet_points
-
-        # 2. Look inside ``` ... ``` (generic code block)
-        code_match = re.search(r"```\s*(.*?)\s*```", response, re.DOTALL)
-        if code_match:
-            code_content = code_match.group(1)
-            bullet_points = [
-                line.strip()[2:].strip()
-                for line in code_content.split("\n")
-                if line.strip().startswith("- ")
-            ]
-            if bullet_points:
-                return bullet_points
-
-        # 3. Look anywhere in the response
-        bullet_points = [
-            line.strip()[2:].strip()
-            for line in response.split("\n")
-            if line.strip().startswith("- ")
-        ]
-        return bullet_points
+        return response.split("\n")
 
     def _parse_json_response(
         self, response: str
@@ -576,7 +548,9 @@ class InterpreterExecution(TraceMixin):
                 # Store the execution result (success or failure)
                 self.state.tool_executions.append(tool_execution)
                 # Add tool execution trace to conversation history
-                self.state.add_conversation_history(tool_execution.__repr__())
+                self.state.add_conversation_history(
+                    "ExecutionResult: " + tool_execution.__repr__()
+                )
                 self.trace(tool_execution)  # Trace the ToolExecution object itself
             else:
                 # This might happen if annotation failed or a new type was added

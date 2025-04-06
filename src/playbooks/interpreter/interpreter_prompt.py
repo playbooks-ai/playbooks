@@ -81,7 +81,10 @@ class InterpreterPrompt:
         prompt = prompt.replace("{{CONVERSATION_HISTORY}}", conversation_history_str)
         prompt = prompt.replace("{{INITIAL_STATE}}", initial_state)
         prompt = prompt.replace("{{INSTRUCTION}}", self.instruction)
-        prompt = prompt.replace("{{AGENT_INSTRUCTIONS}}", self.agent_instructions)
+        if self.agent_instructions:
+            prompt = prompt.replace("{{AGENT_INSTRUCTIONS}}", self.agent_instructions)
+        else:
+            prompt = prompt.replace("{{AGENT_INSTRUCTIONS}}", "")
         return prompt
 
     @property

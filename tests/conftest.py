@@ -3,7 +3,10 @@ from pathlib import Path
 
 import pytest
 
+from playbooks.utils.env_loader import load_environment
+
 os.environ["ENVIRONMENT"] = "test"
+load_environment()
 
 
 @pytest.fixture
