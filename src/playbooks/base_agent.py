@@ -1,12 +1,43 @@
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Generator, Optional
+import asyncio
+import uuid
+from abc import ABC
+from collections import defaultdict
+from typing import TYPE_CHECKING
+
+from playbooks.constants import EOM
 
 if TYPE_CHECKING:
-    # Import types only for type checking to avoid circular imports
-    from .types import AgentResponseChunk
+    from src.playbooks.program import Program
 
 
-class BaseAgent(ABC):
+class AgentCommunicationMixin:
+    def __init__(self):
+        self.program: Program | None = None
+        self.inboxes = defaultdict(asyncio.Queue)
+
+    async def SendMessage(self, target_agent_id: str, message: str):
+        await self.program.route_message(self.id, target_agent_id, message)
+
+    async def WaitForMessage(self, source_agent_id: str) -> str | None:
+        messages = []
+
+        while not self.inboxes[source_agent_id].empty():
+            message = self.inboxes[source_agent_id].get_nowait()
+            if message == EOM:
+                break
+            messages.append(message)
+
+        if not messages:
+            messages.append(await self.inboxes[source_agent_id].get())
+
+        for message in messages:
+            self.state.session_log.append(
+                f"Received message from {source_agent_id}: {message}"
+            )
+        return "\n".join(messages)
+
+
+class BaseAgent(AgentCommunicationMixin, ABC):
     """
     Abstract base class for all agent implementations.
 
@@ -24,31 +55,6 @@ class BaseAgent(ABC):
         Args:
             klass: The class/type identifier for this agent.
         """
+        super().__init__()
+        self.id = str(uuid.uuid4())
         self.klass = klass
-
-    @abstractmethod
-    def process_message(
-        self,
-        message: str,
-        from_agent: Optional["BaseAgent"],
-        routing_type: str,
-        llm_config: Optional[dict] = None,
-        stream: bool = False,
-    ) -> Generator["AgentResponseChunk", None, None]:
-        """
-        Process an incoming message and generate a response.
-
-        Args:
-            message: The message content to process.
-            from_agent: The agent that sent the message, if any.
-            routing_type: The type of routing used for the message (e.g., "direct").
-            llm_config: Configuration for language model, if applicable.
-            stream: Whether to stream the response incrementally.
-
-        Returns:
-            A generator yielding response chunks.
-
-        Raises:
-            NotImplementedError: This method must be implemented by subclasses.
-        """
-        raise NotImplementedError("Subclasses must implement process_message()")

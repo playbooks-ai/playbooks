@@ -21,6 +21,9 @@ class Variable:
         )
         self.value = new_value
 
+    def __repr__(self) -> str:
+        return f"{self.name}={self.value}"
+
 
 class Variables:
     def __init__(self):

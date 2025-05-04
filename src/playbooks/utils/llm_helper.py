@@ -6,11 +6,12 @@ from functools import wraps
 from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 
 import litellm
-from litellm import BadRequestError, completion, get_supported_openai_params
+from litellm import completion, get_supported_openai_params
 
-from playbooks.config import LLMConfig
-from playbooks.constants import SYSTEM_PROMPT_DELIMITER
-from playbooks.utils.langfuse_helper import LangfuseHelper
+from ..constants import SYSTEM_PROMPT_DELIMITER
+from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
+from .langfuse_helper import LangfuseHelper
+from .llm_config import LLMConfig
 
 # Configure litellm based on environment variable
 litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
@@ -66,7 +67,7 @@ T = TypeVar("T")
 def retry_on_overload(
     max_retries: int = 3, base_delay: float = 1.0
 ) -> Callable[[Callable[..., T]], Callable[..., T]]:
-    """Decorator that retries a function on Anthropic overload errors with exponential backoff.
+    """Decorator that retries a function on API overload or rate limit errors with exponential backoff.
 
     Args:
         max_retries: Maximum number of retry attempts
@@ -82,12 +83,22 @@ def retry_on_overload(
             for attempt in range(max_retries):
                 try:
                     return func(*args, **kwargs)
-                except BadRequestError as e:
-                    if "Overloaded" in str(e) and attempt < max_retries - 1:
-                        delay = base_delay * (2**attempt)
-                        time.sleep(delay)
-                        continue
-                    raise
+                except (
+                    VendorAPIOverloadedError,
+                    VendorAPIRateLimitError,
+                    litellm.exceptions.InternalServerError,
+                    litellm.RateLimitError,
+                ) as e:
+                    # Check if it's an overload error from litellm
+                    if (
+                        isinstance(e, litellm.exceptions.InternalServerError)
+                        and "overloaded" not in str(e).lower()
+                    ):
+                        raise  # Re-raise if not an overload error
+
+                    delay = base_delay * (2**attempt)
+                    time.sleep(delay)
+                    continue
             return func(*args, **kwargs)  # Final attempt
 
         return wrapper
@@ -126,6 +137,7 @@ def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
             yield content
 
 
+@retry_on_overload()
 def get_completion(
     llm_config: LLMConfig,
     messages: List[dict],
@@ -193,7 +205,7 @@ def get_completion(
         )
 
     # Try to get response from cache if enabled
-    if llm_cache_enabled and use_cache and cache:
+    if llm_cache_enabled and use_cache and cache is not None:
         cache_key = custom_get_cache_key(**completion_kwargs)
         cache_value = cache.get(cache_key)
 
@@ -214,6 +226,7 @@ def get_completion(
 
     # Get response from LLM
     full_response: Union[str, List[str]] = [] if stream else ""
+    error_occurred = False
     try:
         if langfuse_generation:
             langfuse_generation.update(metadata={"cache_hit": False})
@@ -226,12 +239,26 @@ def get_completion(
         else:
             full_response = _make_completion_request(completion_kwargs)
             yield full_response
+    except Exception as e:
+        error_occurred = True
+        if langfuse_generation:
+            langfuse_generation.end(error=str(e))
+            LangfuseHelper.flush()
+        raise  # Re-raise the exception to be caught by the decorator if applicable
     finally:
         # Update cache and Langfuse
-        if llm_cache_enabled and use_cache and cache:
+        if (
+            not error_occurred
+            and llm_cache_enabled
+            and use_cache
+            and cache is not None
+            and full_response is not None
+            and len(full_response) > 0
+        ):
             cache.set(cache_key, full_response)
 
-        if langfuse_generation:
+        if langfuse_generation and not error_occurred:
+            # Only update if no exception occurred
             langfuse_generation.end(output=str(full_response))
             LangfuseHelper.flush()
 

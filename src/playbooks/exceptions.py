@@ -7,6 +7,12 @@ class PlaybooksError(Exception):
     pass
 
 
+class ProgramLoadError(PlaybooksError):
+    """Exception raised when there is an error loading a program."""
+
+    pass
+
+
 class AgentError(PlaybooksError):
     """Base exception class for agent-related errors."""
 
@@ -19,25 +25,13 @@ class AgentConfigurationError(AgentError):
     pass
 
 
-class AgentAlreadyRunningError(AgentError):
-    """Raised when attempting to run an agent that is already running."""
+class VendorAPIOverloadedError(PlaybooksError):
+    """Raised when the vendor API is overloaded."""
 
     pass
 
 
-class RuntimeError(PlaybooksError):
-    """Base exception class for runtime-related errors."""
-
-    pass
-
-
-class PlaybookError(PlaybooksError):
-    """Base exception class for playbook-related errors."""
-
-    pass
-
-
-class DatabaseError(PlaybooksError):
-    """Base exception class for database-related errors."""
+class VendorAPIRateLimitError(PlaybooksError):
+    """Raised when the vendor API rate limit is exceeded."""
 
     pass

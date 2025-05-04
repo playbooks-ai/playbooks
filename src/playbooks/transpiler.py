@@ -3,9 +3,10 @@ from typing import Iterator
 
 from rich.console import Console
 
-from playbooks.config import LLMConfig
-from playbooks.exceptions import PlaybookError
-from playbooks.utils.llm_helper import get_completion, get_messages_for_prompt
+from .exceptions import ProgramLoadError
+from .utils.langfuse_helper import LangfuseHelper
+from .utils.llm_config import LLMConfig
+from .utils.llm_helper import get_completion, get_messages_for_prompt
 
 console = Console()
 
@@ -32,25 +33,25 @@ class Transpiler:
         """
         self.llm_config = llm_config
 
-    def process(self, playbooks_content: str) -> str:
+    def process(self, program_content: str) -> str:
         """
         Transpile a string of Markdown playbooks by adding line type codes and line numbers.
 
         Args:
-            playbooks_content: Content of the playbooks
+            program_content: Content of the playbooks
 
         Returns:
             str: Transpiled content of the playbooks
 
         Raises:
-            PlaybookError: If the playbook format is invalid
+            ProgramLoadError: If the playbook format is invalid
         """
         # Basic validation of playbook format
-        if not playbooks_content.strip():
-            raise PlaybookError("Empty playbook content")
+        if not program_content.strip():
+            raise ProgramLoadError("Empty playbook content")
 
         # Check for required H1 and H2 headers
-        lines = playbooks_content.split("\n")
+        lines = program_content.split("\n")
         found_h1 = False
         found_h2 = False
 
@@ -61,11 +62,11 @@ class Transpiler:
                 found_h2 = True
 
         if not found_h1:
-            raise PlaybookError(
+            raise ProgramLoadError(
                 "Failed to parse playbook: Missing H1 header (Agent name)"
             )
         if not found_h2:
-            raise PlaybookError(
+            raise ProgramLoadError(
                 "Failed to parse playbook: Missing H2 header (Playbook definition)"
             )
 
@@ -77,19 +78,24 @@ class Transpiler:
             with open(prompt_path, "r") as f:
                 prompt = f.read()
         except (IOError, OSError) as e:
-            raise PlaybookError(f"Error reading prompt template: {str(e)}") from e
+            raise ProgramLoadError(f"Error reading prompt template: {str(e)}") from e
 
-        prompt = prompt.replace("{{PLAYBOOKS}}", playbooks_content)
+        prompt = prompt.replace("{{PLAYBOOKS}}", program_content)
         messages = get_messages_for_prompt(prompt)
+        langfuse_span = LangfuseHelper.instance().trace(
+            name="transpile_playbooks", input=program_content
+        )
 
         # Get the transpiled content from the LLM
         response: Iterator[str] = get_completion(
             llm_config=self.llm_config,
             messages=messages,
             stream=False,
+            langfuse_span=langfuse_span,
         )
 
         processed_content = next(response)
+        langfuse_span.update(output=processed_content)
         console.print("[dim pink]Transpiled playbook content[/dim pink]")
 
         return processed_content

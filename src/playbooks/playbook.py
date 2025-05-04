@@ -1,18 +1,14 @@
-import ast
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .enums import PlaybookExecutionType
 from .playbook_step import PlaybookStep, PlaybookStepCollection
-from .utils.markdown_to_ast import refresh_markdown_attributes
 
 
 class PlaybookTrigger:
     """Represents a trigger that can start a playbook."""
 
-    def __init__(
-        self, playbook_klass: str, playbook_signature: str, list_item: Dict[str, Any]
-    ):
+    def __init__(self, playbook_klass: str, playbook_signature: str, trigger: str):
         """Initialize a PlaybookTrigger.
 
         Args:
@@ -22,11 +18,11 @@ class PlaybookTrigger:
         """
         self.playbook_klass = playbook_klass
         self.playbook_signature = playbook_signature
-        self.list_item = list_item
-        self.text = list_item.get("text", "").strip()
-        # Example text: "- 01:BGN When the agent starts running"
-        self.trigger_name = self.text.split(" ")[0]
-        self.trigger_description = " ".join(self.text.split(" ")[1:])
+        self.trigger = trigger
+        # Example text: "01:BGN When the agent starts running"
+        self.trigger_name = self.trigger.split(" ")[0]
+        self.trigger_description = " ".join(self.trigger.split(" ")[1:])
+        self.is_begin = "BGN" in self.trigger_name
 
     def __str__(self) -> str:
         """Return a string representation of the trigger."""
@@ -38,7 +34,10 @@ class PlaybookTriggers:
     """Collection of triggers for a playbook."""
 
     def __init__(
-        self, playbook_klass: str, playbook_signature: str, h3: Dict[str, Any]
+        self,
+        playbook_klass: str,
+        playbook_signature: str,
+        triggers: List[str],
     ):
         """Initialize a PlaybookTriggers collection.
 
@@ -49,14 +48,13 @@ class PlaybookTriggers:
         """
         self.playbook_klass = playbook_klass
         self.playbook_signature = playbook_signature
-        self.h3 = h3
         self.triggers = [
             PlaybookTrigger(
                 playbook_klass=self.playbook_klass,
                 playbook_signature=self.playbook_signature,
-                list_item=item,
+                trigger=trigger,
             )
-            for item in h3.get("children", [])
+            for trigger in triggers
         ]
 
 
@@ -64,8 +62,8 @@ class Playbook:
     """Represents a playbook that can be executed by an agent.
 
     Playbooks can be of two types:
-    - INT: Internal playbooks written in the step format.
-    - EXT: External playbooks written in Python code.
+    - MD: Markdown playbooks written in the step format.
+    - PYTHON: Python playbooks written in Python code.
     """
 
     @classmethod
@@ -82,20 +80,13 @@ class Playbook:
             ValueError: If the H2 structure is invalid or required sections are missing
         """
         cls._validate_h2_structure(h2)
-        signature, klass = cls.parse_title(h2.get("text", "").strip())
+        signature, klass, export = cls.parse_title(h2.get("text", "").strip())
+
         description, h3s = cls._extract_description_and_h3s(h2)
 
         # Determine playbook type based on presence of a Code h3 section
-        if any(h3.get("text", "").strip().lower() == "code" for h3 in h3s):
-            # External playbook (EXT)
-            playbook = cls._create_ext_playbook(h2, klass, signature, description, h3s)
-            # Refresh markdown attributes after removing code sections
-            refresh_markdown_attributes(h2)
-            playbook.markdown = h2["markdown"]
-            return playbook
-        else:
-            # Internal playbook (INT)
-            return cls._create_int_playbook(h2, klass, signature, description, h3s)
+        # Markdown playbook (MD)
+        return cls._create_md_playbook(h2, klass, signature, description, h3s, export)
 
     @staticmethod
     def _validate_h2_structure(h2: Dict[str, Any]) -> None:
@@ -142,61 +133,16 @@ class Playbook:
         return description, h3s
 
     @classmethod
-    def _process_code_block(cls, code: Optional[str]) -> Tuple[str, Callable]:
-        """Process and validate a Python code block.
-
-        Args:
-            code: The Python code as a string.
-
-        Returns:
-            A tuple containing the processed code and the compiled function.
-
-        Raises:
-            ValueError: If the code is None, contains multiple functions, or no functions.
-        """
-        if code is None:
-            raise ValueError("EXT playbook must have a code block")
-
-        code = code.strip()
-
-        # Parse and validate python code
-        tree = ast.parse(code)
-        module_globals = {}
-        func = None
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef):
-                if func is not None:
-                    raise ValueError(
-                        "Multiple functions found in EXT playbook. Each EXT playbook should have a single function."
-                    )
-
-                code_obj = compile(
-                    ast.Module(body=[node], type_ignores=[]),
-                    filename="<ast>",
-                    mode="exec",
-                )
-                exec(code_obj, module_globals)
-                func = module_globals[node.name]
-                break
-
-        if func is None:
-            raise ValueError(
-                "No function found in EXT playbook. Each EXT playbook should have a single function."
-            )
-
-        return code, func
-
-    @classmethod
-    def _create_int_playbook(
+    def _create_md_playbook(
         cls,
         h2: Dict[str, Any],
         klass: str,
         signature: str,
         description: Optional[str],
         h3s: List[Dict[str, Any]],
+        export: bool,
     ) -> "Playbook":
-        """Create an internal (INT) type playbook.
+        """Create a markdown (MD) type playbook.
 
         Args:
             h2: The H2 AST node.
@@ -206,21 +152,25 @@ class Playbook:
             h3s: The list of H3 sections.
 
         Returns:
-            A new INT playbook instance.
+            A new MD playbook instance.
 
         Raises:
             ValueError: If an unknown H3 section is encountered.
         """
-        trigger = None
+        triggers = None
         steps = None
         notes = None
         step_collection = PlaybookStepCollection()
 
         for h3 in h3s:
             h3_title = h3.get("text", "").strip().lower()
-            if h3_title == "trigger":
-                trigger = PlaybookTriggers(
-                    playbook_klass=klass, playbook_signature=signature, h3=h3
+            if h3_title == "triggers":
+                triggers = PlaybookTriggers(
+                    playbook_klass=klass,
+                    playbook_signature=signature,
+                    triggers=[
+                        child.get("text", "").strip() for child in h3["children"]
+                    ],
                 )
             elif h3_title == "steps":
                 steps = h3
@@ -238,78 +188,17 @@ class Playbook:
 
         return cls(
             klass=klass,
-            execution_type=PlaybookExecutionType.INT,
+            execution_type=PlaybookExecutionType.MARKDOWN,
             signature=signature,
             description=description,
-            trigger=trigger,
+            triggers=triggers,
             steps=steps,
             notes=notes,
             code=None,
             func=None,
             markdown=h2["markdown"],
             step_collection=step_collection,
-        )
-
-    @classmethod
-    def _create_ext_playbook(
-        cls,
-        h2: Dict[str, Any],
-        klass: str,
-        signature: str,
-        description: Optional[str],
-        h3s: List[Dict[str, Any]],
-    ) -> "Playbook":
-        """Create an external (EXT) type playbook.
-
-        Args:
-            h2: The H2 AST node.
-            klass: The playbook class name.
-            signature: The playbook signature.
-            description: The playbook description.
-            h3s: The list of H3 sections.
-
-        Returns:
-            A new EXT playbook instance.
-
-        Raises:
-            ValueError: If EXT playbook has sections other than 'code' or 'trigger', or if the code block is invalid.
-        """
-        code = None
-        trigger = None
-        for h3 in h3s:
-            h3_title = h3.get("text", "").strip().lower()
-            if h3_title == "code":
-                code_block = h3.get("children", [{}])[0]
-                if code_block.get("type") != "code-block":
-                    raise ValueError(
-                        f"EXT playbook ### Code section can only have a code block, found: {h3.get('markdown', '')}"
-                    )
-                code = code_block["text"]
-                # Remove the code block from the markdown
-                h2["children"].remove(h3)
-            elif h3_title == "trigger":
-                trigger = PlaybookTriggers(
-                    playbook_klass=klass, playbook_signature=signature, h3=h3
-                )
-            else:
-                raise ValueError(
-                    f"EXT playbook can only have code and trigger sections, found: {h3_title}"
-                )
-
-        code, func = cls._process_code_block(code)
-
-        return cls(
-            klass=klass,
-            execution_type=PlaybookExecutionType.EXT,
-            signature=signature,
-            description=description,
-            trigger=trigger,
-            steps=None,
-            notes=None,
-            code=code,
-            func=func,
-            markdown=h2["markdown"],
-            step_collection=None,
+            export=export,
         )
 
     @classmethod
@@ -325,6 +214,12 @@ class Playbook:
         Raises:
             ValueError: If the class name is not a valid identifier.
         """
+        export = False
+        match = re.match(r"^export\s*:\s*(.*)", title, re.DOTALL)
+        if match:
+            export = True
+            title = match.group(1).strip()
+
         # Extract the class name (must be a valid identifier starting with a letter)
         match = re.match(r"^[A-Za-z][A-Za-z0-9]*", title)
         if not match:
@@ -333,7 +228,7 @@ class Playbook:
             )
 
         klass = match.group(0)
-        return title, klass
+        return title, klass, export
 
     def __init__(
         self,
@@ -341,40 +236,42 @@ class Playbook:
         execution_type: PlaybookExecutionType,
         signature: str,
         description: Optional[str],
-        trigger: Optional[PlaybookTriggers],
+        triggers: Optional[PlaybookTriggers],
         steps: Optional[Dict[str, Any]],
         notes: Optional[Dict[str, Any]],
         code: Optional[str],
         func: Optional[Callable],
         markdown: str,
         step_collection: Optional[PlaybookStepCollection] = None,
+        export: bool = False,
     ):
         """Initialize a Playbook.
 
         Args:
             klass: The class name of the playbook.
-            execution_type: The execution type (INT or EXT).
+            execution_type: The execution type (MD or PYTHON).
             signature: The signature of the playbook function.
             description: The description of the playbook.
-            trigger: The triggers for the playbook.
+            triggers: The triggers for the playbook.
             steps: The AST node representing the steps section.
             notes: The AST node representing the notes section.
-            code: The Python code for EXT playbooks.
-            func: The compiled function for EXT playbooks.
+            code: The Python code for PYTHON playbooks.
+            func: The compiled function for PYTHON playbooks.
             markdown: The markdown representation of the playbook.
-            step_collection: The collection of steps for INT playbooks.
+            step_collection: The collection of steps for MD playbooks.
         """
         self.klass = klass
         self.execution_type = execution_type
         self.signature = signature
         self.description = description
-        self.trigger = trigger
+        self.triggers = triggers
         self.steps = steps
         self.notes = notes
         self.code = code
         self.func = func
         self.markdown = markdown
         self.step_collection = step_collection
+        self.export = export
 
     def get_step(self, line_number: str) -> Optional[PlaybookStep]:
         """Get a step by line number.
@@ -409,7 +306,9 @@ class Playbook:
             A list of trigger instruction strings, or an empty list if no triggers.
         """
         return (
-            [str(trigger) for trigger in self.trigger.triggers] if self.trigger else []
+            [str(trigger) for trigger in self.triggers.triggers]
+            if self.triggers
+            else []
         )
 
     def __repr__(self) -> str:

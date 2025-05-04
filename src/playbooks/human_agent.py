@@ -1,23 +1,10 @@
-from .base_agent import BaseAgent
+from playbooks.base_agent import BaseAgent
 
 
 class HumanAgent(BaseAgent):
-    def __init__(self, klass: str = "Human"):
+    def __init__(self, klass: str):
         super().__init__(klass)
+        self.id = "human"
 
-    def process_message(
-        self,
-        message: str,
-        from_agent: "BaseAgent",
-        routing_type: str,
-        llm_config: dict = None,
-        stream: bool = False,
-    ):
-        # We don't know yet what it means for human agent to receive a message
-        raise NotImplementedError
-
-    def __repr__(self):
-        return "User"
-
-    def __str__(self):
-        return "User"
+    async def begin(self):
+        pass
