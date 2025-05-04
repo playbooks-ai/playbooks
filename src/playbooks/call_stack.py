@@ -1,7 +1,4 @@
-from typing import Any, Dict, List, Optional, Union
-
-from playbooks.interpreter.output_item import OutputItem, StringTrace
-from playbooks.trace_mixin import TraceMixin
+from typing import Any, Dict, List, Optional
 
 
 class InstructionPointer:
@@ -23,6 +20,13 @@ class InstructionPointer:
             else f"{self.playbook}:{self.line_number}"
         )
 
+    def __repr__(self) -> str:
+        return str(self)
+
+    @classmethod
+    def from_step(cls, step: str) -> "InstructionPointer":
+        return cls(step.split(":")[0], step.split(":")[1])
+
 
 class CallStackFrame:
     """Represents a frame in the call stack.
@@ -35,10 +39,10 @@ class CallStackFrame:
     def __init__(
         self,
         instruction_pointer: InstructionPointer,
-        llm_chat_session_id: Optional[str] = None,
+        langfuse_span: Optional[Any] = None,
     ):
         self.instruction_pointer = instruction_pointer
-        self.llm_chat_session_id = llm_chat_session_id
+        self.langfuse_span = langfuse_span
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the frame to a dictionary representation.
@@ -51,8 +55,11 @@ class CallStackFrame:
             "llm_chat_session_id": self.llm_chat_session_id,
         }
 
+    def __repr__(self) -> str:
+        return str(self.instruction_pointer)
 
-class CallStack(TraceMixin):
+
+class CallStack:
     """Represents a call stack for playbook execution.
 
     Tracks the execution path through playbooks with a stack of frames.
@@ -63,41 +70,11 @@ class CallStack(TraceMixin):
     """
 
     def __init__(self, playbook_lines: Optional[List[str]] = None):
-        super().__init__()
         self.frames: List[CallStackFrame] = []
 
         if playbook_lines:
             for playbook_line in playbook_lines:
                 self.push_playbook_line(playbook_line)
-
-    def trace(
-        self,
-        message: Union[str, OutputItem],
-        metadata: Optional[Dict[str, Any]] = None,
-        level: str = "INFO",
-    ) -> None:
-        """Trace a message with call stack information.
-
-        Args:
-            message: The message to trace.
-            metadata: Additional metadata for the trace.
-            level: The level of the trace.
-        """
-        if isinstance(message, str):
-            message = StringTrace(message)
-
-        # Update the trace metadata
-        trace_metadata = metadata or {}
-        trace_metadata.update(
-            {
-                "frames": self.to_dict(),
-                "level": level,
-            }
-        )
-
-        # Set the metadata and delegate to parent class for actual tracing
-        message.metadata = trace_metadata
-        super().trace(message, trace_metadata, level)
 
     def is_empty(self) -> bool:
         """Check if the call stack is empty.
@@ -144,6 +121,16 @@ class CallStack(TraceMixin):
         """
         return self.frames[-1] if self.frames else None
 
+    def advance_instruction_pointer(
+        self, instruction_pointer: InstructionPointer
+    ) -> None:
+        """Advance the instruction pointer to the next instruction.
+
+        Args:
+            instruction_pointer: The new instruction pointer.
+        """
+        self.frames[-1].instruction_pointer = instruction_pointer
+
     def __repr__(self) -> str:
         frames = ", ".join(str(frame.instruction_pointer) for frame in self.frames)
         return f"CallStack[{frames}]"
@@ -158,21 +145,3 @@ class CallStack(TraceMixin):
             A list of string representations of instruction pointers.
         """
         return [str(frame.instruction_pointer) for frame in self.frames]
-
-    def to_trace(self) -> List[str]:
-        """Convert to a trace representation.
-
-        Returns:
-            A list of string representations of instruction pointers.
-        """
-        return self.to_dict()
-
-    def get_trace_metadata(self) -> Dict[str, Any]:
-        """Get metadata for tracing.
-
-        Returns:
-            A dictionary with frame information.
-        """
-        return {
-            "frames": [frame.to_dict() for frame in self.frames],
-        }

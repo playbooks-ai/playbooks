@@ -28,5 +28,8 @@ def load_environment(env_name: str = None) -> None:
 
     # Load environment-specific file with higher precedence
     env_specific_path = root_dir / f".env.{env_name}"
+    # print(f"Loading environment variables from {env_specific_path}")
     if env_specific_path.exists():
         load_dotenv(env_specific_path, override=True)
+
+    # print(f"Environment variables: {os.environ}")

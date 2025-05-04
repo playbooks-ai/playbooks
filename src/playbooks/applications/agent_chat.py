@@ -1,225 +1,196 @@
-import logging
-from dataclasses import dataclass
-from typing import Iterable, List, Optional
+#!/usr/bin/env python
+"""
+CLI application for interactive agent chat using playbooks.
+Provides a simple terminal interface for communicating with AI agents.
+"""
+import argparse
+import asyncio
+import functools
+import glob
+import sys
+from pathlib import Path
+from typing import Callable, List
 
-import typer
 from rich.console import Console
-from rich.prompt import Prompt
+from rich.panel import Panel
+from rich.text import Text
 
-from playbooks.agent_factory import AgentFactory
-from playbooks.config import LLMConfig
-from playbooks.exceptions import AgentConfigurationError
-from playbooks.human_agent import HumanAgent
-from playbooks.message_router import MessageRouter
-from playbooks.types import AgentResponseChunk
+from playbooks import Playbooks
+from playbooks.base_agent import AgentCommunicationMixin
+from playbooks.constants import EOM
+from playbooks.markdown_playbook_execution import ExecutionFinished
+from playbooks.playbook_call import PlaybookCall
+from playbooks.session_log import SessionLogItemLevel
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
+# Add the src directory to the Python path to import playbooks
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
-app = typer.Typer()
+# Initialize Rich console
 console = Console()
 
 
-@dataclass
-class AgentChatConfig:
-    playbooks_paths: List[str] = None
-    playbooks_content: Optional[str] = None
-    main_model_config: LLMConfig = None
+class PubSub:
+    """Simple publish-subscribe mechanism for event handling."""
+
+    def __init__(self):
+        self.subscribers: List[Callable] = []
+
+    def subscribe(self, callback: Callable):
+        """Subscribe a callback function to receive messages."""
+        self.subscribers.append(callback)
+
+    def publish(self, message):
+        """Publish a message to all subscribers."""
+        for subscriber in self.subscribers:
+            subscriber(message)
 
 
-class AgentChat:
-    def __init__(self, config: AgentChatConfig = None):
-        self.config = config or AgentChatConfig()
+class SessionLogWrapper:
+    """Wrapper around session_log that publishes updates."""
 
-        if config:
-            if config.playbooks_paths:
-                self.agents = AgentFactory.from_playbooks_paths(
-                    config.playbooks_paths, config.main_model_config
-                )
-            elif config.playbooks_content:
-                self.agents = AgentFactory.from_playbooks_content(
-                    config.playbooks_content, config.main_model_config
-                )
-            else:
-                raise AgentConfigurationError(
-                    "Expected either playbooks_paths or playbooks_content to be set"
-                )
+    def __init__(self, session_log, pubsub, verbose=False, agent=None):
+        self._session_log = session_log
+        self._pubsub = pubsub
+        self.verbose = verbose
+        self.agent = agent
 
-        if len(self.agents) != 1:
-            raise AgentConfigurationError(
-                f"Expected 1 agent, but found {len(self.agents)}"
-            )
-
-        self.ai_agent_class = self.agents[list(self.agents.keys())[0]]
-        self.ai_agent = self.ai_agent_class()
-        self.human_agent = self.agents["User"] = HumanAgent(klass="User")
-
-    def run(self, stream: bool):
-        """Run the agent and return chunks.
-
-        Args:
-            stream: Whether to stream the response chunks or collect them all.
-
-        Returns:
-            An iterable of AgentResponseChunk objects. When stream=True, yields chunks
-            one by one as they're generated. When stream=False, collects all chunks
-            and then yields them.
-        """
-        chunks = []
-        for chunk in self.ai_agent.run(
-            llm_config=self.config.main_model_config, stream=stream
+    def append(self, msg, level=SessionLogItemLevel.MEDIUM):
+        """Append a message to the session log and publish it."""
+        self._session_log.append(msg, level)
+        # Always publish messages related to SendMessage to human
+        if (
+            isinstance(msg, PlaybookCall)
+            and msg.playbook_klass == "SendMessage"
+            and msg.args
+            and msg.args[0] == "human"
         ):
-            if stream:
-                yield chunk
-            else:
-                chunks.append(chunk)
+            # Use the agent's class/type as the display name
+            agent_name = self.agent.klass if self.agent else "Agent"
 
-        if not stream:
-            yield from chunks
-
-    def process_user_message(self, message: str, stream: bool):
-        """Process a user message and return response chunks.
-
-        Args:
-            message: The user message to process.
-            stream: Whether to stream the response chunks or collect them all.
-
-        Returns:
-            An iterable of AgentResponseChunk objects. The behavior depends on the
-            MessageRouter implementation, but generally follows the stream parameter.
-        """
-        return MessageRouter.send_message(
-            message=message,
-            from_agent=self.human_agent,
-            to_agent=self.ai_agent,
-            llm_config=self.config.main_model_config,
-            stream=stream,
-        )
-
-
-@app.command()
-def main(
-    playbooks_paths: List[str] = typer.Argument(  # noqa: B008
-        ..., help="One or more paths to playbook files. Supports glob patterns"
-    ),
-    model: str = typer.Option(None, help="Model name for the selected LLM"),
-    api_key: Optional[str] = typer.Option(None, help="API key for the selected LLM"),
-    stream: bool = typer.Option(False, help="Enable streaming output from LLM"),
-):
-    """Start an interactive chat session using the specified playbooks and LLM"""
-    _chat(playbooks_paths=playbooks_paths, model=model, api_key=api_key, stream=stream)
-
-
-def output(stream: bool, response_generator: Iterable[AgentResponseChunk]):
-    if stream:
-        agent_responses = []
-        tool_responses = []
-        for chunk in response_generator:
-            if chunk:
-                if hasattr(chunk, "raw") and chunk.raw:
-                    console.print("[green]" + chunk.raw + "[/green]", end="")
-                if hasattr(chunk, "trace") and chunk.trace:
-                    console.print("[yellow]" + chunk.trace + "[/yellow]")
-                if hasattr(chunk, "agent_response") and chunk.agent_response:
-                    agent_responses.append(chunk.agent_response)
-                if hasattr(chunk, "tool_response") and chunk.tool_response:
-                    tool_responses.append(chunk.tool_response)
-
-        # if tool_responses:
-        #     for tool_response in tool_responses:
-        #         console.print(
-        #             "Tool: "
-        #             + tool_response.code
-        #             + " returned "
-        #             + str(tool_response.output)
-        #         )
-        if agent_responses:
-            for agent_response in agent_responses:
-                console.print("[blue]Agent: " + agent_response + "[/blue]")
-    else:
-        chunks = list(response_generator)
-        # Collect all raw content from chunks that have raw attribute
-        raw_content = "".join(chunk.raw for chunk in chunks if chunk.raw)
-        if raw_content:
-            console.print(raw_content)
-            console.print()
-
-        agent_responses = []
-        tool_responses = []
-        for chunk in chunks:
-            if chunk.agent_response:
-                agent_responses.append(chunk.agent_response)
-            if chunk.tool_response:
-                tool_responses.append(chunk.tool_response)
-
-        for tool_response in tool_responses:
-            print(
-                "Tool: " + tool_response.code + " returned " + str(tool_response.output)
-            )
-        for agent_response in agent_responses:
-            print("Agent: " + agent_response)
-
-
-def _chat(
-    playbooks_paths: List[str],
-    model: Optional[str],
-    api_key: Optional[str],
-    stream: bool,
-):
-    """Run the chat session"""
-    config = AgentChatConfig(
-        playbooks_paths=playbooks_paths,
-        main_model_config=LLMConfig(model=model, api_key=api_key),
-    )
-
-    agent_chat = AgentChat(config)
-
-    try:
-        console.print(f"\nLoading playbooks from: {playbooks_paths}")
-        console.print("\nLoaded playbooks successfully")
-        console.print(
-            f"\nInitializing runtime with model={model}, "
-            f"api_key={'*' * len(api_key) if api_key else None}"
-        )
-        console.print("\nRuntime initialized successfully")
-
-        # Print initial response from AI agent
-        output(stream=stream, response_generator=agent_chat.run(stream=stream))
-
-        # Start interactive chat loop
-        while True:
-            try:
-                # Get user input
-                user_message = Prompt.ask("\n[blue]User[/blue]")
-                if not user_message:
-                    continue
-
-                # Process user message
-                output(
-                    stream=stream,
-                    response_generator=agent_chat.process_user_message(
-                        user_message, stream=stream
-                    ),
+            # Create a styled message with Rich
+            message_text = Text(msg.args[1])
+            console.print()  # Add a newline for spacing
+            console.print(
+                Panel(
+                    message_text,
+                    title=agent_name,
+                    border_style="cyan",
+                    title_align="left",
+                    expand=False,
                 )
+            )
 
-            except (KeyboardInterrupt, EOFError):
-                break
-            except Exception as e:
-                # show error message and stack trace
-                console.print(f"\n[red]Error: {str(e)}[/red]")
-                raise e
-                break
+        if self.verbose:
+            self._pubsub.publish(str(msg))
 
-        console.print("\n[yellow]Goodbye![/yellow]")
+    def __iter__(self):
+        return iter(self._session_log)
 
+    def __str__(self):
+        return str(self._session_log)
+
+
+# Store original method for restoring later
+original_wait_for_message = AgentCommunicationMixin.WaitForMessage
+
+
+@functools.wraps(original_wait_for_message)
+async def patched_wait_for_message(self, source_agent_id: str):
+    """Patched version of WaitForMessage that shows a prompt when waiting for human input."""
+    messages = []
+    while not self.inboxes[source_agent_id].empty():
+        message = self.inboxes[source_agent_id].get_nowait()
+        if message == EOM:
+            break
+        messages.append(message)
+
+    if not messages:
+        # Show User prompt only when waiting for a human message and the queue is empty
+        if source_agent_id == "human":
+            # Simple user prompt (not in a panel)
+            console.print()  # Add a newline for spacing
+            user_input = await asyncio.to_thread(
+                console.input, "[bold yellow]User:[/bold yellow] "
+            )
+
+            messages.append(user_input)
+        else:
+            # Wait for input
+            messages.append(await self.inboxes[source_agent_id].get())
+
+    for message in messages:
+        self.state.session_log.append(
+            f"Received message from {source_agent_id}: {message}"
+        )
+    return "\n".join(messages)
+
+
+async def handle_user_input(playbooks):
+    """Handle user input and send it to the AI agent."""
+    while True:
+        # User input is now handled in patched_wait_for_message
+        # Just check if we need to exit
+        if len(playbooks.program.agents) == 0:
+            console.print("[yellow]No agents available. Exiting...[/yellow]")
+            break
+
+        # Small delay to prevent CPU spinning
+        await asyncio.sleep(0.1)
+
+
+async def main(glob_path: str, verbose: bool):
+    """Main entrypoint for the CLI application.
+
+    Args:
+        glob_path: Path to the playbook file(s) to load
+        verbose: Whether to print the session log
+    """
+    # Patch the WaitForMessage method before loading agents
+    AgentCommunicationMixin.WaitForMessage = patched_wait_for_message
+
+    # Expand glob patterns to file paths
+    file_paths = glob.glob(glob_path)
+    if not file_paths:
+        console.print(
+            f"[bold red]Error:[/bold red] No files found matching pattern: {glob_path}"
+        )
+        sys.exit(1)
+
+    console.print(f"[green]Loading playbooks from:[/green] {file_paths}")
+    playbooks = Playbooks(file_paths)
+    pubsub = PubSub()
+
+    # Wrap the session_log with the custom wrapper for all agents
+    for agent in playbooks.program.agents:
+        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+            agent.state.session_log = SessionLogWrapper(
+                agent.state.session_log, pubsub, verbose, agent
+            )
+
+    # Start the program
+    try:
+        await asyncio.gather(playbooks.program.begin(), handle_user_input(playbooks))
+    except ExecutionFinished:
+        console.print("[green]Execution finished. Exiting...[/green]")
     except KeyboardInterrupt:
-        console.print("\n[yellow]Goodbye![/yellow]")
+        console.print("\n[yellow]Exiting...[/yellow]")
     except Exception as e:
-        console.print(f"\n[red]Fatal error:[/red] {str(e)}")
+        console.print(f"[bold red]Error:[/bold red] {e}")
         raise
+    finally:
+        # Restore the original method when we're done
+        AgentCommunicationMixin.WaitForMessage = original_wait_for_message
 
 
 if __name__ == "__main__":
-    app()
+    parser = argparse.ArgumentParser(description="Run the agent chat application.")
+    parser.add_argument("glob_path", help="Path to the playbook file(s) to load")
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print the session log"
+    )
+    args = parser.parse_args()
+
+    try:
+        asyncio.run(main(args.glob_path, args.verbose))
+    except KeyboardInterrupt:
+        print("\nGracefully shutting down...")

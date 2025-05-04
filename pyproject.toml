@@ -1,54 +1,29 @@
 [tool.poetry]
 name = "playbooks"
-version = "0.2.0"
-license = "LICENSE-CODE"
-description = "A framework for creating AI agents using natural language programming"
+version = "0.3.0"
+description = "A framework for creating AI applications and agents using natural language programming"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
+license = "MIT"
 readme = "README.md"
 packages = [{include = "playbooks", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-openai = "*"
-anthropic = "*"
-google_cloud_aiplatform = "*"
-typer = "*"
-rich = "*"
-python_dotenv = "*"
-litellm = "*"
-md2py = "*"
-sqlalchemy = "^2.0.36"
-alembic = "^1.14.0"
-markdown-it-py = "^3.0.0"
-redis = "^5.2.1"
+rich = "^14.0.0"
+dotenv = "^0.9.9"
+litellm = "^1.65.0"
 diskcache = "^5.6.3"
-langfuse = "^2.60.1"
+langfuse = "^2.60.2"
+redis = "^5.2.1"
+markdown-it-py = "^3.0.0"
+python-frontmatter = "^1.1.0"
+pytest-asyncio = "^0.26.0"
+
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.4.0"
-pytest_cov = "^4.1.0"
-black = "^23.7.0"
-ruff = "*"
-pyright = "*"
-pytest_asyncio = "*"
-autogen_core = "^0.4.0.dev13"
-mypy = "*"
-pytest-mock = "^3.14.0"
-pre-commit = "^4.0.1"
-tavily-python = "^0.5.0"
-sphinx = "^7.2.6"
-sphinx-rtd-theme = "^2.0.0"
-sphinx-autodoc-typehints = "^2.0.0"
-myst-parser = "^2.0.0"
+pytest = "^8.3.5"
+pytest-asyncio = "^0.26.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-[tool.ruff]
-select = ["E", "F", "B"]
-ignore = ["B006", "B018", "E501"]
-line-length = 88
-
-[tool.poetry.scripts]
-playbooks = "playbooks.cli.cli:main"

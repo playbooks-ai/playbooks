@@ -13,8 +13,8 @@ class RoutingType:
 
 
 class PlaybookExecutionType(str, Enum):
-    INT = "INT"
-    EXT = "EXT"
+    MARKDOWN = "markdown"
+    CODE = "code"
 
     @classmethod
     def __getitem__(cls, key):

@@ -115,6 +115,9 @@ class PlaybookStep:
         """Return a string representation of the step."""
         return f"PlaybookStep({self.line_number}, {self.step_type}, {self.content})"
 
+    def execute(self):
+        pass
+
 
 class PlaybookStepCollection:
     """A collection of playbook steps."""

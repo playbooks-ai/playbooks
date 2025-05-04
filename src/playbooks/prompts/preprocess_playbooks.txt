@@ -1,51 +1,73 @@
-**You are a Playbooks preprocessor. You receive raw playbook text (Markdown) and a list of external functions. Your task is to output a processed version with the following rules**:
+### Playbooks → Intermediate‑Format Transpiler Prompt
 
-1. **Playbook Signature**  
-   - Format: `## <PlaybookName>(<optional params>) -> <returnVar>`  
-   - If no parameters, use `## Foo() -> None`.  
-   - If no return, also use `-> None`.  
+You convert *raw playbooks program* including markdown playbooks and Python `@playbook` functions into a **intermediate‑format program**. Follow the rules below **exactly**; deviations break compilation.
 
-2. **Trigger Section**  
-   - Each line in`### Trigger` should begin with `<two-digit>:<three-letter-trigger-code>`
-   - **Trigger codes:**
-     - `BGN`: When agent start running, e.g. starts a conversation
-     - `CND`: A conditional trigger such as when a variable is updated
-     - `EVT`: When the agent receives an event
+---
+#### 1  Golden Rules (read first, remember always)
+1. **Keep every fenced code block verbatim** – no edits, no re‑ordering.
+2. **Never invent or remove content**: no new triggers, steps, variables, or dialogue text not present or implied in the source.
+3. For loops use `CND` + indented sub‑steps + `JMP` back to the `CND` line. Avoid recursion.
+4. Variable declarations: $var:type = … where type ∈ {str int float list dict}. If type unknown use str.
+5. Output **only** the transformed program – no comments, no explanations.
 
-3. **Steps Section**  
-  - Each line in `### Steps` should begin with `<two-digit>:<three-letter-command-code>`
-  - **3-Letter Command Codes:**
-    - `EXE`: Execute internal logic or assignments (e.g., `$x = $y + 2`)or playbook invocation (e.g., `AnotherPlaybook()`).
-    - `LOP`: Loop (e.g., `LOP For each $item in $list`)
-    - `CND`: A conditional or if or an else statement (e.g., `CND If user is unhappy`, `CND otherwise`)
-    - `CHK`: Refer to a note from the Notes section (e.g., `CHK N1`).
-    - `RET`: Return from current playbook, optionally returning a value.  
-    - `JMP`: Jump to a different line.  
-    - `YLD`: Yield control back to wait for queued playbook call or for user input
+---
+#### 2  Output contract
+```
+--- optional front‑matter (title, author) — copy verbatim if present ---
+# <AgentName>
+<If provided, copy agent description verbatim, otherwise generate a short paragraph description>
 
-  - **Line Numbering:**  
-    - Use two-digit line numbers: `01:`, `02:`, etc.  
-    - For sub-steps (like within an if block), append `.01`, `.02`, etc.
+```python
+… external @playbook functions verbatim …
+```
 
-5. **Splitting and Reformulating Steps**  
-   - Convert compound steps (e.g. “If X then do Y else do Z” or “construct a name and return it”) into multiple lines with the correct commands.  
-   - Maintain atomic actions—one instruction per line.
-   - Add sub-steps if an `if` block is needed (e.g., `01:CND If $firstName == "Steve"  01.01:RET return "Steverleon"`).  
+## <PlaybookName>(<params>) -> <returnVar | None>
+<If provided, copy playbook description verbatim, otherwise generate a short paragraph description>
+### Triggers  (omit section if none)
+T<n>:<BGN|CND|EVT> <trigger text>
+### Steps
+01:<CMD> …  # two‑digit numbering; dot‑notation for sub‑steps
+… more steps …
+### Notes  (optional)
+N<n> <text>
+```
+---
+#### 3  Allowed Command Codes (Steps)
+| Code | Meaning                                                        |
+|------|----------------------------------------------------------------|
+| EXE  | Imperative action / assignment                                 |
+| QUE  | Queue a playbook or function call                              |
+| CND  | `if`, `else`, `while`, `for` condition                         |
+| CHK  | Apply a note                                                   |
+| RET  | Return from playbook                                           |
+| JMP  | Jump to another numbered line                                  |
+| YLD user   | Yield, wait for user input                               |
+| YLD call   | Yield, wait for queued call to finish                    |
+| YLD return | Yield, returning from playbook                           |
+| YLD exit   | Yield, exiting program                                   |
 
-6. **Notes**  
-   - Number notes like `N1.`, `N2.`, and triggers like `T1.`, `T2.`
+---
+#### 4  Quick Mapping Cheatsheet
+| Raw text starts with …                 | Emit Steps (example)                                   |
+|----------------------------------------|--------------------------------------------------------|
+| Func(x) expecting result               | $r:type = Func(x=$x) then YLD call             |
+| If ‑‑ then … else …                    | CND If … + sub‑steps 01.01: etc                    |
+| While …                                | 01:CND While … + sub‑steps + 01.99:JMP 01          |
+| Load files "a", "b.txt"            | 01:QUE LoadArtifact("a") + 02:QUE LoadArtifact("b.txt") + YLD call          |
+| Show file "abc" to user                | 01:QUE Say("Artifact[abc]") + YLD call          |
+| Tell user contents of artifact "abc"   | 01:QUE LoadArtifact("abc") + 02:YLD call + 03:QUE Say(contents of Artifact[abc])        |
 
-**Output**  
-- Each Python tool function becomes a EXT playbook. Add the playbook with the same name as the function and a description using function documentation, noting it is external call. Include the code in a `### Code` section.
-- Each non-python playbooks is an INT playbook. Add description if not already present.
-- If not WordCase already, convert agent and playbook names to WordCase.
-
-Example --
+---
+#### 5  Illustrative Transformation (study carefully)
 **Start input**  
-
+---
+title: "Example agent"
+author: "Playbooks AI"
+---
 # Example agent
 
-```tools
+```python
+@playbook
 def GetWeather(city:str):
     """
     Get weather info for a city
@@ -58,107 +80,191 @@ def GetWeather(city:str):
     """
     return {"temperature": 70, "description": "Clear and sunny"}
 
+@playbook(triggers=["Whenever you need to look up additional information"], export=True)
 def LookupInfo(query:str):
     """
     Look up info for given query
-
-    ### Trigger
-    - Whenever you need to look up additional information
     """
     return "Some information"
 ```
 
 ## Main
 
-### Trigger
+### Triggers
 - When program starts
 
 ### Steps
 - Ask user for name and city they are from
 - Greet the user and give an interesting fact about the city
-- Get weather for the city
+- GetWeather(city)
 - Tell user what the weather is like
+- List 5 cities near user's city
+- Think deeply about the 5 cities and if we should ask user if they have visited all 5 cities
+- Ask user if they have visited all 5 cities
 
 ### Notes
 - If name is a Jack Sparrow, start speaking in pirate speak
 
-## Validate city
+## export: Validate city
+This playbook validates a city input by the user.
+<output_format>
+The output is a string of the validated city in "Austin, TX" format.
+</output_format>
+Only consider cities in the United States.
+<style_guide>
+- Write in a friendly, conversational tone
+- Use simple language and avoid complex words
+- Keep sentences short and concise
+</style_guide>
 
-## Trigger
+## Triggers
 - When user provides their city
 
 ### Steps
 - While the city is not a US city or unclear which state the city is from
   - Ask user to specify a US city or disambiguate
 
+# SecondAgent
+
+## P1($name, $age)
+- Say hello $name
+- Save "greeting.txt" with summary "Greeting" and content "Hello $name"
+
+## export:P2
+- Load "greeting.txt"
+- Show "greeting.txt" to user
+
 **End input**  
 
 **Start output**
+---
+title: "Example agent"
+author: "Playbooks AI"
+---
 
 # ExampleAgent
 As ExampleAgent, you greet users warmly, collect and validate US city locations, share interesting facts about their city, and provide current weather information, all while maintaining a helpful, conversational tone.
 
-## GetWeather(city: str) -> dict
-Returns current weather for the given city in "Austin, TX" format
-### Code
 ```python
-def GetWeather(city: str) -> dict:
-    return {"temperature": 70, "description": "Clear and sunny"}
-```
+@playbook
+def GetWeather(city:str) -> dict:
+    """
+    Get weather info for a city
 
-## LookupInfo(query:str) -> str:
-Looks up info for given query
-### Trigger
-T1:EVT Whenever you need to look up additional information
-### Code
-```python
+    Args:
+        city (str): US city and state, e.g. "Austin, TX"
+
+    Returns:
+        dict: Weather information
+    """
+    return {"temperature": 70, "description": "Clear and sunny"}
+
+@playbook(triggers=["T1:CND Whenever you need to look up additional information"], export=True)
 def LookupInfo(query:str) -> str:
+    """
+    Look up info for given query
+    """
     return "Some information"
 ```
 
 ## Main() -> None
 Main interaction loop that guides user conversations through a friendly information-gathering and sharing process.
-### Trigger
+### Triggers
 T1:BGN When program starts
 ### Steps
-01:EXE $name, $city = Say(Ask user for name and city they are from)
-02:YLD for user
+01:QUE Ask user for $name:str and $city:str they are from
+02:YLD user
 03:CHK N1
-04:EXE Say(Greet the user and give an interesting fact about the city)
-05:EXE $weather = GetWeather(city=$city)
-06:YLD for call
-07:QUE Say(Tell user what the weather is like)
-08:RET
+04:QUE Greet the user and give an interesting fact about the city
+05:QUE $weather:dict = GetWeather(city=$city)
+06:YLD call
+07:QUE Tell user what the $weather is like
+08:EXE List 5 $cities:list near $city
+09:TNK Think deeply about the 5 $cities and if we should ask user if they have visited all 5 $cities
+10:QUE Ask user if they have visited all 5 $cities
+11:YLD user
+12:RET
 ### Notes
-N1 If name is a Jack Sparrow, start speaking in pirate speak
+N1 If $name is a Jack Sparrow, start speaking in pirate speak
 
-## ValidateCity($city) -> None
-Validation routine that ensures location input meets formatting requirements through iterative verification
-### Trigger
+## export: ValidateCity($city) -> None
+This playbook validates a city input by the user.
+<output_format>
+The output is a string of the validated city in "Austin, TX" format.
+</output_format>
+Only consider cities in the United States.
+<style_guide>
+- Write in a friendly, conversational tone
+- Use simple language and avoid complex words
+- Keep sentences short and concise
+</style_guide>
+### Triggers
 T1:CND When user provides their city
 ### Steps
-01:CND While $city is not a US city or unclear which state the $city is from
-  01.01:EXE $city = Say(Ask user to specify a US city or disambiguate)
+01:CND While $city is not a US city or unclear what state $city is in
+  01.01:QUE Ask user to specify another $city or disambiguate which state $city is in
   01.02:YLD for user
   01.02:JMP 01 to check again
 02:RET return $city in "Austin, TX" format
+
+```exports.json
+[
+  {
+    "name": "LookupInfo",
+    "description": "Look up info for given query",
+    "parameters": {
+      "type": "object",
+      "properties": {"query": {"type": "string", "description": "Query to look up"}}
+    },
+    "triggers": ["Whenever you need to look up additional information"]
+  },
+  {
+    "name": "ValidateCity",
+    "description": "Validation routine that ensures location input meets formatting requirements through iterative verification",
+    "parameters": {
+      "type": "object",
+      "properties": {"$city": {"type": "string", "description": "US city and state, e.g. 'Austin, TX'"}}
+    },
+    "triggers": ["When user provides their city"]
+  }
+]
+```
+
+# SecondAgent
+
+## P1($name, $age)
+Says hello to the user
+### Steps
+01:QUE Say hello $name
+02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name")
+03:RET
+
+## export:P2
+Says goodbye to the user
+### Steps
+01:QUE LoadArtifact("greeting.txt")
+02:YLD call
+03:QUE Say("Artifact[greeting.txt]")
+04:RET
+
+```exports.json
+[
+  {
+    "name": "P2",
+    "description": "Says goodbye to the user",
+  }
+]
+```
+
 **End output**
 
-====
-
-Follow these instructions exactly to transform the entire input. Output only the transformed text, nothing else.
-
 ====SYSTEM_PROMPT_DELIMITER====
-
 **Start input**
 
 {{PLAYBOOKS}}
 
 **End input**
-
-Make sure that agent and playbooks have proper descriptions, external tool must have a code block, internal playbooks must have Steps.
-Insert proper line numbers, headings, trigger/step codes, etc.
-Each playbook must have a name that is alphanumeric and starts with a letter.
-Use JMP for loops. Avoid recursive calls.
-
+Accurately transpile the input into the intermediate format. yld user only when waiting for user input. Queue as many calls as possible before yld call. For each H1, generate export.json with tool info for each exported python and markdown playbooks. If no exported playbooks, generate empty [] export.json.
+If 
+Follow the output contract exactly; deviations break execution.
 **Start output**
