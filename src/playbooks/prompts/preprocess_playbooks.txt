@@ -56,6 +56,7 @@ N<n> <text>
 | Load files "a", "b.txt"            | 01:QUE LoadArtifact("a") + 02:QUE LoadArtifact("b.txt") + YLD call          |
 | Show file "abc" to user                | 01:QUE Say("Artifact[abc]") + YLD call          |
 | Tell user contents of artifact "abc"   | 01:QUE LoadArtifact("abc") + 02:YLD call + 03:QUE Say(contents of Artifact[abc])        |
+| @playbook(triggers=["when program begins"], export=True) | @playbook(triggers=["BGN:when program begins"], export=True) |
 
 ---
 #### 5  Illustrative Transformation (study carefully)
@@ -216,7 +217,7 @@ T1:CND When user provides their city
       "type": "object",
       "properties": {"query": {"type": "string", "description": "Query to look up"}}
     },
-    "triggers": ["Whenever you need to look up additional information"]
+    "triggers": ["T1:CND Whenever you need to look up additional information"]
   },
   {
     "name": "ValidateCity",
@@ -225,10 +226,11 @@ T1:CND When user provides their city
       "type": "object",
       "properties": {"$city": {"type": "string", "description": "US city and state, e.g. 'Austin, TX'"}}
     },
-    "triggers": ["When user provides their city"]
+    "triggers": ["T1:CND When user provides their city"]
   }
 ]
 ```
+
 
 # SecondAgent
 

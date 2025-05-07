@@ -42,9 +42,14 @@ class Variables:
         value: any,
         instruction_pointer: InstructionPointer = None,
     ):
+        if ":" in name:
+            name = name.split(":")[0]
         if name not in self.variables:
             self.variables[name] = Variable(name, value)
         self.variables[name].update(value, instruction_pointer)
+
+    def __contains__(self, name: str) -> bool:
+        return name in self.variables
 
     def __iter__(self):
         return iter(self.variables.values())

@@ -21,7 +21,7 @@ def test_exports(playbooks):
     assert len(agent0.exports) == 1
     assert agent0.exports[0]["name"] == "A"
     assert len(agent0.exports[0]["triggers"]) == 1
-    assert agent0.exports[0]["triggers"][0] == "When you need to compute square root"
+    assert agent0.exports[0]["triggers"][0] == "T1:CND When you need to compute square root"
     assert agent0.playbooks["A"].export
     assert not agent0.playbooks["X"].export
 
@@ -36,7 +36,7 @@ def test_exports(playbooks):
     assert len(agent1.exports[2]["triggers"]) == 1
     assert (
         agent1.exports[2]["triggers"][0]
-        == "When you need to get a secret about a country"
+        == "T1:CND When you need to get a secret about a country"
     )
     assert agent1.playbooks["GetLengthOfCountry"].export
     assert agent1.playbooks["GetCountryPopulation"].export

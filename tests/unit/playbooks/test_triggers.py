@@ -27,7 +27,7 @@ async def test_triggers(test_data_dir):
     await human.SendMessage(ai.id, "test@playbooks.com")
     await human.SendMessage(ai.id, EOM)
 
-    await playbooks.program.begin()
+    await playbooks.program.run_till_exit()
     log = ai.state.session_log.to_log_full()
 
     # python playbook trigger on user providing a PIN

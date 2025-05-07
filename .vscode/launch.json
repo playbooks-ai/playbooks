@@ -11,7 +11,7 @@
             "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
             "console": "integratedTerminal",
             "args": [
-                "tests/data/07-react.md",
+                "${workspaceFolder}/tests/data/04-md-python-md.md",
                 "--verbose"
             ]
         },

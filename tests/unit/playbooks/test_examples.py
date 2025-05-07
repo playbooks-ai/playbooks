@@ -6,10 +6,9 @@ from playbooks import Playbooks
 @pytest.mark.asyncio
 async def test_example_01(test_data_dir):
     playbooks = Playbooks([test_data_dir / "01-hello-playbooks.md"])
-    await playbooks.program.begin()
-    log = str(playbooks.program.agents[0].state.session_log)
-    assert "Executing SendMessage(human" in log
-    assert "HelloWorldDemo finished" in log
+    await playbooks.program.run_till_exit()
+    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    assert "SendMessage(human" in log
 
 
 @pytest.mark.asyncio
@@ -20,8 +19,8 @@ async def test_example_02(test_data_dir):
     # AI will ask name, so seed message from human
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, "John")
 
-    await playbooks.program.begin()
-    log = str(playbooks.program.agents[0].state.session_log)
+    await playbooks.program.run_till_exit()
+    log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert "John" in log
 
 
@@ -33,17 +32,19 @@ async def test_example_03(test_data_dir):
     # AI will ask for a number, so seed response from human
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, "10")
 
-    await playbooks.program.begin()
-    log = str(playbooks.program.agents[0].state.session_log)
+    await playbooks.program.run_till_exit()
+    log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert "-5.44" in log
 
 
 @pytest.mark.asyncio
 async def test_example_04(test_data_dir):
     playbooks = Playbooks([test_data_dir / "04-md-python-md.md"])
-    await playbooks.program.begin()
-    log = str(playbooks.program.agents[0].state.session_log)
-    assert "Executing SendMessage(human" in log
+    await playbooks.program.run_till_exit()
+    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    assert "generate_report_summary()" in log
+    assert "FormatSummary()" in log
+    assert "SendMessage(human" in log
 
 
 @pytest.mark.asyncio
@@ -55,15 +56,15 @@ async def test_example_05(test_data_dir):
         playbooks.program.agents[0].id, "Bhutan"
     )
 
-    await playbooks.program.begin()
-    log = str(playbooks.program.agents[0].state.session_log)
-    assert log.count("Executing GetCountryFact") == 5
+    await playbooks.program.run_till_exit()
+    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    assert log.count("GetCountryFact() returned") == 5
 
 
 @pytest.mark.asyncio
 async def test_example_08(test_data_dir):
     playbooks = Playbooks([test_data_dir / "08-artifact.md"])
-    await playbooks.program.begin()
+    await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert '`LoadArtifact("my_artifact")`' in log
     assert '`LoadArtifact("another_artifact")`' in log

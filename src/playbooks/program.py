@@ -6,6 +6,7 @@ import frontmatter
 
 from .agent_builder import AgentBuilder
 from .human_agent import HumanAgent
+from .markdown_playbook_execution import ExecutionFinished
 from .utils.markdown_to_ast import markdown_to_ast
 
 
@@ -70,3 +71,9 @@ class Program(ProgramAgentsCommunicationMixin):
 
     async def begin(self):
         await asyncio.gather(*[agent.begin() for agent in self.agents])
+
+    async def run_till_exit(self):
+        try:
+            await self.begin()
+        except ExecutionFinished:
+            pass

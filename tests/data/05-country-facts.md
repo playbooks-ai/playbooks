@@ -22,6 +22,7 @@ async def process_countries(countries: List[str]):
 - At the beginning
 ### Steps
 - Ask user what $country they are from
+- If user did not provide a country, engage in a conversation and gently nudge them to provide a country
 - List 5 $countries near $country
 - Tell the user that here are 5 nearby countries to the one they are from
 - Inform the user that you will now tell them some interesting facts about each of the countries
