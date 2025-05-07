@@ -76,8 +76,13 @@ class MarkdownPlaybookExecution:
                 if line.return_value:
                     return_value = line.return_value
                     str_return_value = str(return_value)
-                    if str_return_value.startswith("$") and str_return_value in self.agent.state.variables:
-                        return_value = self.agent.state.variables[str_return_value].value
+                    if (
+                        str_return_value.startswith("$")
+                        and str_return_value in self.agent.state.variables
+                    ):
+                        return_value = self.agent.state.variables[
+                            str_return_value
+                        ].value
 
                 # Wait for external event
                 if line.wait_for_user_input:
