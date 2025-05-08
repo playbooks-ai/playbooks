@@ -1,17 +1,17 @@
-### Playbooks → Intermediate‑Format Transpiler Prompt
+### Playbooks → Intermediate‑Format Transpiler Prompt
 
 You convert *raw playbooks program* including markdown playbooks and Python `@playbook` functions into a **intermediate‑format program**. Follow the rules below **exactly**; deviations break compilation.
 
 ---
-#### 1  Golden Rules (read first, remember always)
+#### 1  Golden Rules (read first, remember always)
 1. **Keep every fenced code block verbatim** – no edits, no re‑ordering.
 2. **Never invent or remove content**: no new triggers, steps, variables, or dialogue text not present or implied in the source.
 3. For loops use `CND` + indented sub‑steps + `JMP` back to the `CND` line. Avoid recursion.
-4. Variable declarations: $var:type = … where type ∈ {str int float list dict}. If type unknown use str.
+4. Variable declarations: $var:type = … where type ∈ {str int float list dict}. If type unknown use str.
 5. Output **only** the transformed program – no comments, no explanations.
 
 ---
-#### 2  Output contract
+#### 2  Output contract
 ```
 --- optional front‑matter (title, author) — copy verbatim if present ---
 # <AgentName>
@@ -32,7 +32,7 @@ T<n>:<BGN|CND|EVT> <trigger text>
 N<n> <text>
 ```
 ---
-#### 3  Allowed Command Codes (Steps)
+#### 3  Allowed Command Codes (Steps)
 | Code | Meaning                                                        |
 |------|----------------------------------------------------------------|
 | EXE  | Imperative action / assignment                                 |
@@ -47,7 +47,7 @@ N<n> <text>
 | YLD exit   | Yield, exiting program                                   |
 
 ---
-#### 4  Quick Mapping Cheatsheet
+#### 4  Quick Mapping Cheatsheet
 | Raw text starts with …                 | Emit Steps (example)                                   |
 |----------------------------------------|--------------------------------------------------------|
 | Func(x) expecting result               | $r:type = Func(x=$x) then YLD call             |
@@ -56,10 +56,10 @@ N<n> <text>
 | Load files "a", "b.txt"            | 01:QUE LoadArtifact("a") + 02:QUE LoadArtifact("b.txt") + YLD call          |
 | Show file "abc" to user                | 01:QUE Say("Artifact[abc]") + YLD call          |
 | Tell user contents of artifact "abc"   | 01:QUE LoadArtifact("abc") + 02:YLD call + 03:QUE Say(contents of Artifact[abc])        |
-| @playbook(triggers=["when program begins"], export=True) | @playbook(triggers=["BGN:when program begins"], export=True) |
+| @playbook(triggers=["when program begins"], public=True) | @playbook(triggers=["BGN:when program begins"], public=True) |
 
 ---
-#### 5  Illustrative Transformation (study carefully)
+#### 5  Illustrative Transformation (study carefully)
 **Start input**  
 ---
 title: "Example agent"
@@ -81,7 +81,7 @@ def GetWeather(city:str):
     """
     return {"temperature": 70, "description": "Clear and sunny"}
 
-@playbook(triggers=["Whenever you need to look up additional information"], export=True)
+@playbook(triggers=["Whenever you need to look up additional information"], public=True)
 def LookupInfo(query:str):
     """
     Look up info for given query
@@ -106,7 +106,7 @@ def LookupInfo(query:str):
 ### Notes
 - If name is a Jack Sparrow, start speaking in pirate speak
 
-## export: Validate city
+## public: Validate city
 This playbook validates a city input by the user.
 <output_format>
 The output is a string of the validated city in "Austin, TX" format.
@@ -131,7 +131,7 @@ Only consider cities in the United States.
 - Say hello $name
 - Save "greeting.txt" with summary "Greeting" and content "Hello $name"
 
-## export:P2
+## public:P2
 - Load "greeting.txt"
 - Show "greeting.txt" to user
 
@@ -160,7 +160,7 @@ def GetWeather(city:str) -> dict:
     """
     return {"temperature": 70, "description": "Clear and sunny"}
 
-@playbook(triggers=["T1:CND Whenever you need to look up additional information"], export=True)
+@playbook(triggers=["T1:CND Whenever you need to look up additional information"], public=True)
 def LookupInfo(query:str) -> str:
     """
     Look up info for given query
@@ -188,7 +188,7 @@ T1:BGN When program starts
 ### Notes
 N1 If $name is a Jack Sparrow, start speaking in pirate speak
 
-## export: ValidateCity($city) -> None
+## public: ValidateCity($city) -> None
 This playbook validates a city input by the user.
 <output_format>
 The output is a string of the validated city in "Austin, TX" format.
@@ -208,7 +208,7 @@ T1:CND When user provides their city
   01.02:JMP 01 to check again
 02:RET return $city in "Austin, TX" format
 
-```exports.json
+```public.json
 [
   {
     "name": "LookupInfo",
@@ -241,7 +241,7 @@ Says hello to the user
 02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name")
 03:RET
 
-## export:P2
+## public:P2
 Says goodbye to the user
 ### Steps
 01:QUE LoadArtifact("greeting.txt")
@@ -249,7 +249,7 @@ Says goodbye to the user
 03:QUE Say("Artifact[greeting.txt]")
 04:RET
 
-```exports.json
+```public.json
 [
   {
     "name": "P2",
@@ -266,7 +266,7 @@ Says goodbye to the user
 {{PLAYBOOKS}}
 
 **End input**
-Accurately transpile the input into the intermediate format. yld user only when waiting for user input. Queue as many calls as possible before yld call. For each H1, generate export.json with tool info for each exported python and markdown playbooks. If no exported playbooks, generate empty [] export.json.
+Accurately transpile the input into the intermediate format. yld user only when waiting for user input. Queue as many calls as possible before yld call. For each H1, generate public.json with tool info for each public python and markdown playbooks. If no public playbooks, generate empty [] public.json.
 If 
 Follow the output contract exactly; deviations break execution.
 **Start output**

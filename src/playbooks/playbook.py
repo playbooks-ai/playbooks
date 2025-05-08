@@ -80,13 +80,13 @@ class Playbook:
             ValueError: If the H2 structure is invalid or required sections are missing
         """
         cls._validate_h2_structure(h2)
-        signature, klass, export = cls.parse_title(h2.get("text", "").strip())
+        signature, klass, public = cls.parse_title(h2.get("text", "").strip())
 
         description, h3s = cls._extract_description_and_h3s(h2)
 
         # Determine playbook type based on presence of a Code h3 section
         # Markdown playbook (MD)
-        return cls._create_md_playbook(h2, klass, signature, description, h3s, export)
+        return cls._create_md_playbook(h2, klass, signature, description, h3s, public)
 
     @staticmethod
     def _validate_h2_structure(h2: Dict[str, Any]) -> None:
@@ -140,7 +140,7 @@ class Playbook:
         signature: str,
         description: Optional[str],
         h3s: List[Dict[str, Any]],
-        export: bool,
+        public: bool,
     ) -> "Playbook":
         """Create a markdown (MD) type playbook.
 
@@ -198,26 +198,26 @@ class Playbook:
             func=None,
             markdown=h2["markdown"],
             step_collection=step_collection,
-            export=export,
+            public=public,
         )
 
     @classmethod
-    def parse_title(cls, title: str) -> Tuple[str, str]:
+    def parse_title(cls, title: str) -> Tuple[str, str, bool]:
         """Parse the title of a playbook.
 
         Args:
             title: The title of the playbook, e.g. "CheckOrderStatusFlow($authToken: str) -> None"
 
         Returns:
-            A tuple containing the signature and class name.
+            A tuple containing the signature, class name, and public flag.
 
         Raises:
             ValueError: If the class name is not a valid identifier.
         """
-        export = False
-        match = re.match(r"^export\s*:\s*(.*)", title, re.DOTALL)
+        public = False
+        match = re.match(r"^public\s*:\s*(.*)", title, re.DOTALL)
         if match:
-            export = True
+            public = True
             title = match.group(1).strip()
 
         # Extract the class name (must be a valid identifier starting with a letter)
@@ -228,7 +228,7 @@ class Playbook:
             )
 
         klass = match.group(0)
-        return title, klass, export
+        return title, klass, public
 
     def __init__(
         self,
@@ -243,7 +243,7 @@ class Playbook:
         func: Optional[Callable],
         markdown: str,
         step_collection: Optional[PlaybookStepCollection] = None,
-        export: bool = False,
+        public: bool = False,
     ):
         """Initialize a Playbook.
 
@@ -271,7 +271,7 @@ class Playbook:
         self.func = func
         self.markdown = markdown
         self.step_collection = step_collection
-        self.export = export
+        self.public = public
 
     def get_step(self, line_number: str) -> Optional[PlaybookStep]:
         """Get a step by line number.

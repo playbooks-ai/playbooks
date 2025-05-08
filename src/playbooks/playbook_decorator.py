@@ -27,10 +27,10 @@ def playbook_decorator(
             raise TypeError(f"Playbook function '{func.__name__}' must be async")
         func.__is_playbook__ = True
         func.__triggers__ = []
-        func.__export__ = False
+        func.__public__ = False
         return func
 
-    # Case 2: @playbook(triggers=[...]) or @playbook([...]) or @playbook(export=True)
+    # Case 2: @playbook(triggers=[...]) or @playbook([...]) or @playbook(public=True)
     else:
         # If triggers is None, assume func_or_triggers is the triggers list
         def decorator(func: Callable) -> Callable:
@@ -38,7 +38,7 @@ def playbook_decorator(
                 raise TypeError(f"Playbook function '{func.__name__}' must be async")
             func.__is_playbook__ = True
             func.__triggers__ = kwargs.get("triggers", [])
-            func.__export__ = kwargs.get("export", False)
+            func.__public__ = kwargs.get("public", False)
             return func
 
     return decorator

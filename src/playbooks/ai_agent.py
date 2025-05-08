@@ -45,7 +45,7 @@ class AIAgent(BaseAgent):
         self.state = ExecutionState()
         for playbook in self.playbooks.values():
             playbook.func.__globals__.update({"agent": self})
-        self.exports = None
+        self.public = None
 
     async def begin(self):
         # Find playbooks with a BGN trigger and execute them

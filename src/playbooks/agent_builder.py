@@ -237,7 +237,7 @@ class AgentBuilder:
         doc = inspect.getdoc(func)
         description = doc.split("\n")[0] if doc is not None else None
         triggers = getattr(func, "__triggers__", [])
-        export = getattr(func, "__export__", False)
+        public = getattr(func, "__public__", False)
         # If triggers are not prefixed with T1:BGN, T1:CND, etc., add T{i}:CND
         # Use regex to find if prefix is missing
         triggers = [
@@ -269,7 +269,7 @@ class AgentBuilder:
             notes=None,
             code=None,
             markdown=None,
-            export=export,
+            public=public,
         )
 
     @staticmethod

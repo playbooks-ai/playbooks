@@ -25,20 +25,20 @@ class ProgramAgentsCommunicationMixin:
 class Program(ProgramAgentsCommunicationMixin):
     def __init__(self, full_program: str):
         self.full_program = full_program
-        self.extract_exports_json()
+        self.extract_public_json()
         self.parse_metadata()
         self.ast = markdown_to_ast(self.program_content)
         self.agent_klasses = AgentBuilder.create_agents_from_ast(self.ast)
         self.agents = [klass() for klass in self.agent_klasses.values()]
         if not self.agents:
             raise ValueError("No agents found in program")
-        if len(self.agents) != len(self.exports_jsons):
+        if len(self.agents) != len(self.public_jsons):
             raise ValueError(
-                "Number of agents and export jsons must be the same. "
-                f"Got {len(self.agents)} agents and {len(self.exports_jsons)} export jsons"
+                "Number of agents and public jsons must be the same. "
+                f"Got {len(self.agents)} agents and {len(self.public_jsons)} public jsons"
             )
         for i in range(len(self.agents)):
-            self.agents[i].exports = self.exports_jsons[i]
+            self.agents[i].public = self.public_jsons[i]
         self.agents.append(HumanAgent("human"))
         self.agents_by_klass = {}
         self.agents_by_id = {}
@@ -57,16 +57,14 @@ class Program(ProgramAgentsCommunicationMixin):
         self.application = frontmatter_data.get("application", "MultiAgentChat")
         self.program_content = frontmatter_data.content
 
-    def extract_exports_json(self):
-        # Extract exports.json from full_program
-        self.exports_jsons = []
-        matches = re.findall(
-            r"(```exports\.json(.*?)```)", self.full_program, re.DOTALL
-        )
+    def extract_public_json(self):
+        # Extract publics.json from full_program
+        self.public_jsons = []
+        matches = re.findall(r"(```public\.json(.*?)```)", self.full_program, re.DOTALL)
         if matches:
             for match in matches:
-                exports_json = json.loads(match[1])
-                self.exports_jsons.append(exports_json)
+                public_json = json.loads(match[1])
+                self.public_jsons.append(public_json)
                 self.full_program = self.full_program.replace(match[0], "")
 
     async def begin(self):
