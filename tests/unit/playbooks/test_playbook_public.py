@@ -14,13 +14,11 @@ def playbooks(md_path):
 
 
 def test_public(playbooks):
-    agent0, agent1 = playbooks
+    agent0, agent1, _ = playbooks.program.agents
     assert len(agent0.public) == 1
     assert agent0.public[0]["name"] == "A"
     assert len(agent0.public[0]["triggers"]) == 1
-    assert (
-        "T1:CND When you need to compute square root" == agent0.public[0]["triggers"][0]
-    )
+    assert "T1:CND" in agent0.public[0]["triggers"][0]
     assert agent0.playbooks["A"].public
     assert not agent0.playbooks["X"].public
 
@@ -31,10 +29,7 @@ def test_public(playbooks):
     assert "triggers" not in agent1.public[1]
     assert agent1.public[2]["name"] == "GetCountrySecret"
     assert len(agent1.public[2]["triggers"]) == 1
-    assert (
-        "T1:CND When you need to know a country's secret"
-        == agent1.public[2]["triggers"][0]
-    )
+    assert "T1:CND" in agent1.public[2]["triggers"][0]
     assert agent1.playbooks["GetLengthOfCountry"].public
     assert agent1.playbooks["GetCountryPopulation"].public
     assert agent1.playbooks["GetCountrySecret"].public

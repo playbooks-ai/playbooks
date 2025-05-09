@@ -19,7 +19,7 @@ async def A(num: float) -> float:
 - When program starts
 ### Steps
 - Tell user about Canada's secret
-- get population of India from the country facts agent
+- get population of India from the country info agent
 - return $num * population of India * 2
 
 
