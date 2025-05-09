@@ -1,5 +1,5 @@
 <div align="center">
-  <h1 align="center">Playbooks AI</h1>
+   <h1><img src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png" alt="Playbooks AI Logo" width="200" height="200"></h1>
   <h2 align="center">Create AI agents with natural language programs</h2>
 </div>
 
