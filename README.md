@@ -1,5 +1,9 @@
 <div align="center">
-   <h1><img src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png" alt="Playbooks AI Logo" width="200" height="200"></h1>
+   <h1>
+   <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo-dark.png">
+      <img alt="Text changing depending on mode. Light: 'So light!' Dark: 'So dark!'" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png" width=200 height=200>
+   </picture>
   <h2 align="center">Create AI agents with natural language programs</h2>
 </div>
 
