@@ -131,6 +131,41 @@ class Playbook:
 
         description = "\n".join(description_parts).strip() or None
         return description, h3s
+        
+    @staticmethod
+    def _get_default_react_steps() -> Dict[str, Any]:
+        """Return the default ReAct steps as an AST node.
+        
+        These steps follow the ReAct pattern (Reason, Act) and are used
+        when a playbook is identified as a ReAct playbook (no Steps section).
+        """
+        default_steps = {
+            "type": "h3",
+            "text": "Steps",
+            "children": [
+                {
+                    "type": "list-item",
+                    "text": "01:EXE: Think deeply about the task to understand requirements and context",
+                },
+                {
+                    "type": "list-item",
+                    "text": "02:CND: If task needs clarification\n  02.01:EXE: Ask the user clarification questions\n  02.02:YLD: Wait for user response\n  02.03:EXE: Update understanding of the task with user's response",
+                },
+                {
+                    "type": "list-item",
+                    "text": "03:EXE: Initialize $task with clarified understanding and context of the task",
+                },
+                {
+                    "type": "list-item",
+                    "text": "04:EXE: Initialize $task_status with \"started\"",
+                },
+                {
+                    "type": "list-item",
+                    "text": "05:LOP: While $task_status is not \"complete\"\n  05.01:EXE: Think about the current state; Check if any playbooks can be used; create/update your plan for completing the task\n  05.02:EXE: Based on the plan, decide the next $task_action, one of [\"call\", \"communicate\", \"finish\"]; must produce a \"finish\" action at the end\n  05.03:CND: If $task_action is \"call\"\n    05.03.01:EXE: Queue calls to appropriate playbooks with appropriate parameters\n    05.03.02:YLD: Wait for all the calls to complete\n  05.04:CND: If $task_action is \"communicate\"\n    05.04.01:EXE: Decide whether to ask or tell: $communication_type\n    05.04.02:CND: If $communication_type is \"ask\"\n      05.04.02.01:EXE: Formulate and ask question to the user\n      05.04.02.02:YLD: Wait for user response\n    05.04.03:CND: If $communication_type is \"tell\"\n      05.04.03.01:EXE: Say appropriate message to the user\n  05.05:CND: If $task_action is \"finish\"\n    05.05.01:CND: If task is expected to produce a comprehensive report\n      05.05.01.01:EXE: Generate final result; follow the output format if specified; save the result as an artifact `SaveArtifact(\"name of report file.md\", \"One line summary of the report\", \"report content...\")`\n      05.05.01.02:RET: Return artifact reference 'Artifact[\"name of report file.md\"]'\n    05.05.02:CND: If task is expected to produce a short answer\n      05.05.02.01:EXE: Generate final result; follow the output format if specified\n      05.05.02.02:RET: Return the answer as a string\n    05.05.03:EXE: Set $task_status to \"complete\"",
+                },
+            ],
+        }
+        return default_steps
 
     @classmethod
     def _create_md_playbook(
@@ -150,6 +185,7 @@ class Playbook:
             signature: The playbook signature.
             description: The playbook description.
             h3s: The list of H3 sections.
+            export: Whether the playbook should be exported.
 
         Returns:
             A new MD playbook instance.
@@ -161,6 +197,7 @@ class Playbook:
         steps = None
         notes = None
         step_collection = PlaybookStepCollection()
+        is_react_playbook = True  # Assume ReAct by default
 
         for h3 in h3s:
             h3_title = h3.get("text", "").strip().lower()
@@ -174,6 +211,7 @@ class Playbook:
                 )
             elif h3_title == "steps":
                 steps = h3
+                is_react_playbook = False  # Not a ReAct playbook since it has steps
                 # Parse steps into PlaybookStep objects
                 for child in h3.get("children", []):
                     lines = child.get("text", "").strip().split("\n")
@@ -186,9 +224,22 @@ class Playbook:
             else:
                 raise ValueError(f"Unknown H3 section: {h3_title}")
 
+        if is_react_playbook:
+            steps = cls._get_default_react_steps()
+            # Parse steps into PlaybookStep objects
+            for child in steps.get("children", []):
+                lines = child.get("text", "").strip().split("\n")
+                for line in lines:
+                    step = PlaybookStep.from_text(line)
+                    if step:
+                        step_collection.add_step(step)
+            execution_type = PlaybookExecutionType.REACT
+        else:
+            execution_type = PlaybookExecutionType.MARKDOWN
+
         return cls(
             klass=klass,
-            execution_type=PlaybookExecutionType.MARKDOWN,
+            execution_type=execution_type,
             signature=signature,
             description=description,
             triggers=triggers,
@@ -202,14 +253,14 @@ class Playbook:
         )
 
     @classmethod
-    def parse_title(cls, title: str) -> Tuple[str, str]:
+    def parse_title(cls, title: str) -> Tuple[str, str, bool]:
         """Parse the title of a playbook.
 
         Args:
             title: The title of the playbook, e.g. "CheckOrderStatusFlow($authToken: str) -> None"
 
         Returns:
-            A tuple containing the signature and class name.
+            A tuple containing the signature, class name, and export flag.
 
         Raises:
             ValueError: If the class name is not a valid identifier.

@@ -15,6 +15,7 @@ class RoutingType:
 class PlaybookExecutionType(str, Enum):
     MARKDOWN = "markdown"
     CODE = "code"
+    REACT = "react"
 
     @classmethod
     def __getitem__(cls, key):
