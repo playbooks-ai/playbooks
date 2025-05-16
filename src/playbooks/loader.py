@@ -41,7 +41,7 @@ class Loader:
             # Simplified glob pattern check
             if "*" in str(path) or "?" in str(path) or "[" in str(path):
                 # Handle glob pattern
-                all_files.extend(glob.glob(path, recursive=True))
+                all_files.extend(glob(path, recursive=True))
             else:
                 # Handle single file
                 all_files.append(path)

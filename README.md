@@ -43,7 +43,7 @@ Unlike standard LLM prompts that offer no execution guarantees, Playbooks provid
 - **Multi-Agent Architecture** - Build systems with multiple specialized agents, interact and leverage external AI agents
 - **Event-Driven Programming** - Use triggers to create reactive, context-aware agents
 - **Variables, Artifacts and Memory** - Native support for managing agent state using variables, artifacts and memory
-- **Execution Observability** - Full audit trail of every step of execution and explainability for every decision made the the AI agent
+- **Execution Observability** - Full audit trail of every step of execution and explainability for every decision made by the AI agent
 
 
 ## 🏁 Quick Start

@@ -16,7 +16,7 @@ def playbooks(md_path):
 
 def test_load_playbooks(playbooks):
     assert playbooks.program_content is not None
-    assert playbooks.program_content is not None
+    assert playbooks.program_content != playbooks.transpiled_program_content
     assert "BAXY" in playbooks.program_content
 
     assert playbooks.transpiled_program_content is not None

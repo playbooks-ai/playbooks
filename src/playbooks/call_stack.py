@@ -52,7 +52,7 @@ class CallStackFrame:
         """
         return {
             "instruction_pointer": str(self.instruction_pointer),
-            "llm_chat_session_id": self.llm_chat_session_id,
+            "langfuse_span": str(self.langfuse_span) if self.langfuse_span else None,
         }
 
     def __repr__(self) -> str:
