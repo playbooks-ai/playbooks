@@ -434,5 +434,60 @@ def test_markdown_to_ast_with_proper_nested_lists():
             assert line.startswith("      - ")
 
 
+def test_parse_markdown_to_dict_multi_paragraph_list_items():
+    """Test parsing markdown with list items containing multiple paragraphs."""
+    markdown_text = """- List item with
+  multiple paragraphs
+
+  Second paragraph in the same list item
+- Another list item"""
+
+    ast = parse_markdown_to_dict(markdown_text)
+
+    assert ast["type"] == "root"
+    assert len(ast["children"]) == 1
+
+    list_node = ast["children"][0]
+    assert list_node["type"] == "list"
+    assert len(list_node["children"]) == 2
+
+    multi_para_item = list_node["children"][0]
+    assert multi_para_item["type"] == "list-item"
+    assert "List item with\nmultiple paragraphs" in multi_para_item["text"]
+    assert "Second paragraph in the same list item" in multi_para_item["text"]
+
+    second_item = list_node["children"][1]
+    assert second_item["type"] == "list-item"
+    assert second_item["text"] == "Another list item"
+
+
+def test_markdown_to_ast_multi_paragraph_list_items():
+    """Test converting markdown with list items containing multiple paragraphs to AST."""
+    markdown_text = """# Multiple Paragraph List Items
+
+- List item with
+  multiple paragraphs
+
+  Second paragraph in the same list item
+- Another list item"""
+
+    ast = markdown_to_ast(markdown_text)
+    assert "markdown" in ast
+
+    # Debug: Print the actual markdown output
+    print("\nActual markdown output:")
+    for i, line in enumerate(ast["markdown"].split("\n")):
+        print(f"{i}: {line}")
+
+    # Verify the markdown output properly formats the multiple paragraphs
+    markdown_lines = ast["markdown"].split("\n")
+    # Check for list item text across lines (line 2 has "List item with", line 3 has "multiple paragraphs")
+    assert any("List item with" in line for line in markdown_lines)
+    assert any("multiple paragraphs" in line for line in markdown_lines)
+    assert any(
+        "Second paragraph in the same list item" in line for line in markdown_lines
+    )
+
+
 if __name__ == "__main__":
     pytest.main(["-xvs", __file__])

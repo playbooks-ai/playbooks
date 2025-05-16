@@ -51,8 +51,11 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
 
         elif token.type == "paragraph_open":
             paragraph_text = tokens[i + 1].content
-            if stack[-1]["type"] == "list-item" and not stack[-1]["text"]:
-                stack[-1]["text"] = paragraph_text
+            if stack[-1]["type"] == "list-item":
+                if not stack[-1]["text"]:
+                    stack[-1]["text"] = paragraph_text
+                else:
+                    stack[-1]["text"] += "\n\n" + paragraph_text
             else:
                 stack[-1]["children"].append(
                     {"type": "paragraph", "text": paragraph_text}
@@ -142,7 +145,16 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
         pass
     elif node["type"] == "list-item":
         prefix = f"{node['_number']}. " if "_number" in node else "- "
-        current_markdown = prefix + node["text"]
+
+        # Handle multiple paragraphs in list items
+        if "\n\n" in node["text"]:
+            paragraphs = node["text"].split("\n\n")
+            first_para = prefix + paragraphs[0]
+            indent = " " * len(prefix)
+            rest_paras = [indent + p for p in paragraphs[1:]]
+            current_markdown = "\n\n".join([first_para] + rest_paras)
+        else:
+            current_markdown = prefix + node["text"]
 
         children_markdown = []
         for child in node.get("children", []):
