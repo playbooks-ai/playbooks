@@ -1,0 +1,29 @@
+### Steps
+- Think deeply about the task to understand requirements and context
+- If task needs clarification
+  - Ask the user clarification questions
+  - Wait for user response
+  - Update understanding of the task with user's response
+- Initialize $task with clarified understanding and context of the task
+- Initialize $task_status with "started"
+- While $task_status is not "complete"
+  - Think about the current state; Check if any playbooks can be used; create/update your plan for completing the task
+  - Based on the plan, decide the next $task_action, one of ["call", "communicate", "finish"]; must produce a "finish" action at the end
+  - If $task_action is "call"
+    - Queue calls to appropriate playbooks with appropriate parameters
+    - Wait for all the calls to complete
+  - If $task_action is "communicate"
+    - Decide whether to ask or tell: $communication_type
+    - If $communication_type is "ask"
+      - Formulate and ask question to the user
+      - Wait for user response
+    - If $communication_type is "tell"
+      - Say appropriate message to the user
+  - If $task_action is "finish"
+    - If task is expected to produce a comprehensive report
+      - Generate final result; follow the output format if specified; save the result as an artifact `SaveArtifact("name of report file.md", "One line summary of the report", "report content...")`
+      - Return artifact reference 'Artifact["name of report file.md"]'
+    - If task is expected to produce a short answer
+      - Generate final result; follow the output format if specified
+      - Return the answer as a string
+    - Set $task_status to "complete"
