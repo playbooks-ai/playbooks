@@ -67,16 +67,13 @@ def test_parse_markdown_to_dict_lists():
         assert item["_number"] == i + 1
 
 
-def test_parse_markdown_to_dict_flat_nested_lists():
-    """Test parsing markdown with nested list syntax (but flat structure in AST).
+def test_parse_markdown_to_dict_nested_lists():
+    """Test parsing markdown with properly nested lists into AST dictionary."""
+    markdown_text = """- Level 1, Item 1
+  - Level 2, Item 1
+    - Level 3, Item 1
+- Level 1, Item 2"""
 
-    Note: The current implementation has limitations with nested lists.
-    This test verifies the actual behavior of the implementation, not the ideal behavior.
-    """
-    markdown_text = "- Level 1, Item 1\n- Level 2, Item 1\n- Level 1, Item 2"
-
-    # The current implementation doesn't handle nested lists properly
-    # It treats them as flat lists
     ast = parse_markdown_to_dict(markdown_text)
 
     assert ast["type"] == "root"
@@ -84,11 +81,29 @@ def test_parse_markdown_to_dict_flat_nested_lists():
 
     list_node = ast["children"][0]
     assert list_node["type"] == "list"
-    assert len(list_node["children"]) == 3
+    assert len(list_node["children"]) == 2
 
-    assert list_node["children"][0]["text"] == "Level 1, Item 1"
-    assert list_node["children"][1]["text"] == "Level 2, Item 1"
-    assert list_node["children"][2]["text"] == "Level 1, Item 2"
+    level1_item1 = list_node["children"][0]
+    assert level1_item1["type"] == "list-item"
+    assert level1_item1["text"] == "Level 1, Item 1"
+
+    # Verify that it has a nested list
+    nested_lists = [
+        child for child in level1_item1["children"] if child["type"] == "list"
+    ]
+    assert len(nested_lists) == 1
+
+    level2_list = nested_lists[0]
+    assert len(level2_list["children"]) == 1
+    assert level2_list["children"][0]["text"] == "Level 2, Item 1"
+
+    level3_lists = [
+        child
+        for child in level2_list["children"][0]["children"]
+        if child["type"] == "list"
+    ]
+    assert len(level3_lists) == 1
+    assert level3_lists[0]["children"][0]["text"] == "Level 3, Item 1"
 
 
 def test_parse_markdown_to_dict_code_blocks():
@@ -248,41 +263,19 @@ def test_markdown_to_ast_complex():
 
 
 def test_markdown_to_ast_four_level_nested_lists():
-    """Test converting markdown with 4-level deep nested lists to AST.
+    """Test converting markdown with 4-level deep nested lists to AST."""
+    markdown_text = """# Four Level Nested Lists
 
-    Note: The current implementation doesn't properly handle nested lists,
-    so this test verifies the current behavior rather than ideal behavior.
-    """
-    # First test with a simpler nested list to avoid parser errors
-    simple_nested = "# Nested Lists\n\n- Level 1\n- Level 2"
+- Level 1, Item 1
+  - Level 2, Item 1
+    - Level 3, Item 1
+      - Level 4, Item 1
+      - Level 4, Item 2
+    - Level 3, Item 2
+  - Level 2, Item 2
+- Level 1, Item 2"""
 
-    ast = markdown_to_ast(simple_nested)
-    assert ast["type"] == "document"
-
-    # Find the heading
-    h1 = None
-    for node in ast["children"]:
-        if node["type"] == "h1" and node["text"] == "Nested Lists":
-            h1 = node
-            break
-
-    assert h1 is not None
-
-    list_nodes = []
-    for node in h1["children"]:
-        if node["type"] == "list":
-            list_nodes.append(node)
-
-    assert len(list_nodes) > 0
-
-    # The most important part of this test is to verify that the parser handles
-    # markdown with 4-level nested list syntax without crashing, even though
-    # it doesn't produce a proper nested structure
-
-    # Now test with a 4-level nested list that works with the current implementation
-    four_level_nested = "# Four Level Nested Lists\n\n- Level 1, Item 1\n- Level 2, Item 1\n- Level 3, Item 1\n- Level 4, Item 1\n- Level 4, Item 2\n- Level 3, Item 2\n- Level 2, Item 2\n- Level 1, Item 2"
-
-    ast = markdown_to_ast(four_level_nested)
+    ast = markdown_to_ast(markdown_text)
     assert ast["type"] == "document"
 
     # Find the heading
@@ -302,23 +295,50 @@ def test_markdown_to_ast_four_level_nested_lists():
             break
 
     assert list_node is not None
-    assert len(list_node["children"]) == 8
+    assert len(list_node["children"]) == 2
 
-    # Verify the list items
-    expected_texts = [
-        "Level 1, Item 1",
-        "Level 2, Item 1",
-        "Level 3, Item 1",
-        "Level 4, Item 1",
-        "Level 4, Item 2",
-        "Level 3, Item 2",
-        "Level 2, Item 2",
-        "Level 1, Item 2",
-    ]
+    level1_item1 = list_node["children"][0]
+    assert level1_item1["type"] == "list-item"
+    assert level1_item1["text"] == "Level 1, Item 1"
 
-    for i, item in enumerate(list_node["children"]):
-        assert item["type"] == "list-item"
-        assert item["text"] == expected_texts[i]
+    # Check for level 2 list
+    level2_list = None
+    for node in level1_item1["children"]:
+        if node["type"] == "list":
+            level2_list = node
+            break
+
+    assert level2_list is not None
+    assert len(level2_list["children"]) == 2
+
+    level2_item1 = level2_list["children"][0]
+    assert level2_item1["text"] == "Level 2, Item 1"
+
+    # Check for level 3 list
+    level3_list = None
+    for node in level2_item1["children"]:
+        if node["type"] == "list":
+            level3_list = node
+            break
+
+    assert level3_list is not None
+    assert len(level3_list["children"]) == 2
+
+    level3_item1 = level3_list["children"][0]
+    assert level3_item1["text"] == "Level 3, Item 1"
+
+    # Check for level 4 list
+    level4_list = None
+    for node in level3_item1["children"]:
+        if node["type"] == "list":
+            level4_list = node
+            break
+
+    assert level4_list is not None
+    assert len(level4_list["children"]) == 2
+
+    assert level4_list["children"][0]["text"] == "Level 4, Item 1"
+    assert level4_list["children"][1]["text"] == "Level 4, Item 2"
 
 
 def test_markdown_to_ast_mixed_list_types():
@@ -359,15 +379,18 @@ def test_markdown_to_ast_mixed_list_types():
     assert len(unordered_list["children"]) == 2
 
 
-def test_markdown_to_ast_with_indented_lists():
-    """Test parsing markdown with indented lists that simulate nesting.
+def test_markdown_to_ast_with_proper_nested_lists():
+    """Test parsing markdown with proper nested list syntax after implementation fix."""
+    markdown_text = """# Four Level Nested Lists
 
-    Since the implementation has issues with true nested lists using standard
-    markdown syntax, this test uses a flat list structure with text indentation
-    to visually represent nesting levels.
-    """
-    # to avoid the IndexError in the implementation
-    markdown_text = "# Four Level Nested Lists\n\n- Level 1, Item 1\n- ⠀⠀Level 2, Item 1\n- ⠀⠀⠀⠀Level 3, Item 1\n- ⠀⠀⠀⠀⠀⠀Level 4, Item 1\n- ⠀⠀⠀⠀⠀⠀Level 4, Item 2\n- ⠀⠀⠀⠀Level 3, Item 2\n- ⠀⠀Level 2, Item 2\n- Level 1, Item 2"
+- Level 1, Item 1
+  - Level 2, Item 1
+    - Level 3, Item 1
+      - Level 4, Item 1
+      - Level 4, Item 2
+    - Level 3, Item 2
+  - Level 2, Item 2
+- Level 1, Item 2"""
 
     ast = markdown_to_ast(markdown_text)
     assert ast["type"] == "document"
@@ -390,13 +413,25 @@ def test_markdown_to_ast_with_indented_lists():
 
     assert list_node is not None
 
-    # The test verifies that we can parse markdown with indented lists
-    # that simulate nesting, even though the AST structure will be flat
+    # Verify the markdown contains proper nested list structure
     assert "markdown" in ast
     assert "- Level 1, Item 1" in ast["markdown"]
-    assert "- ⠀⠀Level 2, Item 1" in ast["markdown"]
-    assert "- ⠀⠀⠀⠀Level 3, Item 1" in ast["markdown"]
-    assert "- ⠀⠀⠀⠀⠀⠀Level 4, Item 1" in ast["markdown"]
+
+    # Check that the nested lists are properly indented in the markdown output
+    markdown_lines = ast["markdown"].split("\n")
+    indented_lines = [
+        line
+        for line in markdown_lines
+        if "Level 2" in line or "Level 3" in line or "Level 4" in line
+    ]
+
+    for line in indented_lines:
+        if "Level 2" in line:
+            assert line.startswith("  - ")
+        elif "Level 3" in line:
+            assert line.startswith("    - ")
+        elif "Level 4" in line:
+            assert line.startswith("      - ")
 
 
 if __name__ == "__main__":

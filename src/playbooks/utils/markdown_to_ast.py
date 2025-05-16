@@ -51,7 +51,12 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
 
         elif token.type == "paragraph_open":
             paragraph_text = tokens[i + 1].content
-            stack[-1]["children"].append({"type": "paragraph", "text": paragraph_text})
+            if stack[-1]["type"] == "list-item" and not stack[-1]["text"]:
+                stack[-1]["text"] = paragraph_text
+            else:
+                stack[-1]["children"].append(
+                    {"type": "paragraph", "text": paragraph_text}
+                )
             i += 2  # Skip paragraph_close
 
         elif token.type == "bullet_list_open" or token.type == "ordered_list_open":
@@ -66,19 +71,19 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
             i += 1
 
         elif token.type == "list_item_open":
-            item_text = ""
-            j = i + 1
-            while tokens[j].type != "list_item_close":
-                if tokens[j].type == "inline":
-                    item_text = tokens[j].content
-                j += 1
-
-            item = {"type": "list-item", "text": item_text}
+            item = {"type": "list-item", "text": "", "children": []}
             if stack[-1].get("_ordered", False):
                 item["_number"] = list_counter
                 list_counter += 1
+
             stack[-1]["children"].append(item)
-            i = j + 1
+
+            stack.append(item)
+            i += 1
+
+        elif token.type == "list_item_close":
+            stack.pop()
+            i += 1
 
         elif token.type in ["bullet_list_close", "ordered_list_close"]:
             stack.pop()
@@ -138,6 +143,20 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     elif node["type"] == "list-item":
         prefix = f"{node['_number']}. " if "_number" in node else "- "
         current_markdown = prefix + node["text"]
+
+        children_markdown = []
+        for child in node.get("children", []):
+            if "markdown" in child and child["type"] == "list":
+                # Indent each line of the nested list's markdown
+                indented_lines = []
+                for line in child["markdown"].split("\n"):
+                    if line:
+                        indented_lines.append("  " + line)
+                if indented_lines:
+                    children_markdown.append("\n".join(indented_lines))
+
+        if children_markdown:
+            current_markdown += "\n" + "\n".join(children_markdown)
 
     # Combine current node's markdown with children's markdown
     markdown_parts = [current_markdown] if current_markdown else []
