@@ -1,5 +1,3 @@
-import pytest
-import os
 from pathlib import Path
 
 from playbooks.playbook import Playbook
