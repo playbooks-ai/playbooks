@@ -131,11 +131,11 @@ class Playbook:
 
         description = "\n".join(description_parts).strip() or None
         return description, h3s
-        
+
     @staticmethod
     def _get_default_react_steps() -> Dict[str, Any]:
         """Return the default ReAct steps as an AST node.
-        
+
         These steps follow the ReAct pattern (Reason, Act) and are used
         when a playbook is identified as a ReAct playbook (no Steps section).
         """
@@ -157,11 +157,11 @@ class Playbook:
                 },
                 {
                     "type": "list-item",
-                    "text": "04:EXE: Initialize $task_status with \"started\"",
+                    "text": '04:EXE: Initialize $task_status with "started"',
                 },
                 {
                     "type": "list-item",
-                    "text": "05:LOP: While $task_status is not \"complete\"\n  05.01:EXE: Think about the current state; Check if any playbooks can be used; create/update your plan for completing the task\n  05.02:EXE: Based on the plan, decide the next $task_action, one of [\"call\", \"communicate\", \"finish\"]; must produce a \"finish\" action at the end\n  05.03:CND: If $task_action is \"call\"\n    05.03.01:EXE: Queue calls to appropriate playbooks with appropriate parameters\n    05.03.02:YLD: Wait for all the calls to complete\n  05.04:CND: If $task_action is \"communicate\"\n    05.04.01:EXE: Decide whether to ask or tell: $communication_type\n    05.04.02:CND: If $communication_type is \"ask\"\n      05.04.02.01:EXE: Formulate and ask question to the user\n      05.04.02.02:YLD: Wait for user response\n    05.04.03:CND: If $communication_type is \"tell\"\n      05.04.03.01:EXE: Say appropriate message to the user\n  05.05:CND: If $task_action is \"finish\"\n    05.05.01:CND: If task is expected to produce a comprehensive report\n      05.05.01.01:EXE: Generate final result; follow the output format if specified; save the result as an artifact `SaveArtifact(\"name of report file.md\", \"One line summary of the report\", \"report content...\")`\n      05.05.01.02:RET: Return artifact reference 'Artifact[\"name of report file.md\"]'\n    05.05.02:CND: If task is expected to produce a short answer\n      05.05.02.01:EXE: Generate final result; follow the output format if specified\n      05.05.02.02:RET: Return the answer as a string\n    05.05.03:EXE: Set $task_status to \"complete\"",
+                    "text": '05:LOP: While $task_status is not "complete"\n  05.01:EXE: Think about the current state; Check if any playbooks can be used; create/update your plan for completing the task\n  05.02:EXE: Based on the plan, decide the next $task_action, one of ["call", "communicate", "finish"]; must produce a "finish" action at the end\n  05.03:CND: If $task_action is "call"\n    05.03.01:EXE: Queue calls to appropriate playbooks with appropriate parameters\n    05.03.02:YLD: Wait for all the calls to complete\n  05.04:CND: If $task_action is "communicate"\n    05.04.01:EXE: Decide whether to ask or tell: $communication_type\n    05.04.02:CND: If $communication_type is "ask"\n      05.04.02.01:EXE: Formulate and ask question to the user\n      05.04.02.02:YLD: Wait for user response\n    05.04.03:CND: If $communication_type is "tell"\n      05.04.03.01:EXE: Say appropriate message to the user\n  05.05:CND: If $task_action is "finish"\n    05.05.01:CND: If task is expected to produce a comprehensive report\n      05.05.01.01:EXE: Generate final result; follow the output format if specified; save the result as an artifact `SaveArtifact("name of report file.md", "One line summary of the report", "report content...")`\n      05.05.01.02:RET: Return artifact reference \'Artifact["name of report file.md"]\'\n    05.05.02:CND: If task is expected to produce a short answer\n      05.05.02.01:EXE: Generate final result; follow the output format if specified\n      05.05.02.02:RET: Return the answer as a string\n    05.05.03:EXE: Set $task_status to "complete"',
                 },
             ],
         }
