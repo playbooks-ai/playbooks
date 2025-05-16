@@ -139,7 +139,7 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     elif node["type"] == "quote":
         current_markdown = "> " + node["text"]
     elif node["type"] == "code-block":
-        current_markdown = node["text"]
+        current_markdown = "```\n" + node["text"] + "\n```"
     elif node["type"] == "list":
         # List nodes don't need their own text, they're containers
         pass
