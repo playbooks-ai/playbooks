@@ -41,4 +41,4 @@ def playbook_decorator(
             func.__public__ = kwargs.get("public", False)
             return func
 
-    return decorator
+        return decorator

@@ -146,10 +146,11 @@ class AIAgent(BaseAgent):
                 if var_name in self.state.variables.variables:
                     kwargs[key] = self.state.variables.variables[var_name].value
 
-        # Execute the playbook
-        playbook.func.__globals__["agent"] = self
-        result = await playbook.func(*args, **kwargs)
-
-        await self._post_execute(call, result, langfuse_span)
-
-        return result
+        try:
+            playbook.func.__globals__["agent"] = self
+            result = await playbook.func(*args, **kwargs)
+            await self._post_execute(call, result, langfuse_span)
+            return result
+        except Exception as e:
+            await self._post_execute(call, str(e), langfuse_span)
+            raise

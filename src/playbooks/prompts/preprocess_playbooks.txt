@@ -266,7 +266,7 @@ Says goodbye to the user
 {{PLAYBOOKS}}
 
 **End input**
-Accurately transpile the input into the intermediate format. yld user only when waiting for user input. Queue as many calls as possible before yld call. For each H1, generate export.json with tool info for each exported python and markdown playbooks. If no exported playbooks, generate empty [] export.json.
+Accurately transpile the input into the intermediate format. yld user only when waiting for user input. Queue as many calls as possible before yld call. For each H1, generate public.json with tool info for each public python and markdown playbooks. If no publiced playbooks, generate empty [] public.json.
 
 Follow the output contract exactly; deviations break execution.
 **Start output**

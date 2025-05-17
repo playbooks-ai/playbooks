@@ -33,3 +33,7 @@ class ExecutionState:
             "variables": self.variables.to_dict(),
             "artifacts": self.artifacts.to_dict(),
         }
+
+    def __str__(self) -> str:
+        """Return a string representation of the execution state."""
+        return f"ExecutionState(call_stack={self.call_stack}, variables={self.variables}, session_log={self.session_log})"
