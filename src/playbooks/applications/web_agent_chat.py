@@ -38,6 +38,12 @@ class _OutboxWrapper:
     def __getattr__(self, name):
         return getattr(self._session_log, name)
 
+    def __str__(self):
+        return self._session_log.__str__()
+
+    def __repr__(self):
+        return self._session_log.__repr__()
+
 
 @dataclass
 class _Run:
