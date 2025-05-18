@@ -18,11 +18,51 @@ class LLMResponseLine:
         self.return_value = None
         self.is_thinking = False
         self.vars = Variables()
+        self.artifact_ops = []
         self.parse_line(self.text)
 
     def parse_line(self, line: str):
+        # Extract artifact operations first
+        artifact_pattern = re.compile(
+            r"`Artifact\[(?P<name>[^\]]+)\] (?P<action>CREATE|MODIFY)`\n(?P<body>.*?)`Artifact\[\1\] END`",
+            re.DOTALL,
+        )
+        for match in artifact_pattern.finditer(line):
+            name = match.group("name")
+            action = match.group("action")
+            body = match.group("body").rstrip()
+            summary = None
+            content = ""
+            patch = ""
+            body_lines = body.splitlines()
+            if action == "CREATE":
+                if body_lines and body_lines[0].startswith("Summary:"):
+                    summary = body_lines[0].split("Summary:", 1)[1].strip()
+                    content = "\n".join(body_lines[1:])
+                else:
+                    summary = ""
+                    content = "\n".join(body_lines)
+            else:
+                if body_lines and body_lines[0].startswith("Summary:"):
+                    summary = body_lines[0].split("Summary:", 1)[1].strip()
+                    patch = "\n".join(body_lines[1:])
+                else:
+                    patch = "\n".join(body_lines)
+
+            self.artifact_ops.append(
+                {
+                    "name": name,
+                    "action": action,
+                    "summary": summary,
+                    "content": content,
+                    "patch": patch,
+                }
+            )
+
+        clean_line = artifact_pattern.sub("", line)
+
         # Extract Step metadata, e.g., `Step["auth_step"]`
-        self.steps = re.findall(r'`Step\["([^"]+)"\]`', self.text)
+        self.steps = re.findall(r'`Step\["([^"]+)"\]`', clean_line)
 
         if any(step.endswith(":TNK") for step in self.steps):
             self.is_thinking = True
@@ -33,7 +73,7 @@ class LLMResponseLine:
 
         # Extract Var metadata, e.g., `Var[$user_email, "test@example.com"]` or `Var[$pin, 1234]`
         # Captures the variable name (with $) and its value, parsing the value as a Python expression
-        var_matches = re.findall(r"`Var\[(\$[^,\]]+),\s*([^`]+)\]`", self.text)
+        var_matches = re.findall(r"`Var\[(\$[^,\]]+),\s*([^`]+)\]`", clean_line)
 
         for var_name, var_value_str in var_matches:
             # Parse the value as a Python expression safely
@@ -43,19 +83,19 @@ class LLMResponseLine:
             self.vars[var_name] = parsed_value
 
         # Extract Trigger metadata, e.g., `Trigger["user_auth_failed"]`
-        self.triggers = re.findall(r'`Trigger\["([^"]+)"\]`', self.text)
+        self.triggers = re.findall(r'`Trigger\["([^"]+)"\]`', clean_line)
 
-        if re.search(r"\byld return\b", self.text):
+        if re.search(r"\byld return\b", clean_line):
             self.playbook_finished = True
 
-        if re.search(r"\byld user\b", self.text):
+        if re.search(r"\byld user\b", clean_line):
             self.wait_for_user_input = True
 
-        if re.search(r"\byld exit\b", self.text):
+        if re.search(r"\byld exit\b", clean_line):
             self.exit_program = True
 
         # detect if return value in backticks somewhere in the line using regex
-        match = re.search(r"`Return\[(.*)\]`", self.text)
+        match = re.search(r"`Return\[(.*)\]`", clean_line)
         map = {
             "true": True,
             "false": False,
@@ -76,7 +116,7 @@ class LLMResponseLine:
         # e.g., `MyPlaybook(arg1, arg2, kwarg1="value")` or `Playbook(key1=$var1)`
         # or `MyPlaybook(10, "someval", kwarg1="value", kwarg2=$my_var)`
         playbook_call_matches = re.findall(
-            r"\`(?:.*\W*\=\W*)?([A-Za-z0-9_]+\(.*?\))\`", self.text
+            r"\`(?:.*\W*\=\W*)?([A-Za-z0-9_]+\(.*?\))\`", clean_line
         )
 
         for playbook_call in playbook_call_matches:

@@ -42,7 +42,7 @@ class MarkdownPlaybookExecution:
             user_inputs = []
             artifacts_to_load = []
             for line in llm_response.lines:
-                if "`SaveArtifact(" not in line.text:
+                if not line.artifact_ops:
                     self.agent.state.session_log.append(
                         SessionLogItemMessage(line.text),
                         level=SessionLogItemLevel.LOW,
@@ -56,6 +56,26 @@ class MarkdownPlaybookExecution:
                 # Update variables
                 if len(line.vars) > 0:
                     self.agent.state.variables.update(line.vars.to_dict())
+
+                # Handle artifact operations
+                if getattr(line, "artifact_ops", None):
+                    for op in line.artifact_ops:
+                        if op["action"] == "CREATE":
+                            self.agent.state.artifacts.set(
+                                op["name"], op["summary"], op["content"]
+                            )
+                        elif (
+                            op["action"] == "MODIFY"
+                            and op["name"] in self.agent.state.artifacts
+                        ):
+                            artifact = self.agent.state.artifacts[op["name"]]
+                            from playbooks.utils.patch_utils import apply_patch
+
+                            artifact.content = apply_patch(
+                                artifact.content, op["patch"]
+                            )
+                            if op["summary"] is not None:
+                                artifact.summary = op["summary"]
 
                 # Execute playbook calls
                 if line.playbook_calls:

@@ -51,11 +51,11 @@ N<n> <text>
 | Raw text starts with …                 | Emit Steps (example)                                   |
 |----------------------------------------|--------------------------------------------------------|
 | Func(x) expecting result               | $r:type = Func(x=$x) then YLD call             |
-| If ‑‑ then … else …                    | CND If … + sub‑steps 01.01: etc                    |
-| While …                                | 01:CND While … + sub‑steps + 01.99:JMP 01          |
-| Load files "a", "b.txt"            | 01:QUE LoadArtifact("a") + 02:QUE LoadArtifact("b.txt") + YLD call          |
-| Show file "abc" to user                | 01:QUE Say("Artifact[abc]") + YLD call          |
-| Tell user contents of artifact "abc"   | 01:QUE LoadArtifact("abc") + 02:YLD call + 03:QUE Say(contents of Artifact[abc])        |
+| If ‑‑ then … else …                    | CND If …<br>sub‑steps 01.01: etc                    |
+| While …                                | 01:CND While …<br>sub‑steps<br>01.99:JMP 01          |
+| Load files "a", "b.txt"            | 01:QUE LoadArtifact("a")<br>02:QUE LoadArtifact("b.txt")<br>YLD call          |
+| Show file "abc" to user                | 01:QUE Say("Here is the report: Artifact[abc]")<br>YLD call          |
+| Tell user contents of artifact "abc"   | 01:QUE LoadArtifact("abc")<br>02:YLD call<br>03:QUE Say(contents of Artifact[abc])        |
 | @playbook(triggers=["when program begins"], public=True) | @playbook(triggers=["BGN:when program begins"], public=True) |
 
 ---
@@ -129,7 +129,7 @@ Only consider cities in the United States.
 
 ## P1($name, $age)
 - Say hello $name
-- Save "greeting.txt" with summary "Greeting" and content "Hello $name"
+- Save a 4 line poem welcoming the user in "greeting.txt"
 
 ## public:P2
 - Load "greeting.txt"
@@ -238,7 +238,7 @@ T1:CND When user provides their city
 Says hello to the user
 ### Steps
 01:QUE Say hello $name
-02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name")
+02:QUE Save a 4 line poem welcoming the user to "greeting.txt" artifact
 03:RET
 
 ## public:P2
@@ -246,7 +246,7 @@ Says goodbye to the user
 ### Steps
 01:QUE LoadArtifact("greeting.txt")
 02:YLD call
-03:QUE Say("Artifact[greeting.txt]")
+03:QUE Say("Goodbye, here is your poem: Artifact[greeting.txt]")
 04:RET
 
 ```public.json

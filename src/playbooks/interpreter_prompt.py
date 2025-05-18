@@ -92,7 +92,7 @@ class InterpreterPrompt:
             artifact_messages = []
             for artifact in self.artifacts_to_load:
                 artifact = self.state.artifacts[artifact]
-                artifact_message = f"Artifact[{artifact.name}]\n\nSummary: {artifact.summary}\n\nContent: {artifact.content}"
+                artifact_message = f"`Artifact[{artifact.name}] LOADED`\nSummary: {artifact.summary}\n{artifact.content}\n`Artifact[{artifact.name}] END`"
                 artifact_messages.append({"role": "user", "content": artifact_message})
             messages = [messages[0]] + artifact_messages + messages[1:]
         return messages

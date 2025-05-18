@@ -66,6 +66,7 @@ async def test_example_08(test_data_dir):
     playbooks = Playbooks([test_data_dir / "08-artifact.md"])
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
+    assert "Artifact[artifact1.txt] CREATE" in log
     assert '`LoadArtifact("my_artifact")`' in log
     assert '`LoadArtifact("another_artifact")`' in log
 

@@ -3,8 +3,8 @@
 ```python
 @playbook
 async def Playbook3():
-    await SaveArtifact("another_artifact", "Another artifact", "Secret message 54345.")
-    return "Artifact[another_artifact]"
+    await SaveArtifact("another_artifact.md", "Another artifact", "Secret message 54345.")
+    return "Artifact[another_artifact.md]"
 
 @playbook
 async def Playbook4():
@@ -16,17 +16,17 @@ async def Playbook4():
 ## Playbook1
 
 ### Steps
-- Create an artifact with the name "my_artifact" and the content "This is a test artifact."
+- Create an artifact with the name "my_artifact.txt" and the content "This is a test artifact" followed by a 2 line poem
 - Return the artifact
 
 ## Playbook2
 
 ### Steps
-- Load the artifact "my_artifact" and "another_artifact"
-- Show my_artifact to user
-- Say the content of my_artifact
-- Show another_artifact to user
-- Say the content of another_artifact
+- Load the artifact "my_artifact.txt" and "another_artifact.md"
+- Show my_artifact.txt to user
+- Say the content of my_artifact.txt
+- Show another_artifact.md to user
+- Say the content of another_artifact.md
 
 ## Main
 
@@ -35,7 +35,8 @@ async def Playbook4():
 
 ### Steps
 - Run Playbook1
-- SaveArtifact("artifact1.txt", "Artifact1", "This is artifact1.")
+- Save "artifact1.txt" with summary "Artifact1" and content "This is artifact1."
+- Update "my_artifact.txt" with a 4 line poem followed by "This is my artifact."
 - Run Playbook3
 - Run Playbook2
 - Run Playbook4
