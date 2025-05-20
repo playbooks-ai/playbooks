@@ -2,9 +2,9 @@
 This program greets the user by name
 
 ## Greet
-## Triggers
+### Triggers
 - At the beginning
-## Steps
+### Steps
 - Ask the user for their name
 - Say hello to the user by name and welcome them to Playbooks
 - End program
