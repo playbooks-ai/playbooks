@@ -56,7 +56,7 @@ class LLMResponseLine:
 
         # detect if return value in backticks somewhere in the line using regex
         match = re.search(r"`Return\[(.*)\]`", self.text)
-        map = {
+        literal_map = {
             "true": True,
             "false": False,
             "null": None,
@@ -65,8 +65,8 @@ class LLMResponseLine:
             expression = match.group(1)
             if expression == "":
                 self.return_value = None
-            elif expression in map.keys():
-                self.return_value = map[expression]
+            elif expression in literal_map.keys():
+                self.return_value = literal_map[expression]
             elif expression.startswith("$"):
                 self.return_value = expression
             else:
