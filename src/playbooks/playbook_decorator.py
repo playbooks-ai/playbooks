@@ -7,8 +7,9 @@ def playbook_decorator(
     **kwargs,
 ) -> Union[Callable, Any]:
     """
-    A decorator that marks a function as a playbook by setting __is_playbook__ to True.
-    Can be used with or without arguments. Wraps the function in an async wrapper.
+    A decorator that marks a function as a playbook by setting ``__is_playbook__``
+    to ``True``. It can be applied with or without arguments and simply annotates
+    the target coroutine with metadata. No wrapper function is created.
 
     Args:
         func_or_triggers: Either the function to decorate or a list of trigger strings
