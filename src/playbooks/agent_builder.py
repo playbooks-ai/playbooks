@@ -4,6 +4,7 @@ import re
 import types
 from typing import Any, Callable, Dict, List, Optional, Type
 
+from playbooks.event_bus import EventBus
 from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
 
 from .ai_agent import AIAgent
@@ -128,12 +129,13 @@ class AgentBuilder:
         playbooks = self.playbooks
 
         # Define __init__ for the new class
-        def __init__(self):
+        def __init__(self, event_bus: EventBus):
             AIAgent.__init__(
                 self,
                 klass=klass,
                 description=description,
                 playbooks=playbooks,
+                event_bus=event_bus,
             )
 
         # Create and return the new Agent class

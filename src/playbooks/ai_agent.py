@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from .base_agent import BaseAgent
 from .call_stack import CallStackFrame, InstructionPointer
 from .enums import PlaybookExecutionType
+from .event_bus import EventBus
 from .execution_state import ExecutionState
 from .playbook import Playbook
 from .playbook_call import PlaybookCall, PlaybookCallResult
@@ -30,6 +31,7 @@ class AIAgent(BaseAgent):
         self,
         klass: str,
         description: str,
+        event_bus: EventBus,
         playbooks: Dict[str, Playbook] = None,
     ):
         """Initialize a new Agent.
@@ -37,12 +39,13 @@ class AIAgent(BaseAgent):
         Args:
             klass: The class/type of this agent.
             description: Human-readable description of the agent.
+            bus: The event bus for publishing events.
             playbooks: Dictionary of playbooks available to this agent.
         """
         super().__init__(klass)
         self.description = description
         self.playbooks: Dict[str, Playbook] = playbooks or {}
-        self.state = ExecutionState()
+        self.state = ExecutionState(event_bus)
         for playbook in self.playbooks.values():
             playbook.func.__globals__.update({"agent": self})
         self.public = None

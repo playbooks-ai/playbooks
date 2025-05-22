@@ -8,6 +8,7 @@ import asyncio
 import functools
 import glob
 import sys
+import uuid
 from pathlib import Path
 from typing import Callable, List
 
@@ -18,6 +19,7 @@ from rich.text import Text
 from playbooks import Playbooks
 from playbooks.base_agent import AgentCommunicationMixin
 from playbooks.constants import EOM
+from playbooks.events import Event
 from playbooks.markdown_playbook_execution import ExecutionFinished
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel
@@ -157,7 +159,8 @@ async def main(glob_path: str, verbose: bool):
         sys.exit(1)
 
     console.print(f"[green]Loading playbooks from:[/green] {file_paths}")
-    playbooks = Playbooks(file_paths)
+    session_id = str(uuid.uuid4())
+    playbooks = Playbooks(file_paths, session_id=session_id)
     pubsub = PubSub()
 
     # Wrap the session_log with the custom wrapper for all agents
@@ -167,8 +170,13 @@ async def main(glob_path: str, verbose: bool):
                 agent.state.session_log, pubsub, verbose, agent
             )
 
+    def log_event(event: Event):
+        print(event)
+
     # Start the program
     try:
+        if verbose:
+            playbooks.event_bus.subscribe("*", log_event)
         await asyncio.gather(playbooks.program.begin(), handle_user_input(playbooks))
     except ExecutionFinished:
         console.print("[green]Execution finished. Exiting...[/green]")
@@ -178,6 +186,8 @@ async def main(glob_path: str, verbose: bool):
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise
     finally:
+        if verbose:
+            playbooks.event_bus.unsubscribe("*", log_event)
         # Restore the original method when we're done
         AgentCommunicationMixin.WaitForMessage = original_wait_for_message
 

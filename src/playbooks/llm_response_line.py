@@ -3,12 +3,13 @@ import re
 from typing import Any, List
 
 from playbooks.call_stack import InstructionPointer
+from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
 from playbooks.variables import Variables
 
 
 class LLMResponseLine:
-    def __init__(self, text: str):
+    def __init__(self, text: str, event_bus: EventBus):
         self.text = text
         self.steps = []
         self.playbook_calls: List[PlaybookCall] = []
@@ -17,7 +18,7 @@ class LLMResponseLine:
         self.exit_program = False
         self.return_value = None
         self.is_thinking = False
-        self.vars = Variables()
+        self.vars = Variables(event_bus)
         self.parse_line(self.text)
 
     def parse_line(self, line: str):

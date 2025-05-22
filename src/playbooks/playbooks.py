@@ -1,6 +1,8 @@
 import os
+import uuid
 from typing import List
 
+from playbooks.event_bus import EventBus
 from playbooks.utils.markdown_to_ast import (
     parse_markdown_to_dict,
     refresh_markdown_attributes,
@@ -13,13 +15,20 @@ from .utils.llm_config import LLMConfig
 
 
 class Playbooks:
-    def __init__(self, program_paths: List[str], llm_config: LLMConfig = None):
+    def __init__(
+        self,
+        program_paths: List[str],
+        llm_config: LLMConfig = None,
+        session_id: str = None,
+    ):
         self.program_paths = program_paths
         self.llm_config = llm_config or LLMConfig()
+        self.session_id = session_id or str(uuid.uuid4())
         self.program_content = Loader.read_program(program_paths)
         self.program_content = self.preprocess_program(self.program_content)
         self.transpiled_program_content = self.transpile_program(self.program_content)
-        self.program = Program(self.transpiled_program_content)
+        self.event_bus = EventBus(self.session_id)
+        self.program = Program(self.transpiled_program_content, self.event_bus)
 
     def begin(self):
         self.program.begin()

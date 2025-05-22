@@ -72,6 +72,7 @@ class _Handler(BaseHTTPRequestHandler):
         self._send(404, "Not Found")
 
     def _handle_new_run(self) -> None:
+        session_id = str(uuid.uuid4())
         length = int(self.headers.get("Content-Length", 0))
         data = json.loads(self.rfile.read(length)) if length else {}
         path = data.get("path")
@@ -81,32 +82,41 @@ class _Handler(BaseHTTPRequestHandler):
             return
         try:
             if path:
-                playbooks = Playbooks([path])
+                playbooks = Playbooks([path], session_id=session_id)
             else:
-                playbooks = Playbooks.from_string(program)
+                playbooks = Playbooks.from_string(program, session_id=session_id)
         except Exception as e:  # pragma: no cover - invalid input
             self._send(400, str(e))
             return
 
         outbox: asyncio.Queue[str] = asyncio.Queue()
-        _patch_agents(playbooks.program, outbox)
-        run_id = str(uuid.uuid4())
+
+        for agent in playbooks.program.agents:
+            # Wrap the session log to capture messages for the HTTP client
+            agent.state.session_log = _OutboxWrapper(
+                agent.state.session_log, outbox, agent
+            )
+
         task = self.server.loop.create_task(
-            _run_program(playbooks, self.server, run_id)
+            _run_program(playbooks, self.server, session_id)
         )
-        self.server.runs[run_id] = _Run(
+        self.server.runs[session_id] = _Run(
             playbooks, outbox, task, playbooks.program.agents[0]
         )
-        # give the program a moment to start and potentially produce output
+
+        # Give the program a moment to start and potentially produce output
         asyncio.run_coroutine_threadsafe(asyncio.sleep(0.1), self.server.loop).result()
+
+        # Collect any initial messages
         msgs: List[str] = []
         while not outbox.empty():
             msgs.append(outbox.get_nowait())
+
         body = json.dumps(
             {
-                "run_id": run_id,
+                "session_id": session_id,
                 "messages": msgs,
-                "terminated": self.server.runs[run_id].terminated,
+                "terminated": self.server.runs[session_id].terminated,
             }
         )
         self._send(200, body, "application/json")
@@ -116,8 +126,8 @@ class _Handler(BaseHTTPRequestHandler):
         if len(parts) != 3:
             self._send(404, "Not Found")
             return
-        run_id = parts[1]
-        run = self.server.runs.get(run_id)
+        session_id = parts[1]
+        run = self.server.runs.get(session_id)
         if not run:
             self._send(404, "Run not found")
             return
@@ -136,7 +146,7 @@ class _Handler(BaseHTTPRequestHandler):
         while not run.outbox.empty():
             msgs.append(run.outbox.get_nowait())
         body = json.dumps(
-            {"run_id": run_id, "messages": msgs, "terminated": run.terminated}
+            {"session_id": session_id, "messages": msgs, "terminated": run.terminated}
         )
         self._send(200, body, "application/json")
 
@@ -151,18 +161,13 @@ class _Server(ThreadingHTTPServer):
         self.runs: Dict[str, _Run] = {}
 
 
-def _patch_agents(program, queue):
-    for agent in program.agents:
-        agent.state.session_log = _OutboxWrapper(agent.state.session_log, queue, agent)
-
-
-async def _run_program(playbooks, server, run_id):
+async def _run_program(playbooks, server, session_id):
     try:
         await playbooks.program.begin()
     except ExecutionFinished:
-        server.runs[run_id].terminated = True
+        server.runs[session_id].terminated = True
     except Exception:
-        server.runs[run_id].terminated = True
+        server.runs[session_id].terminated = True
         raise
 
 
@@ -205,10 +210,10 @@ IMPORTANT: This server is intended for development and testing purposes only. It
 
 Examples:
   # Run server on default port 8000
-  python web_agent_chat.py
+  python -m playbooks.applications.web_agent_chat
 
   # Run server on custom port
-  python web_agent_chat.py --port 9000
+  python -m playbooks.applications.web_agent_chat --port 9000
 
 API Endpoints:
   POST /runs/new
@@ -223,12 +228,12 @@ API Endpoints:
     
     Response:
     {
-        "run_id": "uuid-of-the-run",
+        "session_id": "uuid-of-the-run",
         "messages": ["message1", "message2", ...],
         "terminated": false
     }
     
-  POST /runs/{run_id}/messages
+  POST /runs/{session_id}/messages
     Send a message to an existing chat session
     - message: The message content to send
     
@@ -239,14 +244,14 @@ API Endpoints:
     
     Response:
     {
-        "run_id": "uuid-of-the-run",
+        "session_id": "uuid-of-the-run",
         "messages": ["message1", "message2", ...],
         "terminated": false
     }
 
 Response Format:
   All responses are JSON objects with the following fields:
-  - run_id: string - The unique identifier for this chat session
+  - session_id: string - The unique identifier for this chat session
   - messages: array of strings - List of messages from AI agents since the last request
   - terminated: boolean - Indicates if the program has terminated (true) or is still running (false)
 """,

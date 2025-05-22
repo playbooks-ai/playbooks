@@ -5,6 +5,7 @@ import re
 import frontmatter
 
 from .agent_builder import AgentBuilder
+from .event_bus import EventBus
 from .human_agent import HumanAgent
 from .markdown_playbook_execution import ExecutionFinished
 from .utils.markdown_to_ast import markdown_to_ast
@@ -23,13 +24,15 @@ class ProgramAgentsCommunicationMixin:
 
 
 class Program(ProgramAgentsCommunicationMixin):
-    def __init__(self, full_program: str):
+    def __init__(self, full_program: str, event_bus: EventBus):
         self.full_program = full_program
+        self.event_bus = event_bus
+
         self.extract_public_json()
         self.parse_metadata()
         self.ast = markdown_to_ast(self.program_content)
         self.agent_klasses = AgentBuilder.create_agents_from_ast(self.ast)
-        self.agents = [klass() for klass in self.agent_klasses.values()]
+        self.agents = [klass(self.event_bus) for klass in self.agent_klasses.values()]
         if not self.agents:
             raise ValueError("No agents found in program")
         if len(self.agents) != len(self.public_jsons):
@@ -39,7 +42,7 @@ class Program(ProgramAgentsCommunicationMixin):
             )
         for i in range(len(self.agents)):
             self.agents[i].public = self.public_jsons[i]
-        self.agents.append(HumanAgent("human"))
+        self.agents.append(HumanAgent("human", self.event_bus))
         self.agents_by_klass = {}
         self.agents_by_id = {}
         for agent in self.agents:

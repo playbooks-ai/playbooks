@@ -1,5 +1,8 @@
 from typing import Any, Dict, List, Optional
 
+from .event_bus import EventBus
+from .events import CallStackPopEvent, CallStackPushEvent, InstructionPointerEvent
+
 
 class InstructionPointer:
     """Represents a position in a playbook.
@@ -60,21 +63,14 @@ class CallStackFrame:
 
 
 class CallStack:
-    """Represents a call stack for playbook execution.
+    """A stack of call frames."""
 
-    Tracks the execution path through playbooks with a stack of frames.
-    Implements tracing functionality through TraceMixin.
-
-    Attributes:
-        frames: The list of CallStackFrame objects in the stack.
-    """
-
-    def __init__(self, playbook_lines: Optional[List[str]] = None):
+    def __init__(self, event_bus: EventBus, playbook_lines: Optional[List[str]] = None):
         self.frames: List[CallStackFrame] = []
-
+        self.event_bus = event_bus
         if playbook_lines:
-            for playbook_line in playbook_lines:
-                self.push_playbook_line(playbook_line)
+            for line in playbook_lines:
+                self.push_playbook_line(line)
 
     def is_empty(self) -> bool:
         """Check if the call stack is empty.
@@ -91,6 +87,8 @@ class CallStack:
             frame: The frame to push.
         """
         self.frames.append(frame)
+        event = CallStackPushEvent(frame=str(frame), stack=self.to_dict())
+        self.event_bus.publish(event)
 
     def push_playbook_line(self, playbook_line: str) -> None:
         """Push a frame created from a playbook line onto the call stack.
@@ -103,7 +101,8 @@ class CallStack:
         playbook = parts[0]
         line_number = parts[1] if len(parts) > 1 else None
         instruction_pointer = InstructionPointer(playbook, line_number)
-        self.push(CallStackFrame(instruction_pointer))
+        frame = CallStackFrame(instruction_pointer)
+        self.push(frame)
 
     def pop(self) -> Optional[CallStackFrame]:
         """Remove and return the top frame from the call stack.
@@ -111,7 +110,11 @@ class CallStack:
         Returns:
             The top frame, or None if the stack is empty.
         """
-        return self.frames.pop() if self.frames else None
+        frame = self.frames.pop() if self.frames else None
+        if frame:
+            event = CallStackPopEvent(frame=str(frame), stack=self.to_dict())
+            self.event_bus.publish(event)
+        return frame
 
     def peek(self) -> Optional[CallStackFrame]:
         """Return the top frame without removing it.
@@ -130,6 +133,10 @@ class CallStack:
             instruction_pointer: The new instruction pointer.
         """
         self.frames[-1].instruction_pointer = instruction_pointer
+        event = InstructionPointerEvent(
+            pointer=str(instruction_pointer), stack=self.to_dict()
+        )
+        self.event_bus.publish(event)
 
     def __repr__(self) -> str:
         frames = ", ".join(str(frame.instruction_pointer) for frame in self.frames)

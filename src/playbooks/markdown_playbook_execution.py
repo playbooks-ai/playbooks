@@ -2,6 +2,7 @@ from typing import List
 
 from playbooks.ai_agent import AIAgent
 from playbooks.config import LLMConfig
+from playbooks.events import LineExecutedEvent, PlaybookEndEvent, PlaybookStartEvent
 from playbooks.interpreter_prompt import InterpreterPrompt
 from playbooks.llm_response import LLMResponse
 from playbooks.playbook import Playbook
@@ -26,6 +27,11 @@ class MarkdownPlaybookExecution:
         done = False
         return_value = None
 
+        # Publish playbook start event
+        self.agent.state.event_bus.publish(
+            PlaybookStartEvent(playbook=self.playbook.klass)
+        )
+
         call = PlaybookCall(self.playbook.klass, args, kwargs)
 
         instruction = f"Execute {str(call)}"
@@ -36,7 +42,8 @@ class MarkdownPlaybookExecution:
                     instruction=instruction,
                     agent_instructions=self.agent.description,
                     artifacts_to_load=artifacts_to_load,
-                )
+                ),
+                self.agent.state.event_bus,
             )
 
             user_inputs = []
@@ -52,6 +59,10 @@ class MarkdownPlaybookExecution:
                 if line.steps:
                     last_step = line.steps[-1]
                     self.agent.state.call_stack.advance_instruction_pointer(last_step)
+                    # Publish line executed event
+                    self.agent.state.event_bus.publish(
+                        LineExecutedEvent(step=str(last_step), text=line.text)
+                    )
 
                 # Update variables
                 if len(line.vars) > 0:
@@ -110,6 +121,11 @@ class MarkdownPlaybookExecution:
 
         if self.agent.state.call_stack.is_empty():
             raise ExecutionFinished("Call stack is empty. Execution finished.")
+
+        # Publish playbook end event
+        self.agent.state.event_bus.publish(
+            PlaybookEndEvent(playbook=self.playbook.klass, return_value=return_value)
+        )
         return return_value
 
     async def make_llm_call(
