@@ -25,7 +25,7 @@ def test_load_playbooks(playbooks):
 
 def test_load_program(playbooks):
     assert playbooks.program is not None
-    assert playbooks.program.title == "Playbooks Python Interop"
+    assert playbooks.program.title == "Interop"
 
 
 def test_load_agents(playbooks):

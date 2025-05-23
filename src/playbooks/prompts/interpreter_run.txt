@@ -137,4 +137,4 @@ yld exit
 {{INSTRUCTION}}
 
 ---
-**Follow the contract exactly; deviations break execution. Keep responses concise—avoid extra prose.**
+**Follow the contract exactly; deviations break execution.**

@@ -28,3 +28,4 @@ async def process_countries(countries: List[str]):
 - Inform the user that you will now tell them some interesting facts about each of the countries
 - process_countries($countries)
 - End program
+ 
