@@ -63,6 +63,12 @@ class Program(ProgramAgentsCommunicationMixin):
         self.application = frontmatter_data.get("application", "MultiAgentChat")
         self.program_content = frontmatter_data.content
 
+    def update_metadata_from_agent(self, agent):
+        if not self.title:
+            self.title = agent.klass
+        if not self.description:
+            self.description = agent.description
+
     def extract_public_json(self):
         # Extract publics.json from full_program
         self.public_jsons = []
