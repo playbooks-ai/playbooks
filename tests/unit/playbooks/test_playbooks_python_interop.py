@@ -6,7 +6,7 @@ from playbooks.enums import PlaybookExecutionType
 
 @pytest.fixture
 def md_file_name():
-    return "playbooks-python-interop.md"
+    return "playbooks-python-interop.pb"
 
 
 @pytest.fixture

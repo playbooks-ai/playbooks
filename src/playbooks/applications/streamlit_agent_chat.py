@@ -49,7 +49,7 @@ def initialize_session_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "playbook_path" not in st.session_state:
-        st.session_state.playbook_path = "tests/data/02-personalized-greeting.md"
+        st.session_state.playbook_path = "tests/data/02-personalized-greeting.pb"
 
 
 def create_new_chat(playbook_path: str) -> Optional[str]:

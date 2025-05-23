@@ -224,7 +224,7 @@ API Endpoints:
     Example:
     curl -X POST http://localhost:8000/runs/new \\
          -H "Content-Type: application/json" \\
-         -d '{"path": "tests/data/02-personalized-greeting.md"}'
+         -d '{"path": "tests/data/02-personalized-greeting.pb"}'
     
     Response:
     {

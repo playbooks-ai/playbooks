@@ -67,7 +67,7 @@ class Playbooks:
             if not h3s:
                 with open(
                     os.path.join(
-                        os.path.dirname(__file__), "prompts", "react_steps.md"
+                        os.path.dirname(__file__), "prompts", "react_steps.pb"
                     ),
                     "r",
                 ) as f:

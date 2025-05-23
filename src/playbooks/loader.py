@@ -27,7 +27,7 @@ class Loader:
         Load program content from file paths. Supports both single files and glob patterns.
 
         Args:
-            paths: List of file paths or glob patterns (e.g., 'my_playbooks/**/*.md')
+            paths: List of file paths or glob patterns (e.g., 'my_playbooks/**/*.pb')
 
         Returns:
             str: Combined contents of all matching program files
