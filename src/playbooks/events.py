@@ -45,3 +45,17 @@ class PlaybookEndEvent(Event):
 class LineExecutedEvent(Event):
     step: str
     text: str
+
+
+@dataclass
+class BreakpointHitEvent(Event):
+    file_path: str
+    line_number: int
+    step: str
+
+
+@dataclass
+class TranspiledProgramEvent(Event):
+    transpiled_file_path: str  # e.g., "hello.pb"
+    content: str  # Full transpiled program content
+    original_file_paths: List[str]  # Original source files that were transpiled

@@ -140,12 +140,23 @@ async def handle_user_input(playbooks):
         await asyncio.sleep(0.1)
 
 
-async def main(glob_path: str, verbose: bool):
+async def main(
+    glob_path: str,
+    verbose: bool,
+    debug: bool = False,
+    debug_host: str = "127.0.0.1",
+    debug_port: int = 7529,
+    wait_for_client: bool = False,
+):
     """Main entrypoint for the CLI application.
 
     Args:
         glob_path: Path to the playbook file(s) to load
         verbose: Whether to print the session log
+        debug: Whether to start the debug server
+        debug_host: Host address for the debug server
+        debug_port: Port for the debug server
+        wait_for_client: Whether to wait for a client to connect before starting
     """
     # Patch the WaitForMessage method before loading agents
     AgentCommunicationMixin.WaitForMessage = patched_wait_for_message
@@ -173,6 +184,23 @@ async def main(glob_path: str, verbose: bool):
     def log_event(event: Event):
         print(event)
 
+    # Start debug server if requested
+    if debug:
+        console.print(
+            f"[green]Starting debug server on {debug_host}:{debug_port}[/green]"
+        )
+        await playbooks.program.start_debug_server(host=debug_host, port=debug_port)
+
+        # If wait_for_client is True, pause until a client connects
+        if wait_for_client:
+            console.print(
+                f"[yellow]Waiting for a debug client to connect at {debug_host}:{debug_port}...[/yellow]"
+            )
+            # Wait for a client to connect using the debug server's wait_for_client method
+            await playbooks.program._debug_server.wait_for_client()
+            await playbooks.program._debug_server.wait_for_continue()
+            console.print("[green]Debug client connected. Resuming execution.[/green]")
+
     # Start the program
     try:
         if verbose:
@@ -198,9 +226,32 @@ if __name__ == "__main__":
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Print the session log"
     )
+    parser.add_argument("--debug", action="store_true", help="Start the debug server")
+    parser.add_argument(
+        "--debug-host",
+        default="127.0.0.1",
+        help="Debug server host (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--debug-port", type=int, default=7529, help="Debug server port (default: 7529)"
+    )
+    parser.add_argument(
+        "--wait-for-client",
+        action="store_true",
+        help="Wait for a debug client to connect before starting execution",
+    )
     args = parser.parse_args()
 
     try:
-        asyncio.run(main(args.glob_path, args.verbose))
+        asyncio.run(
+            main(
+                args.glob_path,
+                args.verbose,
+                args.debug,
+                args.debug_host,
+                args.debug_port,
+                args.wait_for_client,
+            )
+        )
     except KeyboardInterrupt:
         print("\nGracefully shutting down...")

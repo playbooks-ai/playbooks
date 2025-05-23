@@ -27,10 +27,16 @@ class Playbooks:
         self.llm_config = llm_config or LLMConfig()
         self.session_id = session_id or str(uuid.uuid4())
         self.program_content = Loader.read_program(program_paths)
-        self.program_content = self.preprocess_program(self.program_content)
-        self.transpiled_program_content = self.transpile_program(self.program_content)
+        self.preprocessed_program_content = self.preprocess_program(
+            self.program_content
+        )
+        self.transpiled_program_content = self.transpile_program(
+            self.preprocessed_program_content
+        )
         self.event_bus = EventBus(self.session_id)
-        self.program = Program(self.transpiled_program_content, self.event_bus)
+        self.program = Program(
+            self.transpiled_program_content, self.event_bus, program_paths
+        )
 
     def begin(self):
         self.program.begin()

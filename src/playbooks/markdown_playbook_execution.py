@@ -2,7 +2,12 @@ from typing import List
 
 from playbooks.ai_agent import AIAgent
 from playbooks.config import LLMConfig
-from playbooks.events import LineExecutedEvent, PlaybookEndEvent, PlaybookStartEvent
+from playbooks.events import (
+    BreakpointHitEvent,
+    LineExecutedEvent,
+    PlaybookEndEvent,
+    PlaybookStartEvent,
+)
 from playbooks.interpreter_prompt import InterpreterPrompt
 from playbooks.llm_response import LLMResponse
 from playbooks.playbook import Playbook
@@ -59,6 +64,33 @@ class MarkdownPlaybookExecution:
                 if line.steps:
                     last_step = line.steps[-1]
                     self.agent.state.call_stack.advance_instruction_pointer(last_step)
+
+                    # Check for breakpoints before emitting LineExecutedEvent
+                    debug_server = self.agent.program._debug_server
+                    if debug_server and debug_server.has_breakpoint(
+                        step=str(last_step)
+                    ):
+                        # Emit breakpoint hit event and wait for continuation
+                        # Get file path from agent program or use playbook klass as default
+                        file_path = (
+                            getattr(self.agent.program, "program_path", "")
+                            or self.playbook.klass
+                        )
+                        line_number = (
+                            int(str(last_step).split(".")[0])
+                            if "." in str(last_step)
+                            else 1
+                        )
+
+                        self.agent.state.event_bus.publish(
+                            BreakpointHitEvent(
+                                file_path=file_path,
+                                line_number=line_number,
+                                step=str(last_step),
+                            )
+                        )
+                        await debug_server.wait_for_continue()
+
                     # Publish line executed event
                     self.agent.state.event_bus.publish(
                         LineExecutedEvent(step=str(last_step), text=line.text)

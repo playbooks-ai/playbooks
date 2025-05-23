@@ -1,10 +1,13 @@
 import asyncio
 import json
 import re
+from pathlib import Path
+from typing import List
 
 import frontmatter
 
 from .agent_builder import AgentBuilder
+from .debug.server import DebugServer
 from .event_bus import EventBus
 from .human_agent import HumanAgent
 from .markdown_playbook_execution import ExecutionFinished
@@ -24,9 +27,12 @@ class ProgramAgentsCommunicationMixin:
 
 
 class Program(ProgramAgentsCommunicationMixin):
-    def __init__(self, full_program: str, event_bus: EventBus):
+    def __init__(
+        self, full_program: str, event_bus: EventBus, program_paths: List[str] = None
+    ):
         self.full_program = full_program
         self.event_bus = event_bus
+        self.program_paths = program_paths or []
 
         self.extract_public_json()
         self.parse_metadata()
@@ -54,6 +60,28 @@ class Program(ProgramAgentsCommunicationMixin):
             self.agents_by_klass[agent.klass].append(agent)
             self.agents_by_id[agent.id] = agent
             agent.program = self
+
+        self._debug_server = None
+
+    def _get_transpiled_file_name(self) -> str:
+        """Generate the transpiled file name based on the first original file."""
+        if self.program_paths:
+            # Use the first file's name with .pb extension
+            first_file = Path(self.program_paths[0])
+            return f"{first_file.stem}.pb"
+        return "program.pb"
+
+    def _emit_transpiled_program_event(self):
+        """Emit an event with the transpiled program content for debugging."""
+        from .events import TranspiledProgramEvent
+
+        transpiled_file_path = self._get_transpiled_file_name()
+        event = TranspiledProgramEvent(
+            transpiled_file_path=transpiled_file_path,
+            content=self.full_program,
+            original_file_paths=self.program_paths,
+        )
+        self.event_bus.publish(event)
 
     def parse_metadata(self):
         frontmatter_data = frontmatter.loads(self.full_program)
@@ -87,3 +115,29 @@ class Program(ProgramAgentsCommunicationMixin):
             await self.begin()
         except ExecutionFinished:
             pass
+
+    async def start_debug_server(
+        self, host: str = "127.0.0.1", port: int = 5678
+    ) -> None:
+        """Start a debug server to stream runtime events.
+
+        The debug server connects to the agents' event buses to receive and stream events.
+
+        Args:
+            host: Host address to listen on
+            port: Port to listen on
+        """
+        if self._debug_server is None:
+            self._debug_server = DebugServer(host, port)
+            await self._debug_server.start()
+
+            # Store reference to this program in the debug server
+            self._debug_server.set_program(self)
+
+            # Register all agents' buses with the debug server
+            for agent in self.agents:
+                if hasattr(agent, "state") and hasattr(agent.state, "event_bus"):
+                    self._debug_server.register_bus(agent.state.event_bus)
+
+            # Emit transpiled program content for debugging
+            self._emit_transpiled_program_event()
