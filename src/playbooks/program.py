@@ -40,6 +40,9 @@ class Program(ProgramAgentsCommunicationMixin):
                 "Number of agents and public jsons must be the same. "
                 f"Got {len(self.agents)} agents and {len(self.public_jsons)} public jsons"
             )
+
+        self.update_metadata_from_agent(self.agents[0])
+
         for i in range(len(self.agents)):
             self.agents[i].public = self.public_jsons[i]
         self.agents.append(HumanAgent("human", self.event_bus))
@@ -55,8 +58,8 @@ class Program(ProgramAgentsCommunicationMixin):
     def parse_metadata(self):
         frontmatter_data = frontmatter.loads(self.full_program)
         self.metadata = frontmatter_data.metadata
-        self.title = frontmatter_data.get("title", "Untitled Program")
-        self.description = frontmatter_data.get("description", "")
+        self.title = frontmatter_data.get("title", None)
+        self.description = frontmatter_data.get("description", None)
         self.application = frontmatter_data.get("application", "MultiAgentChat")
         self.program_content = frontmatter_data.content
 

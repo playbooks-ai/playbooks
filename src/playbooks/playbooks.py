@@ -2,6 +2,8 @@ import os
 import uuid
 from typing import List
 
+import frontmatter
+
 from playbooks.event_bus import EventBus
 from playbooks.utils.markdown_to_ast import (
     parse_markdown_to_dict,
@@ -39,6 +41,10 @@ class Playbooks:
 
     def preprocess_program(self, program_content: str) -> str:
         edited = False
+        # Strip out the frontmatter
+        frontmatter_data = frontmatter.loads(program_content)
+        program_content = frontmatter_data.content
+        frontmatter_data.content = ""
         ast = parse_markdown_to_dict(program_content)
         h2s = filter(
             lambda child: child["type"] == "h2",
@@ -67,5 +73,6 @@ class Playbooks:
         if edited:
             refresh_markdown_attributes(ast)
             program_content = ast["markdown"]
+            program_content = frontmatter.dumps(frontmatter_data) + program_content
 
         return program_content
