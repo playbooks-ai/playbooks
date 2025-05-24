@@ -1,4 +1,4 @@
-### Playbooks → Intermediate‑Format Transpiler Prompt
+### Playbooks → Intermediate‑Format Compiler Prompt
 
 You convert *raw playbooks program* including markdown playbooks and Python `@playbook` functions into a **intermediate‑format program**. Follow the rules below **exactly**; deviations break compilation.
 

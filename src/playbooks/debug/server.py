@@ -44,11 +44,11 @@ class DebugServer:
                 BreakpointHitEvent,
                 CallStackPopEvent,
                 CallStackPushEvent,
+                CompiledProgramEvent,
                 InstructionPointerEvent,
                 LineExecutedEvent,
                 PlaybookEndEvent,
                 PlaybookStartEvent,
-                TranspiledProgramEvent,
                 VariableUpdateEvent,
             )
 
@@ -61,7 +61,7 @@ class DebugServer:
                 PlaybookStartEvent,
                 PlaybookEndEvent,
                 LineExecutedEvent,
-                TranspiledProgramEvent,
+                CompiledProgramEvent,
             ]:
                 bus.subscribe(event_type, self._on_event)
 
@@ -153,20 +153,20 @@ class DebugServer:
                 writer.write((json.dumps(response) + "\n").encode())
                 await writer.drain()
 
-            elif command_type == "get_transpiled_program":
-                # Send the transpiled program content to the client
+            elif command_type == "get_compiled_program":
+                # Send the compiled program content to the client
                 if self._program:
-                    transpiled_file_path = self._program._get_transpiled_file_name()
+                    compiled_file_path = self._program._get_compiled_file_name()
                     response = {
-                        "type": "transpiled_program_response",
+                        "type": "compiled_program_response",
                         "success": True,
-                        "transpiled_file": transpiled_file_path,
+                        "compiled_file": compiled_file_path,
                         "content": self._program.full_program,
                         "original_files": self._program.program_paths,
                     }
                 else:
                     response = {
-                        "type": "transpiled_program_response",
+                        "type": "compiled_program_response",
                         "success": False,
                         "error": "No program available",
                     }

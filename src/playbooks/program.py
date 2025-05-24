@@ -63,21 +63,21 @@ class Program(ProgramAgentsCommunicationMixin):
 
         self._debug_server = None
 
-    def _get_transpiled_file_name(self) -> str:
-        """Generate the transpiled file name based on the first original file."""
+    def _get_compiled_file_name(self) -> str:
+        """Generate the compiled file name based on the first original file."""
         if self.program_paths:
-            # Use the first file's name with .pb extension
+            # Use the first file path as the base for the compiled file name
             first_file = Path(self.program_paths[0])
-            return f"{first_file.stem}.pb"
-        return "program.pb"
+            return f"{first_file.stem}.pbc"
+        return "unknown.pbc"
 
-    def _emit_transpiled_program_event(self):
-        """Emit an event with the transpiled program content for debugging."""
-        from .events import TranspiledProgramEvent
+    def _emit_compiled_program_event(self):
+        """Emit an event with the compiled program content for debugging."""
+        from .events import CompiledProgramEvent
 
-        transpiled_file_path = self._get_transpiled_file_name()
-        event = TranspiledProgramEvent(
-            transpiled_file_path=transpiled_file_path,
+        compiled_file_path = self._get_compiled_file_name()
+        event = CompiledProgramEvent(
+            compiled_file_path=compiled_file_path,
             content=self.full_program,
             original_file_paths=self.program_paths,
         )
@@ -139,5 +139,5 @@ class Program(ProgramAgentsCommunicationMixin):
                 if hasattr(agent, "state") and hasattr(agent.state, "event_bus"):
                     self._debug_server.register_bus(agent.state.event_bus)
 
-            # Emit transpiled program content for debugging
-            self._emit_transpiled_program_event()
+            # Emit compiled program content for debugging
+            self._emit_compiled_program_event()

@@ -55,7 +55,7 @@ class BreakpointHitEvent(Event):
 
 
 @dataclass
-class TranspiledProgramEvent(Event):
-    transpiled_file_path: str  # e.g., "hello.pb"
-    content: str  # Full transpiled program content
-    original_file_paths: List[str]  # Original source files that were transpiled
+class CompiledProgramEvent(Event):
+    compiled_file_path: str  # e.g., "hello.pbc"
+    content: str  # Full compiled program content
+    original_file_paths: List[str]  # Original source files that were compiled
