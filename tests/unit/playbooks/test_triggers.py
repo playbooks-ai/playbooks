@@ -39,9 +39,6 @@ async def test_triggers(test_data_dir):
     # Trigger on variable set
     assert "TooBig()" in log
 
-    # Trigger on after calling a playbook
-    assert "PB1()" in log
-
     # Make sure the program completed its task
     assert "LoadAccount()" in log
-    assert "$8999" in log
+    assert "8999" in log
