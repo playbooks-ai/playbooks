@@ -72,7 +72,33 @@ class DebugServer:
         self._server = await asyncio.start_server(
             self._handle_client, self.host, self.port
         )
-        asyncio.create_task(self._server.serve_forever())
+        self._serve_task = asyncio.create_task(self._server.serve_forever())
+
+    async def shutdown(self) -> None:
+        """Shutdown the debug server and clean up resources."""
+        if self._server:
+            # Close the server
+            self._server.close()
+            await self._server.wait_closed()
+
+            # Cancel the serve_forever task
+            if hasattr(self, "_serve_task") and not self._serve_task.done():
+                self._serve_task.cancel()
+                try:
+                    await self._serve_task
+                except asyncio.CancelledError:
+                    pass
+
+            # Close all client connections
+            for writer in list(self.clients):
+                writer.close()
+                try:
+                    await writer.wait_closed()
+                except Exception:
+                    pass
+
+            self.clients.clear()
+            self._server = None
 
     async def wait_for_client(self) -> None:
         """Wait until at least one client is connected.

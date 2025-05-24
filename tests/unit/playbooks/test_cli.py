@@ -1,4 +1,6 @@
 import asyncio
+import json
+import socket
 import subprocess
 import sys
 import tempfile
@@ -6,18 +8,19 @@ from pathlib import Path
 
 import pytest
 
-from playbooks.cli import compile_playbook, run_application
+from playbooks.cli import compile, run_application
+from playbooks.exceptions import ProgramLoadError
 
 
 class TestCLICompile:
     """Test the CLI compile functionality."""
 
-    def test_compile_playbook_to_stdout(self, test_data_dir, capsys):
+    def test_compile_to_stdout(self, test_data_dir, capsys):
         """Test compiling a playbook and outputting to stdout."""
-        playbook_path = test_data_dir / "01-hello-playbooks.pb"
+        playbooks_path = test_data_dir / "01-hello-playbooks.pb"
 
         # Call the compile function directly
-        compile_playbook(str(playbook_path))
+        compile([str(playbooks_path)])
 
         # Capture the output
         captured = capsys.readouterr()
@@ -30,9 +33,9 @@ class TestCLICompile:
         assert "03:QUE Say goodbye to the user" in captured.out
         assert "public.json" in captured.out
 
-    def test_compile_playbook_to_file(self, test_data_dir):
+    def test_compile_to_file(self, test_data_dir):
         """Test compiling a playbook and saving to a file."""
-        playbook_path = test_data_dir / "01-hello-playbooks.pb"
+        playbooks_path = test_data_dir / "01-hello-playbooks.pb"
 
         with tempfile.NamedTemporaryFile(
             mode="w", suffix=".pbc", delete=False
@@ -41,7 +44,7 @@ class TestCLICompile:
 
         try:
             # Call the compile function with output file
-            compile_playbook(str(playbook_path), output_path)
+            compile([str(playbooks_path)], output_path)
 
             # Verify the file was created and contains expected content
             assert Path(output_path).exists()
@@ -61,8 +64,8 @@ class TestCLICompile:
 
     def test_compile_nonexistent_file(self):
         """Test compiling a non-existent file raises appropriate error."""
-        with pytest.raises(SystemExit):
-            compile_playbook("nonexistent.pb")
+        with pytest.raises(ProgramLoadError):
+            compile("nonexistent.pb")
 
 
 class TestCLIRun:
@@ -71,12 +74,12 @@ class TestCLIRun:
     @pytest.mark.asyncio
     async def test_run_application_with_agent_chat(self, test_data_dir):
         """Test running a playbook with the agent_chat application."""
-        playbook_path = test_data_dir / "01-hello-playbooks.pb"
+        playbooks_path = test_data_dir / "01-hello-playbooks.pb"
 
         # This test will actually run the application but we'll interrupt it quickly
         # since it's an interactive application
         task = asyncio.create_task(
-            run_application("playbooks.applications.agent_chat", [str(playbook_path)])
+            run_application("playbooks.applications.agent_chat", [str(playbooks_path)])
         )
 
         # Let it start up briefly
@@ -89,6 +92,64 @@ class TestCLIRun:
             await task
         except asyncio.CancelledError:
             pass  # Expected for interactive applications
+
+    @pytest.mark.asyncio
+    async def test_run_application_with_debug_server(self, test_data_dir):
+        """Test that the --debug flag starts a debug server and can accept connections."""
+        playbooks_path = test_data_dir / "01-hello-playbooks.pb"
+
+        # Find an available port for testing
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(("", 0))
+            debug_port = s.getsockname()[1]
+
+        # Start the application with debug enabled and wait-for-client
+        task = asyncio.create_task(
+            run_application(
+                "playbooks.applications.agent_chat",
+                [str(playbooks_path)],
+                debug=True,
+                debug_port=debug_port,
+                debug_host="127.0.0.1",
+                wait_for_client=True,
+            )
+        )
+
+        try:
+            # Give the debug server time to start and wait for client
+            await asyncio.sleep(1.0)
+
+            # Try to connect to the debug server to verify it's running
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection("127.0.0.1", debug_port), timeout=2.0
+            )
+
+            # Send a continue command to let the playbook proceed
+            continue_command = {"command": "continue"}
+            writer.write((json.dumps(continue_command) + "\n").encode())
+            await writer.drain()
+
+            # Close the connection
+            writer.close()
+            await writer.wait_closed()
+
+            # Wait for the application to complete
+            await asyncio.wait_for(task, timeout=5.0)
+
+            # Test passed - debug server was accessible and application completed
+            assert True
+
+        except (asyncio.TimeoutError, ConnectionRefusedError):
+            # Debug server is not running or not accessible
+            pytest.fail("Debug server was not started or is not accessible")
+        finally:
+            # Clean up the task if it's still running
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
 
     @pytest.mark.asyncio
     async def test_run_application_invalid_module(self):
@@ -120,6 +181,25 @@ class TestCLIIntegration:
         assert "run" in result.stdout
         assert "compile" in result.stdout
 
+    def test_cli_version(self):
+        """Test that the CLI version command works."""
+        result = subprocess.run(
+            [sys.executable, "-m", "playbooks", "--version"],
+            capture_output=True,
+            text=True,
+            cwd=Path(__file__).parent.parent.parent.parent,  # Go to project root
+        )
+
+        assert result.returncode == 0
+        assert "playbooks" in result.stdout
+        # Check that it contains a version number (format: x.y.z)
+        import re
+
+        version_pattern = r"playbooks \d+\.\d+\.\d+"
+        assert re.search(
+            version_pattern, result.stdout
+        ), f"Version output doesn't match expected pattern: {result.stdout}"
+
     def test_cli_compile_help(self):
         """Test that the CLI compile help command works."""
         result = subprocess.run(
@@ -145,14 +225,20 @@ class TestCLIIntegration:
         assert result.returncode == 0
         assert "run" in result.stdout
         assert "--application" in result.stdout
+        # Check that all debug options are present in help
+        assert "--debug" in result.stdout
+        assert "--debug-host" in result.stdout
+        assert "--debug-port" in result.stdout
+        assert "--wait-for-client" in result.stdout
+        assert "-v" in result.stdout or "--verbose" in result.stdout
 
     def test_cli_compile_stdout(self, test_data_dir):
         """Test CLI compile command outputting to stdout."""
-        playbook_path = test_data_dir / "01-hello-playbooks.pb"
+        playbooks_path = test_data_dir / "01-hello-playbooks.pb"
         project_root = Path(__file__).parent.parent.parent.parent
 
         result = subprocess.run(
-            [sys.executable, "-m", "playbooks", "compile", str(playbook_path)],
+            [sys.executable, "-m", "playbooks", "compile", str(playbooks_path)],
             capture_output=True,
             text=True,
             cwd=project_root,
@@ -165,7 +251,7 @@ class TestCLIIntegration:
 
     def test_cli_compile_to_file(self, test_data_dir):
         """Test CLI compile command saving to file."""
-        playbook_path = test_data_dir / "01-hello-playbooks.pb"
+        playbooks_path = test_data_dir / "01-hello-playbooks.pb"
         project_root = Path(__file__).parent.parent.parent.parent
 
         with tempfile.NamedTemporaryFile(
@@ -180,7 +266,7 @@ class TestCLIIntegration:
                     "-m",
                     "playbooks",
                     "compile",
-                    str(playbook_path),
+                    str(playbooks_path),
                     "--output",
                     output_path,
                 ],
@@ -218,7 +304,7 @@ class TestCLIIntegration:
         )
 
         assert result.returncode == 1
-        assert "Playbook file not found" in result.stdout
+        assert "not found" in result.stdout
 
     def test_cli_run_nonexistent_file(self):
         """Test CLI run with non-existent file."""
@@ -232,7 +318,7 @@ class TestCLIIntegration:
         )
 
         assert result.returncode == 1
-        assert "Playbook file not found" in result.stdout
+        assert "not found" in result.stdout
 
     def test_cli_no_command(self):
         """Test CLI with no command shows help."""
@@ -258,11 +344,9 @@ class TestCLIWithExamples:
 
         # Find all .pb files in test data, but exclude ones that don't meet format requirements
         pb_files = list(test_data_dir.glob("*.pb"))
-        # Filter out files that are known to not meet the H1/H2 requirements
-        valid_pb_files = [f for f in pb_files if f.name not in ["markdown.pb"]]
-        assert len(valid_pb_files) > 0, "No valid .pb files found in test data"
+        assert len(pb_files) > 0, "No valid .pb files found in test data"
 
-        for pb_file in valid_pb_files:
+        for pb_file in pb_files:
             result = subprocess.run(
                 [sys.executable, "-m", "playbooks", "compile", str(pb_file)],
                 capture_output=True,
@@ -285,7 +369,7 @@ class TestCLIWithExamples:
     )
     def test_run_with_different_applications(self, test_data_dir, application):
         """Test running playbooks with different applications."""
-        playbook_path = test_data_dir / "01-hello-playbooks.pb"
+        playbooks_path = test_data_dir / "01-hello-playbooks.pb"
         project_root = Path(__file__).parent.parent.parent.parent
 
         # Start the process
@@ -295,7 +379,7 @@ class TestCLIWithExamples:
                 "-m",
                 "playbooks",
                 "run",
-                str(playbook_path),
+                str(playbooks_path),
                 "--application",
                 application,
             ],

@@ -1,0 +1,16 @@
+# HelloWorld
+This is a hello world demo for the playbooks system that greets users, explains the demo purpose, and provides a clean exit.
+
+## HelloWorldDemo() -> None
+This playbooks demo prints a hello playbooks message
+### Triggers
+T1:BGN At the beginning
+### Steps
+01:QUE Greet the user with a hello playbooks message
+02:QUE Tell the user that this is a demo for the playbooks system
+03:QUE Say goodbye to the user
+04:YLD exit
+
+```public.json
+[]
+```

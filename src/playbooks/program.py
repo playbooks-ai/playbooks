@@ -141,3 +141,9 @@ class Program(ProgramAgentsCommunicationMixin):
 
             # Emit compiled program content for debugging
             self._emit_compiled_program_event()
+
+    async def shutdown_debug_server(self) -> None:
+        """Shutdown the debug server if it's running."""
+        if self._debug_server:
+            await self._debug_server.shutdown()
+            self._debug_server = None

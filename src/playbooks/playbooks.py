@@ -19,9 +19,16 @@ class Playbooks:
         self.program_paths = program_paths
         self.llm_config = llm_config or LLMConfig()
         self.session_id = session_id or str(uuid.uuid4())
-        self.program_content = Loader.read_program(program_paths)
-        # Compilation now includes preprocessing
-        self.compiled_program_content = self.compile_program(self.program_content)
+        self.program_content, self.do_not_compile = Loader.read_program(program_paths)
+
+        # Skip compilation if any of the files are already compiled (.pbc)
+        if self.do_not_compile:
+            # For compiled files, use the content as-is without compilation
+            self.compiled_program_content = self.program_content
+        else:
+            # For source files, compile the program content
+            self.compiled_program_content = self.compile_program(self.program_content)
+
         self.event_bus = EventBus(self.session_id)
         self.program = Program(
             self.compiled_program_content, self.event_bus, program_paths

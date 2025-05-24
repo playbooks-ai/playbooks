@@ -6,7 +6,6 @@ Provides a simple terminal interface for communicating with AI agents.
 import argparse
 import asyncio
 import functools
-import glob
 import sys
 import uuid
 from pathlib import Path
@@ -141,7 +140,7 @@ async def handle_user_input(playbooks):
 
 
 async def main(
-    glob_path: str,
+    program_paths: str,
     verbose: bool,
     debug: bool = False,
     debug_host: str = "127.0.0.1",
@@ -151,7 +150,7 @@ async def main(
     """Main entrypoint for the CLI application.
 
     Args:
-        glob_path: Path to the playbook file(s) to load
+        program_paths: Path to the playbook file(s) to load
         verbose: Whether to print the session log
         debug: Whether to start the debug server
         debug_host: Host address for the debug server
@@ -161,17 +160,12 @@ async def main(
     # Patch the WaitForMessage method before loading agents
     AgentCommunicationMixin.WaitForMessage = patched_wait_for_message
 
-    # Expand glob patterns to file paths
-    file_paths = glob.glob(glob_path)
-    if not file_paths:
-        console.print(
-            f"[bold red]Error:[/bold red] No files found matching pattern: {glob_path}"
-        )
-        sys.exit(1)
+    console.print(f"[green]Loading playbooks from:[/green] {program_paths}")
 
-    console.print(f"[green]Loading playbooks from:[/green] {file_paths}")
     session_id = str(uuid.uuid4())
-    playbooks = Playbooks(file_paths, session_id=session_id)
+    if isinstance(program_paths, str):
+        program_paths = [program_paths]
+    playbooks = Playbooks(program_paths, session_id=session_id)
     pubsub = PubSub()
 
     # Wrap the session_log with the custom wrapper for all agents
@@ -216,13 +210,20 @@ async def main(
     finally:
         if verbose:
             playbooks.event_bus.unsubscribe("*", log_event)
+        # Shutdown debug server if it was started
+        if debug and playbooks.program._debug_server:
+            await playbooks.program.shutdown_debug_server()
         # Restore the original method when we're done
         AgentCommunicationMixin.WaitForMessage = original_wait_for_message
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the agent chat application.")
-    parser.add_argument("glob_path", help="Path to the playbook file(s) to load")
+    parser.add_argument(
+        "program_paths",
+        help="Paths to the playbook file(s) to load",
+        nargs="+",
+    )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Print the session log"
     )
@@ -240,12 +241,17 @@ if __name__ == "__main__":
         action="store_true",
         help="Wait for a debug client to connect before starting execution",
     )
+    parser.add_argument(
+        "--skip-compilation",
+        action="store_true",
+        help="Skip compilation (useful for .pbc files)",
+    )
     args = parser.parse_args()
 
     try:
         asyncio.run(
             main(
-                args.glob_path,
+                args.program_paths,
                 args.verbose,
                 args.debug,
                 args.debug_host,
