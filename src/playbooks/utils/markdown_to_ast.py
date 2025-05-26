@@ -1,24 +1,27 @@
 from typing import Any, Dict
 
 from markdown_it import MarkdownIt
+from markdown_it.token import Token
 
 
 def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
     """
-    Parse markdown text into a hierarchical dictionary structure (AST).
+    Parse markdown text into a hierarchical dictionary structure (AST)
+    with line numbers.
 
     Args:
         markdown_text: The markdown text to parse
 
     Returns:
-        A dictionary representing the AST of the markdown text
+        A dictionary representing the AST of the markdown text with
+        line numbers
     """
-    # Initialize markdown parser
+    # Initialize markdown parser with line numbers
     md = MarkdownIt()
     tokens = md.parse(markdown_text)
 
     # Initialize root and stack for tracking hierarchy
-    root = {"type": "root", "children": []}
+    root = {"type": "root", "children": [], "line_number": 1}
     stack = [root]
 
     def get_current_level() -> int:
@@ -33,6 +36,12 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
         while len(stack) > 1 and get_current_level() >= target_level:
             stack.pop()
 
+    def get_line_number(token: Token) -> int:
+        """Get the 1-indexed line number for a token"""
+        if hasattr(token, "map") and token.map:
+            return token.map[0] + 1  # Convert to 1-indexed
+        return 1
+
     i = 0
     list_counter = 0  # Counter for ordered list items
     while i < len(tokens):
@@ -44,13 +53,22 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
 
             # Get heading text from next token
             heading_text = tokens[i + 1].content
-            new_heading = {"type": f"h{level}", "text": heading_text, "children": []}
+            line_number = get_line_number(token)
+
+            new_heading = {
+                "type": f"h{level}",
+                "text": heading_text,
+                "children": [],
+                "line_number": line_number,
+            }
             stack[-1]["children"].append(new_heading)
             stack.append(new_heading)
             i += 2  # Skip the heading_close token
 
         elif token.type == "paragraph_open":
             paragraph_text = tokens[i + 1].content
+            line_number = get_line_number(token)
+
             if stack[-1]["type"] == "list-item":
                 if not stack[-1]["text"]:
                     stack[-1]["text"] = paragraph_text
@@ -58,15 +76,21 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
                     stack[-1]["text"] += "\n\n" + paragraph_text
             else:
                 stack[-1]["children"].append(
-                    {"type": "paragraph", "text": paragraph_text}
+                    {
+                        "type": "paragraph",
+                        "text": paragraph_text,
+                        "line_number": line_number,
+                    }
                 )
             i += 2  # Skip paragraph_close
 
         elif token.type == "bullet_list_open" or token.type == "ordered_list_open":
+            line_number = get_line_number(token)
             new_list = {
                 "type": "list",
                 "children": [],
                 "_ordered": token.type == "ordered_list_open",
+                "line_number": line_number,
             }
             stack[-1]["children"].append(new_list)
             stack.append(new_list)
@@ -74,13 +98,18 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
             i += 1
 
         elif token.type == "list_item_open":
-            item = {"type": "list-item", "text": "", "children": []}
+            line_number = get_line_number(token)
+            item = {
+                "type": "list-item",
+                "text": "",
+                "children": [],
+                "line_number": line_number,
+            }
             if stack[-1].get("_ordered", False):
                 item["_number"] = list_counter
                 list_counter += 1
 
             stack[-1]["children"].append(item)
-
             stack.append(item)
             i += 1
 
@@ -93,6 +122,7 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
             i += 1
 
         elif token.type == "blockquote_open":
+            line_number = get_line_number(token)
             quote_text = ""
             j = i + 1
             while tokens[j].type != "blockquote_close":
@@ -100,11 +130,20 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
                     quote_text = tokens[j].content
                 j += 1
 
-            stack[-1]["children"].append({"type": "quote", "text": quote_text})
+            stack[-1]["children"].append(
+                {"type": "quote", "text": quote_text, "line_number": line_number}
+            )
             i = j + 1
 
         elif token.type == "fence":  # For code blocks
-            stack[-1]["children"].append({"type": "code-block", "text": token.content})
+            line_number = get_line_number(token)
+            stack[-1]["children"].append(
+                {
+                    "type": "code-block",
+                    "text": token.content,
+                    "line_number": line_number,
+                }
+            )
             i += 1
 
         else:
@@ -118,8 +157,9 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
 
 def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     """
-    Performs a DFS walk on the node tree to add markdown attributes to each node.
-    This adds a 'markdown' field to each node with the markdown representation.
+    Performs a DFS walk on the node tree to add markdown attributes to
+    each node. This adds a 'markdown' field to each node with the
+    markdown representation. Line numbers are preserved during this process.
 
     Args:
         node: The node to process and update with markdown attributes
@@ -185,13 +225,15 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
 
 def markdown_to_ast(markdown: str) -> Dict[str, Any]:
     """
-    Convert markdown text to an Abstract Syntax Tree (AST) representation.
+    Convert markdown text to an Abstract Syntax Tree (AST) representation
+    with line numbers.
 
     Args:
         markdown: The markdown text to convert
 
     Returns:
-        A dictionary representing the AST of the markdown text with a 'document' root
+        A dictionary representing the AST of the markdown text with a
+        'document' root and line numbers on all nodes
     """
     tree = parse_markdown_to_dict(markdown)
     refresh_markdown_attributes(tree)
@@ -203,9 +245,11 @@ def markdown_to_ast(markdown: str) -> Dict[str, Any]:
         return tree
 
     # Otherwise wrap the tree in a document node
+    children = [tree] if isinstance(tree, dict) else tree.get("children", [])
     return {
         "type": "document",
         "text": "",
-        "children": [tree] if isinstance(tree, dict) else tree.get("children", []),
+        "children": children,
         "markdown": markdown,
+        "line_number": 1,
     }
