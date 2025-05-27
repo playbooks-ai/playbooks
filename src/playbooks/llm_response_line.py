@@ -2,6 +2,7 @@ import ast
 import re
 from typing import Any, List
 
+from playbooks.ai_agent import AIAgent
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
@@ -9,8 +10,11 @@ from playbooks.variables import Variables
 
 
 class LLMResponseLine:
-    def __init__(self, text: str, event_bus: EventBus):
+    def __init__(self, text: str, event_bus: EventBus, agent: AIAgent):
         self.text = text
+        self.event_bus = event_bus
+        self.agent = agent
+
         self.steps = []
         self.playbook_calls: List[PlaybookCall] = []
         self.playbook_finished = False
@@ -23,14 +27,15 @@ class LLMResponseLine:
 
     def parse_line(self, line: str):
         # Extract Step metadata, e.g., `Step["auth_step"]`
-        self.steps = re.findall(r'`Step\["([^"]+)"\]`', self.text)
+        steps = re.findall(r'`Step\["([^"]+)"\]`', self.text)
 
-        if any(step.endswith(":TNK") for step in self.steps):
+        if any(step.endswith(":TNK") for step in steps):
             self.is_thinking = True
 
-        self.steps: List[InstructionPointer] = [
-            InstructionPointer.from_step(step) for step in self.steps
-        ]
+        self.steps: List[InstructionPointer] = []
+        for step in steps:
+            ip = self.agent.parse_instruction_pointer(step)
+            self.steps.append(ip)
 
         # Extract Var metadata, e.g., `Var[$user_email, "test@example.com"]` or `Var[$pin, 1234]`
         # Captures the variable name (with $) and its value, parsing the value as a Python expression

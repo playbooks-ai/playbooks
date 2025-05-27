@@ -10,25 +10,26 @@ class InstructionPointer:
     Attributes:
         playbook: The name of the playbook.
         line_number: The line number within the playbook.
+        source_line_number: The source line number in the markdown.
     """
 
-    def __init__(self, playbook: str, line_number: str):
+    def __init__(self, playbook: str, line_number: str, source_line_number: int):
         self.playbook = playbook
         self.line_number = line_number
+        self.source_line_number = source_line_number
 
     def __str__(self) -> str:
-        return (
+        base = (
             self.playbook
             if self.line_number is None
             else f"{self.playbook}:{self.line_number}"
         )
+        if self.source_line_number is not None:
+            return f"{base} (src:{self.source_line_number})"
+        return base
 
     def __repr__(self) -> str:
         return str(self)
-
-    @classmethod
-    def from_step(cls, step: str) -> "InstructionPointer":
-        return cls(step.split(":")[0], step.split(":")[1])
 
 
 class CallStackFrame:
@@ -65,12 +66,9 @@ class CallStackFrame:
 class CallStack:
     """A stack of call frames."""
 
-    def __init__(self, event_bus: EventBus, playbook_lines: Optional[List[str]] = None):
+    def __init__(self, event_bus: EventBus):
         self.frames: List[CallStackFrame] = []
         self.event_bus = event_bus
-        if playbook_lines:
-            for line in playbook_lines:
-                self.push_playbook_line(line)
 
     def is_empty(self) -> bool:
         """Check if the call stack is empty.
@@ -89,20 +87,6 @@ class CallStack:
         self.frames.append(frame)
         event = CallStackPushEvent(frame=str(frame), stack=self.to_dict())
         self.event_bus.publish(event)
-
-    def push_playbook_line(self, playbook_line: str) -> None:
-        """Push a frame created from a playbook line onto the call stack.
-
-        Args:
-            playbook_line: A string in the format "Playbook:LineNumber[:Extra]".
-                Example: "Playbook10:04.02:QUE"
-        """
-        parts = playbook_line.split(":")
-        playbook = parts[0]
-        line_number = parts[1] if len(parts) > 1 else None
-        instruction_pointer = InstructionPointer(playbook, line_number)
-        frame = CallStackFrame(instruction_pointer)
-        self.push(frame)
 
     def pop(self) -> Optional[CallStackFrame]:
         """Remove and return the top frame from the call stack.

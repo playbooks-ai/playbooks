@@ -112,9 +112,10 @@ class AIAgent(BaseAgent):
         langfuse_span.update(input=input_log)
 
         # Add the call to the call stack
+        first_step_line_number = playbook.first_step_line_number
         self.state.call_stack.push(
             CallStackFrame(
-                InstructionPointer(playbook.klass, "01"),
+                InstructionPointer(playbook.klass, "01", first_step_line_number),
                 langfuse_span=langfuse_span,
             )
         )
@@ -161,3 +162,28 @@ class AIAgent(BaseAgent):
         except Exception as e:
             await self._post_execute(call, str(e), langfuse_span)
             raise
+
+    def parse_instruction_pointer(self, step: str) -> InstructionPointer:
+        """Parse an instruction pointer from a string in format "Playbook:LineNumber[:Extra]".
+
+        Args:
+            step: The instruction pointer string in format "Playbook:LineNumber[:Extra]".
+
+        Returns:
+            An InstructionPointer object.
+        """
+        parts = step.split(":")
+        playbook_klass = parts[0]
+        line_number = parts[1] if len(parts) > 1 else "01"
+
+        playbook = self.playbooks[playbook_klass]
+        playbook_step = playbook.step_collection.get_step(line_number)
+        if playbook_step:
+            source_line_number = playbook_step.source_line_number
+        else:
+            source_line_number = playbook.first_step_line_number
+        return InstructionPointer(
+            playbook_klass,
+            line_number,
+            source_line_number,
+        )

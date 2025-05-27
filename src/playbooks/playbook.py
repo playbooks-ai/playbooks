@@ -314,6 +314,22 @@ class Playbook:
         self.public = public
         self.source_line_number = source_line_number
 
+    @property
+    def first_step(self) -> Optional[PlaybookStep]:
+        """Get the first step of the playbook."""
+        if self.step_collection and len(self.step_collection.ordered_line_numbers) > 0:
+            return self.step_collection.get_step(
+                self.step_collection.ordered_line_numbers[0]
+            )
+        return None
+
+    @property
+    def first_step_line_number(self) -> Optional[int]:
+        """Get the line number of the first step of the playbook."""
+        if self.first_step:
+            return self.first_step.source_line_number
+        return self.source_line_number
+
     def get_step(self, line_number: str) -> Optional[PlaybookStep]:
         """Get a step by line number.
 
