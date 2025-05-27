@@ -80,7 +80,7 @@ class AgentBuilder:
         refresh_markdown_attributes(h1)
 
         # Create Agent class
-        return self._create_agent_class(klass, description)
+        return self._create_agent_class(klass, description, h1)
 
     def _process_code_blocks(self, h1: Dict) -> None:
         """Process code blocks in the AST and extract playbooks."""
@@ -115,6 +115,7 @@ class AgentBuilder:
         self,
         klass: str,
         description: Optional[str],
+        h1: Dict,
     ) -> Type[AIAgent]:
         """Create and return a new Agent class."""
         agent_class_name = self.make_agent_class_name(klass)
@@ -127,6 +128,7 @@ class AgentBuilder:
 
         # Store references to playbooks and namespace for closure
         playbooks = self.playbooks
+        source_line_number = h1.get("line_number")
 
         # Define __init__ for the new class
         def __init__(self, event_bus: EventBus):
@@ -136,6 +138,7 @@ class AgentBuilder:
                 description=description,
                 playbooks=playbooks,
                 event_bus=event_bus,
+                source_line_number=source_line_number,
             )
 
         # Create and return the new Agent class
@@ -272,6 +275,7 @@ class AgentBuilder:
             code=None,
             markdown=None,
             public=public,
+            source_line_number=None,  # Python functions don't have markdown line numbers
         )
 
     @staticmethod

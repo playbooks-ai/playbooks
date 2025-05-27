@@ -33,6 +33,7 @@ class AIAgent(BaseAgent):
         description: str,
         event_bus: EventBus,
         playbooks: Dict[str, Playbook] = None,
+        source_line_number: int = None,
     ):
         """Initialize a new Agent.
 
@@ -41,11 +42,14 @@ class AIAgent(BaseAgent):
             description: Human-readable description of the agent.
             bus: The event bus for publishing events.
             playbooks: Dictionary of playbooks available to this agent.
+            source_line_number: The line number in the source markdown where this
+                agent is defined.
         """
         super().__init__(klass)
         self.description = description
         self.playbooks: Dict[str, Playbook] = playbooks or {}
         self.state = ExecutionState(event_bus)
+        self.source_line_number = source_line_number
         for playbook in self.playbooks.values():
             playbook.func.__globals__.update({"agent": self})
         self.public = None

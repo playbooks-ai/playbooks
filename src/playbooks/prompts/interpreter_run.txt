@@ -107,12 +107,12 @@ yld exit
 #### 4  Quick Mapping Cheatsheet
 | Playbook step                          | Condition     |Output (example)                                   |
 |----------------------------------------|---------------|-----------------------------------------|
-| PB:01:QUE Introduce yourself           |               |`Step[PB:01:QUE]` `Say("Hello! I am an AI assistant.")`|
-| PB:01:QUE $result:bool = PB2(user's age) | if $age is set | `Step[PB:01:QUE]` `$result:bool = PB2(age=$age)` |
+| - PB:01:QUE Introduce yourself           |               |`Step[PB:01:QUE]` `Say("Hello! I am an AI assistant.")`|
+| - PB:01:QUE $result:bool = PB2(user's age) | if $age is set | `Step[PB:01:QUE]` `$result:bool = PB2(age=$age)` |
 |                                          | if age is known but $age is not set | `Step[PB:01:QUE]` `$result:bool = PB2(age=23)` |
-| PB:05:EXE Generate full report and store in artifact | Artifacts not loaded | `Step[PB:05:EXE]` `LoadArtifact("result1.md")` `LoadArtifact("blah.txt")`<br>yld call |
-| PB:05:EXE Generate full report and store in artifact | Artifacts loaded | `Step[PB:05:EXE]` `SaveArtifact("result_1.md", "Result for 'How to swim'", "#How to swim: A comprehensive report\nThis report...full report here...")`|
-| PB:06:QUE Show result to user | Referring to artifact shows it in UI | `Say("Artifact[result_1.md]")` |
+| - PB:05:EXE Generate full report and store in artifact | Artifacts not loaded | `Step[PB:05:EXE]` `LoadArtifact("result1.md")` `LoadArtifact("blah.txt")`<br>yld call |
+| - PB:05:EXE Generate full report and store in artifact | Artifacts loaded | `Step[PB:05:EXE]` `SaveArtifact("result_1.md", "Result for 'How to swim'", "#How to swim: A comprehensive report\nThis report...full report here...")`|
+| - PB:06:QUE Show result to user | Referring to artifact shows it in UI | `Say("Artifact[result_1.md]")` |
 
 ====SYSTEM_PROMPT_DELIMITER====
 *Current playbook*

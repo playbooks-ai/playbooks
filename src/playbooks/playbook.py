@@ -8,17 +8,26 @@ from .playbook_step import PlaybookStep, PlaybookStepCollection
 class PlaybookTrigger:
     """Represents a trigger that can start a playbook."""
 
-    def __init__(self, playbook_klass: str, playbook_signature: str, trigger: str):
+    def __init__(
+        self,
+        playbook_klass: str,
+        playbook_signature: str,
+        trigger: str,
+        source_line_number: Optional[int] = None,
+    ):
         """Initialize a PlaybookTrigger.
 
         Args:
             playbook_klass: The class name of the playbook.
             playbook_signature: The signature of the playbook function.
-            list_item: The AST node representing the trigger in the markdown.
+            trigger: The trigger string.
+            source_line_number: The line number in the source markdown where this
+                trigger is defined.
         """
         self.playbook_klass = playbook_klass
         self.playbook_signature = playbook_signature
         self.trigger = trigger
+        self.source_line_number = source_line_number
         # Example text: "01:BGN When the agent starts running"
         self.trigger_name = self.trigger.split(" ")[0]
         self.trigger_description = " ".join(self.trigger.split(" ")[1:])
@@ -38,23 +47,34 @@ class PlaybookTriggers:
         playbook_klass: str,
         playbook_signature: str,
         triggers: List[str],
+        trigger_line_numbers: Optional[List[Optional[int]]] = None,
+        source_line_number: Optional[int] = None,
     ):
         """Initialize a PlaybookTriggers collection.
 
         Args:
             playbook_klass: The class name of the playbook.
             playbook_signature: The signature of the playbook function.
-            h3: The AST node representing the triggers section.
+            triggers: List of trigger strings.
+            trigger_line_numbers: List of line numbers for each trigger.
+            source_line_number: The line number in the source markdown where this
+                triggers section is defined.
         """
         self.playbook_klass = playbook_klass
         self.playbook_signature = playbook_signature
+        self.source_line_number = source_line_number
+
+        if trigger_line_numbers is None:
+            trigger_line_numbers = [None] * len(triggers)
+
         self.triggers = [
             PlaybookTrigger(
                 playbook_klass=self.playbook_klass,
                 playbook_signature=self.playbook_signature,
                 trigger=trigger,
+                source_line_number=line_num,
             )
-            for trigger in triggers
+            for trigger, line_num in zip(triggers, trigger_line_numbers)
         ]
 
 
@@ -165,22 +185,38 @@ class Playbook:
         for h3 in h3s:
             h3_title = h3.get("text", "").strip().lower()
             if h3_title == "triggers":
+                trigger_items = []
+                trigger_line_numbers = []
+                for child in h3["children"]:
+                    if child.get("type") == "list":
+                        for list_item in child.get("children", []):
+                            if list_item.get("type") == "list-item":
+                                trigger_items.append(list_item.get("text", "").strip())
+                                trigger_line_numbers.append(
+                                    list_item.get("line_number")
+                                )
+
                 triggers = PlaybookTriggers(
                     playbook_klass=klass,
                     playbook_signature=signature,
-                    triggers=[
-                        child.get("text", "").strip() for child in h3["children"]
-                    ],
+                    triggers=trigger_items,
+                    trigger_line_numbers=trigger_line_numbers,
+                    source_line_number=h3.get("line_number"),
                 )
             elif h3_title == "steps":
                 steps = h3
                 # Parse steps into PlaybookStep objects
                 for child in h3.get("children", []):
-                    lines = child.get("text", "").strip().split("\n")
-                    for line in lines:
-                        step = PlaybookStep.from_text(line)
-                        if step:
-                            step_collection.add_step(step)
+                    if child.get("type") == "list":
+                        for list_item in child.get("children", []):
+                            if list_item.get("type") == "list-item":
+                                lines = list_item.get("text", "").strip().split("\n")
+                                item_line_number = list_item.get("line_number")
+                                for line in lines:
+                                    step = PlaybookStep.from_text(line)
+                                    if step:
+                                        step.source_line_number = item_line_number
+                                        step_collection.add_step(step)
             elif h3_title == "notes":
                 notes = h3
             else:
@@ -199,6 +235,7 @@ class Playbook:
             markdown=h2["markdown"],
             step_collection=step_collection,
             public=public,
+            source_line_number=h2.get("line_number"),
         )
 
     @classmethod
@@ -244,6 +281,7 @@ class Playbook:
         markdown: str,
         step_collection: Optional[PlaybookStepCollection] = None,
         public: bool = False,
+        source_line_number: Optional[int] = None,
     ):
         """Initialize a Playbook.
 
@@ -259,6 +297,8 @@ class Playbook:
             func: The compiled function for PYTHON playbooks.
             markdown: The markdown representation of the playbook.
             step_collection: The collection of steps for MD playbooks.
+            source_line_number: The line number in the source markdown where this
+                playbook is defined.
         """
         self.klass = klass
         self.execution_type = execution_type
@@ -272,6 +312,7 @@ class Playbook:
         self.markdown = markdown
         self.step_collection = step_collection
         self.public = public
+        self.source_line_number = source_line_number
 
     def get_step(self, line_number: str) -> Optional[PlaybookStep]:
         """Get a step by line number.

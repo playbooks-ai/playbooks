@@ -948,7 +948,7 @@ def test_line_numbers_multi_agent_pbc(test_data_dir):
     # public:GetCountrySecret($country) -> str
     get_secret = country_info_playbooks[2]
     assert get_secret["text"] == "public:GetCountrySecret($country) -> str"
-    assert get_secret["line_number"] == 63
+    assert get_secret["line_number"] == 61
 
     # Check some h3 sections (Triggers, Steps)
     # X playbook's Triggers
@@ -976,7 +976,7 @@ def test_line_numbers_multi_agent_pbc(test_data_dir):
         if child["type"] == "h3" and child["text"] == "Triggers"
     ]
     assert len(secret_triggers) == 1
-    assert secret_triggers[0]["line_number"] == 65
+    assert secret_triggers[0]["line_number"] == 63
 
     # Check code blocks
     # Python code block in FirstAgent
