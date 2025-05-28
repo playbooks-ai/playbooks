@@ -609,44 +609,41 @@ def test_line_numbers_with_lists():
 
 def test_line_numbers_nested_lists():
     """Test line numbers for nested lists."""
-    markdown_text = """# Nested Lists
-
-- Level 1 item
-  - Level 2 item
-    - Level 3 item
-  - Another level 2
-- Another level 1"""
+    markdown_text = """### Steps
+- 01:QUE Introduce Clover and yourself
+- 02:EXE $relevant_information:list = []
+- 03:CND While conversation is active
+  - 03.01:CND If user is doing chitchat
+    - 03.01.01:QUE Reply to the user with professional chitchat
+  - 03.02:CND Otherwise
+    - 03.02.01:QUE AnswerQuestionUsingKnowledgeBase()
+    - 03.02.02:YLD call
+"""
 
     ast = markdown_to_ast(markdown_text)
 
-    h1 = ast["children"][0]
-    main_list = h1["children"][0]
+    h3 = ast["children"][0]
+    assert h3["line_number"] == 1
 
-    assert main_list["line_number"] == 3
+    li = h3["children"][0]
+    assert li["line_number"] == 2
 
-    # First level 1 item
-    level1_item1 = main_list["children"][0]
-    assert level1_item1["line_number"] == 3
-    assert level1_item1["text"] == "Level 1 item"
+    assert "01:QUE" in li["children"][0]["text"]
+    assert li["children"][0]["line_number"] == 2
 
-    # Nested list under first item
-    nested_list = level1_item1["children"][0]
-    assert nested_list["type"] == "list"
-    assert nested_list["line_number"] == 4
+    assert "02:EXE" in li["children"][1]["text"]
+    assert li["children"][1]["line_number"] == 3
 
-    # Level 2 items
-    level2_item1 = nested_list["children"][0]
-    assert level2_item1["line_number"] == 4
-    assert level2_item1["text"] == "Level 2 item"
+    assert "03:CND" in li["children"][2]["text"]
+    assert li["children"][2]["line_number"] == 4
 
-    level2_item2 = nested_list["children"][1]
-    assert level2_item2["line_number"] == 6
-    assert level2_item2["text"] == "Another level 2"
+    li2 = li["children"][2]["children"][0]
+    assert "03.01:CND" in li2["children"][0]["text"]
+    assert li2["children"][0]["line_number"] == 5
 
-    # Second level 1 item
-    level1_item2 = main_list["children"][1]
-    assert level1_item2["line_number"] == 7
-    assert level1_item2["text"] == "Another level 1"
+    li3 = li2["children"][0]["children"][0]
+    assert "03.01.01:QUE" in li3["children"][0]["text"]
+    assert li3["children"][0]["line_number"] == 6
 
 
 def test_line_numbers_code_blocks():

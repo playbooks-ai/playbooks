@@ -165,8 +165,8 @@ This is a test playbook description.
 
 ### Steps
 - 01:YLD Ask the user for input
-- 02:EXE Process the input
-- 03:RET Return the result
+  - 01.01:EXE Process the input
+- 02:RET Return the result
 
 ### Notes
 - This is a note about the playbook
@@ -218,13 +218,13 @@ This is a test playbook description.
     assert step_01.step_type == "YLD"
     assert step_01.content == "Ask the user for input"
 
-    step_02 = playbook.step_collection.get_step("02")
+    step_02 = playbook.step_collection.get_step("01.01")
     assert step_02 is not None
     assert step_02.source_line_number == 13
     assert step_02.step_type == "EXE"
     assert step_02.content == "Process the input"
 
-    step_03 = playbook.step_collection.get_step("03")
+    step_03 = playbook.step_collection.get_step("02")
     assert step_03 is not None
     assert step_03.source_line_number == 14
     assert step_03.step_type == "RET"
