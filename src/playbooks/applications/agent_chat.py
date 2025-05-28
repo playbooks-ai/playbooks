@@ -146,6 +146,7 @@ async def main(
     debug_host: str = "127.0.0.1",
     debug_port: int = 7529,
     wait_for_client: bool = False,
+    stop_on_entry: bool = False,
 ):
     """Main entrypoint for the CLI application.
 
@@ -156,7 +157,12 @@ async def main(
         debug_host: Host address for the debug server
         debug_port: Port for the debug server
         wait_for_client: Whether to wait for a client to connect before starting
+        stop_on_entry: Whether to stop at the beginning of playbook execution
     """
+    # print(
+    #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
+    # )
+
     # Patch the WaitForMessage method before loading agents
     AgentCommunicationMixin.WaitForMessage = patched_wait_for_message
 
@@ -192,8 +198,21 @@ async def main(
             )
             # Wait for a client to connect using the debug server's wait_for_client method
             await playbooks.program._debug_server.wait_for_client()
-            await playbooks.program._debug_server.wait_for_continue()
-            console.print("[green]Debug client connected. Resuming execution.[/green]")
+            console.print("[green]Debug client connected.[/green]")
+
+        # Set stop_on_entry flag in debug server
+        if stop_on_entry:
+            # print(
+            #     "[DEBUG] agent_chat.main - stop_on_entry=True, setting up debug server"
+            # )
+            # print("[DEBUG] agent_chat.main - clearing _continue_event")
+            playbooks.program._debug_server._continue_event.clear()
+            # print("[DEBUG] agent_chat.main - calling set_stop_on_entry(True)")
+            playbooks.program._debug_server.set_stop_on_entry(True)
+            # print("[DEBUG] agent_chat.main - stop_on_entry setup complete")
+        else:
+            # print("[DEBUG] agent_chat.main - stop_on_entry=False, no special setup")
+            pass
 
     # Start the program
     try:
@@ -246,6 +265,11 @@ if __name__ == "__main__":
         action="store_true",
         help="Skip compilation (useful for .pbc files)",
     )
+    parser.add_argument(
+        "--stop-on-entry",
+        action="store_true",
+        help="Stop at the beginning of playbook execution",
+    )
     args = parser.parse_args()
 
     try:
@@ -257,6 +281,7 @@ if __name__ == "__main__":
                 args.debug_host,
                 args.debug_port,
                 args.wait_for_client,
+                args.stop_on_entry,
             )
         )
     except KeyboardInterrupt:

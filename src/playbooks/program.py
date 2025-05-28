@@ -33,6 +33,7 @@ class Program(ProgramAgentsCommunicationMixin):
         self.full_program = full_program
         self.event_bus = event_bus
         self.program_paths = program_paths or []
+        self._debug_server = None
 
         self.extract_public_json()
         self.parse_metadata()
@@ -60,8 +61,6 @@ class Program(ProgramAgentsCommunicationMixin):
             self.agents_by_klass[agent.klass].append(agent)
             self.agents_by_id[agent.id] = agent
             agent.program = self
-
-        self._debug_server = None
 
     def _get_compiled_file_name(self) -> str:
         """Generate the compiled file name based on the first original file."""

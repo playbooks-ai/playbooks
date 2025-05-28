@@ -31,6 +31,13 @@ class InstructionPointer:
     def __repr__(self) -> str:
         return str(self)
 
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "playbook": self.playbook,
+            "line_number": self.line_number,
+            "source_line_number": self.source_line_number,
+        }
+
 
 class CallStackFrame:
     """Represents a frame in the call stack.
@@ -47,6 +54,10 @@ class CallStackFrame:
     ):
         self.instruction_pointer = instruction_pointer
         self.langfuse_span = langfuse_span
+
+    @property
+    def source_line_number(self) -> int:
+        return self.instruction_pointer.source_line_number
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the frame to a dictionary representation.
@@ -135,4 +146,4 @@ class CallStack:
         Returns:
             A list of string representations of instruction pointers.
         """
-        return [str(frame.instruction_pointer) for frame in self.frames]
+        return [frame.instruction_pointer.to_dict() for frame in self.frames]

@@ -83,6 +83,7 @@ async def run_application(
     debug_host: str = "127.0.0.1",
     debug_port: int = 7529,
     wait_for_client: bool = False,
+    stop_on_entry: bool = False,
 ) -> None:
     """
     Run a playbook using the specified application.
@@ -95,6 +96,7 @@ async def run_application(
         debug_host: Host address for the debug server
         debug_port: Port for the debug server
         wait_for_client: Whether to wait for a client to connect before starting
+        stop_on_entry: Whether to stop at the beginning of playbook execution
     """
     # Import the application module
     try:
@@ -114,6 +116,7 @@ async def run_application(
             debug_host=debug_host,
             debug_port=debug_port,
             wait_for_client=wait_for_client,
+            stop_on_entry=stop_on_entry,
         )
 
     except ImportError as e:
@@ -176,6 +179,11 @@ def main():
         action="store_true",
         help="Skip compilation step (automatically enabled for .pbc files)",
     )
+    run_parser.add_argument(
+        "--stop-on-entry",
+        action="store_true",
+        help="Stop at the beginning of playbook execution",
+    )
 
     # Compile command
     compile_parser = subparsers.add_parser("compile", help="Compile a playbook")
@@ -206,6 +214,7 @@ def main():
                     debug_host=args.debug_host,
                     debug_port=args.debug_port,
                     wait_for_client=args.wait_for_client,
+                    stop_on_entry=args.stop_on_entry,
                 )
             )
         except KeyboardInterrupt:

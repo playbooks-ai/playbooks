@@ -230,6 +230,7 @@ class TestCLIIntegration:
         assert "--debug-host" in result.stdout
         assert "--debug-port" in result.stdout
         assert "--wait-for-client" in result.stdout
+        assert "--stop-on-entry" in result.stdout
         assert "-v" in result.stdout or "--verbose" in result.stdout
 
     def test_cli_compile_stdout(self, test_data_dir):

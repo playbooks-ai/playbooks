@@ -1,9 +1,8 @@
 import uuid
 from typing import List
 
-from playbooks.event_bus import EventBus
-
 from .compiler import Compiler
+from .event_bus import EventBus
 from .loader import Loader
 from .program import Program
 from .utils.llm_config import LLMConfig
