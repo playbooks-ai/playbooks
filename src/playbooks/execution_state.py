@@ -36,6 +36,7 @@ class ExecutionState:
         self.call_stack = CallStack(event_bus)
         self.variables = Variables(event_bus)
         self.artifacts = Artifacts()
+        self.last_llm_response = ""
 
     def __repr__(self) -> str:
         """Return a string representation of the execution state."""

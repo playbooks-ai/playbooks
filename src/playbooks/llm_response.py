@@ -9,6 +9,7 @@ class LLMResponse:
         self.event_bus = event_bus
         self.agent = agent
         self.parse_llm_response(response, agent)
+        self.agent.state.last_llm_response = self.response
 
     def parse_llm_response(self, response, agent):
         self.lines = [

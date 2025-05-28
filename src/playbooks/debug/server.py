@@ -488,8 +488,12 @@ class DebugServer:
         if self._program and hasattr(self._program, "agents") and self._program.agents:
             agent = self._program.agents[0]
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                return agent.state.variables.to_dict()
-        return {}
+                vars = agent.state.variables.to_dict()
+        else:
+            vars = {}
+
+        vars["last_llm_response"] = agent.state.last_llm_response
+        return vars
 
     def _get_current_call_stack(self) -> List[Dict[str, Any]]:
         """Get current call stack from the first agent."""
