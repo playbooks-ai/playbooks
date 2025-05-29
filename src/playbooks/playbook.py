@@ -311,8 +311,9 @@ class Playbook:
             h3_title = h3.get("text", "").strip().lower()
             if h3_title == "steps":
                 step_collection = PlaybookStepCollection()
-                for child in h3["children"][0]["children"]:
-                    parse_node(child, step_collection)
+                if h3["children"] and "children" in h3["children"][0]:
+                    for child in h3["children"][0]["children"]:
+                        parse_node(child, step_collection)
                 return step_collection
         return None
 
