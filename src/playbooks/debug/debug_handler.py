@@ -95,10 +95,15 @@ class DebugHandler:
 class NoOpDebugHandler(DebugHandler):
     """No-op implementation for when debugging is disabled."""
 
-    def __init__(self):
-        super().__init__(None)
+    def __init__(self, debug_server: "DebugServer"):
+        super().__init__(debug_server)
 
-    async def handle_execution_start(self, agent, event_bus):
+    async def handle_execution_start(
+        self,
+        instruction_pointer: InstructionPointer,
+        next_instruction_pointer: InstructionPointer,
+        event_bus,
+    ):
         pass
 
     async def handle_breakpoint(self, source_line_number, event_bus):
