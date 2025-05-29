@@ -1,15 +1,15 @@
 # PersonalizedGreeting
-This program greets the user by name and welcomes them to Playbooks in a friendly, personalized manner.
+This program greets the user by name and welcomes them to Playbooks.
 
 ## Greet() -> None
-Main greeting routine that collects user information and provides a warm welcome experience.
+Greets the user by name and welcomes them to Playbooks
 ### Triggers
-T1:BGN At the beginning
+- T1:BGN At the beginning
 ### Steps
-01:QUE Ask the user for their $name:str
-02:YLD user
-03:QUE Say hello to the user by $name and welcome them to Playbooks
-04:YLD exit
+- 01:QUE Ask the user for their $name:str
+- 02:YLD user
+- 03:QUE Say hello to the user by $name and welcome them to Playbooks
+- 04:YLD exit
 
 ```public.json
 []
