@@ -126,7 +126,11 @@ async def run_application(
         )
         sys.exit(1)
     except Exception as e:
+        import traceback
+
         console.print(f"[bold red]Error running application:[/bold red] {e}")
+        console.print("[bold red]Traceback:[/bold red]")
+        traceback.print_exc()
         sys.exit(1)
 
 
