@@ -57,6 +57,7 @@ async def create_ticket_helper(email: str, title: str, issue: str, priority: str
     - End the conversation
 
 ## AnswerQuestionUsingKnowledgeBase
+### Steps
 - Think deeply. What is the query user is asking for? Is the user query related to Clover and can we answer it by searching the knowledge base? Do you need to decompose the query into smaller queries?
 - $current_query:str = fully resolved and decomposed query based on user's latest message and conversation history
 - If $current_query is a brand new query and not a continuation of a previous query
@@ -83,12 +84,14 @@ async def create_ticket_helper(email: str, title: str, issue: str, priority: str
   - Return False
 
 ## EndConversation
+### Steps
 - Thank user for their business and ask if there is anything else you can help with
 - If user is done
   - Say goodbye to the user
   - Exit program
 
 ## CreateTicket
+### Steps
 - $title =  Create a title for the ticket based on the user's query
 - $issue =  Create a detailed description of the user's issue
 - $priority =  Create a priority (Low, Medium, or High) for the ticket based on the user's query

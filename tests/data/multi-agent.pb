@@ -9,7 +9,7 @@ This is a test agent
 ```python
 import math
 
-@playbook(triggers=["When you need to compute square root"], export=True)
+@playbook(triggers=["When you need to compute square root"], public=True)
 async def A(num: float) -> float:
   return math.sqrt(num)
 ```
@@ -19,7 +19,7 @@ async def A(num: float) -> float:
 - When program starts
 ### Steps
 - Tell user about Canada's secret
-- get population of India from the country facts agent
+- get population of India from the country info agent
 - return $num * population of India * 2
 
 
@@ -29,18 +29,20 @@ This agent returns interesting info about a country
 ```python
 from typing import List
 
-@playbook(export=True)
+@playbook(public=True)
 async def GetLengthOfCountry(country: str):
   return len(country)
 ```
 ## LocalPB
+### Steps
 - Say hello
 
-## export: GetCountryPopulation($country)
+## public: GetCountryPopulation($country)
+### Steps
 - Compute the square root of the length of $country
 - Return the population of $country
 
-## export:GetCountrySecret($country)
+## public:GetCountrySecret($country)
 ### Triggers
 - When you need to get a secret about a country
 ### Steps

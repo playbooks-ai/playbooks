@@ -5,7 +5,7 @@ from playbooks import Playbooks
 
 @pytest.fixture
 def md_file_name():
-    return "multi_agent_multi_begin.md"
+    return "multi_agent_multi_begin.pb"
 
 
 @pytest.fixture

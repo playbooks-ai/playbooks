@@ -1,5 +1,9 @@
 <div align="center">
-  <h1 align="center">Playbooks AI</h1>
+   <h1>
+   <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo-dark.png">
+      <img alt="Text changing depending on mode. Light: 'So light!' Dark: 'So dark!'" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png" width=200 height=200>
+   </picture>
   <h2 align="center">Create AI agents with natural language programs</h2>
 </div>
 
@@ -39,7 +43,7 @@ Unlike standard LLM prompts that offer no execution guarantees, Playbooks provid
 - **Multi-Agent Architecture** - Build systems with multiple specialized agents, interact and leverage external AI agents
 - **Event-Driven Programming** - Use triggers to create reactive, context-aware agents
 - **Variables, Artifacts and Memory** - Native support for managing agent state using variables, artifacts and memory
-- **Execution Observability** - Full audit trail of every step of execution and explainability for every decision made the the AI agent
+- **Execution Observability** - Full audit trail of every step of execution and explainability for every decision made by the AI agent
 
 
 ## 🏁 Quick Start
@@ -52,7 +56,7 @@ pip install playbooks
 
 ### Create Your First Playbook
 
-Create a file named `hello.md`:
+Create a file named `hello.pb`:
 
 ```markdown
 # Personalized greeting
@@ -70,7 +74,7 @@ This program greets the user by name
 ### Run Your Playbook
 
 ```bash
-python -m playbooks.applications.agent_chat hello.md --verbose
+python -m playbooks.applications.agent_chat hello.pb --verbose
 ```
 
 ## 📚 Documentation

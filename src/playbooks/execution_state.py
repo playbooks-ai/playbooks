@@ -5,22 +5,38 @@ tracked during interpreter execution, including call stack, exit conditions,
 and execution control flags.
 """
 
-from dataclasses import dataclass, field
 from typing import Any, Dict
 
 from playbooks.artifacts import Artifacts
 from playbooks.call_stack import CallStack
+from playbooks.event_bus import EventBus
 from playbooks.session_log import SessionLog
 from playbooks.variables import Variables
 
 
-@dataclass
 class ExecutionState:
-    # Core execution state
-    session_log: SessionLog = field(default_factory=SessionLog)
-    call_stack: CallStack = field(default_factory=CallStack)
-    variables: Variables = field(default_factory=Variables)
-    artifacts: Artifacts = field(default_factory=Artifacts)
+    """Encapsulates execution state including call stack, variables, and artifacts.
+
+    Attributes:
+        bus: The event bus
+        session_log: Log of session activity
+        call_stack: Stack tracking the execution path
+        variables: Collection of variables with change history
+        artifacts: Store for execution artifacts
+    """
+
+    def __init__(self, event_bus: EventBus):
+        """Initialize execution state with an event bus.
+
+        Args:
+            bus: The event bus to use for all components
+        """
+        self.event_bus = event_bus
+        self.session_log = SessionLog()
+        self.call_stack = CallStack(event_bus)
+        self.variables = Variables(event_bus)
+        self.artifacts = Artifacts()
+        self.last_llm_response = ""
 
     def __repr__(self) -> str:
         """Return a string representation of the execution state."""
@@ -33,3 +49,7 @@ class ExecutionState:
             "variables": self.variables.to_dict(),
             "artifacts": self.artifacts.to_dict(),
         }
+
+    def __str__(self) -> str:
+        """Return a string representation of the execution state."""
+        return f"ExecutionState(call_stack={self.call_stack}, variables={self.variables}, session_log={self.session_log})"

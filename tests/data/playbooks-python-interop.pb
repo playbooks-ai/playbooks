@@ -36,16 +36,21 @@ async def BAXY1(num: float) -> float:
 ```
 
 ## X($num)
+### Steps
 - return $num * 2
 
 ## Y($num)
+### Steps
 - return half of $num
 
 ## XY($num)
+### Steps
 - return X(Y($num))
 
 ## CallA($num)
+### Steps
 - return A($num)
 
 ## BAXY2($num)
+### Steps
 - return B(A(X($num))) * Y($num)

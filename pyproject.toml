@@ -7,6 +7,9 @@ license = "MIT"
 readme = "README.md"
 packages = [{include = "playbooks", from = "src"}]
 
+[tool.poetry.scripts]
+playbooks = "playbooks.cli:main"
+
 [tool.poetry.dependencies]
 python = "^3.10"
 rich = "^14.0.0"

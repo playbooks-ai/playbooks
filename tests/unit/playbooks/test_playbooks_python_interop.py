@@ -6,7 +6,7 @@ from playbooks.enums import PlaybookExecutionType
 
 @pytest.fixture
 def md_file_name():
-    return "playbooks-python-interop.md"
+    return "playbooks-python-interop.pb"
 
 
 @pytest.fixture
@@ -16,16 +16,16 @@ def playbooks(md_path):
 
 def test_load_playbooks(playbooks):
     assert playbooks.program_content is not None
-    assert playbooks.program_content is not None
+    assert playbooks.program_content != playbooks.compiled_program_content
     assert "BAXY" in playbooks.program_content
 
-    assert playbooks.transpiled_program_content is not None
-    assert "BAXY" in playbooks.transpiled_program_content
+    assert playbooks.compiled_program_content is not None
+    assert "BAXY" in playbooks.compiled_program_content
 
 
 def test_load_program(playbooks):
     assert playbooks.program is not None
-    assert playbooks.program.title == "Playbooks Python Interop"
+    assert playbooks.program.title == "Interop"
 
 
 def test_load_agents(playbooks):

@@ -277,8 +277,18 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
     """
     if SYSTEM_PROMPT_DELIMITER in prompt:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
+
         return [
-            {"role": "system", "content": system.strip()},
+            {
+                "role": "system",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": system.strip(),
+                        "cache_control": {"type": "ephemeral"},
+                    }
+                ],
+            },
             {"role": "user", "content": user.strip()},
         ]
-    return [{"role": "system", "content": prompt.strip()}]
+    return [{"role": "user", "content": prompt.strip()}]

@@ -5,14 +5,25 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Agent Chat",
+            "name": "Command line agent chat",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
             "console": "integratedTerminal",
             "args": [
-                "${workspaceFolder}/tests/data/04-md-python-md.md",
+                "${workspaceFolder}/tests/data/02-personalized-greeting.md",
                 "--verbose"
+            ]
+        },
+        {
+            "name": "Web server for agent chat",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/src/playbooks/applications/web_agent_chat.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--port",
+                "8000"
             ]
         },
         {
@@ -24,5 +35,16 @@
                 "tests/unit/playbooks/test_examples.py"
             ]
         },
+        {
+            "name": "Compile current .pb file",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "playbooks.cli",
+            "console": "integratedTerminal",
+            "args": [
+                "compile",
+                "${file}.doesntexist"
+            ]
+        }
     ]
 }

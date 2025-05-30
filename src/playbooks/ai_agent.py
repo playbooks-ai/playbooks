@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 from .base_agent import BaseAgent
 from .call_stack import CallStackFrame, InstructionPointer
 from .enums import PlaybookExecutionType
+from .event_bus import EventBus
 from .execution_state import ExecutionState
 from .playbook import Playbook
 from .playbook_call import PlaybookCall, PlaybookCallResult
@@ -30,22 +31,28 @@ class AIAgent(BaseAgent):
         self,
         klass: str,
         description: str,
+        event_bus: EventBus,
         playbooks: Dict[str, Playbook] = None,
+        source_line_number: int = None,
     ):
         """Initialize a new Agent.
 
         Args:
             klass: The class/type of this agent.
             description: Human-readable description of the agent.
+            bus: The event bus for publishing events.
             playbooks: Dictionary of playbooks available to this agent.
+            source_line_number: The line number in the source markdown where this
+                agent is defined.
         """
         super().__init__(klass)
         self.description = description
         self.playbooks: Dict[str, Playbook] = playbooks or {}
-        self.state = ExecutionState()
+        self.state = ExecutionState(event_bus)
+        self.source_line_number = source_line_number
         for playbook in self.playbooks.values():
             playbook.func.__globals__.update({"agent": self})
-        self.exports = None
+        self.public = None
 
     async def begin(self):
         # Find playbooks with a BGN trigger and execute them
@@ -105,9 +112,10 @@ class AIAgent(BaseAgent):
         langfuse_span.update(input=input_log)
 
         # Add the call to the call stack
+        first_step_line_number = playbook.first_step_line_number
         self.state.call_stack.push(
             CallStackFrame(
-                InstructionPointer(playbook.klass, "01"),
+                InstructionPointer(playbook.klass, "01", first_step_line_number),
                 langfuse_span=langfuse_span,
             )
         )
@@ -146,10 +154,36 @@ class AIAgent(BaseAgent):
                 if var_name in self.state.variables.variables:
                     kwargs[key] = self.state.variables.variables[var_name].value
 
-        # Execute the playbook
-        playbook.func.__globals__["agent"] = self
-        result = await playbook.func(*args, **kwargs)
+        try:
+            playbook.func.__globals__["agent"] = self
+            result = await playbook.func(*args, **kwargs)
+            await self._post_execute(call, result, langfuse_span)
+            return result
+        except Exception as e:
+            await self._post_execute(call, str(e), langfuse_span)
+            raise
 
-        await self._post_execute(call, result, langfuse_span)
+    def parse_instruction_pointer(self, step: str) -> InstructionPointer:
+        """Parse an instruction pointer from a string in format "Playbook:LineNumber[:Extra]".
 
-        return result
+        Args:
+            step: The instruction pointer string in format "Playbook:LineNumber[:Extra]".
+
+        Returns:
+            An InstructionPointer object.
+        """
+        parts = step.split(":")
+        playbook_klass = parts[0]
+        line_number = parts[1] if len(parts) > 1 else "01"
+
+        playbook = self.playbooks[playbook_klass]
+        playbook_step = playbook.step_collection.get_step(line_number)
+        if playbook_step:
+            source_line_number = playbook_step.source_line_number
+        else:
+            source_line_number = playbook.first_step_line_number
+        return InstructionPointer(
+            playbook_klass,
+            line_number,
+            source_line_number,
+        )

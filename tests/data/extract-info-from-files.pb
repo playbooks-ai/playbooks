@@ -52,6 +52,6 @@ async def process_files(path: str):
 ### Triggers
 - At the beginning
 
-### Actions
+### Steps
 - Ask user for the path to the folder containing the PDF files
 - process_files(path)

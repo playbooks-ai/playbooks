@@ -5,7 +5,7 @@ from playbooks import Playbooks
 
 @pytest.mark.asyncio
 async def test_example_01(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "01-hello-playbooks.md"])
+    playbooks = Playbooks([test_data_dir / "01-hello-playbooks.pb"])
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert "SendMessage(human" in log
@@ -13,7 +13,7 @@ async def test_example_01(test_data_dir):
 
 @pytest.mark.asyncio
 async def test_example_02(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "02-personalized-greeting.md"])
+    playbooks = Playbooks([test_data_dir / "02-personalized-greeting.pb"])
     ai_agent = playbooks.program.agents[0]
 
     # AI will ask name, so seed message from human
@@ -26,7 +26,7 @@ async def test_example_02(test_data_dir):
 
 @pytest.mark.asyncio
 async def test_example_03(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "03-md-calls-python.md"])
+    playbooks = Playbooks([test_data_dir / "03-md-calls-python.pb"])
     ai_agent = playbooks.program.agents[0]
 
     # AI will ask for a number, so seed response from human
@@ -39,7 +39,7 @@ async def test_example_03(test_data_dir):
 
 @pytest.mark.asyncio
 async def test_example_04(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "04-md-python-md.md"])
+    playbooks = Playbooks([test_data_dir / "04-md-python-md.pb"])
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert "generate_report_summary()" in log
@@ -49,7 +49,7 @@ async def test_example_04(test_data_dir):
 
 @pytest.mark.asyncio
 async def test_example_05(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "05-country-facts.md"])
+    playbooks = Playbooks([test_data_dir / "05-country-facts.pb"])
 
     # AI will ask for a country, so seed response from human
     await playbooks.program.agents_by_id["human"].SendMessage(
@@ -63,7 +63,7 @@ async def test_example_05(test_data_dir):
 
 @pytest.mark.asyncio
 async def test_example_08(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "08-artifact.md"])
+    playbooks = Playbooks([test_data_dir / "08-artifact.pb"])
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert '`LoadArtifact("my_artifact")`' in log

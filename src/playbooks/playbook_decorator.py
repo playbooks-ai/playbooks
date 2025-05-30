@@ -7,8 +7,10 @@ def playbook_decorator(
     **kwargs,
 ) -> Union[Callable, Any]:
     """
-    A decorator that marks a function as a playbook by setting __is_playbook__ to True.
-    Can be used with or without arguments. Wraps the function in an async wrapper.
+    A decorator that marks a coroutine as a playbook. It sets the ``__is_playbook__``
+    flag to ``True`` and populates ``__triggers__`` and ``__public__`` attributes
+    based on the provided arguments. No wrapper function is created; the original
+    coroutine is returned unchanged after validation.
 
     Args:
         func_or_triggers: Either the function to decorate or a list of trigger strings
@@ -27,10 +29,10 @@ def playbook_decorator(
             raise TypeError(f"Playbook function '{func.__name__}' must be async")
         func.__is_playbook__ = True
         func.__triggers__ = []
-        func.__export__ = False
+        func.__public__ = False
         return func
 
-    # Case 2: @playbook(triggers=[...]) or @playbook([...]) or @playbook(export=True)
+    # Case 2: @playbook(triggers=[...]) or @playbook([...]) or @playbook(public=True)
     else:
         # If triggers is None, assume func_or_triggers is the triggers list
         def decorator(func: Callable) -> Callable:
@@ -38,7 +40,7 @@ def playbook_decorator(
                 raise TypeError(f"Playbook function '{func.__name__}' must be async")
             func.__is_playbook__ = True
             func.__triggers__ = kwargs.get("triggers", [])
-            func.__export__ = kwargs.get("export", False)
+            func.__public__ = kwargs.get("public", False)
             return func
 
-    return decorator
+        return decorator
