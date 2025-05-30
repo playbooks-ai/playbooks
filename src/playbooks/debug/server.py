@@ -249,8 +249,8 @@ class DebugServer:
                 if command_str:
                     await self._handle_command(command_str, writer)
 
-        except (ConnectionResetError, BrokenPipeError, OSError):
-            # print(f"Client {client_addr} disconnected: {e}")
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            print(e)
             pass
         except Exception as e:
             self.logger.error(f"Error handling client: {e}")

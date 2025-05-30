@@ -61,8 +61,8 @@ async def test_playbooks_compilation_skip(test_data_dir):
     """Test that Playbooks class skips compilation for .pbc files."""
     print("\nTesting Playbooks compilation skip...")
 
-    pb_file_path = test_data_dir / "01-hello-playbooks.pb"
-    pbc_file_path = test_data_dir / "01-hello-playbooks.pbc"
+    pb_file_path = test_data_dir / "02-personalized-greeting.pb"
+    pbc_file_path = test_data_dir / "02-personalized-greeting.pbc"
 
     source_content = pb_file_path.read_text()
     compiled_content = pbc_file_path.read_text()

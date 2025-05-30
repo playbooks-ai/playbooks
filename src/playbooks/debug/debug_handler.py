@@ -95,8 +95,8 @@ class DebugHandler:
 class NoOpDebugHandler(DebugHandler):
     """No-op implementation for when debugging is disabled."""
 
-    def __init__(self, debug_server: "DebugServer"):
-        super().__init__(debug_server)
+    def __init__(self):
+        super().__init__(None)
 
     async def handle_execution_start(
         self,
