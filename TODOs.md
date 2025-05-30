@@ -9,7 +9,7 @@
 - [ ] Investigate join calculus for additional control flow annotations in intermediate format
 
 ## Application infrastructure
-- [ ] playbooks hello.md --application agent_chat --verbose
+- [ ] playbooks hello.pb --application agent_chat --verbose
 - [ ] Steaming!
 - [ ] Websockets
 - [ ] Can we use SSE?

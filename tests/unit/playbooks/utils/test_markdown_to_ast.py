@@ -1,9 +1,9 @@
 import pytest
 
 from playbooks.utils.markdown_to_ast import (
+    markdown_to_ast,
     parse_markdown_to_dict,
     refresh_markdown_attributes,
-    markdown_to_ast,
 )
 
 
@@ -108,7 +108,9 @@ def test_parse_markdown_to_dict_nested_lists():
 
 def test_parse_markdown_to_dict_code_blocks():
     """Test parsing markdown code blocks into AST dictionary."""
-    markdown_text = '```python\ndef hello_world():\n    print("Hello, World!")\n```'
+    markdown_text = (
+        "```python\n" "def hello_world():\n" '    print("Hello, World!")\n' "```"
+    )
 
     ast = parse_markdown_to_dict(markdown_text)
 
@@ -200,7 +202,16 @@ def test_markdown_to_ast_simple():
 
 def test_markdown_to_ast_complex():
     """Test converting complex markdown with mixed elements to AST."""
-    markdown_text = '# Complex Document\n\nThis is a paragraph with some content.\n\n- List item 1\n- List item 2\n\n> This is a blockquote.\n\n```python\ndef test_function():\n    return "test"\n```'
+    markdown_text = (
+        "# Complex Document\n\n"
+        "This is a paragraph with some content.\n\n"
+        "- List item 1\n- List item 2\n\n"
+        "> This is a blockquote.\n\n"
+        "```python\n"
+        "def test_function():\n"
+        '    return "test"\n'
+        "```"
+    )
 
     ast = markdown_to_ast(markdown_text)
 
@@ -343,7 +354,14 @@ def test_markdown_to_ast_four_level_nested_lists():
 
 def test_markdown_to_ast_mixed_list_types():
     """Test converting markdown with mixed ordered and unordered lists to AST."""
-    markdown_text = "# Mixed Lists\n\n1. First ordered item\n2. Second ordered item\n3. Third ordered item\n\n- Unordered item 1\n- Unordered item 2"
+    markdown_text = (
+        "# Mixed Lists\n\n"
+        "1. First ordered item\n"
+        "2. Second ordered item\n"
+        "3. Third ordered item\n\n"
+        "- Unordered item 1\n"
+        "- Unordered item 2"
+    )
 
     ast = markdown_to_ast(markdown_text)
 
@@ -487,6 +505,490 @@ def test_markdown_to_ast_multi_paragraph_list_items():
     assert any(
         "Second paragraph in the same list item" in line for line in markdown_lines
     )
+
+
+# ============================================================================
+# NEW TEST CASES FOR LINE NUMBER TRACKING
+# ============================================================================
+
+
+def test_line_numbers_simple_headings():
+    """Test that line numbers are correctly assigned to headings."""
+    markdown_text = """# Heading 1
+## Heading 2
+### Heading 3"""
+
+    ast = parse_markdown_to_dict(markdown_text)
+
+    assert ast["type"] == "h1"
+    assert ast["line_number"] == 1
+    assert ast["text"] == "Heading 1"
+
+    # Check nested headings
+    h2 = ast["children"][0]
+    assert h2["type"] == "h2"
+    assert h2["line_number"] == 2
+    assert h2["text"] == "Heading 2"
+
+    h3 = h2["children"][0]
+    assert h3["type"] == "h3"
+    assert h3["line_number"] == 3
+    assert h3["text"] == "Heading 3"
+
+
+def test_line_numbers_with_paragraphs():
+    """Test line numbers for paragraphs."""
+    markdown_text = """# Document Title
+
+This is the first paragraph.
+
+This is the second paragraph.
+
+This is the third paragraph."""
+
+    ast = markdown_to_ast(markdown_text)
+
+    # Find the h1
+    h1 = ast["children"][0]
+    assert h1["type"] == "h1"
+    assert h1["line_number"] == 1
+
+    # Check paragraphs
+    paragraphs = [child for child in h1["children"] if child["type"] == "paragraph"]
+    assert len(paragraphs) == 3
+
+    assert paragraphs[0]["line_number"] == 3
+    assert paragraphs[0]["text"] == "This is the first paragraph."
+
+    assert paragraphs[1]["line_number"] == 5
+    assert paragraphs[1]["text"] == "This is the second paragraph."
+
+    assert paragraphs[2]["line_number"] == 7
+    assert paragraphs[2]["text"] == "This is the third paragraph."
+
+
+def test_line_numbers_with_lists():
+    """Test line numbers for list items."""
+    markdown_text = """# Lists
+
+- First item
+- Second item
+- Third item
+
+1. Ordered first
+2. Ordered second"""
+
+    ast = markdown_to_ast(markdown_text)
+
+    h1 = ast["children"][0]
+    assert h1["line_number"] == 1
+
+    lists = [child for child in h1["children"] if child["type"] == "list"]
+    assert len(lists) == 2
+
+    # Unordered list
+    unordered = lists[0]
+    assert unordered["line_number"] == 3
+    assert len(unordered["children"]) == 3
+
+    assert unordered["children"][0]["line_number"] == 3
+    assert unordered["children"][0]["text"] == "First item"
+
+    assert unordered["children"][1]["line_number"] == 4
+    assert unordered["children"][1]["text"] == "Second item"
+
+    assert unordered["children"][2]["line_number"] == 5
+    assert unordered["children"][2]["text"] == "Third item"
+
+    # Ordered list
+    ordered = lists[1]
+    assert ordered["line_number"] == 7
+    assert ordered["children"][0]["line_number"] == 7
+    assert ordered["children"][1]["line_number"] == 8
+
+
+def test_line_numbers_nested_lists():
+    """Test line numbers for nested lists."""
+    markdown_text = """### Steps
+- 01:QUE Introduce Clover and yourself
+- 02:EXE $relevant_information:list = []
+- 03:CND While conversation is active
+  - 03.01:CND If user is doing chitchat
+    - 03.01.01:QUE Reply to the user with professional chitchat
+  - 03.02:CND Otherwise
+    - 03.02.01:QUE AnswerQuestionUsingKnowledgeBase()
+    - 03.02.02:YLD call
+"""
+
+    ast = markdown_to_ast(markdown_text)
+
+    h3 = ast["children"][0]
+    assert h3["line_number"] == 1
+
+    li = h3["children"][0]
+    assert li["line_number"] == 2
+
+    assert "01:QUE" in li["children"][0]["text"]
+    assert li["children"][0]["line_number"] == 2
+
+    assert "02:EXE" in li["children"][1]["text"]
+    assert li["children"][1]["line_number"] == 3
+
+    assert "03:CND" in li["children"][2]["text"]
+    assert li["children"][2]["line_number"] == 4
+
+    li2 = li["children"][2]["children"][0]
+    assert "03.01:CND" in li2["children"][0]["text"]
+    assert li2["children"][0]["line_number"] == 5
+
+    li3 = li2["children"][0]["children"][0]
+    assert "03.01.01:QUE" in li3["children"][0]["text"]
+    assert li3["children"][0]["line_number"] == 6
+
+
+def test_line_numbers_code_blocks():
+    """Test line numbers for code blocks."""
+    markdown_text = """# Code Examples
+
+Here's some code:
+
+```python
+def hello():
+    print("Hello, World!")
+```
+
+And more text."""
+
+    ast = markdown_to_ast(markdown_text)
+
+    h1 = ast["children"][0]
+
+    # Find paragraph
+    para1 = h1["children"][0]
+    assert para1["type"] == "paragraph"
+    assert para1["line_number"] == 3
+
+    # Find code block
+    code_block = h1["children"][1]
+    assert code_block["type"] == "code-block"
+    assert code_block["line_number"] == 5
+
+    # Find last paragraph
+    para2 = h1["children"][2]
+    assert para2["type"] == "paragraph"
+    assert para2["line_number"] == 10
+
+
+def test_line_numbers_blockquotes():
+    """Test line numbers for blockquotes."""
+    markdown_text = """# Quotes
+
+> This is a quote.
+
+> This is another quote
+> that spans multiple lines.
+
+Regular text."""
+
+    ast = markdown_to_ast(markdown_text)
+
+    h1 = ast["children"][0]
+
+    # First quote
+    quote1 = h1["children"][0]
+    assert quote1["type"] == "quote"
+    assert quote1["line_number"] == 3
+    assert quote1["text"] == "This is a quote."
+
+    # Second quote
+    quote2 = h1["children"][1]
+    assert quote2["type"] == "quote"
+    assert quote2["line_number"] == 5
+
+    # Regular paragraph
+    para = h1["children"][2]
+    assert para["type"] == "paragraph"
+    assert para["line_number"] == 8
+
+
+def test_line_numbers_playbook_format():
+    """Test line numbers for a typical playbook format."""
+    markdown_text = """# PersonalizedGreeting
+This program greets the user by name.
+
+## Greet() -> None
+Main greeting routine.
+
+### Triggers
+- T1:BGN At the beginning
+
+### Steps
+- Ask the user for their name
+- Say hello to the user
+- Exit the program"""
+
+    ast = markdown_to_ast(markdown_text)
+
+    # Document root
+    assert ast["line_number"] == 1
+
+    # H1
+    h1 = ast["children"][0]
+    assert h1["type"] == "h1"
+    assert h1["line_number"] == 1
+    assert h1["text"] == "PersonalizedGreeting"
+
+    # Description paragraph
+    desc = h1["children"][0]
+    assert desc["type"] == "paragraph"
+    assert desc["line_number"] == 2
+
+    # H2 (Playbook)
+    h2 = h1["children"][1]
+    assert h2["type"] == "h2"
+    assert h2["line_number"] == 4
+    assert h2["text"] == "Greet() -> None"
+
+    # Playbook description
+    pb_desc = h2["children"][0]
+    assert pb_desc["type"] == "paragraph"
+    assert pb_desc["line_number"] == 5
+
+    # H3 sections
+    h3_triggers = h2["children"][1]
+    assert h3_triggers["type"] == "h3"
+    assert h3_triggers["line_number"] == 7
+    assert h3_triggers["text"] == "Triggers"
+
+    # Triggers list
+    triggers_list = h3_triggers["children"][0]
+    assert triggers_list["type"] == "list"
+    assert triggers_list["line_number"] == 8
+    assert triggers_list["children"][0]["line_number"] == 8
+
+    # Steps section
+    h3_steps = h2["children"][2]
+    assert h3_steps["type"] == "h3"
+    assert h3_steps["line_number"] == 10
+    assert h3_steps["text"] == "Steps"
+
+    # Steps list
+    steps_list = h3_steps["children"][0]
+    assert steps_list["type"] == "list"
+    assert steps_list["line_number"] == 11
+    assert steps_list["children"][0]["line_number"] == 11
+    assert steps_list["children"][1]["line_number"] == 12
+    assert steps_list["children"][2]["line_number"] == 13
+
+
+def test_line_numbers_empty_lines():
+    """Test that empty lines don't affect line number tracking."""
+    markdown_text = """# Title
+
+
+## Subtitle
+
+
+
+### Sub-subtitle"""
+
+    ast = parse_markdown_to_dict(markdown_text)
+
+    assert ast["line_number"] == 1
+
+    h2 = ast["children"][0]
+    assert h2["line_number"] == 4
+
+    h3 = h2["children"][0]
+    assert h3["line_number"] == 8
+
+
+def test_line_numbers_complex_document():
+    """Test line numbers in a complex document with mixed content."""
+    markdown_text = """# Complex Document
+
+This is an introduction.
+
+## Section 1
+
+Content for section 1.
+
+- List item 1
+  - Nested item 1.1
+  - Nested item 1.2
+- List item 2
+
+```python
+# Code block
+x = 42i
+```
+
+## Section 2
+
+> A quote in section 2
+
+Final paragraph."""
+
+    ast = markdown_to_ast(markdown_text)
+
+    h1 = ast["children"][0]
+    assert h1["line_number"] == 1
+
+    # Introduction
+    intro = h1["children"][0]
+    assert intro["line_number"] == 3
+
+    # Section 1
+    section1 = h1["children"][1]
+    assert section1["line_number"] == 5
+    assert section1["type"] == "h2"
+
+    # Content in section 1
+    content1 = section1["children"][0]
+    assert content1["line_number"] == 7
+
+    # List in section 1
+    list1 = section1["children"][1]
+    assert list1["line_number"] == 9
+
+    # Code block
+    code = section1["children"][2]
+    assert code["type"] == "code-block"
+    assert code["line_number"] == 14
+
+    # Section 2
+    section2 = h1["children"][2]
+    assert section2["line_number"] == 19
+    assert section2["type"] == "h2"
+
+    # Quote in section 2
+    quote = section2["children"][0]
+    assert quote["line_number"] == 21
+
+    # Final paragraph
+    final = section2["children"][1]
+    assert final["line_number"] == 23
+
+
+def test_line_numbers_preserved_after_refresh():
+    """Test that line numbers are preserved after refresh_markdown_attributes."""
+    markdown_text = """# Test
+## Subtest
+- Item 1
+- Item 2"""
+
+    ast = parse_markdown_to_dict(markdown_text)
+
+    # Store original line numbers
+    h1_line = ast["line_number"]
+    h2_line = ast["children"][0]["line_number"]
+    list_line = ast["children"][0]["children"][0]["line_number"]
+
+    # Refresh markdown attributes
+    refresh_markdown_attributes(ast)
+
+    # Verify line numbers are preserved
+    assert ast["line_number"] == h1_line
+    assert ast["children"][0]["line_number"] == h2_line
+    assert ast["children"][0]["children"][0]["line_number"] == list_line
+
+
+def test_line_numbers_multi_agent_pbc(test_data_dir):
+    """Test line numbers for multi-agent.pbc file with multiple agents and playbooks."""
+    # Read the actual multi-agent.pbc file
+    with open(test_data_dir / "multi-agent.pbc", "r") as f:
+        markdown_text = f.read()
+
+    ast = markdown_to_ast(markdown_text)
+
+    # The document should have two main agents (h1 elements)
+    h1_nodes = [child for child in ast["children"] if child["type"] == "h1"]
+    assert len(h1_nodes) == 2
+
+    # First agent: FirstAgent
+    first_agent = h1_nodes[0]
+    assert first_agent["text"] == "FirstAgent"
+    assert first_agent["line_number"] == 1
+
+    # Second agent: CountryInfo
+    country_info = h1_nodes[1]
+    assert country_info["text"] == "CountryInfo"
+    assert country_info["line_number"] == 37
+
+    # Check playbooks in FirstAgent
+    first_agent_playbooks = [
+        child for child in first_agent["children"] if child["type"] == "h2"
+    ]
+    assert len(first_agent_playbooks) == 1
+
+    # X($num=10) -> None playbook
+    x_playbook = first_agent_playbooks[0]
+    assert x_playbook["text"] == "X($num=10) -> None"
+    assert x_playbook["line_number"] == 12
+
+    # Check playbooks in CountryInfo agent
+    country_info_playbooks = [
+        child for child in country_info["children"] if child["type"] == "h2"
+    ]
+    assert len(country_info_playbooks) == 3
+
+    # LocalPB() -> None
+    local_pb = country_info_playbooks[0]
+    assert local_pb["text"] == "LocalPB() -> None"
+    assert local_pb["line_number"] == 48
+
+    # public: GetCountryPopulation($country) -> float
+    get_population = country_info_playbooks[1]
+    assert get_population["text"] == "public: GetCountryPopulation($country) -> float"
+    assert get_population["line_number"] == 54
+
+    # public:GetCountrySecret($country) -> str
+    get_secret = country_info_playbooks[2]
+    assert get_secret["text"] == "public:GetCountrySecret($country) -> str"
+    assert get_secret["line_number"] == 61
+
+    # Check some h3 sections (Triggers, Steps)
+    # X playbook's Triggers
+    x_triggers = [
+        child
+        for child in x_playbook["children"]
+        if child["type"] == "h3" and child["text"] == "Triggers"
+    ]
+    assert len(x_triggers) == 1
+    assert x_triggers[0]["line_number"] == 14
+
+    # X playbook's Steps
+    x_steps = [
+        child
+        for child in x_playbook["children"]
+        if child["type"] == "h3" and child["text"] == "Steps"
+    ]
+    assert len(x_steps) == 1
+    assert x_steps[0]["line_number"] == 16
+
+    # GetCountrySecret's Triggers
+    secret_triggers = [
+        child
+        for child in get_secret["children"]
+        if child["type"] == "h3" and child["text"] == "Triggers"
+    ]
+    assert len(secret_triggers) == 1
+    assert secret_triggers[0]["line_number"] == 63
+
+    # Check code blocks
+    # Python code block in FirstAgent
+    first_agent_code_blocks = [
+        child for child in first_agent["children"] if child["type"] == "code-block"
+    ]
+    assert len(first_agent_code_blocks) >= 1
+    assert first_agent_code_blocks[0]["line_number"] == 4
+
+    # Python code block in CountryInfo
+    country_info_code_blocks = [
+        child for child in country_info["children"] if child["type"] == "code-block"
+    ]
+    assert len(country_info_code_blocks) >= 1
+    assert country_info_code_blocks[0]["line_number"] == 40
 
 
 if __name__ == "__main__":

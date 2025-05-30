@@ -40,8 +40,3 @@ async def Validation1(pin: str) -> bool:
 - When $x > 15
 ### Steps
 - Tell user $x is too big
-
-## PB1
-### After calling LoadAccount
-### Steps
-- Tell user that you have loaded their account

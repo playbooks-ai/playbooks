@@ -34,9 +34,11 @@ async def GetLengthOfCountry(country: str):
   return len(country)
 ```
 ## LocalPB
+### Steps
 - Say hello
 
 ## public: GetCountryPopulation($country)
+### Steps
 - Compute the square root of the length of $country
 - Return the population of $country
 

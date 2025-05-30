@@ -1,3 +1,3 @@
-from .playbooks import Playbooks
+from .main import Playbooks
 
 __all__ = ["Playbooks"]

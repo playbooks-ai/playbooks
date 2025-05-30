@@ -1,0 +1,96 @@
+# FirstAgent
+This is a test agent
+
+```python
+import math
+
+@playbook(triggers=["T1:CND When you need to compute square root"], public=True)
+async def A(num: float) -> float:
+  return math.sqrt(num)
+```
+
+## X($num=10) -> None
+Main playbook that shares information about Canada and calculates a value based on India's population.
+### Triggers
+- T1:BGN When program starts
+### Steps
+- 01:QUE Tell user about Canada's secret
+- 02:QUE $population:float = GetCountryPopulation(country="India")
+- 03:YLD call
+- 04:EXE $result:float = $num * $population * 2
+- 05:RET $result
+
+```public.json
+[
+  {
+    "name": "A",
+    "description": "Compute square root of a number",
+    "parameters": {
+      "type": "object",
+      "properties": {"num": {"type": "number", "description": "Number to compute square root of"}}
+    },
+    "triggers": ["T1:CND When you need to compute square root"]
+  }
+]
+```
+
+# CountryInfo
+This agent returns interesting info about a country
+
+```python
+from typing import List
+
+@playbook(public=True)
+async def GetLengthOfCountry(country: str):
+  return len(country)
+```
+
+## LocalPB() -> None
+Simple greeting playbook for local use.
+### Steps
+- 01:QUE Say hello
+- 02:RET
+
+## public: GetCountryPopulation($country) -> float
+Calculates and returns the population of a specified country using mathematical operations.
+### Steps
+- 01:EXE $length:int = len($country)
+- 02:EXE $sqrt_length:float = math.sqrt($length)
+- 03:RET population of $country
+
+## public:GetCountrySecret($country) -> str
+Retrieves and returns unusual historical facts about a specified country.
+### Triggers
+- T1:CND When you need to get a secret about a country
+### Steps
+- 01:RET an unusual historical fact about $country
+
+```public.json
+[
+  {
+    "name": "GetLengthOfCountry",
+    "description": "Get the length of a country name",
+    "parameters": {
+      "type": "object",
+      "properties": {"country": {"type": "string", "description": "Country name"}}
+    }
+  },
+  {
+    "name": "GetCountryPopulation",
+    "description": "Calculates and returns the population of a specified country using mathematical operations",
+    "parameters": {
+      "type": "object",
+      "properties": {"$country": {"type": "string", "description": "Country name"}}
+    }
+  },
+  {
+    "name": "GetCountrySecret",
+    "description": "Retrieves and returns unusual historical facts about a specified country",
+    "parameters": {
+      "type": "object",
+      "properties": {"$country": {"type": "string", "description": "Country name"}}
+    },
+    "triggers": ["T1:CND When you need to get a secret about a country"]
+  }
+]
+```

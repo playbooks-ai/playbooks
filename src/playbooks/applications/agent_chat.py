@@ -6,8 +6,8 @@ Provides a simple terminal interface for communicating with AI agents.
 import argparse
 import asyncio
 import functools
-import glob
 import sys
+import uuid
 from pathlib import Path
 from typing import Callable, List
 
@@ -18,6 +18,7 @@ from rich.text import Text
 from playbooks import Playbooks
 from playbooks.base_agent import AgentCommunicationMixin
 from playbooks.constants import EOM
+from playbooks.events import Event
 from playbooks.markdown_playbook_execution import ExecutionFinished
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel
@@ -138,26 +139,39 @@ async def handle_user_input(playbooks):
         await asyncio.sleep(0.1)
 
 
-async def main(glob_path: str, verbose: bool):
+async def main(
+    program_paths: str,
+    verbose: bool,
+    debug: bool = False,
+    debug_host: str = "127.0.0.1",
+    debug_port: int = 7529,
+    wait_for_client: bool = False,
+    stop_on_entry: bool = False,
+):
     """Main entrypoint for the CLI application.
 
     Args:
-        glob_path: Path to the playbook file(s) to load
+        program_paths: Path to the playbook file(s) to load
         verbose: Whether to print the session log
+        debug: Whether to start the debug server
+        debug_host: Host address for the debug server
+        debug_port: Port for the debug server
+        wait_for_client: Whether to wait for a client to connect before starting
+        stop_on_entry: Whether to stop at the beginning of playbook execution
     """
+    # print(
+    #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
+    # )
+
     # Patch the WaitForMessage method before loading agents
     AgentCommunicationMixin.WaitForMessage = patched_wait_for_message
 
-    # Expand glob patterns to file paths
-    file_paths = glob.glob(glob_path)
-    if not file_paths:
-        console.print(
-            f"[bold red]Error:[/bold red] No files found matching pattern: {glob_path}"
-        )
-        sys.exit(1)
+    console.print(f"[green]Loading playbooks from:[/green] {program_paths}")
 
-    console.print(f"[green]Loading playbooks from:[/green] {file_paths}")
-    playbooks = Playbooks(file_paths)
+    session_id = str(uuid.uuid4())
+    if isinstance(program_paths, str):
+        program_paths = [program_paths]
+    playbooks = Playbooks(program_paths, session_id=session_id)
     pubsub = PubSub()
 
     # Wrap the session_log with the custom wrapper for all agents
@@ -167,8 +181,43 @@ async def main(glob_path: str, verbose: bool):
                 agent.state.session_log, pubsub, verbose, agent
             )
 
+    def log_event(event: Event):
+        print(event)
+
+    # Start debug server if requested
+    if debug:
+        console.print(
+            f"[green]Starting debug server on {debug_host}:{debug_port}[/green]"
+        )
+        await playbooks.program.start_debug_server(host=debug_host, port=debug_port)
+
+        # If wait_for_client is True, pause until a client connects
+        if wait_for_client:
+            console.print(
+                f"[yellow]Waiting for a debug client to connect at {debug_host}:{debug_port}...[/yellow]"
+            )
+            # Wait for a client to connect using the debug server's wait_for_client method
+            await playbooks.program._debug_server.wait_for_client()
+            console.print("[green]Debug client connected.[/green]")
+
+        # Set stop_on_entry flag in debug server
+        if stop_on_entry:
+            # print(
+            #     "[DEBUG] agent_chat.main - stop_on_entry=True, setting up debug server"
+            # )
+            # print("[DEBUG] agent_chat.main - clearing _continue_event")
+            playbooks.program._debug_server._continue_event.clear()
+            # print("[DEBUG] agent_chat.main - calling set_stop_on_entry(True)")
+            playbooks.program._debug_server.set_stop_on_entry(True)
+            # print("[DEBUG] agent_chat.main - stop_on_entry setup complete")
+        else:
+            # print("[DEBUG] agent_chat.main - stop_on_entry=False, no special setup")
+            pass
+
     # Start the program
     try:
+        if verbose:
+            playbooks.event_bus.subscribe("*", log_event)
         await asyncio.gather(playbooks.program.begin(), handle_user_input(playbooks))
     except ExecutionFinished:
         console.print("[green]Execution finished. Exiting...[/green]")
@@ -178,19 +227,62 @@ async def main(glob_path: str, verbose: bool):
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise
     finally:
+        if verbose:
+            playbooks.event_bus.unsubscribe("*", log_event)
+        # Shutdown debug server if it was started
+        if debug and playbooks.program._debug_server:
+            await playbooks.program.shutdown_debug_server()
         # Restore the original method when we're done
         AgentCommunicationMixin.WaitForMessage = original_wait_for_message
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run the agent chat application.")
-    parser.add_argument("glob_path", help="Path to the playbook file(s) to load")
+    parser.add_argument(
+        "program_paths",
+        help="Paths to the playbook file(s) to load",
+        nargs="+",
+    )
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Print the session log"
+    )
+    parser.add_argument("--debug", action="store_true", help="Start the debug server")
+    parser.add_argument(
+        "--debug-host",
+        default="127.0.0.1",
+        help="Debug server host (default: 127.0.0.1)",
+    )
+    parser.add_argument(
+        "--debug-port", type=int, default=7529, help="Debug server port (default: 7529)"
+    )
+    parser.add_argument(
+        "--wait-for-client",
+        action="store_true",
+        help="Wait for a debug client to connect before starting execution",
+    )
+    parser.add_argument(
+        "--skip-compilation",
+        action="store_true",
+        help="Skip compilation (useful for .pbc files)",
+    )
+    parser.add_argument(
+        "--stop-on-entry",
+        action="store_true",
+        help="Stop at the beginning of playbook execution",
     )
     args = parser.parse_args()
 
     try:
-        asyncio.run(main(args.glob_path, args.verbose))
+        asyncio.run(
+            main(
+                args.program_paths,
+                args.verbose,
+                args.debug,
+                args.debug_host,
+                args.debug_port,
+                args.wait_for_client,
+                args.stop_on_entry,
+            )
+        )
     except KeyboardInterrupt:
         print("\nGracefully shutting down...")

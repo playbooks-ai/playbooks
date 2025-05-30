@@ -56,7 +56,7 @@ pip install playbooks
 
 ### Create Your First Playbook
 
-Create a file named `hello.md`:
+Create a file named `hello.pb`:
 
 ```markdown
 # Personalized greeting
@@ -74,7 +74,7 @@ This program greets the user by name
 ### Run Your Playbook
 
 ```bash
-python -m playbooks.applications.agent_chat hello.md --verbose
+python -m playbooks.applications.agent_chat hello.pb --verbose
 ```
 
 ## 📚 Documentation

@@ -35,5 +35,16 @@
                 "tests/unit/playbooks/test_examples.py"
             ]
         },
+        {
+            "name": "Compile current .pb file",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "playbooks.cli",
+            "console": "integratedTerminal",
+            "args": [
+                "compile",
+                "${file}.doesntexist"
+            ]
+        }
     ]
 }

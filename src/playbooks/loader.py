@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List
 
 from .exceptions import ProgramLoadError
+from .utils.file_utils import is_compiled_playbook_file
 
 
 class Loader:
@@ -13,13 +14,13 @@ class Loader:
         """
         program_content = None
         try:
-            program_content = Loader._read_program(program_paths)
+            program_content, do_not_compile = Loader._read_program(program_paths)
         except FileNotFoundError as e:
-            raise ProgramLoadError(f"File not found: {str(e)}") from e
+            raise ProgramLoadError(str(e)) from e
         except (OSError, IOError) as e:
-            raise ProgramLoadError(f"Error reading file: {str(e)}") from e
+            raise ProgramLoadError(str(e)) from e
 
-        return program_content
+        return program_content, do_not_compile
 
     @staticmethod
     def _read_program(paths: List[str]) -> str:
@@ -27,7 +28,7 @@ class Loader:
         Load program content from file paths. Supports both single files and glob patterns.
 
         Args:
-            paths: List of file paths or glob patterns (e.g., 'my_playbooks/**/*.md')
+            paths: List of file paths or glob patterns (e.g., 'my_playbooks/**/*.pb')
 
         Returns:
             str: Combined contents of all matching program files
@@ -51,14 +52,23 @@ class Loader:
 
         # Deduplicate files and read content
         contents = []
+        do_not_compile = False
+        not_found = []
         for file in set(all_files):
             file_path = Path(file)
-            if file_path.is_file():
+            if file_path.is_file() and file_path.exists():
+                if is_compiled_playbook_file(file_path):
+                    do_not_compile = True
                 contents.append(file_path.read_text())
+            else:
+                not_found.append(str(file_path))
+
+        if not_found:
+            raise FileNotFoundError(f"{', '.join(not_found)} not found")
 
         program_contents = "\n\n".join(contents)
 
         if not program_contents:
             raise FileNotFoundError("Files found but content is empty")
 
-        return program_contents
+        return program_contents, do_not_compile

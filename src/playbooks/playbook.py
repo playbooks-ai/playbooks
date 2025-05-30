@@ -8,17 +8,26 @@ from .playbook_step import PlaybookStep, PlaybookStepCollection
 class PlaybookTrigger:
     """Represents a trigger that can start a playbook."""
 
-    def __init__(self, playbook_klass: str, playbook_signature: str, trigger: str):
+    def __init__(
+        self,
+        playbook_klass: str,
+        playbook_signature: str,
+        trigger: str,
+        source_line_number: Optional[int] = None,
+    ):
         """Initialize a PlaybookTrigger.
 
         Args:
             playbook_klass: The class name of the playbook.
             playbook_signature: The signature of the playbook function.
-            list_item: The AST node representing the trigger in the markdown.
+            trigger: The trigger string.
+            source_line_number: The line number in the source markdown where this
+                trigger is defined.
         """
         self.playbook_klass = playbook_klass
         self.playbook_signature = playbook_signature
         self.trigger = trigger
+        self.source_line_number = source_line_number
         # Example text: "01:BGN When the agent starts running"
         self.trigger_name = self.trigger.split(" ")[0]
         self.trigger_description = " ".join(self.trigger.split(" ")[1:])
@@ -38,23 +47,34 @@ class PlaybookTriggers:
         playbook_klass: str,
         playbook_signature: str,
         triggers: List[str],
+        trigger_line_numbers: Optional[List[Optional[int]]] = None,
+        source_line_number: Optional[int] = None,
     ):
         """Initialize a PlaybookTriggers collection.
 
         Args:
             playbook_klass: The class name of the playbook.
             playbook_signature: The signature of the playbook function.
-            h3: The AST node representing the triggers section.
+            triggers: List of trigger strings.
+            trigger_line_numbers: List of line numbers for each trigger.
+            source_line_number: The line number in the source markdown where this
+                triggers section is defined.
         """
         self.playbook_klass = playbook_klass
         self.playbook_signature = playbook_signature
+        self.source_line_number = source_line_number
+
+        if trigger_line_numbers is None:
+            trigger_line_numbers = [None] * len(triggers)
+
         self.triggers = [
             PlaybookTrigger(
                 playbook_klass=self.playbook_klass,
                 playbook_signature=self.playbook_signature,
                 trigger=trigger,
+                source_line_number=line_num,
             )
-            for trigger in triggers
+            for trigger, line_num in zip(triggers, trigger_line_numbers)
         ]
 
 
@@ -157,34 +177,51 @@ class Playbook:
         Raises:
             ValueError: If an unknown H3 section is encountered.
         """
-        triggers = None
-        steps = None
-        notes = None
-        step_collection = PlaybookStepCollection()
+        triggers = cls._parse_triggers(klass, signature, h3s)
+        steps = cls._parse_steps(h3s)
+        notes = cls._parse_notes(h3s)
 
-        for h3 in h3s:
-            h3_title = h3.get("text", "").strip().lower()
-            if h3_title == "triggers":
-                triggers = PlaybookTriggers(
-                    playbook_klass=klass,
-                    playbook_signature=signature,
-                    triggers=[
-                        child.get("text", "").strip() for child in h3["children"]
-                    ],
-                )
-            elif h3_title == "steps":
-                steps = h3
-                # Parse steps into PlaybookStep objects
-                for child in h3.get("children", []):
-                    lines = child.get("text", "").strip().split("\n")
-                    for line in lines:
-                        step = PlaybookStep.from_text(line)
-                        if step:
-                            step_collection.add_step(step)
-            elif h3_title == "notes":
-                notes = h3
-            else:
-                raise ValueError(f"Unknown H3 section: {h3_title}")
+        # step_collection = PlaybookStepCollection()
+
+        # for h3 in h3s:
+        #     h3_title = h3.get("text", "").strip().lower()
+        #     if h3_title == "triggers":
+        #         trigger_items = []
+        #         trigger_line_numbers = []
+        #         for child in h3["children"]:
+        #             if child.get("type") == "list":
+        #                 for list_item in child.get("children", []):
+        #                     if list_item.get("type") == "list-item":
+        #                         trigger_items.append(list_item.get("text", "").strip())
+        #                         trigger_line_numbers.append(
+        #                             list_item.get("line_number")
+        #                         )
+
+        #         triggers = PlaybookTriggers(
+        #             playbook_klass=klass,
+        #             playbook_signature=signature,
+        #             triggers=trigger_items,
+        #             trigger_line_numbers=trigger_line_numbers,
+        #             source_line_number=h3.get("line_number"),
+        #         )
+        #     elif h3_title == "steps":
+        #         steps = h3
+        #         # Parse steps into PlaybookStep objects
+        #         for child in h3.get("children", []):
+        #             if child.get("type") == "list":
+        #                 for list_item in child.get("children", []):
+        #                     if list_item.get("type") == "list-item":
+        #                         lines = list_item.get("text", "").strip().split("\n")
+        #                         item_line_number = list_item.get("line_number")
+        #                         for line in lines:
+        #                             step = PlaybookStep.from_text(line)
+        #                             if step:
+        #                                 step.source_line_number = item_line_number
+        #                                 step_collection.add_step(step)
+        #     elif h3_title == "notes":
+        #         notes = h3
+        #     else:
+        #         raise ValueError(f"Unknown H3 section: {h3_title}")
 
         return cls(
             klass=klass,
@@ -197,9 +234,97 @@ class Playbook:
             code=None,
             func=None,
             markdown=h2["markdown"],
-            step_collection=step_collection,
+            step_collection=steps,
             public=public,
+            source_line_number=h2.get("line_number"),
         )
+
+    @classmethod
+    def _parse_triggers(
+        cls,
+        klass: str,
+        signature: str,
+        h3s: List[Dict[str, Any]],
+    ) -> PlaybookTriggers:
+        """Parse the triggers from the H3 sections."""
+        for h3 in h3s:
+            h3_title = h3.get("text", "").strip().lower()
+            if h3_title == "triggers":
+                trigger_items = []
+                trigger_line_numbers = []
+                for child in h3["children"]:
+                    if child.get("type") == "list":
+                        for list_item in child.get("children", []):
+                            if list_item.get("type") == "list-item":
+                                trigger_items.append(list_item.get("text", "").strip())
+                                trigger_line_numbers.append(
+                                    list_item.get("line_number")
+                                )
+                return PlaybookTriggers(
+                    playbook_klass=klass,
+                    playbook_signature=signature,
+                    triggers=trigger_items,
+                    trigger_line_numbers=trigger_line_numbers,
+                    source_line_number=h3.get("line_number"),
+                )
+        return None
+
+    @classmethod
+    def _parse_steps(cls, h3s: List[Dict[str, Any]]) -> PlaybookStepCollection:
+        def parse_node(
+            node: Dict[str, Any], step_collection: PlaybookStepCollection
+        ) -> PlaybookStep:
+            step = None
+            if node.get("type") == "list-item":
+                text = node.get("text", "").strip()
+                item_line_number = node.get("line_number")
+                step = PlaybookStep.from_text(text)
+                if step:
+                    step.source_line_number = item_line_number
+                    step_collection.add_step(step)
+
+                    if node.get("children"):
+                        if len(node.get("children")) > 1:
+                            raise ValueError(
+                                f"Expected 1 child for list-item, got {len(node.get('children'))}"
+                            )
+
+                        list = node.get("children")[0]
+                        if list.get("type") != "list":
+                            raise ValueError(
+                                f"Expected a single list under list-item, got a {list.get('type')}"
+                            )
+
+                        child_steps = []
+                        for child in list.get("children", []):
+                            child_step = parse_node(child, step_collection)
+                            if child_step:
+                                child_steps.append(child_step)
+
+                        step.children = child_steps
+            else:
+                raise ValueError(f"Expected a list-item, got a {node.get('type')}")
+            return step
+
+        """Parse the steps from the H3 sections."""
+        for h3 in h3s:
+            h3_title = h3.get("text", "").strip().lower()
+            if h3_title == "steps":
+                step_collection = PlaybookStepCollection()
+                if h3["children"] and "children" in h3["children"][0]:
+                    for child in h3["children"][0]["children"]:
+                        parse_node(child, step_collection)
+                return step_collection
+        return None
+
+    @classmethod
+    def _parse_notes(cls, h3s: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Parse the notes from the H3 sections."""
+        for h3 in h3s:
+            h3_title = h3.get("text", "").strip().lower()
+            if h3_title == "notes":
+                return h3
+        return None
 
     @classmethod
     def parse_title(cls, title: str) -> Tuple[str, str, bool]:
@@ -244,6 +369,7 @@ class Playbook:
         markdown: str,
         step_collection: Optional[PlaybookStepCollection] = None,
         public: bool = False,
+        source_line_number: Optional[int] = None,
     ):
         """Initialize a Playbook.
 
@@ -259,6 +385,8 @@ class Playbook:
             func: The compiled function for PYTHON playbooks.
             markdown: The markdown representation of the playbook.
             step_collection: The collection of steps for MD playbooks.
+            source_line_number: The line number in the source markdown where this
+                playbook is defined.
         """
         self.klass = klass
         self.execution_type = execution_type
@@ -272,6 +400,23 @@ class Playbook:
         self.markdown = markdown
         self.step_collection = step_collection
         self.public = public
+        self.source_line_number = source_line_number
+
+    @property
+    def first_step(self) -> Optional[PlaybookStep]:
+        """Get the first step of the playbook."""
+        if self.step_collection and len(self.step_collection.ordered_line_numbers) > 0:
+            return self.step_collection.get_step(
+                self.step_collection.ordered_line_numbers[0]
+            )
+        return None
+
+    @property
+    def first_step_line_number(self) -> Optional[int]:
+        """Get the line number of the first step of the playbook."""
+        if self.first_step:
+            return self.first_step.source_line_number
+        return self.source_line_number
 
     def get_step(self, line_number: str) -> Optional[PlaybookStep]:
         """Get a step by line number.

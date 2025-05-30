@@ -1,4 +1,4 @@
-### Playbooks → Intermediate‑Format Transpiler Prompt
+### Playbooks → Intermediate‑Format Compiler Prompt
 
 You convert *raw playbooks program* including markdown playbooks and Python `@playbook` functions into a **intermediate‑format program**. Follow the rules below **exactly**; deviations break compilation.
 
@@ -24,12 +24,12 @@ You convert *raw playbooks program* including markdown playbooks and Python `@pl
 ## <PlaybookName>(<params>) -> <returnVar | None>
 <If provided, copy playbook description verbatim, otherwise generate a short paragraph description>
 ### Triggers  (omit section if none)
-T<n>:<BGN|CND|EVT> <trigger text>
+- T<n>:<BGN|CND|EVT> <trigger text>
 ### Steps
-01:<CMD> …  # two‑digit numbering; dot‑notation for sub‑steps
+- 01:<CMD> …  # two‑digit numbering; dot‑notation for sub‑steps
 … more steps …
 ### Notes  (optional)
-N<n> <text>
+- N<n> <text>
 ```
 ---
 #### 3  Allowed Command Codes (Steps)
@@ -53,7 +53,7 @@ N<n> <text>
 | Func(x) expecting result               | $r:type = Func(x=$x) then YLD call             |
 | If ‑‑ then … else …                    | CND If … + sub‑steps 01.01: etc                    |
 | While …                                | 01:CND While … + sub‑steps + 01.99:JMP 01          |
-| Load files "a", "b.txt"            | 01:QUE LoadArtifact("a") + 02:QUE LoadArtifact("b.txt") + YLD call          |
+| Load files "a", "b.txt"            | - 01:QUE LoadArtifact("a") + 02:QUE LoadArtifact("b.txt") + YLD call          |
 | Show file "abc" to user                | 01:QUE Say("Artifact[abc]") + YLD call          |
 | Tell user contents of artifact "abc"   | 01:QUE LoadArtifact("abc") + 02:YLD call + 03:QUE Say(contents of Artifact[abc])        |
 | @playbook(triggers=["when program begins"], public=True) | @playbook(triggers=["BGN:when program begins"], public=True) |
@@ -171,22 +171,22 @@ def LookupInfo(query:str) -> str:
 ## Main() -> None
 Main interaction loop that guides user conversations through a friendly information-gathering and sharing process.
 ### Triggers
-T1:BGN When program starts
+- T1:BGN When program starts
 ### Steps
-01:QUE Ask user for $name:str and $city:str they are from
-02:YLD user
-03:CHK N1
-04:QUE Greet the user and give an interesting fact about the city
-05:QUE $weather:dict = GetWeather(city=$city)
-06:YLD call
-07:QUE Tell user what the $weather is like
-08:EXE List 5 $cities:list near $city
-09:TNK Think deeply about the 5 $cities and if we should ask user if they have visited all 5 $cities
-10:QUE Ask user if they have visited all 5 $cities
-11:YLD user
-12:RET
+- 01:QUE Ask user for $name:str and $city:str they are from
+- 02:YLD user
+- 03:CHK N1
+- 04:QUE Greet the user and give an interesting fact about the city
+- 05:QUE $weather:dict = GetWeather(city=$city)
+- 06:YLD call
+- 07:QUE Tell user what the $weather is like
+- 08:EXE List 5 $cities:list near $city
+- 09:TNK Think deeply about the 5 $cities and if we should ask user if they have visited all 5 $cities
+- 10:QUE Ask user if they have visited all 5 $cities
+- 11:YLD user
+- 12:RET
 ### Notes
-N1 If $name is a Jack Sparrow, start speaking in pirate speak
+- N1 If $name is a Jack Sparrow, start speaking in pirate speak
 
 ## public: ValidateCity($city) -> None
 This playbook validates a city input by the user.
@@ -200,13 +200,13 @@ Only consider cities in the United States.
 - Keep sentences short and concise
 </style_guide>
 ### Triggers
-T1:CND When user provides their city
+- T1:CND When user provides their city
 ### Steps
-01:CND While $city is not a US city or unclear what state $city is in
-  01.01:QUE Ask user to specify another $city or disambiguate which state $city is in
-  01.02:YLD for user
-  01.02:JMP 01 to check again
-02:RET return $city in "Austin, TX" format
+- 01:CND While $city is not a US city or unclear what state $city is in
+  - 01.01:QUE Ask user to specify another $city or disambiguate which state $city is in
+  - 01.02:YLD for user
+  - 01.02:JMP 01 to check again
+- 02:RET return $city in "Austin, TX" format
 
 ```public.json
 [
@@ -237,17 +237,17 @@ T1:CND When user provides their city
 ## P1($name, $age)
 Says hello to the user
 ### Steps
-01:QUE Say hello $name
-02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name")
-03:RET
+- 01:QUE Say hello $name
+- 02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name")
+- 03:RET
 
 ## public:P2
 Says goodbye to the user
 ### Steps
-01:QUE LoadArtifact("greeting.txt")
-02:YLD call
-03:QUE Say("Artifact[greeting.txt]")
-04:RET
+- 01:QUE LoadArtifact("greeting.txt")
+- 02:YLD call
+- 03:QUE Say("Artifact[greeting.txt]")
+- 04:RET
 
 ```public.json
 [
