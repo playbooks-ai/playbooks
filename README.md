@@ -77,6 +77,17 @@ This program greets the user by name
 python -m playbooks.applications.agent_chat hello.pb --verbose
 ```
 
+### VSCode Support (Optional)
+
+Install the **Playbooks Language Support** extension for Visual Studio Code:
+
+1. Open VSCode
+2. Go to Extensions (Ctrl+Shift+X / Cmd+Shift+X)
+3. Search for "Playbooks Language Support"
+4. Click Install
+
+The extension provides debugging capabilities for playbooks programs, making it easier to develop and troubleshoot your AI agents. Once the plugin is installed, you can open a playbooks .pb file and start debugging!
+
 ## 📚 Documentation
 
 Visit our [documentation](https://playbooks-ai.github.io/playbooks-docs/) for comprehensive guides, tutorials, and reference materials.
