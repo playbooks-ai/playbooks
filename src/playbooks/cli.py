@@ -10,6 +10,7 @@ import importlib
 import sys
 from typing import List
 
+import openai
 from rich.console import Console
 
 from .compiler import Compiler
@@ -43,7 +44,7 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
     Compile a playbook file.
 
     Args:
-        program_paths: List of playbook files to compile
+        program_paths: List of Playbooks program files to compile
         output_file: Optional path to save compiled output. If None, prints to stdout.
     """
     if isinstance(program_paths, str):
@@ -65,13 +66,15 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
             # Save to file
             with open(output_file, "w") as f:
                 f.write(compiled_content)
-            console.print(f"[green]Compiled playbook saved to:[/green] {output_file}")
+            console.print(
+                f"[green]Compiled Playbooks program saved to:[/green] {output_file}"
+            )
         else:
             # Print to stdout
             print(compiled_content)
 
     except Exception as e:
-        console.print(f"[bold red]Error compiling playbooks:[/bold red] {e}")
+        console.print(f"[bold red]Error compiling Playbooks program:[/bold red] {e}")
         sys.exit(1)
 
 
@@ -137,7 +140,8 @@ async def run_application(
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description="Playbooks CLI - Run and compile playbooks", prog="playbooks"
+        description="Playbooks CLI - Compile and run Playbooks programs",
+        prog="playbooks",
     )
 
     # Add version argument
@@ -148,10 +152,10 @@ def main():
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
 
     # Run command
-    run_parser = subparsers.add_parser("run", help="Run a playbook with an application")
+    run_parser = subparsers.add_parser("run", help="Run a Playbooks program")
     run_parser.add_argument(
         "program_paths",
-        help="One or more paths to the playbook files to run",
+        help="One or more paths to the Playbooks program files to run",
         nargs="+",
     )
     run_parser.add_argument(
@@ -235,8 +239,19 @@ def main():
             )
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user[/yellow]")
+        except openai.OpenAIError:
+            import traceback
+
+            traceback.print_exc()
+            console.print(
+                "[bold red]Error: Authentication failed. Please make sure you have a valid ANTHROPIC_API_KEY environment variable set.[/bold red]"
+            )
+            sys.exit(1)
         except ProgramLoadError as e:
             console.print(f"[bold red]Error loading program:[/bold red] {e}")
+            sys.exit(1)
+        except Exception as e:
+            console.print(f"[bold red]Error compiling playbooks:[/bold red] {e}")
             sys.exit(1)
 
 
