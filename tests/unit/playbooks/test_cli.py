@@ -292,7 +292,7 @@ class TestCLIIntegration:
             )
 
             assert result.returncode == 0
-            assert "Compiled playbook saved to:" in result.stdout
+            assert "Compiled Playbooks program saved to:" in result.stdout
 
             # Verify the file was created and contains expected content
             assert Path(output_path).exists()
