@@ -77,3 +77,22 @@ async def test_example_08(test_data_dir):
 
     assert "SendMessage(human, Artifact[artifact1.txt])" in log
     assert "SendMessage(human, This is artifact1.)" in log
+
+
+@pytest.mark.asyncio
+async def test_example_09(test_data_dir):
+    playbooks = Playbooks([test_data_dir / "09-create-playbook.pb"])
+    ai_agent = playbooks.program.agents[0]
+
+    # AI will ask task and clarification
+    await playbooks.program.agents_by_id["human"].SendMessage(
+        ai_agent.id, "add two numbers"
+    )
+    await playbooks.program.agents_by_id["human"].SendMessage(
+        ai_agent.id,
+        "integers only, as parameters $x and $y, return the result, no edge cases",
+    )
+
+    await playbooks.program.run_till_exit()
+    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    assert "John" in log
