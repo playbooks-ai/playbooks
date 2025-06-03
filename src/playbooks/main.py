@@ -20,7 +20,7 @@ class Playbooks:
         self.session_id = session_id or str(uuid.uuid4())
         self.program_content, self.do_not_compile = Loader.read_program(program_paths)
 
-        # Skip compilation if any of the files are already compiled (.pbc)
+        # Skip compilation if any of the files are already compiled (.pbasm)
         if self.do_not_compile:
             # For compiled files, use the content as-is without compilation
             self.compiled_program_content = self.program_content

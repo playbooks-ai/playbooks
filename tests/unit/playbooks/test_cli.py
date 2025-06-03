@@ -38,7 +38,7 @@ class TestCLICompile:
         playbooks_path = test_data_dir / "01-hello-playbooks.pb"
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".pbc", delete=False
+            mode="w", suffix=".pbasm", delete=False
         ) as tmp_file:
             output_path = tmp_file.name
 
@@ -271,7 +271,7 @@ class TestCLIIntegration:
         project_root = Path(__file__).parent.parent.parent.parent
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".pbc", delete=False
+            mode="w", suffix=".pbasm", delete=False
         ) as tmp_file:
             output_path = tmp_file.name
 

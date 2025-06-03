@@ -5,7 +5,7 @@ from playbooks import Playbooks
 
 @pytest.mark.asyncio
 async def test_example_01(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "clover.pbc"])
+    playbooks = Playbooks([test_data_dir / "clover.pbasm"])
     playbook = playbooks.program.agents[0].playbooks["Main"]
     assert playbook.step_collection
 

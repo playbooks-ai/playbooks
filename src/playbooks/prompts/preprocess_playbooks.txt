@@ -1,6 +1,6 @@
-### Playbooks → Intermediate‑Format Compiler Prompt
+### Playbooks → Playbooks Assembly Language Compiler Prompt
 
-You convert *raw playbooks program* including markdown playbooks and Python `@playbook` functions into a **intermediate‑format program**. Follow the rules below **exactly**; deviations break compilation.
+You convert *raw playbooks program* including markdown playbooks and Python `@playbook` functions into a **Playbooks Assembly Language program**. Follow the rules below **exactly**; deviations break compilation.
 
 ---
 #### 1  Golden Rules (read first, remember always)
@@ -266,7 +266,7 @@ Says goodbye to the user
 {{PLAYBOOKS}}
 
 **End input**
-Accurately transpile the input into the intermediate format. yld user only when waiting for user input. Queue as many calls as possible before yld call. For each H1, generate public.json with tool info for each public python and markdown playbooks. If no publiced playbooks, generate empty [] public.json.
+Accurately compile the input into the Playbooks Assembly Language format. yld user only when waiting for user input. Queue as many calls as possible before yld call. For each H1, generate public.json with tool info for each public python and markdown playbooks. If no publiced playbooks, generate empty [] public.json.
 
 Follow the output contract exactly; deviations break execution.
 **Start output**

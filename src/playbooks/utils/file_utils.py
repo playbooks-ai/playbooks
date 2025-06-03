@@ -8,15 +8,15 @@ from typing import List
 
 def is_compiled_playbook_file(file_path: str) -> bool:
     """
-    Check if a file is a compiled playbook (.pbc) file.
+    Check if a file is a compiled playbook (.pbasm) file.
 
     Args:
         file_path: Path to the file to check
 
     Returns:
-        bool: True if the file is a .pbc file, False otherwise
+        bool: True if the file is a .pbasm file, False otherwise
     """
-    return Path(file_path).suffix.lower() == ".pbc"
+    return Path(file_path).suffix.lower() == ".pbasm"
 
 
 def is_source_playbook_file(file_path: str) -> bool:
@@ -35,7 +35,7 @@ def is_source_playbook_file(file_path: str) -> bool:
 
 def is_playbook_file(file_path: str) -> bool:
     """
-    Check if a file is any type of playbook file (.pb, .pbc, .playbooks).
+    Check if a file is any type of playbook file (.pb, .pbasm, .playbooks).
 
     Args:
         file_path: Path to the file to check
@@ -54,7 +54,7 @@ def has_compiled_playbook_files(file_paths: List[str]) -> bool:
         file_paths: List of file paths to check
 
     Returns:
-        bool: True if any file is a .pbc file, False otherwise
+        bool: True if any file is a .pbasm file, False otherwise
     """
     return any(is_compiled_playbook_file(path) for path in file_paths)
 

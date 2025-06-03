@@ -893,10 +893,10 @@ def test_line_numbers_preserved_after_refresh():
     assert ast["children"][0]["children"][0]["line_number"] == list_line
 
 
-def test_line_numbers_multi_agent_pbc(test_data_dir):
-    """Test line numbers for multi-agent.pbc file with multiple agents and playbooks."""
-    # Read the actual multi-agent.pbc file
-    with open(test_data_dir / "multi-agent.pbc", "r") as f:
+def test_line_numbers_multi_agent_pbasm(test_data_dir):
+    """Test line numbers for multi-agent.pbasm file with multiple agents and playbooks."""
+    # Read the actual multi-agent.pbasm file
+    with open(test_data_dir / "multi-agent.pbasm", "r") as f:
         markdown_text = f.read()
 
     ast = markdown_to_ast(markdown_text)
