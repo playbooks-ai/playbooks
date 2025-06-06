@@ -165,6 +165,8 @@ def get_completion(
     Returns:
         An iterator of response text (single item for non-streaming)
     """
+
+    messages = ensure_upto_N_cached_messages(messages)
     completion_kwargs = {
         "model": llm_config.model,
         "api_key": llm_config.api_key,
@@ -285,6 +287,32 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
             make_uncached_llm_message(user.strip(), LLMMessageRole.USER),
         ]
     return [make_uncached_llm_message(prompt.strip(), LLMMessageRole.USER)]
+
+
+def ensure_upto_N_cached_messages(messages: List[dict]) -> List[dict]:
+    """
+    Ensure that there are at most N cached messages in the list.
+    If there are more than N, keep the last N.
+    """
+
+    max_cached_messages = 4
+    count_cached_messages = 0
+
+    # Cached messages are those with a cache_control field set
+    # Scan in reverse order to keep the last N cached messages
+    for message in reversed(messages):
+        # If we've already found N cached messages, remove cache_control from all subsequent messages
+        if count_cached_messages > max_cached_messages:
+            if "cache_control" in message:
+                del message["cache_control"]
+
+            continue
+
+        # If we haven't found N cached messages yet, check if this message is cached
+        if "cache_control" in message:
+            count_cached_messages += 1
+
+    return messages
 
 
 def make_cached_llm_message(
