@@ -115,26 +115,13 @@ yld exit
 | - PB:06:QUE Show result to user | Referring to artifact shows it in UI | `Say("Artifact[result_1.md]")` |
 
 ====SYSTEM_PROMPT_DELIMITER====
-*Current playbook*
-```md
-{{CURRENT_PLAYBOOK_MARKDOWN}}
-```
-
-*Available playbook triggers*
-```md
-{{TRIGGERS}}
-```
-
-*Session log*
-{{SESSION_LOG}}
-
 *Current state*
 ```json
 {{INITIAL_STATE}}
 ```
 
 {{AGENT_INSTRUCTIONS}}
+
 {{INSTRUCTION}}
 
----
 **Follow the contract exactly; deviations break execution.**

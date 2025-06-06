@@ -8,6 +8,8 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
+from playbooks.enums import LLMMessageRole
+
 from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
 from .langfuse_helper import LangfuseHelper
@@ -279,16 +281,38 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
 
         return [
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": system.strip(),
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-            },
-            {"role": "user", "content": user.strip()},
+            make_cached_llm_message(system.strip(), LLMMessageRole.SYSTEM),
+            make_uncached_llm_message(user.strip(), LLMMessageRole.USER),
         ]
-    return [{"role": "user", "content": prompt.strip()}]
+    return [make_uncached_llm_message(prompt.strip(), LLMMessageRole.USER)]
+
+
+def make_cached_llm_message(
+    content: str, role: LLMMessageRole = LLMMessageRole.USER
+) -> dict:
+    """Make a message with cache control.
+
+    Args:
+        content: The content of the message
+        role: The role of the message
+
+    Returns:
+        A message with cache control
+    """
+    return {
+        "role": role,
+        "content": content,
+        "cache_control": {"type": "ephemeral"},
+    }
+
+
+def make_uncached_llm_message(
+    content: str, role: LLMMessageRole = LLMMessageRole.USER
+) -> dict:
+    """Make a message without cache control.
+
+    Args:
+        content: The content of the message
+        role: The role of the message
+    """
+    return {"role": role, "content": content}

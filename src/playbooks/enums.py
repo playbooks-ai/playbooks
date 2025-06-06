@@ -12,6 +12,12 @@ class RoutingType:
     BROADCAST = "broadcast"
 
 
+class LLMMessageRole:
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+
+
 class PlaybookExecutionType(str, Enum):
     MARKDOWN = "markdown"
     CODE = "code"
