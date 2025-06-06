@@ -150,7 +150,7 @@ class LLMResponseLine:
                 # Convert back to $variable format
                 kwargs[keyword.arg] = keyword.value.id.replace("__substituted__", "$")
             elif isinstance(keyword.value, ast.Constant):
-                if "__substituted__" in keyword.value.value:
+                if "__substituted__" in str(keyword.value.value):
                     kwargs[keyword.arg] = keyword.value.value.replace(
                         "__substituted__", "$"
                     )
