@@ -58,7 +58,11 @@ async def test_example_05(test_data_dir):
 
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
-    assert log.count("GetCountryFact() returned") == 5
+    assert "India" in log
+    assert "China" in log
+    assert "Nepal" in log
+    assert "Bangladesh" in log
+    assert "Myanmar" in log
 
 
 # @pytest.mark.asyncio

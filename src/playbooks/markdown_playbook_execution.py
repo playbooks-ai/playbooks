@@ -51,7 +51,7 @@ class MarkdownPlaybookExecution:
 
         call = PlaybookCall(self.playbook.klass, args, kwargs)
 
-        instruction = f"Execute {str(call)}"
+        instruction = f"Execute {str(call)} from step 01"
         artifacts_to_load = []
         await self.debug_handler.handle_execution_start(
             self.agent.state.call_stack.peek(),

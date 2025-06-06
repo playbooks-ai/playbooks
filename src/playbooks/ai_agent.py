@@ -132,12 +132,16 @@ class AIAgent(BaseAgent):
 
         self.state.session_log.append(call)
 
+        self.state.variables.update({"$__": None})
+
         return playbook, call, langfuse_span
 
     async def _post_execute(
         self, call: PlaybookCall, result: Any, langfuse_span: Any
     ) -> None:
-        call_result = PlaybookCallResult(call, result)
+        execution_summary = self.state.variables.variables["$__"].value
+        call_result = PlaybookCallResult(call, result, execution_summary)
+        self.state.variables.variables["$__"].update(None)
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
