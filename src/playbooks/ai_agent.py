@@ -120,12 +120,12 @@ class AIAgent(BaseAgent):
         )
         llm_message = []
         if playbook.execution_type == PlaybookExecutionType.MARKDOWN:
-            llm_message.append(playbook.markdown)
+            llm_message.append("```md\n" + playbook.markdown + "\n```")
 
         # Add a cached message whenever we add a stack frame
         llm_message.append("Executing " + str(call))
         call_stack_frame.add_cached_llm_message(
-            "\n====\n".join(llm_message), role=LLMMessageRole.ASSISTANT
+            "\n\n".join(llm_message), role=LLMMessageRole.ASSISTANT
         )
 
         self.state.call_stack.push(call_stack_frame)
