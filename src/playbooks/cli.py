@@ -52,7 +52,7 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
 
     program_content, do_not_compile = Loader.read_program(program_paths)
 
-    # Skip compilation if any of the files are already compiled (.pbc)
+    # Skip compilation if any of the files are already compiled (.pbasm)
     if do_not_compile:
         # For compiled files, use the content as-is without compilation
         compiled_content = program_content
@@ -185,7 +185,7 @@ def main():
     run_parser.add_argument(
         "--skip-compilation",
         action="store_true",
-        help="Skip compilation step (automatically enabled for .pbc files)",
+        help="Skip compilation step (skipped automatically for .pbasm files)",
     )
     run_parser.add_argument(
         "--stop-on-entry",

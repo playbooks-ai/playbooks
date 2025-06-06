@@ -20,6 +20,7 @@ async def Validation1(pin: str) -> bool:
 - Load user account
 - $x = $x * 2
 - Tell the user their account balance
+- Exit program
 
 ## LoadAccount($email, $pin)
 ### Steps

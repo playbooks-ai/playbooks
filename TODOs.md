@@ -6,7 +6,7 @@
 - [ ] Artifact management playbooks?
 - [ ] Add more trigger types
 - [ ] inline playbooks (leaf playbooks that should be executed by the LLM without yielding)
-- [ ] Investigate join calculus for additional control flow annotations in intermediate format
+- [ ] Investigate join calculus for additional control flow annotations in Playbooks Assembly Language
 
 ## Application infrastructure
 - [ ] playbooks hello.pb --application agent_chat --verbose

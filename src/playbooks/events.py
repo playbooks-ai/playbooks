@@ -56,7 +56,7 @@ class BreakpointHitEvent(Event):
 
 @dataclass
 class CompiledProgramEvent(Event):
-    compiled_file_path: str  # e.g., "hello.pbc"
+    compiled_file_path: str  # e.g., "hello.pbasm"
     content: str  # Full compiled program content
     original_file_paths: List[str]  # Original source files that were compiled
 

@@ -1,2 +1,2 @@
 *.pb linguist-language=Playbooks
-*.pbc linguist-language="Playbooks CLS"
+*.pbasm linguist-language="Playbooks Assembly"

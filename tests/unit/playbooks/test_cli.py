@@ -28,9 +28,10 @@ class TestCLICompile:
         # Verify the compiled output contains expected elements
         assert "# HelloWorld" in captured.out
         assert "## HelloWorldDemo() -> None" in captured.out
-        assert "01:QUE Greet the user" in captured.out
-        assert "02:QUE Tell the user that this is a demo" in captured.out
-        assert "03:QUE Say goodbye to the user" in captured.out
+        assert "01:QUE Say(Greet the user" in captured.out
+        assert "02:QUE Say(Tell the user that this is a demo" in captured.out
+        assert "03:QUE Say(Say goodbye to the user" in captured.out
+        assert "YLD exit" in captured.out
         assert "public.json" in captured.out
 
     def test_compile_to_file(self, test_data_dir):
@@ -38,7 +39,7 @@ class TestCLICompile:
         playbooks_path = test_data_dir / "01-hello-playbooks.pb"
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".pbc", delete=False
+            mode="w", suffix=".pbasm", delete=False
         ) as tmp_file:
             output_path = tmp_file.name
 
@@ -54,7 +55,7 @@ class TestCLICompile:
 
             assert "# HelloWorld" in content
             assert "## HelloWorldDemo() -> None" in content
-            assert "01:QUE Greet the user" in content
+            assert "01:QUE Say(Greet the user" in content
             assert "public.json" in content
 
         finally:
@@ -263,7 +264,7 @@ class TestCLIIntegration:
         assert result.returncode == 0
         assert "# HelloWorld" in result.stdout
         assert "## HelloWorldDemo() -> None" in result.stdout
-        assert "01:QUE Greet the user" in result.stdout
+        assert "01:QUE Say(Greet the user" in result.stdout
 
     def test_cli_compile_to_file(self, test_data_dir):
         """Test CLI compile command saving to file."""
@@ -271,7 +272,7 @@ class TestCLIIntegration:
         project_root = Path(__file__).parent.parent.parent.parent
 
         with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".pbc", delete=False
+            mode="w", suffix=".pbasm", delete=False
         ) as tmp_file:
             output_path = tmp_file.name
 

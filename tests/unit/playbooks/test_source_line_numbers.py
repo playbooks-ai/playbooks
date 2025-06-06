@@ -7,10 +7,136 @@ from playbooks.event_bus import EventBus
 from playbooks.utils.markdown_to_ast import markdown_to_ast
 
 
-def test_source_line_numbers_multi_agent_pbc(test_data_dir):
-    """Test source_line_number is set on all objects in multi-agent.pbc."""
-    # Read the actual multi-agent.pbc file
-    with open(test_data_dir / "multi-agent.pbc", "r") as f:
+def test_source_line_numbers_simple_playbook():
+    """Test source_line_number on a simple playbook structure."""
+    markdown_text = """# TestAgent
+This is a test agent description.
+
+## TestPlaybook() -> None
+This is a test playbook description.
+
+### Triggers
+- T1:BGN At the beginning
+- T2:CND When something happens
+
+### Steps
+- 01:YLD Ask the user for input
+  - 01.01:EXE Process the input
+- 02:RET Return the result
+
+### Notes
+- This is a note about the playbook
+"""
+
+    # Parse markdown to AST
+    ast = markdown_to_ast(markdown_text)
+
+    # Create agents from AST
+    agents = AgentBuilder.create_agents_from_ast(ast)
+    assert len(agents) == 1
+
+    # Create agent instance
+    event_bus = EventBus("test_session")
+    agent_class = agents.get("TestAgent")
+    assert agent_class is not None
+    agent = agent_class(event_bus)
+
+    # Verify agent source_line_number
+    assert agent.source_line_number == 1
+
+    # Test playbook
+    assert "TestPlaybook" in agent.playbooks
+    playbook = agent.playbooks["TestPlaybook"]
+    assert playbook.source_line_number == 4
+
+    # Test triggers
+    assert playbook.triggers is not None
+    assert playbook.triggers.source_line_number == 7
+    assert len(playbook.triggers.triggers) == 2
+
+    # Test individual triggers
+    trigger1 = playbook.triggers.triggers[0]
+    assert trigger1.source_line_number == 8
+    assert "T1:BGN At the beginning" == trigger1.trigger
+
+    trigger2 = playbook.triggers.triggers[1]
+    assert trigger2.source_line_number == 9
+    assert "T2:CND When something happens" == trigger2.trigger
+
+    # Test steps
+    assert playbook.step_collection is not None
+    assert len(playbook.step_collection.steps) == 3
+
+    # Test individual steps
+    step_01 = playbook.step_collection.get_step("01")
+    assert step_01 is not None
+    assert step_01.source_line_number == 12
+    assert step_01.step_type == "YLD"
+    assert step_01.content == "Ask the user for input"
+
+    step_02 = playbook.step_collection.get_step("01.01")
+    assert step_02 is not None
+    assert step_02.source_line_number == 13
+    assert step_02.step_type == "EXE"
+    assert step_02.content == "Process the input"
+
+    step_03 = playbook.step_collection.get_step("02")
+    assert step_03 is not None
+    assert step_03.source_line_number == 14
+    assert step_03.step_type == "RET"
+    assert step_03.content == "Return the result"
+
+
+def test_source_line_numbers_builtin_playbooks():
+    """Test that built-in playbooks have None for source_line_number."""
+    markdown_text = """# TestAgent
+This is a test agent.
+
+## TestPlaybook() -> None
+This is a test playbook.
+
+### Triggers
+- T1:BGN At the beginning
+
+### Steps
+- 01:RET Done
+"""
+
+    # Parse markdown to AST
+    ast = markdown_to_ast(markdown_text)
+
+    # Create agents from AST
+    agents = AgentBuilder.create_agents_from_ast(ast)
+    agent_class = agents.get("TestAgent")
+    assert agent_class is not None
+
+    # Create agent instance
+    event_bus = EventBus("test_session")
+    agent = agent_class(event_bus)
+
+    # Test built-in playbooks have None for source_line_number
+    builtin_playbooks = [
+        "SendMessage",
+        "WaitForMessage",
+        "Say",
+        "SaveArtifact",
+        "LoadArtifact",
+    ]
+
+    for playbook_name in builtin_playbooks:
+        assert playbook_name in agent.playbooks
+        playbook = agent.playbooks[playbook_name]
+        assert playbook.source_line_number is None
+
+    # Test user-defined playbook has proper source_line_number
+    user_playbook = agent.playbooks["TestPlaybook"]
+    assert user_playbook.source_line_number == 4
+
+
+def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
+    """Test source_line_number is set on all objects in multi-agent.pbasm."""
+    # Read the actual multi-agent.pbasm file
+    with open(test_data_dir / "multi-agent.pbasm", "r") as f:
         markdown_text = f.read()
 
     # Parse markdown to AST
@@ -149,132 +275,6 @@ def test_source_line_numbers_multi_agent_pbc(test_data_dir):
     assert step_03.source_line_number == 59
     assert step_03.step_type == "RET"
     assert step_03.content == "population of $country"
-
-
-def test_source_line_numbers_simple_playbook():
-    """Test source_line_number on a simple playbook structure."""
-    markdown_text = """# TestAgent
-This is a test agent description.
-
-## TestPlaybook() -> None
-This is a test playbook description.
-
-### Triggers
-- T1:BGN At the beginning
-- T2:CND When something happens
-
-### Steps
-- 01:YLD Ask the user for input
-  - 01.01:EXE Process the input
-- 02:RET Return the result
-
-### Notes
-- This is a note about the playbook
-"""
-
-    # Parse markdown to AST
-    ast = markdown_to_ast(markdown_text)
-
-    # Create agents from AST
-    agents = AgentBuilder.create_agents_from_ast(ast)
-    assert len(agents) == 1
-
-    # Create agent instance
-    event_bus = EventBus("test_session")
-    agent_class = agents.get("TestAgent")
-    assert agent_class is not None
-    agent = agent_class(event_bus)
-
-    # Verify agent source_line_number
-    assert agent.source_line_number == 1
-
-    # Test playbook
-    assert "TestPlaybook" in agent.playbooks
-    playbook = agent.playbooks["TestPlaybook"]
-    assert playbook.source_line_number == 4
-
-    # Test triggers
-    assert playbook.triggers is not None
-    assert playbook.triggers.source_line_number == 7
-    assert len(playbook.triggers.triggers) == 2
-
-    # Test individual triggers
-    trigger1 = playbook.triggers.triggers[0]
-    assert trigger1.source_line_number == 8
-    assert "T1:BGN At the beginning" == trigger1.trigger
-
-    trigger2 = playbook.triggers.triggers[1]
-    assert trigger2.source_line_number == 9
-    assert "T2:CND When something happens" == trigger2.trigger
-
-    # Test steps
-    assert playbook.step_collection is not None
-    assert len(playbook.step_collection.steps) == 3
-
-    # Test individual steps
-    step_01 = playbook.step_collection.get_step("01")
-    assert step_01 is not None
-    assert step_01.source_line_number == 12
-    assert step_01.step_type == "YLD"
-    assert step_01.content == "Ask the user for input"
-
-    step_02 = playbook.step_collection.get_step("01.01")
-    assert step_02 is not None
-    assert step_02.source_line_number == 13
-    assert step_02.step_type == "EXE"
-    assert step_02.content == "Process the input"
-
-    step_03 = playbook.step_collection.get_step("02")
-    assert step_03 is not None
-    assert step_03.source_line_number == 14
-    assert step_03.step_type == "RET"
-    assert step_03.content == "Return the result"
-
-
-def test_source_line_numbers_builtin_playbooks():
-    """Test that built-in playbooks have None for source_line_number."""
-    markdown_text = """# TestAgent
-This is a test agent.
-
-## TestPlaybook() -> None
-This is a test playbook.
-
-### Triggers
-- T1:BGN At the beginning
-
-### Steps
-- 01:RET Done
-"""
-
-    # Parse markdown to AST
-    ast = markdown_to_ast(markdown_text)
-
-    # Create agents from AST
-    agents = AgentBuilder.create_agents_from_ast(ast)
-    agent_class = agents.get("TestAgent")
-    assert agent_class is not None
-
-    # Create agent instance
-    event_bus = EventBus("test_session")
-    agent = agent_class(event_bus)
-
-    # Test built-in playbooks have None for source_line_number
-    builtin_playbooks = [
-        "SendMessage",
-        "WaitForMessage",
-        "Say",
-        "SaveArtifact",
-        "LoadArtifact",
-    ]
-
-    for playbook_name in builtin_playbooks:
-        assert playbook_name in agent.playbooks
-        playbook = agent.playbooks[playbook_name]
-        assert playbook.source_line_number is None
-
-    # Test user-defined playbook has proper source_line_number
-    user_playbook = agent.playbooks["TestPlaybook"]
-    assert user_playbook.source_line_number == 4
 
 
 if __name__ == "__main__":

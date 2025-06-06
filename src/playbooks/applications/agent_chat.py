@@ -263,7 +263,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--skip-compilation",
         action="store_true",
-        help="Skip compilation (useful for .pbc files)",
+        help="Skip compilation (automatically skipped for .pbasm files)",
     )
     parser.add_argument(
         "--stop-on-entry",

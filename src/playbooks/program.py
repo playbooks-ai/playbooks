@@ -67,8 +67,8 @@ class Program(ProgramAgentsCommunicationMixin):
         if self.program_paths:
             # Use the first file path as the base for the compiled file name
             first_file = Path(self.program_paths[0])
-            return f"{first_file.stem}.pbc"
-        return "unknown.pbc"
+            return f"{first_file.stem}.pbasm"
+        return "unknown.pbasm"
 
     def _emit_compiled_program_event(self):
         """Emit an event with the compiled program content for debugging."""
