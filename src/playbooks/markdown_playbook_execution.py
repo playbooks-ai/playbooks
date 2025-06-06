@@ -70,8 +70,8 @@ class MarkdownPlaybookExecution:
                 agent=self.agent,
             )
 
-            self.agent.state.call_stack.peek().add_uncached_llm_message(
-                llm_response.response, role=LLMMessageRole.USER
+            self.agent.state.call_stack.peek().add_cached_llm_message(
+                llm_response.response, role=LLMMessageRole.ASSISTANT
             )
             # print(f"[EXECUTE] llm_response: {llm_response.response}")
 
