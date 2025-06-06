@@ -166,6 +166,7 @@ def get_completion(
         An iterator of response text (single item for non-streaming)
     """
 
+    messages = consolidate_messages(messages)
     messages = ensure_upto_N_cached_messages(messages)
     completion_kwargs = {
         "model": llm_config.model,
@@ -289,20 +290,81 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
     return [make_uncached_llm_message(prompt.strip(), LLMMessageRole.USER)]
 
 
+def consolidate_messages(messages: List[dict]) -> List[dict]:
+    """
+    Consolidate consecutive messages where possible
+    Break into separate messages for different roles and to include upto 1 cached message
+    """
+
+    # First, group messages that can be combined into a single message
+    message_groups = []
+    current_group = []
+    current_role = messages[0]["role"]
+
+    for message in messages:
+        if "cache_control" in message and message["role"] == current_role:
+            # Include the cached message in the current group
+            current_group.append(message)
+            message_groups.append(current_group)
+
+            # Start a new group
+            current_group = []
+        elif message["role"] == current_role:
+            current_group.append(message)
+        else:
+            # New role, so start a new group with this message in it
+            message_groups.append(current_group)
+            current_group = [message]
+            current_role = message["role"]
+
+    if current_group:
+        message_groups.append(current_group)
+
+    # Now, consolidate each group into a single message
+    messages = []
+    for group in message_groups:
+        if not group:
+            continue
+        contents = []
+        cache_control = False
+
+        # Collect all contents and track if there is a cached message
+        for message in group:
+            contents.append(message["content"])
+            if "cache_control" in message:
+                cache_control = True
+
+        # Join all contents into a single string
+        contents = "\n\n".join(contents)
+
+        # Add the consolidatedmessage to the list
+        if cache_control:
+            messages.append(make_cached_llm_message(contents, group[0]["role"]))
+        else:
+            messages.append(make_uncached_llm_message(contents, group[0]["role"]))
+
+    return messages
+
+
 def ensure_upto_N_cached_messages(messages: List[dict]) -> List[dict]:
     """
     Ensure that there are at most N cached messages in the list.
     If there are more than N, keep the last N.
     """
 
-    max_cached_messages = 4
+    max_cached_messages = 4 - 1  # Keep one for the System message
     count_cached_messages = 0
 
     # Cached messages are those with a cache_control field set
     # Scan in reverse order to keep the last N cached messages
     for message in reversed(messages):
-        # If we've already found N cached messages, remove cache_control from all subsequent messages
-        if count_cached_messages > max_cached_messages:
+        # If we've already found N cached messages, remove cache_control from all earlier messages
+        if count_cached_messages >= max_cached_messages:
+            # Don't remove cache_control from the System message
+            if message["role"] == LLMMessageRole.SYSTEM:
+                continue
+
+            # Remove cache_control from all other messages
             if "cache_control" in message:
                 del message["cache_control"]
 
