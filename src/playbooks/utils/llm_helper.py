@@ -17,6 +17,7 @@ from .llm_config import LLMConfig
 
 # Configure litellm based on environment variable
 litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
+litellm.drop_params = True
 
 # Initialize cache if enabled
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
@@ -166,6 +167,7 @@ def get_completion(
         An iterator of response text (single item for non-streaming)
     """
 
+    messages = remove_empty_messages(messages)
     messages = consolidate_messages(messages)
     messages = ensure_upto_N_cached_messages(messages)
     completion_kwargs = {
@@ -266,6 +268,11 @@ def get_completion(
             # Only update if no exception occurred
             langfuse_generation.end(output=str(full_response))
             LangfuseHelper.flush()
+
+
+def remove_empty_messages(messages: List[dict]) -> List[dict]:
+    """Remove empty messages from the list."""
+    return [message for message in messages if message["content"].strip()]
 
 
 def get_messages_for_prompt(prompt: str) -> List[dict]:
