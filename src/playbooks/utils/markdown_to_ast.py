@@ -16,8 +16,12 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
         A dictionary representing the AST of the markdown text with
         line numbers
     """
-    # Initialize markdown parser with line numbers
+    # Initialize markdown parser with line numbers and disable setext headings
+    # to prevent YAML-like content from being interpreted as headings
     md = MarkdownIt()
+    md.disable(
+        ["lheading"]
+    )  # Disable setext-style headings (underline with --- or ===)
     tokens = md.parse(markdown_text)
 
     # Initialize root and stack for tracking hierarchy
@@ -27,7 +31,12 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
     def get_current_level() -> int:
         """Get the heading level of the current container in the stack"""
         for item in reversed(stack):
-            if "type" in item and item["type"].startswith("h"):
+            if (
+                "type" in item
+                and item["type"].startswith("h")
+                and len(item["type"]) == 2
+                and item["type"][1].isdigit()
+            ):
                 return int(item["type"][1])
         return 0
 
@@ -146,11 +155,27 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
             )
             i += 1
 
+        elif token.type == "hr":  # Handle horizontal rules (---)
+            line_number = get_line_number(token)
+            stack[-1]["children"].append(
+                {
+                    "type": "hr",
+                    "text": "---",
+                    "line_number": line_number,
+                }
+            )
+            i += 1
+
         else:
             i += 1
 
     # Return the root node or its only child if it's a heading
-    if len(root["children"]) == 1 and root["children"][0]["type"].startswith("h"):
+    if (
+        len(root["children"]) == 1
+        and root["children"][0]["type"].startswith("h")
+        and len(root["children"][0]["type"]) == 2
+        and root["children"][0]["type"][1].isdigit()
+    ):
         return root["children"][0]
     return root
 
@@ -171,7 +196,11 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
 
     # Generate markdown for current node
     current_markdown = ""
-    if node["type"].startswith("h"):
+    if (
+        node["type"].startswith("h")
+        and len(node["type"]) == 2
+        and node["type"][1].isdigit()
+    ):
         level = int(node["type"][1])  # Extract number from h1, h2, etc.
         current_markdown = "#" * level + " " + node["text"]
     elif node["type"] == "paragraph":
@@ -180,6 +209,8 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
         current_markdown = "> " + node["text"]
     elif node["type"] == "code-block":
         current_markdown = "```\n" + node["text"] + "\n```"
+    elif node["type"] == "hr":
+        current_markdown = "---"
     elif node["type"] == "list":
         # List nodes don't need their own text, they're containers
         pass

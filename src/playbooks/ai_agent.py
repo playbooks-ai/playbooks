@@ -8,6 +8,7 @@ from .execution_state import ExecutionState
 from .playbook import Playbook
 from .playbook_call import PlaybookCall, PlaybookCallResult
 from .utils.langfuse_helper import LangfuseHelper
+from .utils.parse_utils import parse_config_and_description
 
 if TYPE_CHECKING:
     pass
@@ -46,7 +47,7 @@ class AIAgent(BaseAgent):
                 agent is defined.
         """
         super().__init__(klass)
-        self.description = description
+        self.config, self.description = parse_config_and_description(description)
         self.playbooks: Dict[str, Playbook] = playbooks or {}
         self.state = ExecutionState(event_bus)
         self.source_line_number = source_line_number

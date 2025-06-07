@@ -100,3 +100,22 @@ async def test_example_05(test_data_dir):
 #     await playbooks.program.run_till_exit()
 #     log = playbooks.program.agents[0].state.session_log.to_log_full()
 #     assert "John" in log
+
+
+@pytest.mark.asyncio
+async def test_example_10(test_data_dir):
+    playbooks = Playbooks([test_data_dir / "10-configs.pb"])
+
+    assert len(playbooks.program.agents) == 3
+
+    accountant = playbooks.program.agents[0]
+    assert accountant.config["framework"] == "GAAP"
+    assert accountant.config["author"] == "John Doe"
+    assert accountant.config["specialization"][0] == "accounting"
+    assert accountant.config["specialization"][1] == "tax"
+    assert "config" not in accountant.description
+
+    paralegal = playbooks.program.agents[1]
+    assert paralegal.config["mcp"]["url"] == "http://lawoffice.com/Paralegal"
+    assert paralegal.config["mcp"]["timeout"] == 10
+    assert "config" not in paralegal.description

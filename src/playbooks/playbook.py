@@ -3,6 +3,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from .enums import PlaybookExecutionType
 from .playbook_step import PlaybookStep, PlaybookStepCollection
+from .utils.parse_utils import parse_config_and_description
 
 
 class PlaybookTrigger:
@@ -391,7 +392,7 @@ class Playbook:
         self.klass = klass
         self.execution_type = execution_type
         self.signature = signature
-        self.description = description
+        self.config, self.description = parse_config_and_description(description)
         self.triggers = triggers
         self.steps = steps
         self.notes = notes
