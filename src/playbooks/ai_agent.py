@@ -8,6 +8,7 @@ from .execution_state import ExecutionState
 from .playbook import Playbook
 from .playbook_call import PlaybookCall, PlaybookCallResult
 from .utils.langfuse_helper import LangfuseHelper
+from .utils.parse_utils import parse_metadata_and_description
 
 if TYPE_CHECKING:
     pass
@@ -46,13 +47,12 @@ class AIAgent(BaseAgent):
                 agent is defined.
         """
         super().__init__(klass)
-        self.description = description
+        self.metadata, self.description = parse_metadata_and_description(description)
         self.playbooks: Dict[str, Playbook] = playbooks or {}
         self.state = ExecutionState(event_bus)
         self.source_line_number = source_line_number
         for playbook in self.playbooks.values():
             playbook.func.__globals__.update({"agent": self})
-        self.public = None
 
     async def begin(self):
         # Find playbooks with a BGN trigger and execute them

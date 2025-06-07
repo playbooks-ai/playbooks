@@ -146,6 +146,46 @@ Compiled:
 ### Public Playbooks
 - Generate public.json with tool info for each public python and markdown playbooks. If no public playbooks, generate empty [] public.json.
 
+### Agent and Playbook metadata
+Collect any metadata in the description area into a metadata yaml block. Add a --- document separator and write description after that. This applies to # agent and ## playbook blocks.
+
+Raw:
+```
+# Agent1
+model: claude-sonnet-4.0
+This is an example agent
+author:
+  name: Amol Kelkar
+  email: kelkar.amol@gmail.com
+```
+Compiled:
+```
+# Agent1
+metadata:
+  model: claude-sonnet-4.0
+  author:
+    name: Amol Kelkar
+    email: kelkar.amol@gmail.com
+---
+This is an example agent
+```
+
+Raw:
+```
+# WeatherMCPServer
+MCP server for weather tools
+mcp: http://mydomain.com/mcp
+```
+Compiled:
+```
+# WeatherMCPServer
+metadata:
+  mcp: http://mydomain.com/mcp
+---
+MCP server for weather tools
+```
+
+
 ## Step 6: Output Structure Template
 
 ```
@@ -156,6 +196,8 @@ metadata2: "copied verbatim if exists"
 ---
 
 # AgentName
+[metadata yaml block if any metadata specified]
+[--- separator only if both metadata yaml block and description present]
 [One paragraph description - copy if provided, else generate brief description]
 
 ```python
@@ -163,6 +205,8 @@ metadata2: "copied verbatim if exists"
 ```
 
 ## PlaybookName($param1, $param2) -> returnType
+[metadata yaml block if any metadata specified]
+[--- separator only if both metadata yaml block and description present]
 [One paragraph description]
 ### Triggers (if any)
 - T1:TYPE trigger text
@@ -224,12 +268,15 @@ metadata2: "copied verbatim if exists"
 **Input:**
 
 ---
-title: "Example agent"
+title: "Example program"
 author: "Playbooks AI"
 ---
 # Example agent
+author: a@b.com
 
 ```python
+import frontmatter
+import os
 @playbook
 def GetWeather(city:str):
     """
@@ -268,7 +315,8 @@ def LookupInfo(query:str):
 ### Notes
 - If name is a Jack Sparrow, start speaking in pirate speak
 
-## public: Validate city
+## Validate city
+public: true
 This playbook validates a city input by the user.
 <output_format>
 The output is a string of the validated city in "Austin, TX" format.
@@ -290,10 +338,12 @@ Only consider cities in the United States.
 # SecondAgent
 
 ## P1($name, $age)
+model: gpt-4o
 - Say hello $name
 - Save "greeting.txt" with summary "Greeting" and content "Hello $name"
 
-## public:P2
+## P2
+public: true
 - Load "greeting.txt"
 - Show "greeting.txt" to user
 
@@ -304,9 +354,15 @@ author: "Playbooks AI"
 ---
 
 # ExampleAgent
+metadata:
+  author: a@b.com
+---
 As ExampleAgent, you greet users warmly, collect and validate US city locations, share interesting facts about their city, and provide current weather information, all while maintaining a helpful, conversational tone.
 
 ```python
+import os
+import frontmatter
+
 @playbook
 def GetWeather(city:str) -> dict:
     """
@@ -348,7 +404,10 @@ Main interaction loop that guides user conversations through a friendly informat
 ### Notes
 - N1 If $name is a Jack Sparrow, start speaking in pirate speak
 
-## public: ValidateCity($city) -> None
+## ValidateCity($city) -> None
+metadata:
+  public: true
+---
 This playbook validates a city input by the user.
 <output_format>
 The output is a string of the validated city in "Austin, TX" format.
@@ -393,15 +452,22 @@ Only consider cities in the United States.
 
 
 # SecondAgent
+This is a second agent that can say hello and goodbye to the user
 
 ## P1($name, $age)
+metadata:
+  model: gpt-4o
+---
 Says hello to the user
 ### Steps
 - 01:QUE Say hello $name
 - 02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name")
 - 03:RET
 
-## public:P2
+## P2
+metadata:
+  public: true
+---
 Says goodbye to the user
 ### Steps
 - 01:QUE LoadArtifact("greeting.txt")

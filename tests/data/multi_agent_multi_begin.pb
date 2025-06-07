@@ -38,6 +38,7 @@ async def python_a1p4():
 - When user asks for refund
 ### Steps
 - Say "A1P4"
+- End program
 
 # Agent2
 
@@ -52,6 +53,7 @@ async def python_a1p4():
 - At the beginning
 ### Steps
 - Say "A2P2"
+- End program
 
 ## A2P3
 ### Triggers
