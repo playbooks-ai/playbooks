@@ -37,12 +37,14 @@ async def GetLengthOfCountry(country: str):
 ### Steps
 - Say hello
 
-## public: GetCountryPopulation($country)
+## GetCountryPopulation($country)
+public: true
 ### Steps
 - Compute the square root of the length of $country
 - Return the population of $country
 
-## public:GetCountrySecret($country)
+## GetCountrySecret($country)
+public: true
 ### Triggers
 - When you need to get a secret about a country
 ### Steps

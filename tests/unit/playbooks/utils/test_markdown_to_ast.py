@@ -991,10 +991,10 @@ def test_line_numbers_multi_agent_pbasm(test_data_dir):
     assert country_info_code_blocks[0]["line_number"] == 40
 
 
-def test_config_not_parsed_as_heading():
-    """Test that config: sections are not parsed as setext headings when followed by ---."""
+def test_metadata_not_parsed_as_heading():
+    """Test that metadata: sections are not parsed as setext headings when followed by ---."""
     markdown_text = """# Accountant
-config:
+metadata:
   framework: GAAP
   specialization:
     - accounting
@@ -1004,7 +1004,7 @@ config:
 This is an accountant agent that can help with accounting tasks.
 
 # Paralegal
-config:
+metadata:
   mcp:
     url: http://lawoffice.com/Paralegal
     timeout: 10
@@ -1026,19 +1026,19 @@ Legal support agent providing paralegal services and assistance."""
 
     assert accountant_h1 is not None
 
-    # Verify config: becomes a paragraph, not a heading
-    config_paragraph = None
+    # Verify metadata: becomes a paragraph, not a heading
+    metadata_paragraph = None
     hr_element = None
     for child in accountant_h1["children"]:
-        if child["type"] == "paragraph" and "config:" in child["text"]:
-            config_paragraph = child
+        if child["type"] == "paragraph" and "metadata:" in child["text"]:
+            metadata_paragraph = child
         elif child["type"] == "hr":
             hr_element = child
 
-    assert config_paragraph is not None
-    assert "config:" in config_paragraph["text"]
-    assert "framework: GAAP" in config_paragraph["text"]
-    assert "specialization:" in config_paragraph["text"]
+    assert metadata_paragraph is not None
+    assert "metadata:" in metadata_paragraph["text"]
+    assert "framework: GAAP" in metadata_paragraph["text"]
+    assert "specialization:" in metadata_paragraph["text"]
 
     # Verify the --- becomes a horizontal rule, not part of a heading
     assert hr_element is not None
@@ -1053,16 +1053,16 @@ Legal support agent providing paralegal services and assistance."""
 
     assert paralegal_h1 is not None
 
-    # Verify the second config: section is also a paragraph
-    paralegal_config = None
+    # Verify the second metadata: section is also a paragraph
+    paralegal_metadata = None
     for child in paralegal_h1["children"]:
-        if child["type"] == "paragraph" and "config:" in child["text"]:
-            paralegal_config = child
+        if child["type"] == "paragraph" and "metadata:" in child["text"]:
+            paralegal_metadata = child
             break
 
-    assert paralegal_config is not None
-    assert "mcp:" in paralegal_config["text"]
-    assert "url: http://lawoffice.com/Paralegal" in paralegal_config["text"]
+    assert paralegal_metadata is not None
+    assert "mcp:" in paralegal_metadata["text"]
+    assert "url: http://lawoffice.com/Paralegal" in paralegal_metadata["text"]
 
 
 if __name__ == "__main__":

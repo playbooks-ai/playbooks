@@ -1,6 +1,6 @@
 """
-Example input with both config and description --
-config:
+Example input with both metadata and description --
+metadata:
   framework: GAAP
   specialization:
     - accounting
@@ -12,8 +12,8 @@ This is an accountant agent that can help with accounting tasks.
 Example input with only description --
 This is an accountant agent that can help with accounting tasks.
 
-Example input with only config --
-config:
+Example input with only metadata --
+metadata:
   framework: GAAP
   specialization:
     - accounting
@@ -23,38 +23,26 @@ config:
 Also, input can be empty.
 """
 
-import re
-
 import yaml
 
 
-def parse_config_and_description(input: str) -> tuple[dict, str]:
-    """Parse the input into a config and description."""
+def parse_metadata_and_description(input: str) -> tuple[dict, str]:
+    """Parse the input into a metadata and description."""
     if not input or not input.strip():
         return {}, ""
 
-    # Check if there's a config section
-    config_match = re.search(
-        r"^config:\s*\n(.*?)(?=\n\S|\Z)", input, re.MULTILINE | re.DOTALL
-    )
-
-    config = {}
-    description = ""
-
-    if config_match:
-        # Extract and parse the config section
-        config_content = config_match.group(1)
-        try:
-            config = yaml.safe_load(config_content) or {}
-        except yaml.YAMLError:
-            config = {}
-
-        # Remove the config section from input to get description
-        config_section = config_match.group(0)
-        remaining_text = input.replace(config_section, "", 1).strip()
-        description = remaining_text
+    if input.startswith("metadata:"):
+        parts = input.split("---", maxsplit=1)
+        if len(parts) == 1:
+            metadata_text = parts[0]
+            description_text = ""
+        else:
+            metadata_text = parts[0]
+            description_text = parts[1]
+        metadata = yaml.safe_load(metadata_text)["metadata"]
+        description = description_text.strip()
     else:
-        # No config section found, treat entire input as description
+        metadata = {}
         description = input.strip()
 
-    return config, description
+    return metadata, description

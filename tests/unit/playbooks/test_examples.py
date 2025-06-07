@@ -109,13 +109,13 @@ async def test_example_10(test_data_dir):
     assert len(playbooks.program.agents) == 3
 
     accountant = playbooks.program.agents[0]
-    assert accountant.config["framework"] == "GAAP"
-    assert accountant.config["author"] == "John Doe"
-    assert accountant.config["specialization"][0] == "accounting"
-    assert accountant.config["specialization"][1] == "tax"
-    assert "config" not in accountant.description
+    assert accountant.metadata["framework"] == "GAAP"
+    assert accountant.metadata["author"] == "John Doe"
+    assert accountant.metadata["specialization"][0] == "accounting"
+    assert accountant.metadata["specialization"][1] == "tax"
+    assert "metadata" not in accountant.description
 
     paralegal = playbooks.program.agents[1]
-    assert paralegal.config["mcp"]["url"] == "http://lawoffice.com/Paralegal"
-    assert paralegal.config["mcp"]["timeout"] == 10
-    assert "config" not in paralegal.description
+    assert paralegal.metadata["mcp"]["url"] == "http://lawoffice.com/Paralegal"
+    assert paralegal.metadata["mcp"]["timeout"] == 10
+    assert "metadata" not in paralegal.description
