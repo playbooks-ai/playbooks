@@ -367,6 +367,11 @@ class Playbook:
         return self.metadata.get("public", False)
 
     @property
+    def export(self) -> bool:
+        """Return whether this playbook is exported."""
+        return self.metadata.get("export", False)
+
+    @property
     def first_step(self) -> Optional[PlaybookStep]:
         """Get the first step of the playbook."""
         if self.step_collection and len(self.step_collection.ordered_line_numbers) > 0:
