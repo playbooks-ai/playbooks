@@ -36,9 +36,10 @@ class PlaybookCall(SessionLogItem):
 
 
 class PlaybookCallResult(SessionLogItem):
-    def __init__(self, call: PlaybookCall, result: Any):
+    def __init__(self, call: PlaybookCall, result: Any, execution_summary: str = None):
         self.call = call
         self.result = result
+        self.execution_summary = execution_summary
 
     def __str__(self):
         return self.to_log(str(self.result))
@@ -49,9 +50,13 @@ class PlaybookCallResult(SessionLogItem):
             or self.call.playbook_klass == "SaveArtifact"
         ):
             return ""
+
+        if self.execution_summary:
+            return self.execution_summary
+
         if self.result is None:
-            return f"{self.call.to_log_minimal()} finished"
-        return f"{self.call.to_log_minimal()} returned {result_str}"
+            return f"{self.call.to_log_full()} finished"
+        return f"{self.call.to_log_full()} → {result_str}"
 
     def to_log_full(self) -> str:
         return self.to_log(str(self.result) if self.result else "")

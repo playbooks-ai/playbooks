@@ -21,6 +21,7 @@ You execute *playbooks* (markdown H2) and Python `@playbook` functions that tog
 
 ---
 #### 2  Output Contract — **WRITE NOTHING ELSE**
+
 ```
 recap – one‑sentence summary
 plan  – one‑sentence immediate goal
@@ -29,10 +30,11 @@ plan  – one‑sentence immediate goal
 trig? <no | \`Trigger["PB:Ln:Code"]\`>
 \`Step["Playbook:Ln:Code"]\`  optional inline:  \`Say("…")\`  or  \`$x = Func($y)\`
 trig? <no | \`Trigger["PB:Ln:Code"]\`>
-\`Return[<value> | ]\`
+\`Step["Playbook:Ln:Code"]\` \`Return[<value> | ]\` \`Var[$__, 1-5 line summary of this playbook's execution with context useful for the calling playbook and overall conversation and agent execution]\`
 yld <user | call | return | exit>
 ```
-Rules
+
+**Rules**
 1. **Back‑tick** every queued call:  \`Play(P=$p)\` or  \`$r = Func(3)\`. Function calls must be valid Python - breaks execution otherwise.
 2. After each ``Var[…]`` output a trig? line and queue the trigger if matched.
 3. Check trig? after each step; trigger only if not already triggered based on last item in session log
@@ -45,6 +47,7 @@ Rules
 10. Use "yld exit" to exit the program
 11. "Main:03.02.03 was executed - continue execution.": You should complete any variable assignment on line Main:03.02.03 and then execute the *next* line, say Main:03:03
 12. Loading artifacts is expensive. Load an artifact only when you need to read and process the contents of the artifact. To load artifacts, use `LoadArtifact("artifact1")`, `LoadArtifact("artifact2")`, ..., follwed by a yld call
+13. Always output playbook execution summary in $__ variable before returning
 
 ---
 #### 3  Worked Examples (study carefully)
@@ -81,7 +84,7 @@ trig? no
 trig? no
 `Step["DoMagic:04:QUE"]`  `Say("Your magic result is -8.2.")` `Say("Artifact[derivation.txt]")`
 trig? no
-`Step["DoMagic:05:RET"]`  `Return[]`
+`Step["DoMagic:05:RET"]`  `Return[]` `Var[$__, "DoMagic() asked user for a number and applied magic operator on it. Then results were conveyed to the user along with detailed derivation steps."]
 trig? no
 yld return
 ```
@@ -115,26 +118,13 @@ yld exit
 | - PB:06:QUE Show result to user | Referring to artifact shows it in UI | `Say("Artifact[result_1.md]")` |
 
 ====SYSTEM_PROMPT_DELIMITER====
-*Current playbook*
-```md
-{{CURRENT_PLAYBOOK_MARKDOWN}}
-```
-
-*Available playbook triggers*
-```md
-{{TRIGGERS}}
-```
-
-*Session log*
-{{SESSION_LOG}}
-
 *Current state*
 ```json
 {{INITIAL_STATE}}
 ```
 
 {{AGENT_INSTRUCTIONS}}
+
 {{INSTRUCTION}}
 
----
 **Follow the contract exactly; deviations break execution.**

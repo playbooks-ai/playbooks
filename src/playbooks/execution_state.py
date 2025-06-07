@@ -45,7 +45,7 @@ class ExecutionState:
     def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary representation of the execution state."""
         return {
-            "call_stack": self.call_stack.to_dict(),
+            # "call_stack": self.call_stack.to_dict(), # Not needed because of llm_messages context
             "variables": self.variables.to_dict(),
             "artifacts": self.artifacts.to_dict(),
         }

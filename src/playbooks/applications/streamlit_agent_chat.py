@@ -6,6 +6,9 @@ from typing import Dict, Optional
 import requests
 import streamlit as st
 
+from playbooks.enums import LLMMessageRole
+from playbooks.utils.llm_helper import make_uncached_llm_message
+
 # Constants
 SERVER_URL = "http://localhost:8000"  # Default web agent chat server URL
 
@@ -69,7 +72,7 @@ def create_new_chat(playbook_path: str) -> Optional[str]:
             # Add initial messages to the chat
             for message in data.get("messages", []):
                 st.session_state.messages.append(
-                    {"role": "assistant", "content": message}
+                    make_uncached_llm_message(message), LLMMessageRole.ASSISTANT
                 )
             return data["run_id"]
         elif response.status_code == 400:
@@ -157,8 +160,10 @@ def display_chat_interface():
     # Chat input
     if prompt := st.chat_input("Type your message here..."):
         # Add user message to chat
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
+        st.session_state.messages.append(
+            make_uncached_llm_message(prompt, LLMMessageRole.USER)
+        )
+        with st.chat_message(LLMMessageRole.USER):
             st.write(prompt)
 
         # Send message to server and get response
@@ -166,8 +171,8 @@ def display_chat_interface():
 
         # Add agent messages to chat
         for message in response["messages"]:
-            st.session_state.messages.append({"role": "assistant", "content": message})
-            with st.chat_message("assistant"):
+            st.session_state.messages.append(make_uncached_llm_message(message))
+            with st.chat_message(LLMMessageRole.ASSISTANT):
                 st.write(message)
 
         # Check if chat is terminated

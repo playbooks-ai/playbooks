@@ -8,6 +8,8 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
+from playbooks.enums import LLMMessageRole
+
 from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
 from .langfuse_helper import LangfuseHelper
@@ -15,6 +17,7 @@ from .llm_config import LLMConfig
 
 # Configure litellm based on environment variable
 litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
+litellm.drop_params = True
 
 # Initialize cache if enabled
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
@@ -163,6 +166,10 @@ def get_completion(
     Returns:
         An iterator of response text (single item for non-streaming)
     """
+
+    messages = remove_empty_messages(messages)
+    messages = consolidate_messages(messages)
+    messages = ensure_upto_N_cached_messages(messages)
     completion_kwargs = {
         "model": llm_config.model,
         "api_key": llm_config.api_key,
@@ -263,6 +270,11 @@ def get_completion(
             LangfuseHelper.flush()
 
 
+def remove_empty_messages(messages: List[dict]) -> List[dict]:
+    """Remove empty messages from the list."""
+    return [message for message in messages if message["content"].strip()]
+
+
 def get_messages_for_prompt(prompt: str) -> List[dict]:
     """Convert a raw prompt into a properly formatted message list.
 
@@ -279,16 +291,125 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
 
         return [
-            {
-                "role": "system",
-                "content": [
-                    {
-                        "type": "text",
-                        "text": system.strip(),
-                        "cache_control": {"type": "ephemeral"},
-                    }
-                ],
-            },
-            {"role": "user", "content": user.strip()},
+            make_cached_llm_message(system.strip(), LLMMessageRole.SYSTEM),
+            make_uncached_llm_message(user.strip(), LLMMessageRole.USER),
         ]
-    return [{"role": "user", "content": prompt.strip()}]
+    return [make_uncached_llm_message(prompt.strip(), LLMMessageRole.USER)]
+
+
+def consolidate_messages(messages: List[dict]) -> List[dict]:
+    """
+    Consolidate consecutive messages where possible
+    Break into separate messages for different roles and to include upto 1 cached message
+    """
+
+    # First, group messages that can be combined into a single message
+    message_groups = []
+    current_group = []
+    current_role = messages[0]["role"]
+
+    for message in messages:
+        if "cache_control" in message and message["role"] == current_role:
+            # Include the cached message in the current group
+            current_group.append(message)
+            message_groups.append(current_group)
+
+            # Start a new group
+            current_group = []
+        elif message["role"] == current_role:
+            current_group.append(message)
+        else:
+            # New role, so start a new group with this message in it
+            message_groups.append(current_group)
+            current_group = [message]
+            current_role = message["role"]
+
+    if current_group:
+        message_groups.append(current_group)
+
+    # Now, consolidate each group into a single message
+    messages = []
+    for group in message_groups:
+        if not group:
+            continue
+        contents = []
+        cache_control = False
+
+        # Collect all contents and track if there is a cached message
+        for message in group:
+            contents.append(message["content"])
+            if "cache_control" in message:
+                cache_control = True
+
+        # Join all contents into a single string
+        contents = "\n\n".join(contents)
+
+        # Add the consolidatedmessage to the list
+        if cache_control:
+            messages.append(make_cached_llm_message(contents, group[0]["role"]))
+        else:
+            messages.append(make_uncached_llm_message(contents, group[0]["role"]))
+
+    return messages
+
+
+def ensure_upto_N_cached_messages(messages: List[dict]) -> List[dict]:
+    """
+    Ensure that there are at most N cached messages in the list.
+    If there are more than N, keep the last N.
+    """
+
+    max_cached_messages = 4 - 1  # Keep one for the System message
+    count_cached_messages = 0
+
+    # Cached messages are those with a cache_control field set
+    # Scan in reverse order to keep the last N cached messages
+    for message in reversed(messages):
+        # If we've already found N cached messages, remove cache_control from all earlier messages
+        if count_cached_messages >= max_cached_messages:
+            # Don't remove cache_control from the System message
+            if message["role"] == LLMMessageRole.SYSTEM:
+                continue
+
+            # Remove cache_control from all other messages
+            if "cache_control" in message:
+                del message["cache_control"]
+
+            continue
+
+        # If we haven't found N cached messages yet, check if this message is cached
+        if "cache_control" in message:
+            count_cached_messages += 1
+
+    return messages
+
+
+def make_cached_llm_message(
+    content: str, role: LLMMessageRole = LLMMessageRole.USER
+) -> dict:
+    """Make a message with cache control.
+
+    Args:
+        content: The content of the message
+        role: The role of the message
+
+    Returns:
+        A message with cache control
+    """
+    return {
+        "role": role,
+        "content": content,
+        "cache_control": {"type": "ephemeral"},
+    }
+
+
+def make_uncached_llm_message(
+    content: str, role: LLMMessageRole = LLMMessageRole.USER
+) -> dict:
+    """Make a message without cache control.
+
+    Args:
+        content: The content of the message
+        role: The role of the message
+    """
+    return {"role": role, "content": content}

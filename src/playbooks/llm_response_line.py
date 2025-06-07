@@ -61,7 +61,7 @@ class LLMResponseLine:
             self.exit_program = True
 
         # detect if return value in backticks somewhere in the line using regex
-        match = re.search(r"`Return\[(.*)\]`", self.text)
+        match = re.search(r"`Return\[(.*?)\]`", self.text)
         literal_map = {
             "true": True,
             "false": False,
@@ -133,7 +133,7 @@ class LLMResponseLine:
                 # Convert back to $variable format
                 args.append(arg.id.replace("__substituted__", "$"))
             elif isinstance(arg, ast.Constant):
-                if "__substituted__" in arg.value:
+                if isinstance(arg.value, str) and "__substituted__" in arg.value:
                     args.append(arg.value.replace("__substituted__", "$"))
                 else:
                     args.append(arg.value)

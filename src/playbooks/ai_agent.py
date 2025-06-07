@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from .base_agent import BaseAgent
 from .call_stack import CallStackFrame, InstructionPointer
-from .enums import PlaybookExecutionType
+from .enums import LLMMessageRole, PlaybookExecutionType
 from .event_bus import EventBus
 from .execution_state import ExecutionState
 from .playbook import Playbook
@@ -113,24 +113,42 @@ class AIAgent(BaseAgent):
 
         # Add the call to the call stack
         first_step_line_number = playbook.first_step_line_number
-        self.state.call_stack.push(
-            CallStackFrame(
-                InstructionPointer(playbook.klass, "01", first_step_line_number),
-                langfuse_span=langfuse_span,
-            )
+        call_stack_frame = CallStackFrame(
+            InstructionPointer(playbook.klass, "01", first_step_line_number),
+            llm_messages=[],
+            langfuse_span=langfuse_span,
+        )
+        llm_message = []
+        if playbook.execution_type == PlaybookExecutionType.MARKDOWN:
+            llm_message.append("```md\n" + playbook.markdown + "\n```")
+
+        # Add a cached message whenever we add a stack frame
+        llm_message.append("Executing " + str(call))
+        call_stack_frame.add_cached_llm_message(
+            "\n\n".join(llm_message), role=LLMMessageRole.ASSISTANT
         )
 
+        self.state.call_stack.push(call_stack_frame)
+
         self.state.session_log.append(call)
+
+        self.state.variables.update({"$__": None})
 
         return playbook, call, langfuse_span
 
     async def _post_execute(
         self, call: PlaybookCall, result: Any, langfuse_span: Any
     ) -> None:
-        call_result = PlaybookCallResult(call, result)
+        execution_summary = self.state.variables.variables["$__"].value
+        call_result = PlaybookCallResult(call, result, execution_summary)
+        self.state.variables.variables["$__"].update(None)
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
+        if self.state.call_stack.peek() is not None:
+            self.state.call_stack.peek().add_uncached_llm_message(
+                call_result.to_log_full(), role=LLMMessageRole.ASSISTANT
+            )
         langfuse_span.update(output=result)
 
     async def execute_playbook(

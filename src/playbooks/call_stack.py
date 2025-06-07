@@ -1,5 +1,11 @@
 from typing import Any, Dict, List, Optional
 
+from playbooks.enums import LLMMessageRole
+from playbooks.utils.llm_helper import (
+    make_cached_llm_message,
+    make_uncached_llm_message,
+)
+
 from .event_bus import EventBus
 from .events import CallStackPopEvent, CallStackPushEvent, InstructionPointerEvent
 
@@ -50,9 +56,11 @@ class CallStackFrame:
     def __init__(
         self,
         instruction_pointer: InstructionPointer,
+        llm_messages: List[Dict[str, str]],
         langfuse_span: Optional[Any] = None,
     ):
         self.instruction_pointer = instruction_pointer
+        self.llm_messages = llm_messages
         self.langfuse_span = langfuse_span
 
     @property
@@ -70,8 +78,24 @@ class CallStackFrame:
             "langfuse_span": str(self.langfuse_span) if self.langfuse_span else None,
         }
 
+    def add_uncached_llm_message(
+        self, message: str, role: str = LLMMessageRole.ASSISTANT
+    ) -> None:
+        """Add a message to the call stack frame for the LLM."""
+        self.llm_messages.append(make_uncached_llm_message(message, role))
+
+    def add_cached_llm_message(
+        self, message: str, role: str = LLMMessageRole.ASSISTANT
+    ) -> None:
+        """Add a message to the call stack frame for the LLM."""
+        self.llm_messages.append(make_cached_llm_message(message, role))
+
     def __repr__(self) -> str:
         return str(self.instruction_pointer)
+
+    def get_llm_messages(self) -> List[Dict[str, str]]:
+        """Get the messages for the call stack frame for the LLM."""
+        return self.llm_messages
 
 
 class CallStack:
@@ -147,3 +171,10 @@ class CallStack:
             A list of string representations of instruction pointers.
         """
         return [frame.instruction_pointer.to_dict() for frame in self.frames]
+
+    def get_llm_messages(self) -> List[Dict[str, str]]:
+        """Get the messages for the call stack for the LLM."""
+        messages = []
+        for frame in self.frames:
+            messages.extend(frame.get_llm_messages())
+        return messages

@@ -3,6 +3,7 @@ from typing import List
 from playbooks.ai_agent import AIAgent
 from playbooks.config import LLMConfig
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
+from playbooks.enums import LLMMessageRole
 from playbooks.events import (
     LineExecutedEvent,
     PlaybookEndEvent,
@@ -50,7 +51,7 @@ class MarkdownPlaybookExecution:
 
         call = PlaybookCall(self.playbook.klass, args, kwargs)
 
-        instruction = f"Execute {str(call)}"
+        instruction = f"Execute {str(call)} from step 01"
         artifacts_to_load = []
         await self.debug_handler.handle_execution_start(
             self.agent.state.call_stack.peek(),
@@ -62,11 +63,15 @@ class MarkdownPlaybookExecution:
             llm_response = LLMResponse(
                 await self.make_llm_call(
                     instruction=instruction,
-                    agent_instructions=self.agent.description,
+                    agent_instructions="Remember: " + self.agent.description,
                     artifacts_to_load=artifacts_to_load,
                 ),
                 event_bus=self.agent.state.event_bus,
                 agent=self.agent,
+            )
+
+            self.agent.state.call_stack.peek().add_cached_llm_message(
+                llm_response.response, role=LLMMessageRole.ASSISTANT
             )
             # print(f"[EXECUTE] llm_response: {llm_response.response}")
 
