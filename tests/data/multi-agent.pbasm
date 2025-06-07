@@ -51,14 +51,20 @@ Simple greeting playbook for local use.
 - 01:QUE Say hello
 - 02:RET
 
-## public: GetCountryPopulation($country) -> float
+## GetCountryPopulation($country) -> float
+metadata:
+  public: true
+---
 Calculates and returns the population of a specified country using mathematical operations.
 ### Steps
 - 01:EXE $length:int = len($country)
 - 02:EXE $sqrt_length:float = math.sqrt($length)
 - 03:RET population of $country
 
-## public:GetCountrySecret($country) -> str
+## GetCountrySecret($country) -> str
+metadata:
+  public: true
+---
 Retrieves and returns unusual historical facts about a specified country.
 ### Triggers
 - T1:CND When you need to get a secret about a country

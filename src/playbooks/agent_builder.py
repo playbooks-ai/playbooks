@@ -242,7 +242,8 @@ class AgentBuilder:
         doc = inspect.getdoc(func)
         description = doc.split("\n")[0] if doc is not None else None
         triggers = getattr(func, "__triggers__", [])
-        public = getattr(func, "__public__", False)
+        metadata = getattr(func, "__metadata__", {})
+
         # If triggers are not prefixed with T1:BGN, T1:CND, etc., add T{i}:CND
         # Use regex to find if prefix is missing
         triggers = [
@@ -274,7 +275,7 @@ class AgentBuilder:
             notes=None,
             code=None,
             markdown=None,
-            public=public,
+            metadata=metadata,
             source_line_number=None,  # Python functions don't have markdown line numbers
         )
 
@@ -314,7 +315,7 @@ class AgentBuilder:
         description_parts = []
 
         for child in h1.get("children", []):
-            if child.get("type") == "paragraph":
+            if child.get("type") == "paragraph" or child.get("type") == "hr":
                 description_text = child.get("text", "").strip()
                 if description_text:
                     description_parts.append(description_text)

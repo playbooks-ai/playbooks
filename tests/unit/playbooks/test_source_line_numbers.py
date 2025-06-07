@@ -221,7 +221,7 @@ def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
 
     # Test CountryInfo playbooks
     playbook_names = ["LocalPB", "GetCountryPopulation", "GetCountrySecret"]
-    expected_line_numbers = [48, 54, 61]
+    expected_line_numbers = [48, 54, 64]
 
     for name, expected_line in zip(playbook_names, expected_line_numbers):
         assert name in country_info.playbooks
@@ -233,10 +233,10 @@ def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
 
     # Test triggers
     assert secret_playbook.triggers is not None
-    assert secret_playbook.triggers.source_line_number == 63
+    assert secret_playbook.triggers.source_line_number == 69
     assert len(secret_playbook.triggers.triggers) == 1
     secret_trigger = secret_playbook.triggers.triggers[0]
-    assert secret_trigger.source_line_number == 64
+    assert secret_trigger.source_line_number == 70
 
     # Test steps
     assert secret_playbook.step_collection is not None
@@ -244,7 +244,7 @@ def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
 
     secret_step = secret_playbook.step_collection.get_step("01")
     assert secret_step is not None
-    assert secret_step.source_line_number == 66
+    assert secret_step.source_line_number == 72
     assert secret_step.step_type == "RET"
 
     # Test GetCountryPopulation playbook
@@ -260,19 +260,19 @@ def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
     # - 03:RET population of $country
     step_01 = pop_playbook.step_collection.get_step("01")
     assert step_01 is not None
-    assert step_01.source_line_number == 57
+    assert step_01.source_line_number == 60
     assert step_01.step_type == "EXE"
     assert step_01.content == "$length:int = len($country)"
 
     step_02 = pop_playbook.step_collection.get_step("02")
     assert step_02 is not None
-    assert step_02.source_line_number == 58
+    assert step_02.source_line_number == 61
     assert step_02.step_type == "EXE"
     assert step_02.content == "$sqrt_length:float = math.sqrt($length)"
 
     step_03 = pop_playbook.step_collection.get_step("03")
     assert step_03 is not None
-    assert step_03.source_line_number == 59
+    assert step_03.source_line_number == 62
     assert step_03.step_type == "RET"
     assert step_03.content == "population of $country"
 
