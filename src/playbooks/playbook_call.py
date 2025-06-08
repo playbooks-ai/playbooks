@@ -2,6 +2,7 @@ import textwrap
 from typing import Any
 
 from playbooks.session_log import SessionLogItem
+from playbooks.utils.text_utils import simple_shorten
 
 
 class PlaybookCall(SessionLogItem):
@@ -29,7 +30,7 @@ class PlaybookCall(SessionLogItem):
         return str(self)
 
     def to_log_compact(self) -> str:
-        return textwrap.shorten(str(self), 30, placeholder="...")
+        return simple_shorten(str(self), 30, placeholder="...")
 
     def to_log_minimal(self) -> str:
         return self.playbook_klass + "()"

@@ -86,6 +86,23 @@ Compiled (assuming FuncA and FuncB are listed playbooks and $x is available at t
 04:YLD call
 ```
 
+### Pattern C: Calling public playbooks from another agent
+**When the playbook exists on the agent and is public** convert to a function call syntax
+```
+Raw: Get current weather for 98053 from the weather agent
+Compiled (assuming WeatherAgent exists with a GetCurrentWeather(zip) playbook):
+01:QUE $current_weather:dict = WeatherAgent.GetCurrentWeather(98053)
+02:YLD call
+```
+
+**When playbook is not known, e.g. the agent is an MCP server so list of playbooks will only be available at run time, or the playbook is not public**, keep instruction to be resolved at run time
+```
+Raw: Get current weather for 98053 from the weather agent
+Compiled (assuming WeatherAgent exists but playbooks are not listed):
+01:QUE Get $current_weather for 98053 from the WeatherAgent
+02:YLD call
+```
+
 ### Pattern C: User interaction
 Use Say() to show text to the user, and YLD user to wait for user input. Keep instructions instead of making a specific string, e.g. Say(Say hello to the user) instead of Say("Hello!")
 ```
@@ -340,7 +357,8 @@ Only consider cities in the United States.
 ## P1($name, $age)
 model: gpt-4o
 - Say hello $name
-- Save "greeting.txt" with summary "Greeting" and content "Hello $name"
+- Lookup $info for $name from Example agent
+- Save "greeting.txt" with summary "Greeting" and content "Hello $name, your info is $info"
 
 ## P2
 public: true
@@ -461,7 +479,9 @@ metadata:
 Says hello to the user
 ### Steps
 - 01:QUE Say hello $name
-- 02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name")
+- 02:QUE $info:dict = ExampleAgent.LookupInfo($name)
+- 03:YLD call
+- 02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info")
 - 03:RET
 
 ## P2

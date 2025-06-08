@@ -18,6 +18,7 @@ async def A(num: float) -> float:
 ### Triggers
 - When program starts
 ### Steps
+- Get Canada's secret
 - Tell user about Canada's secret
 - get population of India from the country info agent
 - return $num * population of India * 2
@@ -50,4 +51,12 @@ public: true
 ### Steps
 - Return an unusual historical fact about $country
 
+## Main
 
+### Triggers
+- At the beginning
+
+### Steps
+- $answer = FirstAgent.A(1024)
+- Tell user the $answer
+- End program

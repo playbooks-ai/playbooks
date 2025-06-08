@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from .agent_clients import InProcessPlaybooksAgentClient
 from .base_agent import BaseAgent
 from .call_stack import CallStackFrame, InstructionPointer
 from .enums import LLMMessageRole, PlaybookExecutionType
@@ -51,6 +52,8 @@ class AIAgent(BaseAgent):
         self.playbooks: Dict[str, Playbook] = playbooks or {}
         self.state = ExecutionState(event_bus)
         self.source_line_number = source_line_number
+        self.public_json = None
+        self.agent_clients = {}
         for playbook in self.playbooks.values():
             playbook.func.__globals__.update({"agent": self})
 
@@ -92,15 +95,20 @@ class AIAgent(BaseAgent):
     async def _pre_execute(
         self, playbook_klass: str, args: List[Any], kwargs: Dict[str, Any]
     ) -> tuple:
-        playbook = self.playbooks[playbook_klass]
         call = PlaybookCall(playbook_klass, args, kwargs)
+        playbook = self.playbooks.get(playbook_klass)
 
-        # Set up tracing
-        trace_str = call.to_log_compact()
-        if playbook.execution_type == PlaybookExecutionType.MARKDOWN:
-            trace_str = f"Markdown: {trace_str}"
+        trace_str = call.to_log_full()
+
+        if playbook:
+            # Set up tracing
+            if playbook.execution_type == PlaybookExecutionType.MARKDOWN:
+                trace_str = f"Markdown: {trace_str}"
+            else:
+                trace_str = f"Python: {trace_str}"
         else:
-            trace_str = f"Python: {trace_str}"
+            trace_str = f"External: {trace_str}"
+
         if self.state.call_stack.peek() is not None:
             langfuse_span = self.state.call_stack.peek().langfuse_span.span(
                 name=trace_str
@@ -108,18 +116,25 @@ class AIAgent(BaseAgent):
         else:
             langfuse_span = LangfuseHelper.instance().trace(name=trace_str)
 
-        input_log = self._build_input_log(playbook, call)
-        langfuse_span.update(input=input_log)
+        if playbook:
+            input_log = self._build_input_log(playbook, call)
+            langfuse_span.update(input=input_log)
+        else:
+            langfuse_span.update(input=trace_str)
 
         # Add the call to the call stack
-        first_step_line_number = playbook.first_step_line_number
+        if playbook:
+            first_step_line_number = playbook.first_step_line_number
+        else:
+            first_step_line_number = 0
+
         call_stack_frame = CallStackFrame(
-            InstructionPointer(playbook.klass, "01", first_step_line_number),
+            InstructionPointer(call.playbook_klass, "01", first_step_line_number),
             llm_messages=[],
             langfuse_span=langfuse_span,
         )
         llm_message = []
-        if playbook.execution_type == PlaybookExecutionType.MARKDOWN:
+        if playbook and playbook.execution_type == PlaybookExecutionType.MARKDOWN:
             llm_message.append("```md\n" + playbook.markdown + "\n```")
 
         # Add a cached message whenever we add a stack frame
@@ -141,7 +156,6 @@ class AIAgent(BaseAgent):
     ) -> None:
         execution_summary = self.state.variables.variables["$__"].value
         call_result = PlaybookCallResult(call, result, execution_summary)
-        self.state.variables.variables["$__"].update(None)
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
@@ -157,6 +171,7 @@ class AIAgent(BaseAgent):
         playbook, call, langfuse_span = await self._pre_execute(
             playbook_klass, args, kwargs
         )
+
         # Replace variable names with actual values
         for arg in args:
             if isinstance(arg, str) and arg.startswith("$"):
@@ -172,14 +187,38 @@ class AIAgent(BaseAgent):
                 if var_name in self.state.variables.variables:
                     kwargs[key] = self.state.variables.variables[var_name].value
 
-        try:
-            playbook.func.__globals__["agent"] = self
-            result = await playbook.func(*args, **kwargs)
-            await self._post_execute(call, result, langfuse_span)
-            return result
-        except Exception as e:
-            await self._post_execute(call, str(e), langfuse_span)
-            raise
+        # Execute local playbook in this agent
+        if playbook:
+            try:
+                playbook.func.__globals__["agent"] = self
+                result = await playbook.func(*args, **kwargs)
+                await self._post_execute(call, result, langfuse_span)
+                return result
+            except Exception as e:
+                await self._post_execute(call, str(e), langfuse_span)
+                raise
+
+        # Execute playbook in another agent
+        elif "." in playbook_klass:
+            agent_klass, playbook_klass = playbook_klass.split(".", maxsplit=1)
+            if agent_klass != self.klass:
+                other_agent = self.agent_clients.get(agent_klass)
+                try:
+                    if other_agent:
+                        retval = await other_agent.execute_playbook(
+                            playbook_klass, args, kwargs
+                        )
+                    await self._post_execute(call, retval, langfuse_span)
+                    return retval
+                except Exception as e:
+                    await self._post_execute(call, str(e), langfuse_span)
+                    raise
+            else:
+                raise ValueError(
+                    f"Agent {agent_klass} not found when making call {call}"
+                )
+        else:
+            raise ValueError(f"Playbook {playbook_klass} not found")
 
     def parse_instruction_pointer(self, step: str) -> InstructionPointer:
         """Parse an instruction pointer from a string in format "Playbook:LineNumber[:Extra]".
@@ -205,3 +244,73 @@ class AIAgent(BaseAgent):
             line_number,
             source_line_number,
         )
+
+    def trigger_instructions(
+        self, with_namespace: bool = False, public_only: bool = False
+    ) -> List[str]:
+        """Get trigger instructions for this agent."""
+        trigger_instructions = []
+        playbooks = self.playbooks.values()
+        if public_only:
+            playbooks = [playbook for playbook in playbooks if playbook.public]
+
+        for playbook in playbooks:
+            playbook_trigger_instructions = playbook.trigger_instructions(
+                namespace=self.klass if with_namespace else None
+            )
+            trigger_instructions.extend(playbook_trigger_instructions)
+
+        return trigger_instructions
+
+    def other_agents(self) -> List["AIAgent"]:
+        """Get all other agents in the program."""
+        return [
+            agent
+            for agent in self.program.agents
+            if agent.id != self.id and isinstance(agent, AIAgent)
+        ]
+
+    def all_trigger_instructions(self) -> List[str]:
+        """Get all trigger instructions for this agent and public only with namespace for other agents"""
+        trigger_instructions = self.trigger_instructions()
+
+        for agent in self.other_agents():
+            trigger_instructions.extend(
+                agent.trigger_instructions(with_namespace=True, public_only=True)
+            )
+
+        return trigger_instructions
+
+    def get_public_information(self) -> str:
+        """Get public information about this agent."""
+        """
+        Format:
+        # AgentName
+        Description
+        Public playbooks:
+        - `Playbook signature`: Playbook description
+        - `Playbook signature`: Playbook description
+        - ...
+        """
+        information = []
+        information.append(f"# {self.klass}")
+        information.append(self.description)
+        information.append("Public playbooks:")
+        for playbook in self.playbooks.values():
+            if playbook.public:
+                information.append(
+                    f"- `{self.klass}.{playbook.signature}`: {playbook.description}"
+                )
+        return "\n".join(information)
+
+    def other_agents_information(self) -> List[str]:
+        """Get public information about other agents in the program."""
+        information = []
+        for agent in self.other_agents():
+            information.append(agent.get_public_information())
+
+        return information
+
+    def set_up_agent_clients(self):
+        for agent in self.other_agents():
+            self.agent_clients[agent.klass] = InProcessPlaybooksAgentClient(agent)

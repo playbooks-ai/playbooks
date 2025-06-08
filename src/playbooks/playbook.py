@@ -37,8 +37,16 @@ class PlaybookTrigger:
 
     def __str__(self) -> str:
         """Return a string representation of the trigger."""
-        signature = self.playbook_signature.split(" ->")[0]
-        return f'- {self.trigger_description}, `Trigger["{self.playbook_klass}:{self.trigger_name}"]` by enqueuing `{signature}`'
+        return self.trigger_instruction()
+
+    def trigger_instruction(self, namespace: Optional[str] = None) -> str:
+        if not namespace:
+            namespace = ""
+        else:
+            namespace = namespace + "."
+
+        signature = namespace + self.playbook_signature.split(" ->")[0]
+        return f'- {self.trigger_description}, `Trigger["{namespace}{self.playbook_klass}:{self.trigger_name}"]` by enqueuing `{signature}`'
 
 
 class PlaybookTriggers:
@@ -413,14 +421,18 @@ class Playbook:
             return self.step_collection.get_next_step(line_number)
         return None
 
-    def trigger_instructions(self) -> List[str]:
+    def trigger_instructions(self, namespace: Optional[str] = None) -> List[str]:
         """Get the trigger instructions for the playbook.
 
         Returns:
             A list of trigger instruction strings, or an empty list if no triggers.
         """
+
         return (
-            [str(trigger) for trigger in self.triggers.triggers]
+            [
+                trigger.trigger_instruction(namespace)
+                for trigger in self.triggers.triggers
+            ]
             if self.triggers
             else []
         )

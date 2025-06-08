@@ -82,7 +82,7 @@ class LLMResponseLine:
         # e.g., `MyPlaybook(arg1, arg2, kwarg1="value")` or `Playbook(key1=$var1)`
         # or `MyPlaybook(10, "someval", kwarg1="value", kwarg2=$my_var)`
         playbook_call_matches = re.findall(
-            r"\`(?:.*\W*\=\W*)?([A-Za-z0-9_]+\(.*?\))\`", self.text
+            r"\`(?:.*\W*\=\W*)?([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\(.*?\))\`", self.text
         )
 
         for playbook_call in playbook_call_matches:
@@ -124,7 +124,7 @@ class LLMResponseLine:
             raise ValueError("Expected a playbook call")
 
         # Extract playbook name
-        playbook_name = tree.body.func.id
+        playbook_name = self._parse_playbook_name(tree.body)
 
         # Extract positional arguments
         args = []
@@ -160,6 +160,30 @@ class LLMResponseLine:
                 kwargs[keyword.arg] = ast.literal_eval(ast.unparse(keyword.value))
 
         return PlaybookCall(playbook_name, args, kwargs)
+
+    def _parse_playbook_name(self, call_node: ast.Call) -> str:
+        """Parse a playbook name.
+
+        This method parses a playbook name string into a dictionary containing the playbook name,
+        positional arguments, and keyword arguments, handling both literal values and variable
+        references (starting with $).
+        """
+        func = call_node.func
+
+        # Reconstruct the full function name from attribute chain
+        parts = []
+        current = func
+
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+
+        # Reverse to get correct order
+        parts.reverse()
+        return ".".join(parts)
 
     def _parse_arg_value(self, arg_value: str) -> Any:
         """Parse an argument value to the appropriate type.

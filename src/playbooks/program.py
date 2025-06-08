@@ -7,6 +7,7 @@ from typing import List
 import frontmatter
 
 from .agent_builder import AgentBuilder
+from .ai_agent import AIAgent
 from .debug.server import DebugServer
 from .event_bus import EventBus
 from .human_agent import HumanAgent
@@ -47,11 +48,25 @@ class Program(ProgramAgentsCommunicationMixin):
                 "Number of agents and public jsons must be the same. "
                 f"Got {len(self.agents)} agents and {len(self.public_jsons)} public jsons"
             )
-
         self.update_metadata_from_agent(self.agents[0])
 
         for i in range(len(self.agents)):
-            self.agents[i].public = self.public_jsons[i]
+            agent = self.agents[i]
+            agent.public_json = self.public_jsons[i]
+            if agent.public_json:
+                for playbook in agent.playbooks.values():
+                    if not playbook.description:
+                        playbook_jsons = list(
+                            filter(
+                                lambda x: x["name"] == playbook.klass,
+                                agent.public_json,
+                            )
+                        )
+                        if playbook_jsons:
+                            playbook.description = playbook_jsons[0].get(
+                                "description", ""
+                            )
+
         self.agents.append(HumanAgent("human", self.event_bus))
         self.agents_by_klass = {}
         self.agents_by_id = {}
@@ -61,6 +76,10 @@ class Program(ProgramAgentsCommunicationMixin):
             self.agents_by_klass[agent.klass].append(agent)
             self.agents_by_id[agent.id] = agent
             agent.program = self
+
+        for agent in self.agents:
+            if isinstance(agent, AIAgent):
+                agent.set_up_agent_clients()
 
     def _get_compiled_file_name(self) -> str:
         """Generate the compiled file name based on the first original file."""

@@ -238,6 +238,8 @@ class MarkdownPlaybookExecution:
             instruction=instruction,
             agent_instructions=agent_instructions,
             artifacts_to_load=artifacts_to_load,
+            other_agents_information=self.agent.other_agents_information(),
+            trigger_instructions=self.agent.all_trigger_instructions(),
         )
 
         chunks = [
