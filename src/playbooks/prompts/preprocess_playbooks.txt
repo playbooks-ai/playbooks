@@ -103,16 +103,38 @@ Compiled (assuming WeatherAgent exists but playbooks are not listed):
 02:YLD call
 ```
 
-### Pattern C: User interaction
-Use Say() to show text to the user, and YLD user to wait for user input. Keep instructions instead of making a specific string, e.g. Say(Say hello to the user) instead of Say("Hello!")
+### Pattern D: Saying something to user
+Queue Say() to show text to the user. Keep instructions instead of making a specific string, e.g. Say(Say hello to the user) instead of Say("Hello!")
+```
+Raw: Say hello to the user
+Compiled:
+01:QUE Say(Say hello to the user)
+```
+
+### Pattern E: Having a multi-turn conversation with the user
+Queue Say() with an instruction to continue conversation unless condition to move on it satisfied
+```
+Raw: Welcome the user and do some ice breaking chitchat for up to 4 turns
+Compiled:
+01:QUE Say(Welcome the user)
+02:CND While doing ice breaking chitchat for up to 4 turns
+  01.01:YLD user
+  01.02:CHK if continue chitchat
+    01.02.01:QUE Say(respond to user)
+    01.02.02:JMP 02
+```
+
+### Pattern F: Asking user for information
+Use Say() to show text to the user with a "unless no need or ok to give up" instruction, YLD user to wait for user input and JMP to check if we go the information.
 ```
 Raw: Ask user for their name
 Compiled:
-01:QUE Say(Ask user for their $name:str)
-02:YLD user
+01:QUE Say(Ask user for their $name:str) unless no need or ok to give up
+  01.01:YLD user
+  01.02:JMP 01
 ```
 
-### Pattern D: Batch multiple QUE calls
+### Pattern G: Batch multiple QUE calls
 When QUE calls don't depend on results of previous calls, batch them together. Use temporary variable to store results of each call if necessary.
 ```
 Raw: load weather for the cities
@@ -153,8 +175,10 @@ Split when instruction contains multiple actions that cannot or should not be ex
 ```
 Raw: Tell user the price and if they want it, add to cart
 Compiled:
-01:QUE Say(Tell user the price and ask if they want to purchase)
-02:YLD user
+01:QUE Say(Tell user the price)
+02:QUE Say(Ask if user wants to purchase) unless no need or ok to give up
+  02.01:YLD user
+  02.02:JMP 02
 03:CND If user wants to purchase
   03.01:QUE Add to cart
   03.02:YLD call
@@ -407,20 +431,23 @@ Main interaction loop that guides user conversations through a friendly informat
 ### Triggers
 - T1:BGN When program starts
 ### Steps
-- 01:QUE Ask user for $name:str and $city:str they are from
-- 02:YLD user
-- 03:CHK N1
-- 04:QUE Greet the user and give an interesting fact about the city
+- 01:QUE Say(Ask user for their $name:str and $city:str they are from) unless no need or ok to give up
+  - 01.01:YLD user
+  - 01.02:JMP 01
+- 02:CHK N1
+- 03:QUE Say(Greet the user and give an interesting fact about the city)
+- 04:YLD call
 - 05:QUE $weather:dict = GetWeather(city=$city)
 - 06:YLD call
-- 07:QUE Tell user what the $weather is like
-- 08:EXE List 5 $cities:list near $city
-- 09:TNK Think deeply about the 5 $cities and if we should ask user if they have visited all 5 $cities
-- 10:QUE Ask user if they have visited all 5 $cities
-- 11:YLD user
-- 12:RET
+- 07:QUE Say(Tell user what the weather is like)
+- 08:YLD call
+- 09:EXE List 5 $cities:list near $city
+- 10:TNK Think deeply about the 5 cities and if we should ask user if they have visited all 5 cities
+- 11:QUE Say(Ask user if they have visited all 5 cities) unless no need or ok to give up
+  - 11.01:YLD user
+  - 11.02:JMP 11
 ### Notes
-- N1 If $name is a Jack Sparrow, start speaking in pirate speak
+- N1 If name is a Jack Sparrow, start speaking in pirate speak
 
 ## ValidateCity($city) -> None
 metadata:
@@ -439,10 +466,11 @@ Only consider cities in the United States.
 ### Triggers
 - T1:CND When user provides their city
 ### Steps
-- 01:CND While $city is not a US city or unclear what state $city is in
-  - 01.01:QUE Ask user to specify another $city or disambiguate which state $city is in
-  - 01.02:YLD user
-  - 01.02:JMP 01 to check again
+- 01:CND While the city is not a US city or unclear which state the city is from
+  - 01.01:QUE Say(Ask user to specify a US city or disambiguate) unless no need or ok to give up
+    - 01.01.01:YLD user
+    - 01.01.02:JMP 01.01
+  - 01.02:JMP 01
 - 02:RET return $city in "Austin, TX" format
 
 ```public.json
@@ -472,7 +500,7 @@ Only consider cities in the United States.
 # SecondAgent
 This is a second agent that can say hello and goodbye to the user
 
-## P1($name, $age)
+## P1($name:str, $age:int)
 metadata:
   model: gpt-4o
 ---
@@ -481,8 +509,8 @@ Says hello to the user
 - 01:QUE Say hello $name
 - 02:QUE $info:dict = ExampleAgent.LookupInfo($name)
 - 03:YLD call
-- 02:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info")
-- 03:RET
+- 04:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info")
+- 05:YLD call
 
 ## P2
 metadata:
@@ -493,7 +521,7 @@ Says goodbye to the user
 - 01:QUE LoadArtifact("greeting.txt")
 - 02:YLD call
 - 03:QUE Say(Artifact[greeting.txt])
-- 04:RET
+- 04:YLD call
 
 ```public.json
 [
@@ -507,6 +535,8 @@ Says goodbye to the user
 **Input:**
 
 {{PLAYBOOKS}}
+
+====
 
 Remember: Follow patterns exactly, output only the compiled result. Follow the output contract exactly; deviations break execution.
 
