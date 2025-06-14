@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Type
 from playbooks.event_bus import EventBus
 from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
 
-from .ai_agent import AIAgent
+from .agents import AIAgent
 from .config import LLMConfig
 from .exceptions import AgentConfigurationError
 from .playbook import Playbook, PlaybookExecutionType, PlaybookTriggers

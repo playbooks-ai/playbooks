@@ -1,4 +1,4 @@
-from .base_agent import BaseAgent
+from .agents import BaseAgent
 
 
 class SystemAgent(BaseAgent):

@@ -1,4 +1,4 @@
-from playbooks.ai_agent import AIAgent
+from playbooks.agents import AIAgent
 from playbooks.event_bus import EventBus
 from playbooks.llm_response_line import LLMResponseLine
 

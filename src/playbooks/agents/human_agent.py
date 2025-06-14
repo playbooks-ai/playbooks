@@ -1,6 +1,6 @@
-from playbooks.base_agent import BaseAgent
-from playbooks.event_bus import EventBus
-from playbooks.execution_state import ExecutionState
+from ..event_bus import EventBus
+from ..execution_state import ExecutionState
+from .base_agent import BaseAgent
 
 
 class HumanAgent(BaseAgent):

@@ -1,6 +1,6 @@
 from typing import List
 
-from playbooks.ai_agent import AIAgent
+from playbooks.agents import AIAgent
 from playbooks.config import LLMConfig
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
 from playbooks.enums import LLMMessageRole

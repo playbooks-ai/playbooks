@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from playbooks.ai_agent import AIAgent
+    from playbooks.agents import AIAgent
 
 
 class InProcessPlaybooksAgentClient:

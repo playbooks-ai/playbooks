@@ -7,10 +7,9 @@ from typing import List
 import frontmatter
 
 from .agent_builder import AgentBuilder
-from .ai_agent import AIAgent
+from .agents import AIAgent, HumanAgent
 from .debug.server import DebugServer
 from .event_bus import EventBus
-from .human_agent import HumanAgent
 from .markdown_playbook_execution import ExecutionFinished
 from .utils.markdown_to_ast import markdown_to_ast
 

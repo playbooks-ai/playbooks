@@ -2,7 +2,7 @@ import ast
 import re
 from typing import Any, List
 
-from playbooks.ai_agent import AIAgent
+from playbooks.agents import AIAgent
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
