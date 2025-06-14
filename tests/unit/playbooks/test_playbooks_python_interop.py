@@ -1,7 +1,7 @@
 import pytest
 
 from playbooks import Playbooks
-from playbooks.enums import PlaybookExecutionType
+from playbooks.playbook import MarkdownPlaybook, PythonPlaybook
 
 
 @pytest.fixture
@@ -36,9 +36,9 @@ def test_load_agents(playbooks):
     agent = playbooks.program.agents[0]
     assert len(agent.playbooks) >= 10
     assert "X" in agent.playbooks
-    assert agent.playbooks["X"].execution_type == PlaybookExecutionType.MARKDOWN
+    assert isinstance(agent.playbooks["X"], MarkdownPlaybook)
     assert "A" in agent.playbooks
-    assert agent.playbooks["A"].execution_type == PlaybookExecutionType.CODE
+    assert isinstance(agent.playbooks["A"], PythonPlaybook)
 
 
 @pytest.mark.asyncio

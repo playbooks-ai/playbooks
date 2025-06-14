@@ -11,7 +11,7 @@ from playbooks.events import (
 )
 from playbooks.interpreter_prompt import InterpreterPrompt
 from playbooks.llm_response import LLMResponse
-from playbooks.playbook import Playbook
+from playbooks.playbook import MarkdownPlaybook
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel, SessionLogItemMessage
 from playbooks.utils.llm_helper import get_completion
@@ -24,9 +24,9 @@ class ExecutionFinished(Exception):
 
 
 class MarkdownPlaybookExecution:
-    def __init__(self, agent: AIAgent, playbook_klass: str, llm_config: LLMConfig):
+    def __init__(self, agent: AIAgent, playbook_name: str, llm_config: LLMConfig):
         self.agent: AIAgent = agent
-        self.playbook: Playbook = agent.playbooks[playbook_klass]
+        self.playbook: MarkdownPlaybook = agent.playbooks[playbook_name]
         self.llm_config: LLMConfig = llm_config
 
         # Initialize debug handler
@@ -46,10 +46,10 @@ class MarkdownPlaybookExecution:
 
         # Publish playbook start event
         self.agent.state.event_bus.publish(
-            PlaybookStartEvent(playbook=self.playbook.klass)
+            PlaybookStartEvent(playbook=self.playbook.name)
         )
 
-        call = PlaybookCall(self.playbook.klass, args, kwargs)
+        call = PlaybookCall(self.playbook.name, args, kwargs)
 
         instruction = f"Execute {str(call)} from step 01"
         artifacts_to_load = []
@@ -214,7 +214,7 @@ class MarkdownPlaybookExecution:
 
         self.agent.state.event_bus.publish(
             PlaybookEndEvent(
-                playbook=self.playbook.klass,
+                playbook=self.playbook.name,
                 return_value=return_value,
                 call_stack_depth=call_stack_depth,
             )

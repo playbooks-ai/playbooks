@@ -3,8 +3,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from playbooks.utils.parse_utils import parse_metadata_and_description
 
-from .enums import PlaybookExecutionType
-from .playbook_step import PlaybookStep, PlaybookStepCollection
+from ..playbook_step import PlaybookStep, PlaybookStepCollection
+from .local import LocalPlaybook
 
 
 class PlaybookTrigger:
@@ -88,17 +88,15 @@ class PlaybookTriggers:
         ]
 
 
-class Playbook:
-    """Represents a playbook that can be executed by an agent.
+class MarkdownPlaybook(LocalPlaybook):
+    """Represents a markdown playbook that can be executed by an agent.
 
-    Playbooks can be of two types:
-    - MD: Markdown playbooks written in the step format.
-    - PYTHON: Python playbooks written in Python code.
+    Markdown playbooks are written in the step format and parsed from markdown files.
     """
 
     @classmethod
-    def from_h2(cls, h2: Dict[str, Any]) -> "Playbook":
-        """Create a Playbook from an H2 AST node.
+    def from_h2(cls, h2: Dict[str, Any]) -> "MarkdownPlaybook":
+        """Create a MarkdownPlaybook from an H2 AST node.
 
         Args:
             h2: Dictionary representing an H2 AST node
@@ -170,7 +168,7 @@ class Playbook:
         signature: str,
         description: Optional[str],
         h3s: List[Dict[str, Any]],
-    ) -> "Playbook":
+    ) -> "MarkdownPlaybook":
         """Create a markdown (MD) type playbook.
 
         Args:
@@ -192,7 +190,6 @@ class Playbook:
 
         return cls(
             klass=klass,
-            execution_type=PlaybookExecutionType.MARKDOWN,
             signature=signature,
             description=description,
             triggers=triggers,
@@ -318,7 +315,6 @@ class Playbook:
     def __init__(
         self,
         klass: str,
-        execution_type: PlaybookExecutionType,
         signature: str,
         description: Optional[str],
         triggers: Optional[PlaybookTriggers],
@@ -331,11 +327,10 @@ class Playbook:
         metadata: Optional[Dict[str, Any]] = None,
         source_line_number: Optional[int] = None,
     ):
-        """Initialize a Playbook.
+        """Initialize a MarkdownPlaybook.
 
         Args:
             klass: The class name of the playbook.
-            execution_type: The execution type (MD or PYTHON).
             signature: The signature of the playbook function.
             description: The description of the playbook.
             triggers: The triggers for the playbook.
@@ -349,17 +344,23 @@ class Playbook:
             source_line_number: The line number in the source markdown where this
                 playbook is defined.
         """
-        self.klass = klass
-        self.execution_type = execution_type
-        self.signature = signature
-
         # Parse metadata and description, merging with provided metadata
         parsed_metadata, parsed_description = parse_metadata_and_description(
             description or ""
         )
         self.metadata = {**(metadata or {}), **parsed_metadata}
-        self.description = parsed_description or description
+        final_description = parsed_description or description
 
+        # Initialize parent with the new interface
+        super().__init__(
+            name=klass,
+            description=final_description,
+            agent_name=None,  # Will be set by the agent
+        )
+
+        # Keep existing attributes for backward compatibility
+        self.klass = klass
+        self.signature = signature
         self.triggers = triggers
         self.steps = steps
         self.notes = notes
@@ -368,6 +369,43 @@ class Playbook:
         self.markdown = markdown
         self.step_collection = step_collection
         self.source_line_number = source_line_number
+
+    async def _execute_impl(self, *args, **kwargs) -> Any:
+        """Execute the markdown playbook using the compiled function.
+
+        Args:
+            *args: Positional arguments for the playbook
+            **kwargs: Keyword arguments for the playbook
+
+        Returns:
+            The result of executing the playbook function
+        """
+        if not self.func:
+            raise ValueError(f"Playbook {self.name} has no executable function")
+
+        # Execute the compiled function
+        return await self.func(*args, **kwargs)
+
+    def get_parameters(self) -> Dict[str, Any]:
+        """Get the parameters schema for this playbook.
+
+        Returns:
+            A dictionary describing the expected parameters based on the signature
+        """
+        # For now, return a basic schema based on the signature
+        # This could be enhanced to parse the actual signature and extract parameter types
+        return {
+            "signature": self.signature,
+            "description": f"Parameters for {self.name} playbook",
+        }
+
+    def get_description(self) -> str:
+        """Get a human-readable description of this playbook.
+
+        Returns:
+            The description of the playbook
+        """
+        return self.description or self.name
 
     @property
     def public(self) -> bool:
@@ -439,7 +477,7 @@ class Playbook:
 
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""
-        return f"Playbook({self.klass})"
+        return f"MarkdownPlaybook({self.klass})"
 
     def __str__(self) -> str:
         """Return the markdown representation of the playbook."""

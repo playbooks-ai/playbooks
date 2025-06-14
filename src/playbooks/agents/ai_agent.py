@@ -2,10 +2,10 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..agent_clients import InProcessPlaybooksAgentClient
 from ..call_stack import CallStackFrame, InstructionPointer
-from ..enums import LLMMessageRole, PlaybookExecutionType
+from ..enums import LLMMessageRole
 from ..event_bus import EventBus
 from ..execution_state import ExecutionState
-from ..playbook import Playbook
+from ..playbook import MarkdownPlaybook, Playbook, PythonPlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.parse_utils import parse_metadata_and_description
@@ -55,20 +55,21 @@ class AIAgent(BaseAgent):
         self.public_json = None
         self.agent_clients = {}
         for playbook in self.playbooks.values():
-            playbook.func.__globals__.update({"agent": self})
+            if hasattr(playbook, "func") and playbook.func:
+                playbook.func.__globals__.update({"agent": self})
 
     async def begin(self):
         # Find playbooks with a BGN trigger and execute them
         playbooks_to_execute = []
         for playbook in self.playbooks.values():
-            if playbook.triggers:
+            if hasattr(playbook, "triggers") and playbook.triggers:
                 for trigger in playbook.triggers.triggers:
                     if trigger.is_begin:
                         playbooks_to_execute.append(playbook)
 
         # TODO: execute the playbooks in parallel
         for playbook in playbooks_to_execute:
-            await self.execute_playbook(playbook.klass)
+            await self.execute_playbook(playbook.name)
 
     def _build_input_log(self, playbook: Playbook, call: PlaybookCall) -> str:
         """Build the input log string for Langfuse tracing.
@@ -84,27 +85,29 @@ class AIAgent(BaseAgent):
         log_parts.append(str(self.state.call_stack))
         log_parts.append(str(self.state.variables))
         log_parts.append("Session log: \n" + str(self.state.session_log))
-        if playbook.execution_type == PlaybookExecutionType.MARKDOWN:
+
+        if isinstance(playbook, MarkdownPlaybook):
             log_parts.append(playbook.markdown)
-        else:
-            log_parts.append(playbook.code)
+        elif isinstance(playbook, PythonPlaybook):
+            log_parts.append(playbook.code or f"Python function: {playbook.name}")
+
         log_parts.append(str(call))
 
         return "\n\n".join(log_parts)
 
     async def _pre_execute(
-        self, playbook_klass: str, args: List[Any], kwargs: Dict[str, Any]
+        self, playbook_name: str, args: List[Any], kwargs: Dict[str, Any]
     ) -> tuple:
-        call = PlaybookCall(playbook_klass, args, kwargs)
-        playbook = self.playbooks.get(playbook_klass)
+        call = PlaybookCall(playbook_name, args, kwargs)
+        playbook = self.playbooks.get(playbook_name)
 
         trace_str = call.to_log_full()
 
         if playbook:
             # Set up tracing
-            if playbook.execution_type == PlaybookExecutionType.MARKDOWN:
+            if isinstance(playbook, MarkdownPlaybook):
                 trace_str = f"Markdown: {trace_str}"
-            else:
+            elif isinstance(playbook, PythonPlaybook):
                 trace_str = f"Python: {trace_str}"
         else:
             trace_str = f"External: {trace_str}"
@@ -124,7 +127,10 @@ class AIAgent(BaseAgent):
 
         # Add the call to the call stack
         if playbook:
-            first_step_line_number = playbook.first_step_line_number
+            # Get first step line number if available (for MarkdownPlaybook)
+            first_step_line_number = (
+                getattr(playbook, "first_step_line_number", None) or 0
+            )
         else:
             first_step_line_number = 0
 
@@ -134,7 +140,7 @@ class AIAgent(BaseAgent):
             langfuse_span=langfuse_span,
         )
         llm_message = []
-        if playbook and playbook.execution_type == PlaybookExecutionType.MARKDOWN:
+        if playbook and isinstance(playbook, MarkdownPlaybook):
             llm_message.append("```md\n" + playbook.markdown + "\n```")
 
         # Add a cached message whenever we add a stack frame
@@ -166,10 +172,10 @@ class AIAgent(BaseAgent):
         langfuse_span.update(output=result)
 
     async def execute_playbook(
-        self, playbook_klass: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
+        self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> Any:
         playbook, call, langfuse_span = await self._pre_execute(
-            playbook_klass, args, kwargs
+            playbook_name, args, kwargs
         )
 
         # Replace variable names with actual values
@@ -190,8 +196,12 @@ class AIAgent(BaseAgent):
         # Execute local playbook in this agent
         if playbook:
             try:
-                playbook.func.__globals__["agent"] = self
-                result = await playbook.func(*args, **kwargs)
+                # Set agent reference for playbooks that need it
+                if hasattr(playbook, "func") and playbook.func:
+                    playbook.func.__globals__["agent"] = self
+
+                # Use the new execute interface
+                result = await playbook.execute(*args, **kwargs)
                 await self._post_execute(call, result, langfuse_span)
                 return result
             except Exception as e:
@@ -199,14 +209,14 @@ class AIAgent(BaseAgent):
                 raise
 
         # Execute playbook in another agent
-        elif "." in playbook_klass:
-            agent_klass, playbook_klass = playbook_klass.split(".", maxsplit=1)
+        elif "." in playbook_name:
+            agent_klass, playbook_name = playbook_name.split(".", maxsplit=1)
             if agent_klass != self.klass:
                 other_agent = self.agent_clients.get(agent_klass)
                 try:
                     if other_agent:
                         retval = await other_agent.execute_playbook(
-                            playbook_klass, args, kwargs
+                            playbook_name, args, kwargs
                         )
                     await self._post_execute(call, retval, langfuse_span)
                     return retval
@@ -218,7 +228,7 @@ class AIAgent(BaseAgent):
                     f"Agent {agent_klass} not found when making call {call}"
                 )
         else:
-            raise ValueError(f"Playbook {playbook_klass} not found")
+            raise ValueError(f"Playbook {playbook_name} not found")
 
     def parse_instruction_pointer(self, step: str) -> InstructionPointer:
         """Parse an instruction pointer from a string in format "Playbook:LineNumber[:Extra]".
@@ -230,17 +240,23 @@ class AIAgent(BaseAgent):
             An InstructionPointer object.
         """
         parts = step.split(":")
-        playbook_klass = parts[0]
+        playbook_name = parts[0]
         line_number = parts[1] if len(parts) > 1 else "01"
 
-        playbook = self.playbooks[playbook_klass]
-        playbook_step = playbook.step_collection.get_step(line_number)
-        if playbook_step:
-            source_line_number = playbook_step.source_line_number
+        playbook = self.playbooks[playbook_name]
+
+        # Only MarkdownPlaybook has step_collection
+        if isinstance(playbook, MarkdownPlaybook) and playbook.step_collection:
+            playbook_step = playbook.step_collection.get_step(line_number)
+            if playbook_step:
+                source_line_number = playbook_step.source_line_number
+            else:
+                source_line_number = playbook.first_step_line_number
         else:
-            source_line_number = playbook.first_step_line_number
+            source_line_number = 0
+
         return InstructionPointer(
-            playbook_klass,
+            playbook_name,
             line_number,
             source_line_number,
         )
@@ -255,10 +271,12 @@ class AIAgent(BaseAgent):
             playbooks = [playbook for playbook in playbooks if playbook.public]
 
         for playbook in playbooks:
-            playbook_trigger_instructions = playbook.trigger_instructions(
-                namespace=self.klass if with_namespace else None
-            )
-            trigger_instructions.extend(playbook_trigger_instructions)
+            # Only get trigger instructions if the playbook has them
+            if hasattr(playbook, "trigger_instructions"):
+                playbook_trigger_instructions = playbook.trigger_instructions(
+                    namespace=self.klass if with_namespace else None
+                )
+                trigger_instructions.extend(playbook_trigger_instructions)
 
         return trigger_instructions
 
@@ -298,8 +316,9 @@ class AIAgent(BaseAgent):
         information.append("Public playbooks:")
         for playbook in self.playbooks.values():
             if playbook.public:
+                signature = getattr(playbook, "signature", playbook.name)
                 information.append(
-                    f"- `{self.klass}.{playbook.signature}`: {playbook.description}"
+                    f"- `{self.klass}.{signature}`: {playbook.description}"
                 )
         return "\n".join(information)
 
@@ -314,3 +333,27 @@ class AIAgent(BaseAgent):
     def set_up_agent_clients(self):
         for agent in self.other_agents():
             self.agent_clients[agent.klass] = InProcessPlaybooksAgentClient(agent)
+
+    @property
+    def public_playbooks(self) -> List[Dict[str, Any]]:
+        """Get a list of public playbooks for this agent.
+
+        Returns:
+            A list of dictionaries containing public playbook information
+        """
+        public_playbooks = []
+        for playbook in self.playbooks.values():
+            if playbook.public:
+                playbook_info = {
+                    "name": playbook.name,
+                }
+
+                # Add triggers if they exist
+                if hasattr(playbook, "triggers") and playbook.triggers:
+                    playbook_info["triggers"] = [
+                        trigger.trigger for trigger in playbook.triggers.triggers
+                    ]
+
+                public_playbooks.append(playbook_info)
+
+        return public_playbooks

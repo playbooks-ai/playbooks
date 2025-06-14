@@ -10,7 +10,7 @@ from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
 from .agents import AIAgent
 from .config import LLMConfig
 from .exceptions import AgentConfigurationError
-from .playbook import Playbook, PlaybookExecutionType, PlaybookTriggers
+from .playbook import MarkdownPlaybook, PlaybookTriggers, PythonPlaybook
 from .playbook_decorator import playbook_decorator
 from .utils.markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
 
@@ -91,10 +91,10 @@ class AgentBuilder:
 
     def _process_markdown_playbooks(self, h1: Dict) -> None:
         """Process H2 sections in the AST and extract markdown playbooks."""
-        for child in h1.get("children", []):
+        for child in h1["children"]:
             if child.get("type") == "h2":
-                playbook = Playbook.from_h2(child)
-                self.playbooks[playbook.klass] = playbook
+                playbook = MarkdownPlaybook.from_h2(child)
+                self.playbooks[playbook.name] = playbook
                 wrapper = self.create_markdown_playbook_python_wrapper(playbook)
                 playbook.func = wrapper
                 playbook.func.__globals__.update(self.agent_python_namespace)
@@ -102,12 +102,12 @@ class AgentBuilder:
                 def create_call_through_agent(agent_python_namespace, playbook):
                     def call_through_agent(*args, **kwargs):
                         return agent_python_namespace["agent"].execute_playbook(
-                            playbook.klass, args, kwargs
+                            playbook.name, args, kwargs
                         )
 
                     return call_through_agent
 
-                self.agent_python_namespace[playbook.klass] = create_call_through_agent(
+                self.agent_python_namespace[playbook.name] = create_call_through_agent(
                     self.agent_python_namespace, playbook
                 )
 
@@ -150,18 +150,15 @@ class AgentBuilder:
             },
         )
 
-    def playbooks_from_code_block(
-        self,
-        code_block: str,
-    ) -> Dict[str, Playbook]:
+    def playbooks_from_code_block(self, code_block: str) -> Dict[str, PythonPlaybook]:
         """
         Create playbooks from a code block.
 
         Args:
-            code_block: Python code block string
+            code_block: Python code containing @playbook decorated functions
 
         Returns:
-            Dict[str, Playbook]: Discovered playbooks
+            Dict[str, PythonPlaybook]: Discovered playbooks
         """
         # Set up the execution environment
         existing_keys = list(self.agent_python_namespace.keys())
@@ -185,7 +182,7 @@ class AgentBuilder:
 
         # Add function code to playbooks
         for playbook in playbooks.values():
-            playbook.code = function_code[playbook.klass]
+            playbook.code = function_code[playbook.name]
 
         return playbooks
 
@@ -203,8 +200,8 @@ class AgentBuilder:
         return environment
 
     def _discover_playbook_functions(
-        self, original_keys: List[str]
-    ) -> Dict[str, Playbook]:
+        self, existing_keys: List[str]
+    ) -> Dict[str, PythonPlaybook]:
         """Discover playbook-decorated functions in the namespace."""
         playbooks = {}
         wrappers = {}
@@ -212,7 +209,7 @@ class AgentBuilder:
         for obj_name, obj in self.agent_python_namespace.items():
             if (
                 isinstance(obj, types.FunctionType)
-                and obj_name not in original_keys
+                and obj_name not in existing_keys
                 and getattr(obj, "__is_playbook__", False)
             ):
                 # Create playbook from decorated function
@@ -221,7 +218,7 @@ class AgentBuilder:
                 def create_call_through_agent(agent_python_namespace, playbook):
                     def call_through_agent(*args, **kwargs):
                         return agent_python_namespace["agent"].execute_playbook(
-                            playbook.klass, args, kwargs
+                            playbook.name, args, kwargs
                         )
 
                     return call_through_agent
@@ -235,8 +232,8 @@ class AgentBuilder:
         return playbooks
 
     @staticmethod
-    def _create_playbook_from_function(func: Callable) -> Playbook:
-        """Create a Playbook object from a decorated function."""
+    def _create_playbook_from_function(func: Callable) -> PythonPlaybook:
+        """Create a PythonPlaybook object from a decorated function."""
         sig = inspect.signature(func)
         signature = func.__name__ + str(sig)
         doc = inspect.getdoc(func)
@@ -264,23 +261,17 @@ class AgentBuilder:
         else:
             triggers = None
 
-        return Playbook(
-            klass=func.__name__,
-            execution_type=PlaybookExecutionType.CODE,
-            signature=signature,
-            triggers=triggers,
+        return PythonPlaybook(
+            name=func.__name__,
             func=func,
+            signature=signature,
             description=description,
-            steps=None,
-            notes=None,
-            code=None,
-            markdown=None,
+            triggers=triggers,
             metadata=metadata,
-            source_line_number=None,  # Python functions don't have markdown line numbers
         )
 
     @staticmethod
-    def create_markdown_playbook_python_wrapper(playbook: Playbook) -> Callable:
+    def create_markdown_playbook_python_wrapper(playbook: MarkdownPlaybook) -> Callable:
         """
         Create an async python function with the markdown playbook's name and
         inject the function into the agent_python_namespace.
@@ -296,7 +287,7 @@ class AgentBuilder:
         async def wrapper(*args, **kwargs):
             # TODO: Implement actual wrapper logic to call markdown playbooks
             agent = playbook.func.__globals__["agent"]
-            execution = MarkdownPlaybookExecution(agent, playbook.klass, LLMConfig())
+            execution = MarkdownPlaybookExecution(agent, playbook.name, LLMConfig())
             return await execution.execute(*args, **kwargs)
 
         return wrapper

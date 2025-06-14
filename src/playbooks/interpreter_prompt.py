@@ -20,7 +20,7 @@ class InterpreterPrompt:
 
     def __init__(
         self,
-        state: ExecutionState,
+        execution_state: ExecutionState,
         playbooks: Dict[str, Playbook],
         current_playbook: Optional[Playbook],
         instruction: str,
@@ -33,14 +33,14 @@ class InterpreterPrompt:
         Initializes the InterpreterPrompt.
 
         Args:
-            state: The current execution state.
+            execution_state: The current execution state.
             playbooks: A dictionary of available playbooks.
             current_playbook: The currently executing playbook, if any.
             instruction: The user's latest instruction.
             agent_instructions: General instructions for the agent.
             artifacts_to_load: List of artifact names to load.
         """
-        self.state = state
+        self.execution_state = execution_state
         self.playbooks = playbooks
         self.current_playbook = current_playbook
         self.instruction = instruction
@@ -102,9 +102,9 @@ class InterpreterPrompt:
             print("Error: Prompt template file not found!")
             return "Error: Prompt template missing."
 
-        initial_state = json.dumps(self.state.to_dict(), indent=2)
+        initial_state = json.dumps(self.execution_state.to_dict(), indent=2)
 
-        # session_log_str = str(self.state.session_log)
+        # session_log_str = str(self.execution_state.session_log)
 
         # prompt = prompt_template.replace("{{TRIGGERS}}", trigger_instructions_str)
         # prompt = prompt.replace(
@@ -135,7 +135,7 @@ class InterpreterPrompt:
         if trigger_instructions_message:
             messages.append(trigger_instructions_message)
 
-        messages.extend(self.state.call_stack.get_llm_messages())
+        messages.extend(self.execution_state.call_stack.get_llm_messages())
         # messages.extend(self._get_artifact_messages())
         messages.append(prompt_messages[1])
 
@@ -145,7 +145,7 @@ class InterpreterPrompt:
         """Generates messages for the artifacts to load."""
         artifact_messages = []
         for artifact in self.artifacts_to_load:
-            artifact = self.state.artifacts[artifact]
+            artifact = self.execution_state.artifacts[artifact]
             artifact_message = f"Artifact[{artifact.name}]\n\nSummary: {artifact.summary}\n\nContent: {artifact.content}"
             artifact_messages.append(
                 make_uncached_llm_message(artifact_message), LLMMessageRole.ASSISTANT
