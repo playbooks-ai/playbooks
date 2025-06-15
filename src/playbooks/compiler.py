@@ -156,6 +156,6 @@ class Compiler:
 
         processed_content = next(response)
         langfuse_span.update(output=processed_content)
-        console.print("[dim pink]Compiled playbook content[/dim pink]")
+        console.print("[dim pink]Compiled playbooks program[/dim pink]")
 
         return processed_content

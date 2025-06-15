@@ -186,7 +186,7 @@ class AIAgent(BaseAgent, ABC):
             info_parts.append("Public Playbooks:")
             for playbook in public_playbooks:
                 info_parts.append(
-                    f"  - {self.klass}.{playbook['name']}: {playbook['description']}"
+                    f"  - {self.klass}.{playbook.name}: {playbook.description}"
                 )
 
         return "\n".join(info_parts)
@@ -200,7 +200,7 @@ class AIAgent(BaseAgent, ABC):
         return [agent.get_public_information() for agent in self.other_agents.values()]
 
     @property
-    def public_playbooks(self) -> List[Dict[str, Any]]:
+    def public_playbooks(self) -> List[Dict[str, Playbook]]:
         """Get list of public playbooks with their information.
 
         Returns:
@@ -208,15 +208,6 @@ class AIAgent(BaseAgent, ABC):
         """
         public_playbooks = []
         for playbook in self.playbooks.values():
-            if getattr(playbook, "public", False):
-                public_playbooks.append(
-                    {
-                        "name": playbook.name,
-                        "description": (
-                            playbook.get_description()
-                            if hasattr(playbook, "get_description")
-                            else playbook.description or ""
-                        ),
-                    }
-                )
+            if playbook.public:
+                public_playbooks.append(playbook)
         return public_playbooks

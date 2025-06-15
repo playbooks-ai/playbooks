@@ -61,12 +61,20 @@ class MCPAgent(RemoteAIAgent):
                 if hasattr(tool, "name"):
                     # FastMCP Tool object
                     tool_name = tool.name
-                    tool_description = tool.description
-                    input_schema = (
-                        tool.inputSchema.model_dump()
-                        if hasattr(tool.inputSchema, "model_dump")
-                        else tool.inputSchema
+                    tool_description = getattr(
+                        tool, "description", f"MCP tool: {tool.name}"
                     )
+
+                    # Handle input schema properly
+                    if hasattr(tool, "inputSchema"):
+                        if hasattr(tool.inputSchema, "model_dump"):
+                            input_schema = tool.inputSchema.model_dump()
+                        elif hasattr(tool.inputSchema, "dict"):
+                            input_schema = tool.inputSchema.dict()
+                        else:
+                            input_schema = tool.inputSchema
+                    else:
+                        input_schema = {}
                 else:
                     # Dict-style tool
                     tool_name = tool.get("name")
@@ -77,13 +85,13 @@ class MCPAgent(RemoteAIAgent):
                     logger.warning(f"MCP tool missing name: {tool}")
                     continue
 
-                # Create execution function for this tool
-                async def create_execute_fn(tool_name):
+                # Create execution function for this tool - fix closure issue
+                def create_execute_fn(tool_name, schema):
                     async def execute_fn(*args, **kwargs):
                         # Convert positional args to kwargs if needed
                         if args and not kwargs:
                             # If only positional args, try to map them to the first parameter
-                            properties = input_schema.get("properties", {})
+                            properties = schema.get("properties", {})
                             if len(args) == 1 and len(properties) == 1:
                                 param_name = list(properties.keys())[0]
                                 kwargs = {param_name: args[0]}
@@ -95,10 +103,14 @@ class MCPAgent(RemoteAIAgent):
 
                     return execute_fn
 
-                execute_fn = await create_execute_fn(tool_name)
+                execute_fn = create_execute_fn(tool_name, input_schema)
 
                 # Extract parameter schema
-                parameters = input_schema.get("properties", {})
+                parameters = (
+                    input_schema.get("properties", {})
+                    if isinstance(input_schema, dict)
+                    else {}
+                )
 
                 # Create RemotePlaybook
                 playbook = RemotePlaybook(
