@@ -172,7 +172,13 @@ class AgentBuilder:
         # Validate transport type if specified
         transport = remote_config.get("transport")
         if transport is not None:
-            valid_transports = ["sse", "stdio", "websocket", "http", "memory"]
+            valid_transports = [
+                "sse",
+                "stdio",
+                "websocket",
+                "streamable-http",
+                "memory",
+            ]
             if transport not in valid_transports:
                 raise AgentConfigurationError(
                     f"MCP agent '{agent_name}' has invalid transport '{transport}'. "
@@ -234,7 +240,7 @@ class AgentBuilder:
                 raise AgentConfigurationError(
                     f"MCP agent '{agent_name}' with stdio transport should not use HTTP/WebSocket URL"
                 )
-        elif transport in ["sse", "http"]:
+        elif transport in ["sse", "streamable-http"]:
             # For HTTP-based transports, URL should be HTTP(S)
             if not url.startswith(("http://", "https://")):
                 raise AgentConfigurationError(

@@ -1,7 +1,7 @@
 # Example MCP Server
 remote:
   type: mcp
-  transport: http
+  transport: streamable-http
   url: http://localhost:8088/mcp
 
 
