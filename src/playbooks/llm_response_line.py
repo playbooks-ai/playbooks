@@ -2,7 +2,7 @@ import ast
 import re
 from typing import Any, List
 
-from playbooks.agents import AIAgent
+from playbooks.agents import LocalAIAgent
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
@@ -10,7 +10,7 @@ from playbooks.variables import Variables
 
 
 class LLMResponseLine:
-    def __init__(self, text: str, event_bus: EventBus, agent: AIAgent):
+    def __init__(self, text: str, event_bus: EventBus, agent: LocalAIAgent):
         self.text = text
         self.event_bus = event_bus
         self.agent = agent

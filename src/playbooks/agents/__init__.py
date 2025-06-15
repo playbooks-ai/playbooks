@@ -1,5 +1,5 @@
-from .ai_agent import AIAgent
-from .base_agent import AgentCommunicationMixin, BaseAgent
+from .ai_agent import AIAgent, LocalAIAgent
+from .base_agent import BaseAgent
 from .human_agent import HumanAgent
 
-__all__ = ["BaseAgent", "AgentCommunicationMixin", "AIAgent", "HumanAgent"]
+__all__ = ["AIAgent", "LocalAIAgent", "BaseAgent", "HumanAgent"]

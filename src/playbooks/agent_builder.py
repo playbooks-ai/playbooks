@@ -7,7 +7,7 @@ from typing import Any, Callable, Dict, List, Optional, Type
 from playbooks.event_bus import EventBus
 from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
 
-from .agents import AIAgent
+from .agents import LocalAIAgent
 from .config import LLMConfig
 from .exceptions import AgentConfigurationError
 from .playbook import MarkdownPlaybook, PlaybookTriggers, PythonPlaybook
@@ -28,7 +28,7 @@ class AgentBuilder:
         self.agent_python_namespace = {}
 
     @classmethod
-    def create_agents_from_ast(cls, ast: Dict) -> Dict[str, Type[AIAgent]]:
+    def create_agents_from_ast(cls, ast: Dict) -> Dict[str, Type[LocalAIAgent]]:
         """
         Create agent classes from the AST representation of playbooks.
 
@@ -36,7 +36,7 @@ class AgentBuilder:
             ast: AST dictionary containing playbook definitions
 
         Returns:
-            Dict[str, Type[Agent]]: Dictionary mapping agent names to their classes
+            Dict[str, Type[LocalAIAgent]]: Dictionary mapping agent names to their classes
         """
         agents = {}
         for h1 in ast.get("children", []):
@@ -48,7 +48,7 @@ class AgentBuilder:
 
         return agents
 
-    def create_agent_class_from_h1(self, h1: Dict) -> Type[AIAgent]:
+    def create_agent_class_from_h1(self, h1: Dict) -> Type[LocalAIAgent]:
         """
         Create an Agent class from an H1 section in the AST.
 
@@ -56,7 +56,7 @@ class AgentBuilder:
             h1: Dictionary representing an H1 section from the AST
 
         Returns:
-            Type[Agent]: Dynamically created Agent class
+            Type[LocalAIAgent]: Dynamically created Agent class
 
         Raises:
             AgentConfigurationError: If agent configuration is invalid
@@ -116,7 +116,7 @@ class AgentBuilder:
         klass: str,
         description: Optional[str],
         h1: Dict,
-    ) -> Type[AIAgent]:
+    ) -> Type[LocalAIAgent]:
         """Create and return a new Agent class."""
         agent_class_name = self.make_agent_class_name(klass)
 
@@ -132,7 +132,7 @@ class AgentBuilder:
 
         # Define __init__ for the new class
         def __init__(self, event_bus: EventBus):
-            AIAgent.__init__(
+            LocalAIAgent.__init__(
                 self,
                 klass=klass,
                 description=description,
@@ -144,7 +144,7 @@ class AgentBuilder:
         # Create and return the new Agent class
         return type(
             agent_class_name,
-            (AIAgent,),
+            (LocalAIAgent,),
             {
                 "__init__": __init__,
             },

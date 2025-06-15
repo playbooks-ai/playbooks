@@ -1,6 +1,6 @@
 from typing import List
 
-from playbooks.agents import AIAgent
+from playbooks.agents import LocalAIAgent
 from playbooks.config import LLMConfig
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
 from playbooks.enums import LLMMessageRole
@@ -24,8 +24,8 @@ class ExecutionFinished(Exception):
 
 
 class MarkdownPlaybookExecution:
-    def __init__(self, agent: AIAgent, playbook_name: str, llm_config: LLMConfig):
-        self.agent: AIAgent = agent
+    def __init__(self, agent: LocalAIAgent, playbook_name: str, llm_config: LLMConfig):
+        self.agent: LocalAIAgent = agent
         self.playbook: MarkdownPlaybook = agent.playbooks[playbook_name]
         self.llm_config: LLMConfig = llm_config
 

@@ -1,3 +1,3 @@
-from playbooks.agent_clients.in_process import InProcessPlaybooksAgentClient
+# Agent clients module - currently empty as we use direct agent references
 
-__all__ = ["InProcessPlaybooksAgentClient"]
+__all__ = []
