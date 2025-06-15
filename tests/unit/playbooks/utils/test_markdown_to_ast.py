@@ -913,7 +913,7 @@ def test_line_numbers_multi_agent_pbasm(test_data_dir):
     # Second agent: CountryInfo
     country_info = h1_nodes[1]
     assert country_info["text"] == "CountryInfo"
-    assert country_info["line_number"] == 37
+    assert country_info["line_number"] == 41
 
     # Check playbooks in FirstAgent
     first_agent_playbooks = [
@@ -923,29 +923,29 @@ def test_line_numbers_multi_agent_pbasm(test_data_dir):
 
     # X($num=10) -> None playbook
     x_playbook = first_agent_playbooks[0]
-    assert x_playbook["text"] == "X($num=10) -> None"
+    assert x_playbook["text"] == "X($num:int=10) -> str"
     assert x_playbook["line_number"] == 12
 
     # Check playbooks in CountryInfo agent
     country_info_playbooks = [
         child for child in country_info["children"] if child["type"] == "h2"
     ]
-    assert len(country_info_playbooks) == 3
+    assert len(country_info_playbooks) == 4
 
     # LocalPB() -> None
     local_pb = country_info_playbooks[0]
     assert local_pb["text"] == "LocalPB() -> None"
-    assert local_pb["line_number"] == 48
+    assert local_pb["line_number"] == 52
 
     # public: GetCountryPopulation($country) -> float
     get_population = country_info_playbooks[1]
-    assert get_population["text"] == "public: GetCountryPopulation($country) -> float"
-    assert get_population["line_number"] == 54
+    assert get_population["text"] == "GetCountryPopulation($country:str) -> float"
+    assert get_population["line_number"] == 58
 
     # public:GetCountrySecret($country) -> str
     get_secret = country_info_playbooks[2]
-    assert get_secret["text"] == "public:GetCountrySecret($country) -> str"
-    assert get_secret["line_number"] == 61
+    assert get_secret["text"] == "GetCountrySecret($country:str) -> str"
+    assert get_secret["line_number"] == 70
 
     # Check some h3 sections (Triggers, Steps)
     # X playbook's Triggers
@@ -973,7 +973,7 @@ def test_line_numbers_multi_agent_pbasm(test_data_dir):
         if child["type"] == "h3" and child["text"] == "Triggers"
     ]
     assert len(secret_triggers) == 1
-    assert secret_triggers[0]["line_number"] == 63
+    assert secret_triggers[0]["line_number"] == 75
 
     # Check code blocks
     # Python code block in FirstAgent
@@ -988,7 +988,7 @@ def test_line_numbers_multi_agent_pbasm(test_data_dir):
         child for child in country_info["children"] if child["type"] == "code-block"
     ]
     assert len(country_info_code_blocks) >= 1
-    assert country_info_code_blocks[0]["line_number"] == 40
+    assert country_info_code_blocks[0]["line_number"] == 44
 
 
 def test_metadata_not_parsed_as_heading():

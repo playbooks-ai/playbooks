@@ -12,7 +12,7 @@ async def test_multi_agent(test_data_dir):
 
     first_agent = playbooks.program.agents[0]
     log = first_agent.state.session_log.to_log_full()
-    assert "X() → 44.7213595499958" in log
+    assert "X() → 10 2.23" in log
     # assert "A(1024) → 32.0" in log
 
     country_info_agent = playbooks.program.agents[1]
@@ -21,4 +21,4 @@ async def test_multi_agent(test_data_dir):
     # assert "FirstAgent.A(num=5) → 2.23" in log
     # assert "GetCountryPopulation(India) → 2.23" in log
     assert "FirstAgent.A(num=1024) → 32.0" in log
-    assert "Main() → Execution finished" in log
+    assert "yld exit" in log

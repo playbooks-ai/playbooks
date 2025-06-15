@@ -20,8 +20,8 @@ async def A(num: float) -> float:
 ### Steps
 - Get Canada's secret
 - Tell user about Canada's secret
-- get population of India from the country info agent
-- return $num * population of India * 2
+- get $population of India from the country info agent
+- return "{$num} {$population}"
 
 
 # Country info
@@ -41,8 +41,8 @@ async def GetLengthOfCountry(country: str):
 ## GetCountryPopulation($country)
 public: true
 ### Steps
-- Compute the square root of the length of $country
-- Return the population of $country
+- $population = Compute the square root of the length of $country
+- Return $population
 
 ## GetCountrySecret($country)
 public: true

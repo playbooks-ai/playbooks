@@ -9,16 +9,18 @@ async def A(num: float) -> float:
   return math.sqrt(num)
 ```
 
-## X($num=10) -> None
-Main playbook that shares information about Canada and calculates a value based on India's population.
+## X($num:int=10) -> str
+Main execution playbook that retrieves and displays country information
 ### Triggers
 - T1:BGN When program starts
 ### Steps
-- 01:QUE Tell user about Canada's secret
-- 02:QUE $population:float = GetCountryPopulation(country="India")
-- 03:YLD call
-- 04:EXE $result:float = $num * $population * 2
-- 05:RET $result
+- 01:QUE Get Canada's secret from the CountryInfo agent
+- 02:YLD call
+- 03:QUE Say(Tell user about Canada's secret)
+- 04:YLD call
+- 05:QUE $population:float = CountryInfo.GetCountryPopulation(country="India")
+- 06:YLD call
+- 07:RET "{$num} {$population}"
 
 ```public.json
 [
@@ -27,7 +29,9 @@ Main playbook that shares information about Canada and calculates a value based 
     "description": "Compute square root of a number",
     "parameters": {
       "type": "object",
-      "properties": {"num": {"type": "number", "description": "Number to compute square root of"}}
+      "properties": {
+        "num": {"type": "number", "description": "Number to compute square root of"}
+      }
     },
     "triggers": ["T1:CND When you need to compute square root"]
   }
@@ -46,30 +50,43 @@ async def GetLengthOfCountry(country: str):
 ```
 
 ## LocalPB() -> None
-Simple greeting playbook for local use.
+Local playbook for basic greetings
 ### Steps
-- 01:QUE Say hello
-- 02:RET
+- 01:QUE Say(Say hello)
+- 02:YLD call
 
-## GetCountryPopulation($country) -> float
+## GetCountryPopulation($country:str) -> float
 metadata:
   public: true
 ---
-Calculates and returns the population of a specified country using mathematical operations.
+Computes population estimate based on country name length
 ### Steps
-- 01:EXE $length:int = len($country)
-- 02:EXE $sqrt_length:float = math.sqrt($length)
-- 03:RET population of $country
+- 01:QUE $length:int = GetLengthOfCountry(country=$country)
+- 02:YLD call
+- 03:QUE $population:float = FirstAgent.A(num=$length)
+- 04:YLD call
+- 05:RET $population
 
-## GetCountrySecret($country) -> str
+## GetCountrySecret($country:str) -> str
 metadata:
   public: true
 ---
-Retrieves and returns unusual historical facts about a specified country.
+Returns unusual historical facts about countries
 ### Triggers
 - T1:CND When you need to get a secret about a country
 ### Steps
-- 01:RET an unusual historical fact about $country
+- 01:RET Return an unusual historical fact about $country
+
+## Main() -> None
+Main execution flow that demonstrates agent interaction
+### Triggers
+- T1:BGN At the beginning
+### Steps
+- 01:QUE $answer:float = FirstAgent.A(num=1024)
+- 02:YLD call
+- 03:QUE Say(Tell user the $answer)
+- 04:YLD call
+- 05:YLD exit
 
 ```public.json
 [
@@ -78,23 +95,29 @@ Retrieves and returns unusual historical facts about a specified country.
     "description": "Get the length of a country name",
     "parameters": {
       "type": "object",
-      "properties": {"country": {"type": "string", "description": "Country name"}}
+      "properties": {
+        "country": {"type": "string", "description": "Country name"}
+      }
     }
   },
   {
     "name": "GetCountryPopulation",
-    "description": "Calculates and returns the population of a specified country using mathematical operations",
+    "description": "Computes population estimate based on country name length",
     "parameters": {
       "type": "object",
-      "properties": {"$country": {"type": "string", "description": "Country name"}}
+      "properties": {
+        "$country": {"type": "string", "description": "Country name"}
+      }
     }
   },
   {
     "name": "GetCountrySecret",
-    "description": "Retrieves and returns unusual historical facts about a specified country",
+    "description": "Returns unusual historical facts about countries",
     "parameters": {
       "type": "object",
-      "properties": {"$country": {"type": "string", "description": "Country name"}}
+      "properties": {
+        "$country": {"type": "string", "description": "Country name"}
+      }
     },
     "triggers": ["T1:CND When you need to get a secret about a country"]
   }
