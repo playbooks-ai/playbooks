@@ -126,7 +126,10 @@ class AIAgent(BaseAgent, ABC):
         return InstructionPointer(self.klass, step_number, 0)
 
     def trigger_instructions(
-        self, with_namespace: bool = False, public_only: bool = False
+        self,
+        with_namespace: bool = False,
+        public_only: bool = False,
+        skip_bgn: bool = True,
     ) -> List[str]:
         """Get trigger instructions for this agent's playbooks.
 
@@ -139,13 +142,12 @@ class AIAgent(BaseAgent, ABC):
         """
         instructions = []
         for playbook in self.playbooks.values():
-            if public_only and not getattr(playbook, "public", False):
+            if public_only and not playbook.public:
                 continue
-            # Use the playbook's trigger_instructions method if available
-            if hasattr(playbook, "trigger_instructions"):
-                namespace = self.klass if with_namespace else None
-                playbook_instructions = playbook.trigger_instructions(namespace)
-                instructions.extend(playbook_instructions)
+
+            namespace = self.klass if with_namespace else None
+            playbook_instructions = playbook.trigger_instructions(namespace, skip_bgn)
+            instructions.extend(playbook_instructions)
         return instructions
 
     @property
@@ -163,7 +165,7 @@ class AIAgent(BaseAgent, ABC):
         Returns:
             List of all trigger instruction strings
         """
-        instructions = self.trigger_instructions(with_namespace=True)
+        instructions = self.trigger_instructions(with_namespace=False)
         for agent in self.other_agents.values():
             instructions.extend(agent.trigger_instructions(with_namespace=True))
         return instructions
@@ -183,7 +185,9 @@ class AIAgent(BaseAgent, ABC):
         if public_playbooks:
             info_parts.append("Public Playbooks:")
             for playbook in public_playbooks:
-                info_parts.append(f"  - {playbook['name']}: {playbook['description']}")
+                info_parts.append(
+                    f"  - {self.klass}.{playbook['name']}: {playbook['description']}"
+                )
 
         return "\n".join(info_parts)
 

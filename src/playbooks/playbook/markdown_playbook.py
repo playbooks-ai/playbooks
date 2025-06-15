@@ -348,7 +348,7 @@ class MarkdownPlaybook(LocalPlaybook):
         parsed_metadata, parsed_description = parse_metadata_and_description(
             description or ""
         )
-        self.metadata = {**(metadata or {}), **parsed_metadata}
+        merged_metadata = {**(metadata or {}), **parsed_metadata}
         final_description = parsed_description or description
 
         # Initialize parent with the new interface
@@ -356,6 +356,7 @@ class MarkdownPlaybook(LocalPlaybook):
             name=klass,
             description=final_description,
             agent_name=None,  # Will be set by the agent
+            metadata=merged_metadata,
         )
 
         # Keep existing attributes for backward compatibility
@@ -408,16 +409,6 @@ class MarkdownPlaybook(LocalPlaybook):
         return self.description or self.name
 
     @property
-    def public(self) -> bool:
-        """Return whether this playbook is public."""
-        return self.metadata.get("public", False)
-
-    @property
-    def export(self) -> bool:
-        """Return whether this playbook is exported."""
-        return self.metadata.get("export", False)
-
-    @property
     def first_step(self) -> Optional[PlaybookStep]:
         """Get the first step of the playbook."""
         if self.step_collection and len(self.step_collection.ordered_line_numbers) > 0:
@@ -459,21 +450,22 @@ class MarkdownPlaybook(LocalPlaybook):
             return self.step_collection.get_next_step(line_number)
         return None
 
-    def trigger_instructions(self, namespace: Optional[str] = None) -> List[str]:
+    def trigger_instructions(
+        self, namespace: Optional[str] = None, skip_bgn: bool = True
+    ) -> List[str]:
         """Get the trigger instructions for the playbook.
 
         Returns:
             A list of trigger instruction strings, or an empty list if no triggers.
         """
 
-        return (
-            [
-                trigger.trigger_instruction(namespace)
-                for trigger in self.triggers.triggers
-            ]
-            if self.triggers
-            else []
-        )
+        instructions = []
+        if self.triggers:
+            for trigger in self.triggers.triggers:
+                if skip_bgn and trigger.is_begin:
+                    continue
+                instructions.append(trigger.trigger_instruction(namespace))
+        return instructions
 
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""

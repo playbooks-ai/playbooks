@@ -1,6 +1,6 @@
 import logging
 from abc import abstractmethod
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from .base import Playbook
 
@@ -19,6 +19,7 @@ class LocalPlaybook(Playbook):
         name: str,
         description: Optional[str] = None,
         agent_name: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Initialize a local playbook.
 
@@ -27,7 +28,12 @@ class LocalPlaybook(Playbook):
             description: Human-readable description of the playbook
             agent_name: Name of the agent this playbook belongs to
         """
-        super().__init__(name, description, agent_name)
+        super().__init__(
+            name=name,
+            description=description,
+            agent_name=agent_name,
+            metadata=metadata,
+        )
 
     async def execute(self, *args, **kwargs) -> Any:
         """Execute the local playbook with error handling and logging.

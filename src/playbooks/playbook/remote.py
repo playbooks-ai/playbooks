@@ -21,6 +21,7 @@ class RemotePlaybook(Playbook):
         execute_fn: Optional[Callable] = None,
         parameters: Optional[Dict[str, Any]] = None,
         timeout: Optional[float] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ):
         """Initialize a remote playbook.
 
@@ -31,8 +32,9 @@ class RemotePlaybook(Playbook):
             execute_fn: Function to call for remote execution
             parameters: Schema describing the expected parameters
             timeout: Timeout for remote execution in seconds
+            metadata: Additional metadata for the playbook
         """
-        super().__init__(name, description, agent_name)
+        super().__init__(name, description, agent_name, metadata)
         self.execute_fn = execute_fn
         self.parameters = parameters or {}
         self.timeout = timeout

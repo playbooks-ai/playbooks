@@ -114,11 +114,8 @@ class AgentBuilder:
                 f'Agent class {agent_class_name} already exists for agent "{klass}"'
             )
 
-        # Validate MCP configuration
-        if not remote_config.get("url"):
-            raise AgentConfigurationError(
-                f"MCP agent {klass} requires 'url' in remote configuration"
-            )
+        # Comprehensive MCP configuration validation
+        self._validate_mcp_configuration(klass, remote_config)
 
         source_line_number = h1.get("line_number")
 
@@ -141,6 +138,114 @@ class AgentBuilder:
                 "__init__": __init__,
             },
         )
+
+    def _validate_mcp_configuration(
+        self, agent_name: str, remote_config: Dict[str, Any]
+    ) -> None:
+        """Validate MCP agent configuration comprehensively.
+
+        Args:
+            agent_name: Name of the agent being configured
+            remote_config: Remote configuration dictionary
+
+        Raises:
+            AgentConfigurationError: If configuration is invalid
+        """
+        # Check if URL is present
+        if "url" not in remote_config:
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires 'url' in remote configuration"
+            )
+
+        # Validate URL format
+        url = remote_config["url"]
+        if not isinstance(url, str):
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires a valid URL string, got: {type(url).__name__}"
+            )
+
+        if not url.strip():
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires a valid URL string, got empty string"
+            )
+
+        # Validate transport type if specified
+        transport = remote_config.get("transport")
+        if transport is not None:
+            valid_transports = ["sse", "stdio", "websocket", "http", "memory"]
+            if transport not in valid_transports:
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' has invalid transport '{transport}'. "
+                    f"Valid options: {', '.join(valid_transports)}"
+                )
+
+        # Validate timeout if specified
+        timeout = remote_config.get("timeout")
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' timeout must be a positive number, got: {timeout}"
+                )
+
+        # Validate auth configuration if specified
+        auth = remote_config.get("auth")
+        if auth is not None:
+            if not isinstance(auth, dict):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' auth configuration must be a dictionary, got: {type(auth).__name__}"
+                )
+
+            # Validate auth type if specified
+            auth_type = auth.get("type")
+            if auth_type is not None:
+                valid_auth_types = ["api_key", "bearer", "basic", "mtls"]
+                if auth_type not in valid_auth_types:
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' has invalid auth type '{auth_type}'. "
+                        f"Valid options: {', '.join(valid_auth_types)}"
+                    )
+
+                # Validate required fields for each auth type
+                if auth_type == "api_key" and not auth.get("key"):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with api_key auth requires 'key' field"
+                    )
+                elif auth_type == "bearer" and not auth.get("token"):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with bearer auth requires 'token' field"
+                    )
+                elif auth_type == "basic" and (
+                    not auth.get("username") or not auth.get("password")
+                ):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with basic auth requires 'username' and 'password' fields"
+                    )
+                elif auth_type == "mtls" and (
+                    not auth.get("cert") or not auth.get("key")
+                ):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with mtls auth requires 'cert' and 'key' fields"
+                    )
+
+        # Validate URL scheme matches transport
+        if transport == "stdio":
+            # For stdio, URL should be a file path or command
+            if url.startswith(("http://", "https://", "ws://", "wss://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with stdio transport should not use HTTP/WebSocket URL"
+                )
+        elif transport in ["sse", "http"]:
+            # For HTTP-based transports, URL should be HTTP(S)
+            if not url.startswith(("http://", "https://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with {transport} transport requires HTTP(S) URL"
+                )
+        elif transport == "websocket":
+            # For WebSocket, URL should be ws(s)://
+            if not url.startswith(("ws://", "wss://", "http://", "https://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with websocket transport requires WebSocket or HTTP URL"
+                )
 
     def _process_code_blocks(self, h1: Dict) -> None:
         """Process code blocks in the AST and extract playbooks."""

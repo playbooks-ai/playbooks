@@ -40,16 +40,17 @@ class RemoteAIAgent(AIAgent):
 
     async def connect(self) -> None:
         """Establish connection to the remote service."""
-        if self._connected:
+        if self._connected and self.transport and self.transport.is_connected:
             return
 
         try:
             if self.transport:
                 await self.transport.connect()
-                self._connected = True
+                self._connected = self.transport.is_connected
                 logger.info(f"Connected to remote agent {self.klass}")
         except Exception as e:
             logger.error(f"Failed to connect to remote agent {self.klass}: {str(e)}")
+            self._connected = False
             raise
 
     async def disconnect(self) -> None:
@@ -68,11 +69,11 @@ class RemoteAIAgent(AIAgent):
         finally:
             self._connected = False
 
-    async def begin(self):
+    async def initialize(self):
         """Connect and discover playbooks, then execute BGN trigger playbooks."""
         await self.connect()
         await self.discover_playbooks()
-        await super().begin()
+        await super().initialize()
 
     async def __aenter__(self):
         """Async context manager entry."""

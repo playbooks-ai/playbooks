@@ -57,7 +57,22 @@ class MCPAgent(RemoteAIAgent):
 
             # Create RemotePlaybook for each MCP tool
             for tool in tools:
-                tool_name = tool.get("name")
+                # Handle both dict-style and object-style tool representations
+                if hasattr(tool, "name"):
+                    # FastMCP Tool object
+                    tool_name = tool.name
+                    tool_description = tool.description
+                    input_schema = (
+                        tool.inputSchema.model_dump()
+                        if hasattr(tool.inputSchema, "model_dump")
+                        else tool.inputSchema
+                    )
+                else:
+                    # Dict-style tool
+                    tool_name = tool.get("name")
+                    tool_description = tool.get("description", f"MCP tool: {tool_name}")
+                    input_schema = tool.get("inputSchema", {})
+
                 if not tool_name:
                     logger.warning(f"MCP tool missing name: {tool}")
                     continue
@@ -68,7 +83,6 @@ class MCPAgent(RemoteAIAgent):
                         # Convert positional args to kwargs if needed
                         if args and not kwargs:
                             # If only positional args, try to map them to the first parameter
-                            input_schema = tool.get("inputSchema", {})
                             properties = input_schema.get("properties", {})
                             if len(args) == 1 and len(properties) == 1:
                                 param_name = list(properties.keys())[0]
@@ -84,17 +98,17 @@ class MCPAgent(RemoteAIAgent):
                 execute_fn = await create_execute_fn(tool_name)
 
                 # Extract parameter schema
-                input_schema = tool.get("inputSchema", {})
                 parameters = input_schema.get("properties", {})
 
                 # Create RemotePlaybook
                 playbook = RemotePlaybook(
                     name=tool_name,
-                    description=tool.get("description", f"MCP tool: {tool_name}"),
+                    description=tool_description,
                     agent_name=self.klass,
                     execute_fn=execute_fn,
                     parameters=parameters,
                     timeout=self.remote_config.get("timeout"),
+                    metadata={"public": True},  # MCP tools are public by default
                 )
 
                 self.playbooks[tool_name] = playbook

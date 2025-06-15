@@ -128,6 +128,7 @@ class Program(ProgramAgentsCommunicationMixin):
                 self.full_program = self.full_program.replace(match[0], "")
 
     async def begin(self):
+        await asyncio.gather(*[agent.initialize() for agent in self.agents])
         await asyncio.gather(*[agent.begin() for agent in self.agents])
 
     async def run_till_exit(self):

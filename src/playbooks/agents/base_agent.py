@@ -58,3 +58,9 @@ class BaseAgent(AgentCommunicationMixin, ABC):
         super().__init__()
         self.id = str(uuid.uuid4())
         self.klass = klass
+
+    async def begin(self):
+        pass
+
+    async def initialize(self):
+        pass

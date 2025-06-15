@@ -36,12 +36,16 @@ class PythonPlaybook(LocalPlaybook):
             code: The source code of the function
             source_line_number: The line number in the source where this playbook is defined
         """
-        super().__init__(name, description, agent_name)
+        super().__init__(
+            name=name,
+            description=description,
+            agent_name=agent_name,
+            metadata=metadata,
+        )
 
         self.func = func
         self.signature = signature
         self.triggers = triggers
-        self.metadata = metadata or {}
         self.code = code
         self.source_line_number = source_line_number
 
@@ -106,16 +110,6 @@ class PythonPlaybook(LocalPlaybook):
             The description of the playbook
         """
         return self.description or self.name
-
-    @property
-    def public(self) -> bool:
-        """Return whether this playbook is public."""
-        return self.metadata.get("public", False)
-
-    @property
-    def export(self) -> bool:
-        """Return whether this playbook is exported."""
-        return self.metadata.get("export", False)
 
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""
