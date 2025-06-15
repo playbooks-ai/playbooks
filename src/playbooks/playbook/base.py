@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Optional
 
+from ..triggers import PlaybookTriggers
+
 
 class Playbook(ABC):
     """Abstract base class for all playbook implementations.
@@ -28,6 +30,7 @@ class Playbook(ABC):
         self.description = description
         self.agent_name = agent_name
         self.metadata = metadata or {}
+        self.triggers: Optional[PlaybookTriggers] = None
 
     @property
     def public(self) -> bool:
@@ -103,4 +106,11 @@ class Playbook(ABC):
         Returns:
             A list of trigger instruction strings, or an empty list if no triggers.
         """
-        return []
+
+        instructions = []
+        if self.triggers:
+            for trigger in self.triggers.triggers:
+                if skip_bgn and trigger.is_begin:
+                    continue
+                instructions.append(trigger.trigger_instruction(namespace))
+        return instructions
