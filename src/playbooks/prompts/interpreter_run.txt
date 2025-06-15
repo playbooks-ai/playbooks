@@ -30,23 +30,24 @@ plan  – one‑sentence immediate goal
 trig? <no | \`Trigger["PB:Ln:Code"]\`>
 \`Step["Playbook:Ln:Code"]\`  optional inline:  \`Say("…")\`  or  \`$x = Func($y)\`
 trig? <no | \`Trigger["PB:Ln:Code"]\`>
+what? handle unexpected situation intelligently and safely
 \`Step["Playbook:Ln:Code"]\` \`Return[<value> | ]\` \`Var[$__, 1-5 line summary of this playbook's execution with context useful for the calling playbook and overall conversation and agent execution]\`
 yld <user | call | return | exit>
 ```
 
 **Rules**
-1. **Back‑tick** every queued call:  \`Play(P=$p)\` or  \`$r = Func(3)\`. Function calls must be valid Python - breaks execution otherwise.
-2. After each ``Var[…]`` output a trig? line and queue the trigger if matched.
-3. Check trig? after each step; trigger only if not already triggered based on last item in session log
-4. Stop logging immediately after the first yld … *or* \`Return[…]\`.
-5. All user‑visible text must be inside \`Say("…")\`.
+1. Wrap all function calls in backticks:  \`Play(P=$p)\` or  \`$r = Func(3)\`. Must use valid Python syntax or execution will break.
+2. After each ``Var[…]`` output, add a "trig?" line and queue any matched triggers.
+3. Check "trig?" after each step. Only trigger if not already triggered.
+4. Stop logging immediately after first yld … *or* \`Return[…]\`.
+5. Wrap all user-visible text in \`Say("…")\` and maintain natural conversation flow.
 6. Use only defined vars in calls; otherwise use literals.
-7. On anomalies insert a `what?` line and proceed intelligently.
-8. When executing a playbook, start execution at the first line
-9. Use "yld user" only when you need input from user
-10. Use "yld exit" to exit the program
-11. "Main:03.02.03 was executed - continue execution.": You should complete any variable assignment on line Main:03.02.03 and then execute the *next* line, say Main:03:03
-12. Loading artifacts is expensive. Load an artifact only when you need to read and process the contents of the artifact. To load artifacts, use `LoadArtifact("artifact1")`, `LoadArtifact("artifact2")`, ..., follwed by a yld call
+7. Insert "what?" line with thoughts for anomalies and continue with best judgment.
+8. Start playbook execution at the first line.
+9. Use "yld user" only when user input is required.
+10. Use "yld exit" to terminate the program.
+11. When told "Main:03.02.03 was executed - continue execution", complete that line's variable assignment, if any, then execute the next line (Main:03.03).
+12. To load any unloaded artifacts, use `LoadArtifact("artifact1")`, `LoadArtifact("artifact2")`, ..., follwed by a yld call.
 13. Always output playbook execution summary in $__ variable before returning
 
 ---
@@ -105,6 +106,17 @@ plan  – exit the program
 `Step["Support:09:EXE"]` ending conversation
 trig? no
 yld exit
+```
+
+**Ex 5 - Handling unexpected situation**
+For example, say there is no playbook listed to compute magic result.
+```
+recap – got number from user
+plan  – compute magic result
+`Var[$n, 5]`
+trig? no
+what? no playbook found to compute magic result. What would an intelligent agent do? It will be safe to set set an error result.
+`Step["DoMagic:02:QUE"]`  `$result = "I don't know how to compute magic result"`
 ```
 
 #### 4  Quick Mapping Cheatsheet
