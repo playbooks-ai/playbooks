@@ -1,21 +1,17 @@
 from enum import Enum
 
 
-# AgentType enum
-class AgentType:
+class AgentType(str, Enum):
     HUMAN = "human"
     AI = "ai"
 
 
-class RoutingType:
+class RoutingType(str, Enum):
     DIRECT = "direct"
     BROADCAST = "broadcast"
 
 
-class PlaybookExecutionType(str, Enum):
-    MARKDOWN = "markdown"
-    CODE = "code"
-
-    @classmethod
-    def __getitem__(cls, key):
-        return cls(key.upper())
+class LLMMessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"

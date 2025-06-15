@@ -1,94 +1,22 @@
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from .enums import PlaybookExecutionType
-from .playbook_step import PlaybookStep, PlaybookStepCollection
+from playbooks.utils.parse_utils import parse_metadata_and_description
+
+from ..playbook_step import PlaybookStep, PlaybookStepCollection
+from ..triggers import PlaybookTriggers
+from .local import LocalPlaybook
 
 
-class PlaybookTrigger:
-    """Represents a trigger that can start a playbook."""
+class MarkdownPlaybook(LocalPlaybook):
+    """Represents a markdown playbook that can be executed by an agent.
 
-    def __init__(
-        self,
-        playbook_klass: str,
-        playbook_signature: str,
-        trigger: str,
-        source_line_number: Optional[int] = None,
-    ):
-        """Initialize a PlaybookTrigger.
-
-        Args:
-            playbook_klass: The class name of the playbook.
-            playbook_signature: The signature of the playbook function.
-            trigger: The trigger string.
-            source_line_number: The line number in the source markdown where this
-                trigger is defined.
-        """
-        self.playbook_klass = playbook_klass
-        self.playbook_signature = playbook_signature
-        self.trigger = trigger
-        self.source_line_number = source_line_number
-        # Example text: "01:BGN When the agent starts running"
-        self.trigger_name = self.trigger.split(" ")[0]
-        self.trigger_description = " ".join(self.trigger.split(" ")[1:])
-        self.is_begin = "BGN" in self.trigger_name
-
-    def __str__(self) -> str:
-        """Return a string representation of the trigger."""
-        signature = self.playbook_signature.split(" ->")[0]
-        return f'- {self.trigger_description}, `Trigger["{self.playbook_klass}:{self.trigger_name}"]` by enqueuing `{signature}`'
-
-
-class PlaybookTriggers:
-    """Collection of triggers for a playbook."""
-
-    def __init__(
-        self,
-        playbook_klass: str,
-        playbook_signature: str,
-        triggers: List[str],
-        trigger_line_numbers: Optional[List[Optional[int]]] = None,
-        source_line_number: Optional[int] = None,
-    ):
-        """Initialize a PlaybookTriggers collection.
-
-        Args:
-            playbook_klass: The class name of the playbook.
-            playbook_signature: The signature of the playbook function.
-            triggers: List of trigger strings.
-            trigger_line_numbers: List of line numbers for each trigger.
-            source_line_number: The line number in the source markdown where this
-                triggers section is defined.
-        """
-        self.playbook_klass = playbook_klass
-        self.playbook_signature = playbook_signature
-        self.source_line_number = source_line_number
-
-        if trigger_line_numbers is None:
-            trigger_line_numbers = [None] * len(triggers)
-
-        self.triggers = [
-            PlaybookTrigger(
-                playbook_klass=self.playbook_klass,
-                playbook_signature=self.playbook_signature,
-                trigger=trigger,
-                source_line_number=line_num,
-            )
-            for trigger, line_num in zip(triggers, trigger_line_numbers)
-        ]
-
-
-class Playbook:
-    """Represents a playbook that can be executed by an agent.
-
-    Playbooks can be of two types:
-    - MD: Markdown playbooks written in the step format.
-    - PYTHON: Python playbooks written in Python code.
+    Markdown playbooks are written in the step format and parsed from markdown files.
     """
 
     @classmethod
-    def from_h2(cls, h2: Dict[str, Any]) -> "Playbook":
-        """Create a Playbook from an H2 AST node.
+    def from_h2(cls, h2: Dict[str, Any]) -> "MarkdownPlaybook":
+        """Create a MarkdownPlaybook from an H2 AST node.
 
         Args:
             h2: Dictionary representing an H2 AST node
@@ -100,13 +28,13 @@ class Playbook:
             ValueError: If the H2 structure is invalid or required sections are missing
         """
         cls._validate_h2_structure(h2)
-        signature, klass, public = cls.parse_title(h2.get("text", "").strip())
+        signature, klass = cls.parse_title(h2.get("text", "").strip())
 
         description, h3s = cls._extract_description_and_h3s(h2)
 
         # Determine playbook type based on presence of a Code h3 section
         # Markdown playbook (MD)
-        return cls._create_md_playbook(h2, klass, signature, description, h3s, public)
+        return cls._create_md_playbook(h2, klass, signature, description, h3s)
 
     @staticmethod
     def _validate_h2_structure(h2: Dict[str, Any]) -> None:
@@ -160,8 +88,7 @@ class Playbook:
         signature: str,
         description: Optional[str],
         h3s: List[Dict[str, Any]],
-        public: bool,
-    ) -> "Playbook":
+    ) -> "MarkdownPlaybook":
         """Create a markdown (MD) type playbook.
 
         Args:
@@ -181,51 +108,8 @@ class Playbook:
         steps = cls._parse_steps(h3s)
         notes = cls._parse_notes(h3s)
 
-        # step_collection = PlaybookStepCollection()
-
-        # for h3 in h3s:
-        #     h3_title = h3.get("text", "").strip().lower()
-        #     if h3_title == "triggers":
-        #         trigger_items = []
-        #         trigger_line_numbers = []
-        #         for child in h3["children"]:
-        #             if child.get("type") == "list":
-        #                 for list_item in child.get("children", []):
-        #                     if list_item.get("type") == "list-item":
-        #                         trigger_items.append(list_item.get("text", "").strip())
-        #                         trigger_line_numbers.append(
-        #                             list_item.get("line_number")
-        #                         )
-
-        #         triggers = PlaybookTriggers(
-        #             playbook_klass=klass,
-        #             playbook_signature=signature,
-        #             triggers=trigger_items,
-        #             trigger_line_numbers=trigger_line_numbers,
-        #             source_line_number=h3.get("line_number"),
-        #         )
-        #     elif h3_title == "steps":
-        #         steps = h3
-        #         # Parse steps into PlaybookStep objects
-        #         for child in h3.get("children", []):
-        #             if child.get("type") == "list":
-        #                 for list_item in child.get("children", []):
-        #                     if list_item.get("type") == "list-item":
-        #                         lines = list_item.get("text", "").strip().split("\n")
-        #                         item_line_number = list_item.get("line_number")
-        #                         for line in lines:
-        #                             step = PlaybookStep.from_text(line)
-        #                             if step:
-        #                                 step.source_line_number = item_line_number
-        #                                 step_collection.add_step(step)
-        #     elif h3_title == "notes":
-        #         notes = h3
-        #     else:
-        #         raise ValueError(f"Unknown H3 section: {h3_title}")
-
         return cls(
             klass=klass,
-            execution_type=PlaybookExecutionType.MARKDOWN,
             signature=signature,
             description=description,
             triggers=triggers,
@@ -235,7 +119,6 @@ class Playbook:
             func=None,
             markdown=h2["markdown"],
             step_collection=steps,
-            public=public,
             source_line_number=h2.get("line_number"),
         )
 
@@ -327,24 +210,18 @@ class Playbook:
         return None
 
     @classmethod
-    def parse_title(cls, title: str) -> Tuple[str, str, bool]:
+    def parse_title(cls, title: str) -> Tuple[str, str]:
         """Parse the title of a playbook.
 
         Args:
             title: The title of the playbook, e.g. "CheckOrderStatusFlow($authToken: str) -> None"
 
         Returns:
-            A tuple containing the signature, class name, and public flag.
+            A tuple containing the signature and class name.
 
         Raises:
             ValueError: If the class name is not a valid identifier.
         """
-        public = False
-        match = re.match(r"^public\s*:\s*(.*)", title, re.DOTALL)
-        if match:
-            public = True
-            title = match.group(1).strip()
-
         # Extract the class name (must be a valid identifier starting with a letter)
         match = re.match(r"^[A-Za-z][A-Za-z0-9]*", title)
         if not match:
@@ -353,12 +230,11 @@ class Playbook:
             )
 
         klass = match.group(0)
-        return title, klass, public
+        return title, klass
 
     def __init__(
         self,
         klass: str,
-        execution_type: PlaybookExecutionType,
         signature: str,
         description: Optional[str],
         triggers: Optional[PlaybookTriggers],
@@ -368,14 +244,13 @@ class Playbook:
         func: Optional[Callable],
         markdown: str,
         step_collection: Optional[PlaybookStepCollection] = None,
-        public: bool = False,
+        metadata: Optional[Dict[str, Any]] = None,
         source_line_number: Optional[int] = None,
     ):
-        """Initialize a Playbook.
+        """Initialize a MarkdownPlaybook.
 
         Args:
             klass: The class name of the playbook.
-            execution_type: The execution type (MD or PYTHON).
             signature: The signature of the playbook function.
             description: The description of the playbook.
             triggers: The triggers for the playbook.
@@ -385,13 +260,28 @@ class Playbook:
             func: The compiled function for PYTHON playbooks.
             markdown: The markdown representation of the playbook.
             step_collection: The collection of steps for MD playbooks.
+            metadata: Metadata dict.
             source_line_number: The line number in the source markdown where this
                 playbook is defined.
         """
+        # Parse metadata and description, merging with provided metadata
+        parsed_metadata, parsed_description = parse_metadata_and_description(
+            description or ""
+        )
+        merged_metadata = {**(metadata or {}), **parsed_metadata}
+        final_description = parsed_description or description
+
+        # Initialize parent with the new interface
+        super().__init__(
+            name=klass,
+            description=final_description,
+            agent_name=None,  # Will be set by the agent
+            metadata=merged_metadata,
+        )
+
+        # Keep existing attributes for backward compatibility
         self.klass = klass
-        self.execution_type = execution_type
         self.signature = signature
-        self.description = description
         self.triggers = triggers
         self.steps = steps
         self.notes = notes
@@ -399,8 +289,44 @@ class Playbook:
         self.func = func
         self.markdown = markdown
         self.step_collection = step_collection
-        self.public = public
         self.source_line_number = source_line_number
+
+    async def _execute_impl(self, *args, **kwargs) -> Any:
+        """Execute the markdown playbook using the compiled function.
+
+        Args:
+            *args: Positional arguments for the playbook
+            **kwargs: Keyword arguments for the playbook
+
+        Returns:
+            The result of executing the playbook function
+        """
+        if not self.func:
+            raise ValueError(f"Playbook {self.name} has no executable function")
+
+        # Execute the compiled function
+        return await self.func(*args, **kwargs)
+
+    def get_parameters(self) -> Dict[str, Any]:
+        """Get the parameters schema for this playbook.
+
+        Returns:
+            A dictionary describing the expected parameters based on the signature
+        """
+        # For now, return a basic schema based on the signature
+        # This could be enhanced to parse the actual signature and extract parameter types
+        return {
+            "signature": self.signature,
+            "description": f"Parameters for {self.name} playbook",
+        }
+
+    def get_description(self) -> str:
+        """Get a human-readable description of this playbook.
+
+        Returns:
+            The description of the playbook
+        """
+        return self.description or self.name
 
     @property
     def first_step(self) -> Optional[PlaybookStep]:
@@ -444,21 +370,9 @@ class Playbook:
             return self.step_collection.get_next_step(line_number)
         return None
 
-    def trigger_instructions(self) -> List[str]:
-        """Get the trigger instructions for the playbook.
-
-        Returns:
-            A list of trigger instruction strings, or an empty list if no triggers.
-        """
-        return (
-            [str(trigger) for trigger in self.triggers.triggers]
-            if self.triggers
-            else []
-        )
-
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""
-        return f"Playbook({self.klass})"
+        return f"MarkdownPlaybook({self.klass})"
 
     def __str__(self) -> str:
         """Return the markdown representation of the playbook."""

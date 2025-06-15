@@ -1,6 +1,6 @@
-from playbooks.base_agent import BaseAgent
-from playbooks.event_bus import EventBus
-from playbooks.execution_state import ExecutionState
+from ..event_bus import EventBus
+from ..execution_state import ExecutionState
+from .base_agent import BaseAgent
 
 
 class HumanAgent(BaseAgent):
@@ -10,6 +10,3 @@ class HumanAgent(BaseAgent):
 
         # TODO: HumanAgent should not have the same state as AI agents. Use a different state class.
         self.state = ExecutionState(event_bus)
-
-    async def begin(self):
-        pass

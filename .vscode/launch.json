@@ -1,50 +1,49 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-        {
-            "name": "Command line agent chat",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
-            "console": "integratedTerminal",
-            "args": [
-                "${workspaceFolder}/tests/data/02-personalized-greeting.md",
-                "--verbose"
-            ]
-        },
-        {
-            "name": "Web server for agent chat",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "${workspaceFolder}/src/playbooks/applications/web_agent_chat.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--port",
-                "8000"
-            ]
-        },
-        {
-            "name": "pytest",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "pytest",
-            "args": [
-                "tests/unit/playbooks/test_examples.py"
-            ]
-        },
-        {
-            "name": "Compile current .pb file",
-            "type": "debugpy",
-            "request": "launch",
-            "module": "playbooks.cli",
-            "console": "integratedTerminal",
-            "args": [
-                "compile",
-                "${file}.doesntexist"
-            ]
-        }
-    ]
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "playbooks",
+      "request": "launch",
+      "name": "Launch Playbooks Program",
+      "pythonPath": "/Users/amolk/Library/Caches/pypoetry/virtualenvs/playbooks-vVWNXwRG-py3.10/bin/python",
+      "program": "${file}",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "stopOnEntry": true
+    },
+    {
+      "name": "Command line agent chat",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
+      "console": "integratedTerminal",
+      "args": ["${file}", "--verbose"]
+    },
+    {
+      "name": "Web server for agent chat",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/playbooks/applications/web_agent_chat.py",
+      "console": "integratedTerminal",
+      "args": ["--port", "8000"]
+    },
+    {
+      "name": "pytest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/unit/playbooks/test_examples.py"]
+    },
+    {
+      "name": "Compile current .pb file",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "playbooks.cli",
+      "console": "integratedTerminal",
+      "args": ["compile", "${file}.doesntexist"]
+    }
+  ]
 }

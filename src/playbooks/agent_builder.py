@@ -2,17 +2,18 @@ import ast
 import inspect
 import re
 import types
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from playbooks.event_bus import EventBus
 from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
 
-from .ai_agent import AIAgent
+from .agents import LocalAIAgent, MCPAgent
 from .config import LLMConfig
 from .exceptions import AgentConfigurationError
-from .playbook import Playbook, PlaybookExecutionType, PlaybookTriggers
+from .playbook import MarkdownPlaybook, PlaybookTriggers, PythonPlaybook
 from .playbook_decorator import playbook_decorator
 from .utils.markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
+from .utils.parse_utils import parse_metadata_and_description
 
 
 class AgentBuilder:
@@ -28,7 +29,9 @@ class AgentBuilder:
         self.agent_python_namespace = {}
 
     @classmethod
-    def create_agents_from_ast(cls, ast: Dict) -> Dict[str, Type[AIAgent]]:
+    def create_agents_from_ast(
+        cls, ast: Dict
+    ) -> Dict[str, Type[Union[LocalAIAgent, MCPAgent]]]:
         """
         Create agent classes from the AST representation of playbooks.
 
@@ -36,7 +39,7 @@ class AgentBuilder:
             ast: AST dictionary containing playbook definitions
 
         Returns:
-            Dict[str, Type[Agent]]: Dictionary mapping agent names to their classes
+            Dict[str, Type[Union[LocalAIAgent, MCPAgent]]]: Dictionary mapping agent names to their classes
         """
         agents = {}
         for h1 in ast.get("children", []):
@@ -48,7 +51,9 @@ class AgentBuilder:
 
         return agents
 
-    def create_agent_class_from_h1(self, h1: Dict) -> Type[AIAgent]:
+    def create_agent_class_from_h1(
+        self, h1: Dict
+    ) -> Type[Union[LocalAIAgent, MCPAgent]]:
         """
         Create an Agent class from an H1 section in the AST.
 
@@ -56,7 +61,7 @@ class AgentBuilder:
             h1: Dictionary representing an H1 section from the AST
 
         Returns:
-            Type[Agent]: Dynamically created Agent class
+            Type[Union[LocalAIAgent, MCPAgent]]: Dynamically created Agent class
 
         Raises:
             AgentConfigurationError: If agent configuration is invalid
@@ -66,6 +71,17 @@ class AgentBuilder:
             raise AgentConfigurationError("Agent name is required")
 
         description = self._extract_description(h1)
+
+        # Parse metadata to check for remote configuration
+        metadata, _ = parse_metadata_and_description(description)
+
+        # Check if this is a remote MCP agent
+        if "remote" in metadata and metadata["remote"].get("type") == "mcp":
+            return self._create_mcp_agent_class(
+                klass, description, h1, metadata["remote"]
+            )
+
+        # Default to local agent
         self.playbooks = {}
         self.agent_python_namespace = {}
 
@@ -80,7 +96,162 @@ class AgentBuilder:
         refresh_markdown_attributes(h1)
 
         # Create Agent class
-        return self._create_agent_class(klass, description, h1)
+        return self._create_local_agent_class(klass, description, h1)
+
+    def _create_mcp_agent_class(
+        self,
+        klass: str,
+        description: str,
+        h1: Dict,
+        remote_config: Dict[str, Any],
+    ) -> Type[MCPAgent]:
+        """Create an MCP agent class."""
+        agent_class_name = self.make_agent_class_name(klass)
+
+        # Check if class already exists
+        if agent_class_name in globals():
+            raise AgentConfigurationError(
+                f'Agent class {agent_class_name} already exists for agent "{klass}"'
+            )
+
+        # Comprehensive MCP configuration validation
+        self._validate_mcp_configuration(klass, remote_config)
+
+        source_line_number = h1.get("line_number")
+
+        # Define __init__ for the new MCP agent class
+        def __init__(self, event_bus: EventBus):
+            MCPAgent.__init__(
+                self,
+                klass=klass,
+                description=description,
+                event_bus=event_bus,
+                remote_config=remote_config,
+                source_line_number=source_line_number,
+            )
+
+        # Create and return the new MCP Agent class
+        return type(
+            agent_class_name,
+            (MCPAgent,),
+            {
+                "__init__": __init__,
+            },
+        )
+
+    def _validate_mcp_configuration(
+        self, agent_name: str, remote_config: Dict[str, Any]
+    ) -> None:
+        """Validate MCP agent configuration comprehensively.
+
+        Args:
+            agent_name: Name of the agent being configured
+            remote_config: Remote configuration dictionary
+
+        Raises:
+            AgentConfigurationError: If configuration is invalid
+        """
+        # Check if URL is present
+        if "url" not in remote_config:
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires 'url' in remote configuration"
+            )
+
+        # Validate URL format
+        url = remote_config["url"]
+        if not isinstance(url, str):
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires a valid URL string, got: {type(url).__name__}"
+            )
+
+        if not url.strip():
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires a valid URL string, got empty string"
+            )
+
+        # Validate transport type if specified
+        transport = remote_config.get("transport")
+        if transport is not None:
+            valid_transports = [
+                "sse",
+                "stdio",
+                "websocket",
+                "streamable-http",
+                "memory",
+            ]
+            if transport not in valid_transports:
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' has invalid transport '{transport}'. "
+                    f"Valid options: {', '.join(valid_transports)}"
+                )
+
+        # Validate timeout if specified
+        timeout = remote_config.get("timeout")
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' timeout must be a positive number, got: {timeout}"
+                )
+
+        # Validate auth configuration if specified
+        auth = remote_config.get("auth")
+        if auth is not None:
+            if not isinstance(auth, dict):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' auth configuration must be a dictionary, got: {type(auth).__name__}"
+                )
+
+            # Validate auth type if specified
+            auth_type = auth.get("type")
+            if auth_type is not None:
+                valid_auth_types = ["api_key", "bearer", "basic", "mtls"]
+                if auth_type not in valid_auth_types:
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' has invalid auth type '{auth_type}'. "
+                        f"Valid options: {', '.join(valid_auth_types)}"
+                    )
+
+                # Validate required fields for each auth type
+                if auth_type == "api_key" and not auth.get("key"):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with api_key auth requires 'key' field"
+                    )
+                elif auth_type == "bearer" and not auth.get("token"):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with bearer auth requires 'token' field"
+                    )
+                elif auth_type == "basic" and (
+                    not auth.get("username") or not auth.get("password")
+                ):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with basic auth requires 'username' and 'password' fields"
+                    )
+                elif auth_type == "mtls" and (
+                    not auth.get("cert") or not auth.get("key")
+                ):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with mtls auth requires 'cert' and 'key' fields"
+                    )
+
+        # Validate URL scheme matches transport
+        if transport == "stdio":
+            # For stdio, URL should be a file path or command
+            if url.startswith(("http://", "https://", "ws://", "wss://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with stdio transport should not use HTTP/WebSocket URL"
+                )
+        elif transport in ["sse", "streamable-http"]:
+            # For HTTP-based transports, URL should be HTTP(S)
+            if not url.startswith(("http://", "https://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with {transport} transport requires HTTP(S) URL"
+                )
+        elif transport == "websocket":
+            # For WebSocket, URL should be ws(s)://
+            if not url.startswith(("ws://", "wss://", "http://", "https://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with websocket transport requires WebSocket or HTTP URL"
+                )
 
     def _process_code_blocks(self, h1: Dict) -> None:
         """Process code blocks in the AST and extract playbooks."""
@@ -91,10 +262,10 @@ class AgentBuilder:
 
     def _process_markdown_playbooks(self, h1: Dict) -> None:
         """Process H2 sections in the AST and extract markdown playbooks."""
-        for child in h1.get("children", []):
+        for child in h1["children"]:
             if child.get("type") == "h2":
-                playbook = Playbook.from_h2(child)
-                self.playbooks[playbook.klass] = playbook
+                playbook = MarkdownPlaybook.from_h2(child)
+                self.playbooks[playbook.name] = playbook
                 wrapper = self.create_markdown_playbook_python_wrapper(playbook)
                 playbook.func = wrapper
                 playbook.func.__globals__.update(self.agent_python_namespace)
@@ -102,22 +273,22 @@ class AgentBuilder:
                 def create_call_through_agent(agent_python_namespace, playbook):
                     def call_through_agent(*args, **kwargs):
                         return agent_python_namespace["agent"].execute_playbook(
-                            playbook.klass, args, kwargs
+                            playbook.name, args, kwargs
                         )
 
                     return call_through_agent
 
-                self.agent_python_namespace[playbook.klass] = create_call_through_agent(
+                self.agent_python_namespace[playbook.name] = create_call_through_agent(
                     self.agent_python_namespace, playbook
                 )
 
-    def _create_agent_class(
+    def _create_local_agent_class(
         self,
         klass: str,
         description: Optional[str],
         h1: Dict,
-    ) -> Type[AIAgent]:
-        """Create and return a new Agent class."""
+    ) -> Type[LocalAIAgent]:
+        """Create and return a new local Agent class."""
         agent_class_name = self.make_agent_class_name(klass)
 
         # Check if class already exists
@@ -132,7 +303,7 @@ class AgentBuilder:
 
         # Define __init__ for the new class
         def __init__(self, event_bus: EventBus):
-            AIAgent.__init__(
+            LocalAIAgent.__init__(
                 self,
                 klass=klass,
                 description=description,
@@ -144,24 +315,21 @@ class AgentBuilder:
         # Create and return the new Agent class
         return type(
             agent_class_name,
-            (AIAgent,),
+            (LocalAIAgent,),
             {
                 "__init__": __init__,
             },
         )
 
-    def playbooks_from_code_block(
-        self,
-        code_block: str,
-    ) -> Dict[str, Playbook]:
+    def playbooks_from_code_block(self, code_block: str) -> Dict[str, PythonPlaybook]:
         """
         Create playbooks from a code block.
 
         Args:
-            code_block: Python code block string
+            code_block: Python code containing @playbook decorated functions
 
         Returns:
-            Dict[str, Playbook]: Discovered playbooks
+            Dict[str, PythonPlaybook]: Discovered playbooks
         """
         # Set up the execution environment
         existing_keys = list(self.agent_python_namespace.keys())
@@ -185,7 +353,7 @@ class AgentBuilder:
 
         # Add function code to playbooks
         for playbook in playbooks.values():
-            playbook.code = function_code[playbook.klass]
+            playbook.code = function_code[playbook.name]
 
         return playbooks
 
@@ -203,8 +371,8 @@ class AgentBuilder:
         return environment
 
     def _discover_playbook_functions(
-        self, original_keys: List[str]
-    ) -> Dict[str, Playbook]:
+        self, existing_keys: List[str]
+    ) -> Dict[str, PythonPlaybook]:
         """Discover playbook-decorated functions in the namespace."""
         playbooks = {}
         wrappers = {}
@@ -212,7 +380,7 @@ class AgentBuilder:
         for obj_name, obj in self.agent_python_namespace.items():
             if (
                 isinstance(obj, types.FunctionType)
-                and obj_name not in original_keys
+                and obj_name not in existing_keys
                 and getattr(obj, "__is_playbook__", False)
             ):
                 # Create playbook from decorated function
@@ -221,7 +389,7 @@ class AgentBuilder:
                 def create_call_through_agent(agent_python_namespace, playbook):
                     def call_through_agent(*args, **kwargs):
                         return agent_python_namespace["agent"].execute_playbook(
-                            playbook.klass, args, kwargs
+                            playbook.name, args, kwargs
                         )
 
                     return call_through_agent
@@ -235,14 +403,15 @@ class AgentBuilder:
         return playbooks
 
     @staticmethod
-    def _create_playbook_from_function(func: Callable) -> Playbook:
-        """Create a Playbook object from a decorated function."""
+    def _create_playbook_from_function(func: Callable) -> PythonPlaybook:
+        """Create a PythonPlaybook object from a decorated function."""
         sig = inspect.signature(func)
         signature = func.__name__ + str(sig)
         doc = inspect.getdoc(func)
         description = doc.split("\n")[0] if doc is not None else None
         triggers = getattr(func, "__triggers__", [])
-        public = getattr(func, "__public__", False)
+        metadata = getattr(func, "__metadata__", {})
+
         # If triggers are not prefixed with T1:BGN, T1:CND, etc., add T{i}:CND
         # Use regex to find if prefix is missing
         triggers = [
@@ -263,23 +432,17 @@ class AgentBuilder:
         else:
             triggers = None
 
-        return Playbook(
-            klass=func.__name__,
-            execution_type=PlaybookExecutionType.CODE,
-            signature=signature,
-            triggers=triggers,
+        return PythonPlaybook(
+            name=func.__name__,
             func=func,
+            signature=signature,
             description=description,
-            steps=None,
-            notes=None,
-            code=None,
-            markdown=None,
-            public=public,
-            source_line_number=None,  # Python functions don't have markdown line numbers
+            triggers=triggers,
+            metadata=metadata,
         )
 
     @staticmethod
-    def create_markdown_playbook_python_wrapper(playbook: Playbook) -> Callable:
+    def create_markdown_playbook_python_wrapper(playbook: MarkdownPlaybook) -> Callable:
         """
         Create an async python function with the markdown playbook's name and
         inject the function into the agent_python_namespace.
@@ -295,7 +458,7 @@ class AgentBuilder:
         async def wrapper(*args, **kwargs):
             # TODO: Implement actual wrapper logic to call markdown playbooks
             agent = playbook.func.__globals__["agent"]
-            execution = MarkdownPlaybookExecution(agent, playbook.klass, LLMConfig())
+            execution = MarkdownPlaybookExecution(agent, playbook.name, LLMConfig())
             return await execution.execute(*args, **kwargs)
 
         return wrapper
@@ -314,7 +477,7 @@ class AgentBuilder:
         description_parts = []
 
         for child in h1.get("children", []):
-            if child.get("type") == "paragraph":
+            if child.get("type") == "paragraph" or child.get("type") == "hr":
                 description_text = child.get("text", "").strip()
                 if description_text:
                     description_parts.append(description_text)

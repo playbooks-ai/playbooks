@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "playbooks"
-version = "0.3.5"
+version = "0.4.0"
 description = "A framework for creating AI applications and agents using natural language programming"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 license = "MIT"
@@ -21,6 +21,7 @@ redis = "^5.2.1"
 markdown-it-py = "^3.0.0"
 python-frontmatter = "^1.1.0"
 pytest-asyncio = "^0.26.0"
+fastmcp = "^2.0.0"
 
 
 [tool.poetry.group.dev.dependencies]

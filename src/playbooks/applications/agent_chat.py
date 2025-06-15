@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 from playbooks import Playbooks
-from playbooks.base_agent import AgentCommunicationMixin
+from playbooks.agents import AgentCommunicationMixin
 from playbooks.constants import EOM
 from playbooks.events import Event
 from playbooks.markdown_playbook_execution import ExecutionFinished

@@ -1,8 +1,9 @@
 from typing import List
 
-from playbooks.ai_agent import AIAgent
+from playbooks.agents import LocalAIAgent
 from playbooks.config import LLMConfig
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
+from playbooks.enums import LLMMessageRole
 from playbooks.events import (
     LineExecutedEvent,
     PlaybookEndEvent,
@@ -10,7 +11,7 @@ from playbooks.events import (
 )
 from playbooks.interpreter_prompt import InterpreterPrompt
 from playbooks.llm_response import LLMResponse
-from playbooks.playbook import Playbook
+from playbooks.playbook import MarkdownPlaybook
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel, SessionLogItemMessage
 from playbooks.utils.llm_helper import get_completion
@@ -23,9 +24,9 @@ class ExecutionFinished(Exception):
 
 
 class MarkdownPlaybookExecution:
-    def __init__(self, agent: AIAgent, playbook_klass: str, llm_config: LLMConfig):
-        self.agent: AIAgent = agent
-        self.playbook: Playbook = agent.playbooks[playbook_klass]
+    def __init__(self, agent: LocalAIAgent, playbook_name: str, llm_config: LLMConfig):
+        self.agent: LocalAIAgent = agent
+        self.playbook: MarkdownPlaybook = agent.playbooks[playbook_name]
         self.llm_config: LLMConfig = llm_config
 
         # Initialize debug handler
@@ -45,12 +46,12 @@ class MarkdownPlaybookExecution:
 
         # Publish playbook start event
         self.agent.state.event_bus.publish(
-            PlaybookStartEvent(playbook=self.playbook.klass)
+            PlaybookStartEvent(playbook=self.playbook.name)
         )
 
-        call = PlaybookCall(self.playbook.klass, args, kwargs)
+        call = PlaybookCall(self.playbook.name, args, kwargs)
 
-        instruction = f"Execute {str(call)}"
+        instruction = f"Execute {str(call)} from step 01"
         artifacts_to_load = []
         await self.debug_handler.handle_execution_start(
             self.agent.state.call_stack.peek(),
@@ -62,11 +63,15 @@ class MarkdownPlaybookExecution:
             llm_response = LLMResponse(
                 await self.make_llm_call(
                     instruction=instruction,
-                    agent_instructions=self.agent.description,
+                    agent_instructions="Remember: " + self.agent.description,
                     artifacts_to_load=artifacts_to_load,
                 ),
                 event_bus=self.agent.state.event_bus,
                 agent=self.agent,
+            )
+
+            self.agent.state.call_stack.peek().add_cached_llm_message(
+                llm_response.response, role=LLMMessageRole.ASSISTANT
             )
             # print(f"[EXECUTE] llm_response: {llm_response.response}")
 
@@ -209,7 +214,7 @@ class MarkdownPlaybookExecution:
 
         self.agent.state.event_bus.publish(
             PlaybookEndEvent(
-                playbook=self.playbook.klass,
+                playbook=self.playbook.name,
                 return_value=return_value,
                 call_stack_depth=call_stack_depth,
             )
@@ -233,6 +238,8 @@ class MarkdownPlaybookExecution:
             instruction=instruction,
             agent_instructions=agent_instructions,
             artifacts_to_load=artifacts_to_load,
+            other_agents_information=self.agent.other_agents_information(),
+            trigger_instructions=self.agent.all_trigger_instructions(),
         )
 
         chunks = [

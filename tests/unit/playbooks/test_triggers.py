@@ -31,14 +31,14 @@ async def test_triggers(test_data_dir):
     log = ai.state.session_log.to_log_full()
 
     # python playbook trigger on user providing a PIN
-    assert "Validation1()" in log
+    assert "Validation1" in log
 
     # markdown playbook trigger on user providing an email
-    assert "Validation2()" in log
+    assert "Validation2" in log
 
     # Trigger on variable set
-    assert "TooBig()" in log
+    assert "TooBig" in log
 
     # Make sure the program completed its task
-    assert "LoadAccount()" in log
+    assert "LoadAccount" in log
     assert "8999" in log

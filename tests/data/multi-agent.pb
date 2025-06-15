@@ -18,9 +18,10 @@ async def A(num: float) -> float:
 ### Triggers
 - When program starts
 ### Steps
+- Get Canada's secret
 - Tell user about Canada's secret
-- get population of India from the country info agent
-- return $num * population of India * 2
+- get $population of India from the country info agent
+- return "{$num} {$population}"
 
 
 # Country info
@@ -37,15 +38,25 @@ async def GetLengthOfCountry(country: str):
 ### Steps
 - Say hello
 
-## public: GetCountryPopulation($country)
+## GetCountryPopulation($country)
+public: true
 ### Steps
-- Compute the square root of the length of $country
-- Return the population of $country
+- $population = Compute the square root of the length of $country
+- Return $population
 
-## public:GetCountrySecret($country)
+## GetCountrySecret($country)
+public: true
 ### Triggers
 - When you need to get a secret about a country
 ### Steps
 - Return an unusual historical fact about $country
 
+## Main
 
+### Triggers
+- At the beginning
+
+### Steps
+- $answer = FirstAgent.A(1024)
+- Tell user the $answer
+- End program

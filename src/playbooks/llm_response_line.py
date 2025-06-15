@@ -2,7 +2,7 @@ import ast
 import re
 from typing import Any, List
 
-from playbooks.ai_agent import AIAgent
+from playbooks.agents import LocalAIAgent
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
@@ -10,7 +10,7 @@ from playbooks.variables import Variables
 
 
 class LLMResponseLine:
-    def __init__(self, text: str, event_bus: EventBus, agent: AIAgent):
+    def __init__(self, text: str, event_bus: EventBus, agent: LocalAIAgent):
         self.text = text
         self.event_bus = event_bus
         self.agent = agent
@@ -61,7 +61,7 @@ class LLMResponseLine:
             self.exit_program = True
 
         # detect if return value in backticks somewhere in the line using regex
-        match = re.search(r"`Return\[(.*)\]`", self.text)
+        match = re.search(r"`Return\[(.*?)\]`", self.text)
         literal_map = {
             "true": True,
             "false": False,
@@ -82,7 +82,7 @@ class LLMResponseLine:
         # e.g., `MyPlaybook(arg1, arg2, kwarg1="value")` or `Playbook(key1=$var1)`
         # or `MyPlaybook(10, "someval", kwarg1="value", kwarg2=$my_var)`
         playbook_call_matches = re.findall(
-            r"\`(?:.*\W*\=\W*)?([A-Za-z0-9_]+\(.*?\))\`", self.text
+            r"\`(?:.*\W*\=\W*)?([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\(.*?\))\`", self.text
         )
 
         for playbook_call in playbook_call_matches:
@@ -124,7 +124,7 @@ class LLMResponseLine:
             raise ValueError("Expected a playbook call")
 
         # Extract playbook name
-        playbook_name = tree.body.func.id
+        playbook_name = self._parse_playbook_name(tree.body)
 
         # Extract positional arguments
         args = []
@@ -133,7 +133,7 @@ class LLMResponseLine:
                 # Convert back to $variable format
                 args.append(arg.id.replace("__substituted__", "$"))
             elif isinstance(arg, ast.Constant):
-                if "__substituted__" in arg.value:
+                if isinstance(arg.value, str) and "__substituted__" in arg.value:
                     args.append(arg.value.replace("__substituted__", "$"))
                 else:
                     args.append(arg.value)
@@ -160,6 +160,30 @@ class LLMResponseLine:
                 kwargs[keyword.arg] = ast.literal_eval(ast.unparse(keyword.value))
 
         return PlaybookCall(playbook_name, args, kwargs)
+
+    def _parse_playbook_name(self, call_node: ast.Call) -> str:
+        """Parse a playbook name.
+
+        This method parses a playbook name string into a dictionary containing the playbook name,
+        positional arguments, and keyword arguments, handling both literal values and variable
+        references (starting with $).
+        """
+        func = call_node.func
+
+        # Reconstruct the full function name from attribute chain
+        parts = []
+        current = func
+
+        while isinstance(current, ast.Attribute):
+            parts.append(current.attr)
+            current = current.value
+
+        if isinstance(current, ast.Name):
+            parts.append(current.id)
+
+        # Reverse to get correct order
+        parts.reverse()
+        return ".".join(parts)
 
     def _parse_arg_value(self, arg_value: str) -> Any:
         """Parse an argument value to the appropriate type.

@@ -1,6 +1,9 @@
 import pytest
 
 from playbooks import Playbooks
+from playbooks.agents.local_ai_agent import LocalAIAgent
+from playbooks.agents.mcp_agent import MCPAgent
+from tests.unit.playbooks.test_mcp_end_to_end import InMemoryMCPTransport
 
 
 @pytest.mark.asyncio
@@ -58,7 +61,11 @@ async def test_example_05(test_data_dir):
 
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
-    assert log.count("GetCountryFact() returned") == 5
+    assert "India" in log
+    assert "China" in log
+    assert "Nepal" in log
+    assert "Bangladesh" in log
+    assert "Myanmar" in log
 
 
 # @pytest.mark.asyncio
@@ -96,3 +103,43 @@ async def test_example_05(test_data_dir):
 #     await playbooks.program.run_till_exit()
 #     log = playbooks.program.agents[0].state.session_log.to_log_full()
 #     assert "John" in log
+
+
+@pytest.mark.asyncio
+async def test_example_10(test_data_dir):
+    playbooks = Playbooks([test_data_dir / "10-configs.pb"])
+
+    assert len(playbooks.program.agents) == 3
+
+    accountant = playbooks.program.agents[0]
+    assert accountant.metadata["framework"] == "GAAP"
+    assert accountant.metadata["author"] == "John Doe"
+    assert accountant.metadata["specialization"][0] == "accounting"
+    assert accountant.metadata["specialization"][1] == "tax"
+    assert "metadata" not in accountant.description
+
+    paralegal = playbooks.program.agents[1]
+    assert paralegal.metadata["mcp"]["url"] == "http://lawoffice.com/Paralegal"
+    assert paralegal.metadata["mcp"]["timeout"] == 10
+    assert "metadata" not in paralegal.description
+
+
+@pytest.mark.asyncio
+async def test_example_11(test_data_dir, test_mcp_server_instance):
+    playbooks = Playbooks([test_data_dir / "11-mcp-agent.pb"])
+
+    mcp_agent = next(
+        filter(lambda x: isinstance(x, MCPAgent), playbooks.program.agents)
+    )
+    markdown_agent = next(
+        filter(lambda x: isinstance(x, LocalAIAgent), playbooks.program.agents)
+    )
+
+    mcp_agent.transport = InMemoryMCPTransport(test_mcp_server_instance)
+
+    await playbooks.program.run_till_exit()
+
+    log = markdown_agent.state.session_log.to_log_full()
+
+    # Check that the secret message appears in the log
+    assert "Playbooks+MCP FTW!" in log

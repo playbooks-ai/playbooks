@@ -6,7 +6,7 @@ async def Validation1(pin: str) -> bool:
   while len(pin) != 4 or not pin.isdigit():
     await Say("Sorry, that's not a valid PIN. Please try again.")
     pin = await WaitForMessage("human")
-  agent.state.variables["pin"] = pin
+  agent.state.variables["$pin"] = pin
   return pin
 ```
 
@@ -14,8 +14,8 @@ async def Validation1(pin: str) -> bool:
 ### Triggers
 - At the beginning
 ### Steps
-- Ask user for a PIN
-- Ask usre for email
+- Ask user for a $pin
+- Ask user for $email
 - $x = 10
 - Load user account
 - $x = $x * 2
@@ -30,7 +30,7 @@ async def Validation1(pin: str) -> bool:
 ### Triggers
 - When user provides an email
 ### Steps
-- While email is not valid
+- While $email is not valid
   - Tell user email is not valid and ask for email again
   - If the user gives up
     - Apologize and end the conversation

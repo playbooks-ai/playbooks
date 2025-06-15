@@ -68,7 +68,11 @@ class Variables:
         return len(self.variables)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {name: variable.value for name, variable in self.variables.items()}
+        return {
+            name: variable.value
+            for name, variable in self.variables.items()
+            if variable.value is not None and not variable.name.startswith("$_")
+        }
 
     def __repr__(self) -> str:
         return f"Variables({self.to_dict()})"
