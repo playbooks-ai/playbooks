@@ -7,7 +7,7 @@ from typing import List
 import frontmatter
 
 from .agent_builder import AgentBuilder
-from .agents import HumanAgent, LocalAIAgent
+from .agents import AIAgent, HumanAgent
 from .debug.server import DebugServer
 from .event_bus import EventBus
 from .markdown_playbook_execution import ExecutionFinished
@@ -77,10 +77,10 @@ class Program(ProgramAgentsCommunicationMixin):
             agent.program = self
 
         for agent in self.agents:
-            if isinstance(agent, LocalAIAgent):
+            if isinstance(agent, AIAgent):
                 # Register other agents for direct communication
                 for other_agent in self.agents:
-                    if other_agent != agent and isinstance(other_agent, LocalAIAgent):
+                    if other_agent != agent and isinstance(other_agent, AIAgent):
                         agent.register_agent(other_agent.klass, other_agent)
 
     def _get_compiled_file_name(self) -> str:

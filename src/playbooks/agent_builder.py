@@ -2,17 +2,18 @@ import ast
 import inspect
 import re
 import types
-from typing import Any, Callable, Dict, List, Optional, Type
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 from playbooks.event_bus import EventBus
 from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
 
-from .agents import LocalAIAgent
+from .agents import LocalAIAgent, MCPAgent
 from .config import LLMConfig
 from .exceptions import AgentConfigurationError
 from .playbook import MarkdownPlaybook, PlaybookTriggers, PythonPlaybook
 from .playbook_decorator import playbook_decorator
 from .utils.markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
+from .utils.parse_utils import parse_metadata_and_description
 
 
 class AgentBuilder:
@@ -28,7 +29,9 @@ class AgentBuilder:
         self.agent_python_namespace = {}
 
     @classmethod
-    def create_agents_from_ast(cls, ast: Dict) -> Dict[str, Type[LocalAIAgent]]:
+    def create_agents_from_ast(
+        cls, ast: Dict
+    ) -> Dict[str, Type[Union[LocalAIAgent, MCPAgent]]]:
         """
         Create agent classes from the AST representation of playbooks.
 
@@ -36,7 +39,7 @@ class AgentBuilder:
             ast: AST dictionary containing playbook definitions
 
         Returns:
-            Dict[str, Type[LocalAIAgent]]: Dictionary mapping agent names to their classes
+            Dict[str, Type[Union[LocalAIAgent, MCPAgent]]]: Dictionary mapping agent names to their classes
         """
         agents = {}
         for h1 in ast.get("children", []):
@@ -48,7 +51,9 @@ class AgentBuilder:
 
         return agents
 
-    def create_agent_class_from_h1(self, h1: Dict) -> Type[LocalAIAgent]:
+    def create_agent_class_from_h1(
+        self, h1: Dict
+    ) -> Type[Union[LocalAIAgent, MCPAgent]]:
         """
         Create an Agent class from an H1 section in the AST.
 
@@ -56,7 +61,7 @@ class AgentBuilder:
             h1: Dictionary representing an H1 section from the AST
 
         Returns:
-            Type[LocalAIAgent]: Dynamically created Agent class
+            Type[Union[LocalAIAgent, MCPAgent]]: Dynamically created Agent class
 
         Raises:
             AgentConfigurationError: If agent configuration is invalid
@@ -66,6 +71,17 @@ class AgentBuilder:
             raise AgentConfigurationError("Agent name is required")
 
         description = self._extract_description(h1)
+
+        # Parse metadata to check for remote configuration
+        metadata, _ = parse_metadata_and_description(description)
+
+        # Check if this is a remote MCP agent
+        if "remote" in metadata and metadata["remote"].get("type") == "mcp":
+            return self._create_mcp_agent_class(
+                klass, description, h1, metadata["remote"]
+            )
+
+        # Default to local agent
         self.playbooks = {}
         self.agent_python_namespace = {}
 
@@ -80,7 +96,51 @@ class AgentBuilder:
         refresh_markdown_attributes(h1)
 
         # Create Agent class
-        return self._create_agent_class(klass, description, h1)
+        return self._create_local_agent_class(klass, description, h1)
+
+    def _create_mcp_agent_class(
+        self,
+        klass: str,
+        description: str,
+        h1: Dict,
+        remote_config: Dict[str, Any],
+    ) -> Type[MCPAgent]:
+        """Create an MCP agent class."""
+        agent_class_name = self.make_agent_class_name(klass)
+
+        # Check if class already exists
+        if agent_class_name in globals():
+            raise AgentConfigurationError(
+                f'Agent class {agent_class_name} already exists for agent "{klass}"'
+            )
+
+        # Validate MCP configuration
+        if not remote_config.get("url"):
+            raise AgentConfigurationError(
+                f"MCP agent {klass} requires 'url' in remote configuration"
+            )
+
+        source_line_number = h1.get("line_number")
+
+        # Define __init__ for the new MCP agent class
+        def __init__(self, event_bus: EventBus):
+            MCPAgent.__init__(
+                self,
+                klass=klass,
+                description=description,
+                event_bus=event_bus,
+                remote_config=remote_config,
+                source_line_number=source_line_number,
+            )
+
+        # Create and return the new MCP Agent class
+        return type(
+            agent_class_name,
+            (MCPAgent,),
+            {
+                "__init__": __init__,
+            },
+        )
 
     def _process_code_blocks(self, h1: Dict) -> None:
         """Process code blocks in the AST and extract playbooks."""
@@ -111,13 +171,13 @@ class AgentBuilder:
                     self.agent_python_namespace, playbook
                 )
 
-    def _create_agent_class(
+    def _create_local_agent_class(
         self,
         klass: str,
         description: Optional[str],
         h1: Dict,
     ) -> Type[LocalAIAgent]:
-        """Create and return a new Agent class."""
+        """Create and return a new local Agent class."""
         agent_class_name = self.make_agent_class_name(klass)
 
         # Check if class already exists
