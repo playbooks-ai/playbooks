@@ -192,7 +192,11 @@ class LocalAIAgent(AIAgent):
             if "." in playbook_name:
                 agent_name, actual_playbook_name = playbook_name.split(".", 1)
                 target_agent = self.other_agents.get(agent_name)
-                if target_agent and actual_playbook_name in target_agent.playbooks:
+                if (
+                    target_agent
+                    and actual_playbook_name in target_agent.playbooks
+                    and target_agent.playbooks[actual_playbook_name].public
+                ):
                     result = await target_agent.execute_playbook(
                         actual_playbook_name, args, kwargs
                     )
@@ -201,7 +205,10 @@ class LocalAIAgent(AIAgent):
 
             # Try to execute playbook in other agents (fallback)
             for agent in self.other_agents.values():
-                if playbook_name in agent.playbooks:
+                if (
+                    playbook_name in agent.playbooks
+                    and agent.playbooks[playbook_name].public
+                ):
                     result = await agent.execute_playbook(playbook_name, args, kwargs)
                     await self._post_execute(call, result, langfuse_span)
                     return result
