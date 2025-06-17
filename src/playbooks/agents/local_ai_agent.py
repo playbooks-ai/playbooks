@@ -216,4 +216,4 @@ class LocalAIAgent(AIAgent):
             # Playbook not found
             error_msg = f"Playbook '{playbook_name}' not found in agent '{self.klass}' or any registered agents"
             await self._post_execute(call, error_msg, langfuse_span)
-            raise ValueError(error_msg)
+            return error_msg
