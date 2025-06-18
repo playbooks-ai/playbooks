@@ -92,4 +92,4 @@ class RemotePlaybook(Playbook):
 
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""
-        return f"RemotePlaybook(name='{self.name}', agent='{self.agent_name}')"
+        return f"RemotePlaybook {self.agent_name}.{self.name}: {self.description}"
