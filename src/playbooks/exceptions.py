@@ -35,3 +35,9 @@ class VendorAPIRateLimitError(PlaybooksError):
     """Raised when the vendor API rate limit is exceeded."""
 
     pass
+
+
+class ExecutionFinished(Exception):
+    """Custom exception to indicate that the playbook execution is finished."""
+
+    pass

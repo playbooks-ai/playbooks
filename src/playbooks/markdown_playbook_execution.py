@@ -9,18 +9,13 @@ from playbooks.events import (
     PlaybookEndEvent,
     PlaybookStartEvent,
 )
+from playbooks.exceptions import ExecutionFinished
 from playbooks.interpreter_prompt import InterpreterPrompt
 from playbooks.llm_response import LLMResponse
 from playbooks.playbook import MarkdownPlaybook
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel, SessionLogItemMessage
 from playbooks.utils.llm_helper import get_completion
-
-
-class ExecutionFinished(Exception):
-    """Custom exception to indicate that the playbook execution is finished."""
-
-    pass
 
 
 class MarkdownPlaybookExecution:

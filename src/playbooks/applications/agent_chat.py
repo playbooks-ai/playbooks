@@ -11,6 +11,7 @@ import uuid
 from pathlib import Path
 from typing import Callable, List
 
+import litellm
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
@@ -19,7 +20,7 @@ from playbooks import Playbooks
 from playbooks.agents import AgentCommunicationMixin
 from playbooks.constants import EOM
 from playbooks.events import Event
-from playbooks.markdown_playbook_execution import ExecutionFinished
+from playbooks.exceptions import ExecutionFinished
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel
 
@@ -148,7 +149,13 @@ async def main(
     wait_for_client: bool = False,
     stop_on_entry: bool = False,
 ):
-    """Main entrypoint for the CLI application.
+    """
+    Playbooks application host for agent chat. You can execute a playbooks program within this application container.
+
+    Example:
+        ```sh
+        python -m playbooks.applications.agent_chat tests/data/02-personalized-greeting.pb
+        ```
 
     Args:
         program_paths: Path to the playbook file(s) to load
@@ -158,6 +165,7 @@ async def main(
         debug_port: Port for the debug server
         wait_for_client: Whether to wait for a client to connect before starting
         stop_on_entry: Whether to stop at the beginning of playbook execution
+
     """
     # print(
     #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
@@ -171,7 +179,12 @@ async def main(
     session_id = str(uuid.uuid4())
     if isinstance(program_paths, str):
         program_paths = [program_paths]
-    playbooks = Playbooks(program_paths, session_id=session_id)
+    try:
+        playbooks = Playbooks(program_paths, session_id=session_id)
+    except litellm.exceptions.AuthenticationError as e:
+        console.print(f"[bold red]Error:[/bold red] {e}")
+        raise
+
     pubsub = PubSub()
 
     # Wrap the session_log with the custom wrapper for all agents

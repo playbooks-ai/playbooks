@@ -12,7 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List
 
 from playbooks import Playbooks
-from playbooks.markdown_playbook_execution import ExecutionFinished
+from playbooks.exceptions import ExecutionFinished
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel
 
