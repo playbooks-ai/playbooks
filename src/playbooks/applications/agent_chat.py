@@ -13,15 +13,12 @@ from typing import Callable, List
 
 import litellm
 from rich.console import Console
-from rich.panel import Panel
-from rich.text import Text
 
 from playbooks import Playbooks
 from playbooks.agents import AgentCommunicationMixin
 from playbooks.constants import EOM
 from playbooks.events import Event
 from playbooks.exceptions import ExecutionFinished
-from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel
 
 # Add the src directory to the Python path to import playbooks
@@ -55,32 +52,15 @@ class SessionLogWrapper:
         self._pubsub = pubsub
         self.verbose = verbose
         self.agent = agent
+        self.current_streaming_panel = None
+        self.streaming_content = ""
+        self.is_streaming = False
 
     def append(self, msg, level=SessionLogItemLevel.MEDIUM):
         """Append a message to the session log and publish it."""
         self._session_log.append(msg, level)
-        # Always publish messages related to SendMessage to human
-        if (
-            isinstance(msg, PlaybookCall)
-            and msg.playbook_klass == "SendMessage"
-            and msg.args
-            and msg.args[0] == "human"
-        ):
-            # Use the agent's class/type as the display name
-            agent_name = self.agent.klass if self.agent else "Agent"
-
-            # Create a styled message with Rich
-            message_text = Text(msg.args[1])
-            console.print()  # Add a newline for spacing
-            console.print(
-                Panel(
-                    message_text,
-                    title=agent_name,
-                    border_style="cyan",
-                    title_align="left",
-                    expand=False,
-                )
-            )
+        # Skip traditional display entirely - streaming handles all output now
+        # Traditional panels are disabled in favor of streaming output
 
         if self.verbose:
             self._pubsub.publish(str(msg))
@@ -90,6 +70,31 @@ class SessionLogWrapper:
 
     def __str__(self):
         return str(self._session_log)
+
+    async def start_streaming_say(self):
+        """Start displaying a streaming Say() message."""
+        agent_name = self.agent.klass if self.agent else "Agent"
+        self.streaming_content = ""
+        self.is_streaming = True
+
+        # Print agent name to show streaming is starting
+        console.print(f"\n[green]{agent_name}:[/green] ", end="")
+
+    async def stream_say_update(self, content: str):
+        """Add content to the current streaming Say() message."""
+        self.streaming_content += content
+        # Simple streaming display - just print the new content
+        print(content, end="", flush=True)
+
+    async def complete_streaming_say(self):
+        """Complete the current streaming Say() message."""
+        if self.is_streaming:
+            # Print a new line to finish the streaming output
+            console.print()
+
+            # Reset streaming state
+            self.is_streaming = False
+            self.streaming_content = ""
 
 
 # Store original method for restoring later
@@ -190,9 +195,14 @@ async def main(
     # Wrap the session_log with the custom wrapper for all agents
     for agent in playbooks.program.agents:
         if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-            agent.state.session_log = SessionLogWrapper(
-                agent.state.session_log, pubsub, verbose, agent
-            )
+            wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose, agent)
+            agent.state.session_log = wrapper
+
+            # Add streaming methods to the agent if it's not a human agent
+            if hasattr(agent, "klass") and agent.klass != "human":
+                agent.start_streaming_say = wrapper.start_streaming_say
+                agent.stream_say_update = wrapper.stream_say_update
+                agent.complete_streaming_say = wrapper.complete_streaming_say
 
     def log_event(event: Event):
         print(event)

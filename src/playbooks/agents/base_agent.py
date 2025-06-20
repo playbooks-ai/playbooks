@@ -64,3 +64,15 @@ class BaseAgent(AgentCommunicationMixin, ABC):
 
     async def initialize(self):
         pass
+
+    async def start_streaming_say(self):
+        """Start displaying a streaming Say() message. Override in subclasses."""
+        pass
+
+    async def stream_say_update(self, content: str):
+        """Add content to the current streaming Say() message. Override in subclasses."""
+        pass
+
+    async def complete_streaming_say(self):
+        """Complete the current streaming Say() message. Override in subclasses."""
+        pass
