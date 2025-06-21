@@ -345,7 +345,9 @@ class AgentBuilder:
         function_code = {}
         parsed_code = ast.parse(code_block)
         for item in parsed_code.body:
-            if isinstance(item, ast.AsyncFunctionDef):
+            if isinstance(item, ast.AsyncFunctionDef) or isinstance(
+                item, ast.FunctionDef
+            ):
                 function_code[item.name] = ast.unparse(item)
 
         # Discover all @playbook-decorated functions

@@ -9,10 +9,10 @@ import threading
 import uuid
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Dict, List
+from typing import Dict
 
 from playbooks import Playbooks
-from playbooks.markdown_playbook_execution import ExecutionFinished
+from playbooks.exceptions import ExecutionFinished
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel
 
@@ -24,6 +24,8 @@ class _OutboxWrapper:
         self._session_log = session_log
         self._queue = queue
         self.agent = agent
+        self.streaming_content = ""
+        self.is_streaming = False
 
     def append(self, msg, level=SessionLogItemLevel.MEDIUM):
         self._session_log.append(msg, level)
@@ -33,7 +35,9 @@ class _OutboxWrapper:
             and msg.args
             and msg.args[0] == "human"
         ):
-            self._queue.put_nowait(msg.args[1])
+            # Only send traditional messages if not currently streaming
+            if not self.is_streaming:
+                self._queue.put_nowait(msg.args[1])
 
     def __getattr__(self, name):
         return getattr(self._session_log, name)
@@ -43,6 +47,46 @@ class _OutboxWrapper:
 
     def __repr__(self):
         return self._session_log.__repr__()
+
+    async def start_streaming_say(self):
+        """Start streaming a Say() message."""
+        self.streaming_content = ""
+        self.is_streaming = True
+        # Send a streaming start event
+        self._queue.put_nowait(
+            {
+                "type": "stream_start",
+                "agent": self.agent.klass if self.agent else "Agent",
+            }
+        )
+
+    async def stream_say_update(self, content: str):
+        """Update streaming Say() message content."""
+        if self.is_streaming:
+            self.streaming_content += content
+            # Send the incremental update
+            self._queue.put_nowait(
+                {
+                    "type": "stream_update",
+                    "content": content,
+                    "total_content": self.streaming_content,
+                    "agent": self.agent.klass if self.agent else "Agent",
+                }
+            )
+
+    async def complete_streaming_say(self):
+        """Complete the streaming Say() message."""
+        if self.is_streaming:
+            # Send the complete message
+            self._queue.put_nowait(
+                {
+                    "type": "stream_complete",
+                    "content": self.streaming_content,
+                    "agent": self.agent.klass if self.agent else "Agent",
+                }
+            )
+            self.is_streaming = False
+            self.streaming_content = ""
 
 
 @dataclass
@@ -69,10 +113,13 @@ class _Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/runs/") and self.path.endswith("/messages"):
             self._handle_run_message()
             return
+        if self.path.startswith("/runs/") and self.path.endswith("/stream"):
+            self._handle_stream_message()
+            return
         self._send(404, "Not Found")
 
     def _handle_new_run(self) -> None:
-        session_id = str(uuid.uuid4())
+        run_id = str(uuid.uuid4())
         length = int(self.headers.get("Content-Length", 0))
         data = json.loads(self.rfile.read(length)) if length else {}
         path = data.get("path")
@@ -82,25 +129,30 @@ class _Handler(BaseHTTPRequestHandler):
             return
         try:
             if path:
-                playbooks = Playbooks([path], session_id=session_id)
+                playbooks = Playbooks([path], session_id=run_id)
             else:
-                playbooks = Playbooks.from_string(program, session_id=session_id)
+                playbooks = Playbooks.from_string(program, session_id=run_id)
         except Exception as e:  # pragma: no cover - invalid input
             self._send(400, str(e))
             return
 
-        outbox: asyncio.Queue[str] = asyncio.Queue()
+        outbox = asyncio.Queue()  # Can hold both str and dict messages
 
         for agent in playbooks.program.agents:
             # Wrap the session log to capture messages for the HTTP client
-            agent.state.session_log = _OutboxWrapper(
-                agent.state.session_log, outbox, agent
-            )
+            wrapper = _OutboxWrapper(agent.state.session_log, outbox, agent)
+            agent.state.session_log = wrapper
+
+            # Add streaming methods to the agent if it's not a human agent
+            if hasattr(agent, "klass") and agent.klass != "human":
+                agent.start_streaming_say = wrapper.start_streaming_say
+                agent.stream_say_update = wrapper.stream_say_update
+                agent.complete_streaming_say = wrapper.complete_streaming_say
 
         task = self.server.loop.create_task(
-            _run_program(playbooks, self.server, session_id)
+            _run_program(playbooks, self.server, run_id)
         )
-        self.server.runs[session_id] = _Run(
+        self.server.runs[run_id] = _Run(
             playbooks, outbox, task, playbooks.program.agents[0]
         )
 
@@ -108,26 +160,32 @@ class _Handler(BaseHTTPRequestHandler):
         asyncio.run_coroutine_threadsafe(asyncio.sleep(0.1), self.server.loop).result()
 
         # Collect any initial messages
-        msgs: List[str] = []
+        msgs = []
         while not outbox.empty():
-            msgs.append(outbox.get_nowait())
+            msg = outbox.get_nowait()
+            # Handle both old string format and new streaming dict format
+            if isinstance(msg, str):
+                msgs.append({"type": "message", "content": msg})
+            else:
+                msgs.append(msg)
 
         body = json.dumps(
             {
-                "session_id": session_id,
+                "run_id": run_id,
                 "messages": msgs,
-                "terminated": self.server.runs[session_id].terminated,
+                "terminated": self.server.runs[run_id].terminated,
             }
         )
         self._send(200, body, "application/json")
 
     def _handle_run_message(self) -> None:
+        """Handle traditional (non-streaming) message requests."""
         parts = self.path.strip("/").split("/")
         if len(parts) != 3:
             self._send(404, "Not Found")
             return
-        session_id = parts[1]
-        run = self.server.runs.get(session_id)
+        run_id = parts[1]
+        run = self.server.runs.get(run_id)
         if not run:
             self._send(404, "Run not found")
             return
@@ -137,18 +195,127 @@ class _Handler(BaseHTTPRequestHandler):
         if not message:
             self._send(400, "Missing message")
             return
+
+        # Process message and collect all responses
         asyncio.run_coroutine_threadsafe(
             run.playbooks.program.route_message("human", run.main_agent.id, message),
             self.server.loop,
         ).result()
         asyncio.run_coroutine_threadsafe(asyncio.sleep(0.1), self.server.loop).result()
-        msgs: List[str] = []
+
+        msgs = []
         while not run.outbox.empty():
-            msgs.append(run.outbox.get_nowait())
+            msg = run.outbox.get_nowait()
+            if isinstance(msg, str):
+                msgs.append({"type": "message", "content": msg})
+            else:
+                msgs.append(msg)
+
         body = json.dumps(
-            {"session_id": session_id, "messages": msgs, "terminated": run.terminated}
+            {"run_id": run_id, "messages": msgs, "terminated": run.terminated}
         )
         self._send(200, body, "application/json")
+
+    def _handle_stream_message(self) -> None:
+        """Handle streaming message requests using Server-Sent Events."""
+        parts = self.path.strip("/").split("/")
+        if len(parts) != 3:
+            self._send(404, "Not Found")
+            return
+        run_id = parts[1]
+        run = self.server.runs.get(run_id)
+        if not run:
+            self._send(404, "Run not found")
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        data = json.loads(self.rfile.read(length)) if length else {}
+        message = data.get("message")
+        if not message:
+            self._send(400, "Missing message")
+            return
+
+        # Set up SSE headers
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+
+        # Force headers to be sent immediately
+        self.wfile.flush()
+
+        # Create a queue to monitor streaming events in real-time
+        import queue
+        import threading
+
+        event_queue = queue.Queue()
+
+        # Wrapper to capture events as they happen
+        original_put_nowait = run.outbox.put_nowait
+
+        def capture_events(item):
+            original_put_nowait(item)
+            event_queue.put(item)
+
+        run.outbox.put_nowait = capture_events
+
+        try:
+            # Start the message processing in background
+            def process_message():
+                asyncio.run_coroutine_threadsafe(
+                    run.playbooks.program.route_message(
+                        "human", run.main_agent.id, message
+                    ),
+                    self.server.loop,
+                ).result()
+                event_queue.put("__DONE__")  # Signal completion
+
+            thread = threading.Thread(target=process_message)
+            thread.daemon = True
+            thread.start()
+
+            # Stream events as they arrive
+            while True:
+                try:
+                    # Wait for next event with timeout
+                    item = event_queue.get(timeout=1.0)
+
+                    if item == "__DONE__":
+                        self._send_sse_event({"type": "done"})
+                        break
+
+                    # Convert to event format
+                    if isinstance(item, str):
+                        event_data = {"type": "message", "content": item}
+                    else:
+                        event_data = item
+
+                    # Send immediately
+                    self._send_sse_event(event_data)
+
+                except queue.Empty:
+                    # Check if run is still alive
+                    if not thread.is_alive() and run.terminated:
+                        self._send_sse_event({"type": "done"})
+                        break
+                    continue
+
+        except Exception as e:
+            self._send_sse_event({"type": "error", "error": str(e)})
+        finally:
+            # Restore original method
+            run.outbox.put_nowait = original_put_nowait
+
+    def _send_sse_event(self, data: dict) -> None:
+        """Send a Server-Sent Event."""
+        try:
+            event_line = f"data: {json.dumps(data)}\n\n"
+            self.wfile.write(event_line.encode())
+            self.wfile.flush()
+        except Exception:
+            # Connection might be closed
+            pass
 
     def log_message(self, format, *args):  # noqa: D401
         return

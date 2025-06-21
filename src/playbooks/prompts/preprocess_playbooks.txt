@@ -35,17 +35,17 @@ Each step starts with NN(.NN)*:CODE format (NN = two digits, Sub-steps use dot n
 - Example: `01:EXE List 5 $cities:list near $city`
 
 **QUE** - Queue function/playbook calls
-- Without result: `01:QUE Say(Say hello to the user)`
-- With result: `01:QUE $result:type = FunctionName(param=$value)`
+- Without result: `01:QUE Say(Say hello to the user); YLD call`
+- With result: `01:QUE $result:type = FunctionName(param=$value); YLD call`
 
 **YLD** - Yield control (ALWAYS follows specific patterns)
 - After one or more QUE: add `YLD call` to execute the queued calls concurrently, including calls to say something to the user
 - Pattern: QUE → QUE → YLD → next step
 - After asking user for input: add `YLD user` to wait for user input
-- Pattern: QUE ask user for input → YLD user to wait for input → next step
+- Pattern: QUE ask user for input → `YLD user` to wait for input → next step
 - To exit program: `YLD exit`
-- Pattern: QUE some call → QUE another call → QUE ask user for input → YLD user to wait for input → next step
-- Use YLD user only when asking for user input
+- Pattern: QUE some call → QUE another call → QUE ask user for input → `YLD user` to wait for input → next step
+- Use `YLD user` only after asking for user input
 
 **CND** - Conditions (if/while/for)
 - Example: `01:CND If $name == "Jack"`
@@ -72,18 +72,15 @@ Each step starts with NN(.NN)*:CODE format (NN = two digits, Sub-steps use dot n
 ```
 Raw: Load account for the user
 Compiled (assuming LoadAccount is a listed playbook and $email and $pin are available at this point):
-01:QUE $account:dict = LoadAccount(email=$email, pin=$pin)
-02:YLD call
+01:QUE $account:dict = LoadAccount(email=$email, pin=$pin); YLD call
 ```
 
 ### Pattern B: Nested function calls
 ```
 Raw: FuncA(FuncB(x))
 Compiled (assuming FuncA and FuncB are listed playbooks and $x is available at this point):
-01:QUE $temp:type = FuncB(x=$x)
-02:YLD call
-03:QUE $result:type = FuncA(param=$temp) 
-04:YLD call
+01:QUE $temp:type = FuncB(x=$x); YLD call
+02:QUE $result:type = FuncA(param=$temp); YLD call
 ```
 
 ### Pattern C: Calling public playbooks from another agent
@@ -91,16 +88,14 @@ Compiled (assuming FuncA and FuncB are listed playbooks and $x is available at t
 ```
 Raw: Get current weather for 98053 from the weather agent
 Compiled (assuming WeatherAgent exists with a GetCurrentWeather(zip) playbook):
-01:QUE $current_weather:dict = WeatherAgent.GetCurrentWeather(98053)
-02:YLD call
+01:QUE $current_weather:dict = WeatherAgent.GetCurrentWeather(98053); YLC call
 ```
 
 **When playbook is not known, e.g. the agent is an MCP server so list of playbooks will only be available at run time, or the playbook is not public**, keep instruction to be resolved at run time
 ```
 Raw: Get current weather for 98053 from the weather agent
 Compiled (assuming WeatherAgent exists but playbooks are not listed):
-01:QUE Get $current_weather for 98053 from the WeatherAgent
-02:YLD call
+01:QUE Get $current_weather for 98053 from the WeatherAgent; YLD call
 ```
 
 ### Pattern D: Saying something to user
@@ -108,30 +103,24 @@ Queue Say() to show text to the user. Keep instructions instead of making a spec
 ```
 Raw: Say hello to the user
 Compiled:
-01:QUE Say(Say hello to the user)
+01:QUE Say(Say hello to the user); YLD call
 ```
 
 ### Pattern E: Having a multi-turn conversation with the user
 Queue Say() with an instruction to continue conversation unless condition to move on it satisfied
 ```
-Raw: Welcome the user and do some ice breaking chitchat for up to 4 turns
+Raw: Welcome the user, ask how you can help and do some ice breaking chitchat for up to 4 turns
 Compiled:
-01:QUE Say(Welcome the user)
-02:CND While doing ice breaking chitchat for up to 4 turns
-  01.01:YLD user
-  01.02:CHK if continue chitchat
-    01.02.01:QUE Say(respond to user)
-    01.02.02:JMP 02
+01:QUE Say(Welcome the user and ask how you can help); YLD user
+02:QUE Say(Do some ice breaking chitcaht with user); YLD user; done after 4 turns or chitchat finished
 ```
 
 ### Pattern F: Asking user for information
-Use Say() to show text to the user with a "unless no need or ok to give up" instruction, YLD user to wait for user input and JMP to check if we go the information.
+Use Say() to show text to the user with a YLD user to wait for user input.
 ```
 Raw: Ask user for their name
 Compiled:
-01:QUE Say(Ask user for their $name:str) unless no need or ok to give up
-  01.01:YLD user
-  01.02:JMP 01
+01:QUE Say(Ask user for their $name:str); YLD user; done when user provides name or gives up
 ```
 
 ### Pattern G: Batch multiple QUE calls
@@ -141,10 +130,9 @@ Raw: load weather for the cities
 Compiled (assuming LoadWeather is a listed playbook and $cities:list is available at this point):
 01:EXE Initialize empty $weather:dict
 02:CND For each $city in $cities:list
-  02.01:QUE $temp_weather_{$city}:dict = LoadWeather(city=$city)
-03:YLD call to execute the queued calls concurrently
-04:EXE Collect $weather[$city] = $temp_weather_{$city}
-05:EXE Clear $temp_weather_{$city} variables
+  02.01:QUE LoadWeather(city=$city); do not yield because we do not need results here
+03:YLD call to execute all queued calls concurrently
+04:EXE Fill $weather by collecting loaded weather by $city
 ```
 
 ## Step 5: Specific Transformations
@@ -157,12 +145,13 @@ Compiled (assuming LoadWeather is a listed playbook and $cities:list is availabl
 
 ### Loops
 ```
-Raw: While condition
+Raw:
+- Until number is even
+  - Ask user for next number
 Compiled:
-01:CND While condition
-  01.01:EXE action
-  01.02:QUE another action
-  01.99:JMP 01
+01:CND Until number is even
+  01.01:QUE Say(Ask user for next number); YLD user
+  01.02:JMP 01
 ```
 
 ### Artifact Operations
@@ -175,13 +164,10 @@ Split when instruction contains multiple actions that cannot or should not be ex
 ```
 Raw: Tell user the price and if they want it, add to cart
 Compiled:
-01:QUE Say(Tell user the price)
-02:QUE Say(Ask if user wants to purchase) unless no need or ok to give up
-  02.01:YLD user
-  02.02:JMP 02
+01:QUE Say(Tell user the price); no need to yield
+02:QUE Say(Ask if user wants to purchase); YLD user
 03:CND If user wants to purchase
-  03.01:QUE Add to cart
-  03.02:YLD call
+  03.01:QUE Add to cart; YLD call
 ```
 
 ### Public Playbooks
@@ -300,7 +286,7 @@ metadata2: "copied verbatim if exists"
 4. ✓ Add :CODE to each step
 5. ✓ Declare all variables with :type
 6. ✓ Decompose complex instructions into multiple steps if necessary
-7. ✓ Add YLD user after asking for input, but only when asking for user input. Use YLD call when saying something to the user without waiting for user input.
+7. ✓ Add `YLD user` after asking for input, but only when asking for user input. Use `YLD call` when saying something to the user without waiting for user input.
 8. ✓ Add JMP for while loops, and CND for if/else
 9. ✓ Each agent must end with a public.json listing all public playbooks in that agent
 
@@ -350,8 +336,8 @@ def LookupInfo(query:str):
 - GetWeather(city)
 - Tell user what the weather is like
 - List 5 cities near user's city
-- Think deeply about the 5 cities and if we should ask user if they have visited all 5 cities
-- Ask user if they have visited all 5 cities
+- Think deeply about something common among these 5 cities
+- Tell user about that common thing
 
 ### Notes
 - If name is a Jack Sparrow, start speaking in pirate speak
@@ -431,21 +417,16 @@ Main interaction loop that guides user conversations through a friendly informat
 ### Triggers
 - T1:BGN When program starts
 ### Steps
-- 01:QUE Say(Ask user for their $name:str and $city:str they are from) unless no need or ok to give up
-  - 01.01:YLD user
-  - 01.02:JMP 01
+- 01:QUE Say(Ask user for their $name:str and $city:str they are from); YLD user
 - 02:CHK N1
-- 03:QUE Say(Greet the user and give an interesting fact about the city)
-- 04:YLD call
-- 05:QUE $weather:dict = GetWeather(city=$city)
-- 06:YLD call
-- 07:QUE Say(Tell user what the weather is like)
-- 08:YLD call
-- 09:EXE List 5 $cities:list near $city
-- 10:TNK Think deeply about the 5 cities and if we should ask user if they have visited all 5 cities
-- 11:QUE Say(Ask user if they have visited all 5 cities) unless no need or ok to give up
-  - 11.01:YLD user
-  - 11.02:JMP 11
+- 03:QUE Say(Greet the user and give an interesting fact about the city); YLD call
+- 04:QUE $weather:dict = GetWeather(city=$city); YLD call
+- 05:QUE Say(Tell user what the weather is like); YLD call
+- 06:EXE List 5 $cities:list near $city
+- 07:TNK Think deeply about something common among these 5 cities
+- 08:QUE Say(Tell user about that common thing); YLD call
+- 09:RET
+
 ### Notes
 - N1 If name is a Jack Sparrow, start speaking in pirate speak
 
@@ -467,9 +448,7 @@ Only consider cities in the United States.
 - T1:CND When user provides their city
 ### Steps
 - 01:CND While the city is not a US city or unclear which state the city is from
-  - 01.01:QUE Say(Ask user to specify a US city or disambiguate) unless no need or ok to give up
-    - 01.01.01:YLD user
-    - 01.01.02:JMP 01.01
+  - 01.01:QUE Say(Ask user to specify a US city or disambiguate); YLD user
   - 01.02:JMP 01
 - 02:RET return $city in "Austin, TX" format
 
@@ -496,7 +475,6 @@ Only consider cities in the United States.
 ]
 ```
 
-
 # SecondAgent
 This is a second agent that can say hello and goodbye to the user
 
@@ -506,11 +484,10 @@ metadata:
 ---
 Says hello to the user
 ### Steps
-- 01:QUE Say hello $name
-- 02:QUE $info:dict = ExampleAgent.LookupInfo($name)
-- 03:YLD call
-- 04:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info")
-- 05:YLD call
+- 01:QUE Say(Hello $name); YLD call
+- 02:QUE $info:dict = ExampleAgent.LookupInfo($name); YLD call
+- 03:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info"); YLD call
+- 04:RET
 
 ## P2
 metadata:
@@ -518,10 +495,9 @@ metadata:
 ---
 Says goodbye to the user
 ### Steps
-- 01:QUE LoadArtifact("greeting.txt")
-- 02:YLD call
-- 03:QUE Say(Artifact[greeting.txt])
-- 04:YLD call
+- 01:QUE LoadArtifact("greeting.txt"); YLD call
+- 02:QUE Say(Artifact[greeting.txt]); YLD call
+- 03:RET
 
 ```public.json
 [

@@ -9,18 +9,13 @@ from playbooks.events import (
     PlaybookEndEvent,
     PlaybookStartEvent,
 )
+from playbooks.exceptions import ExecutionFinished
 from playbooks.interpreter_prompt import InterpreterPrompt
 from playbooks.llm_response import LLMResponse
 from playbooks.playbook import MarkdownPlaybook
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel, SessionLogItemMessage
 from playbooks.utils.llm_helper import get_completion
-
-
-class ExecutionFinished(Exception):
-    """Custom exception to indicate that the playbook execution is finished."""
-
-    pass
 
 
 class MarkdownPlaybookExecution:
@@ -242,14 +237,79 @@ class MarkdownPlaybookExecution:
             trigger_instructions=self.agent.all_trigger_instructions(),
         )
 
-        chunks = [
-            chunk
-            for chunk in get_completion(
-                messages=prompt.messages,
-                llm_config=self.llm_config,
-                stream=False,
-                json_mode=False,  # interpreter calls produce markdown
-                langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
-            )
-        ]
-        return "".join(chunks)
+        # Use streaming to handle Say() calls progressively
+        return await self._stream_llm_response(prompt)
+
+    async def _stream_llm_response(self, prompt):
+        """Stream LLM response and handle Say() calls progressively."""
+        buffer = ""
+        in_say_call = False
+        current_say_content = ""
+        say_start_pos = 0
+        processed_up_to = 0  # Track how much of buffer we've already processed
+
+        for chunk in get_completion(
+            messages=prompt.messages,
+            llm_config=self.llm_config,
+            stream=True,
+            json_mode=False,
+            langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
+        ):
+            buffer += chunk
+
+            # Only look for new Say() calls in the unprocessed part of the buffer
+            if not in_say_call:
+                say_pattern = '`Say("'
+                say_match_pos = buffer.find(say_pattern, processed_up_to)
+                if say_match_pos != -1:
+                    in_say_call = True
+                    say_start_pos = say_match_pos + len(
+                        say_pattern
+                    )  # Position after `Say("
+                    current_say_content = ""
+                    processed_up_to = say_match_pos + len(say_pattern)
+                    await self.agent.start_streaming_say()
+
+            # Stream Say content if we're in a call
+            if in_say_call:
+                # Look for the end of the Say call
+                end_pattern = '")'
+                end_pos = buffer.find(end_pattern, say_start_pos)
+                if end_pos != -1:
+                    # Found end - extract final content and complete
+                    final_content = buffer[say_start_pos:end_pos]
+                    if len(final_content) > len(current_say_content):
+                        new_content = final_content[len(current_say_content) :]
+                        if new_content:
+                            await self.agent.stream_say_update(new_content)
+
+                    await self.agent.complete_streaming_say()
+                    in_say_call = False
+                    current_say_content = ""
+                    processed_up_to = end_pos + len(end_pattern)
+                else:
+                    # Still streaming - extract new content since last update
+                    # Only look at content between say_start_pos and end of buffer
+                    # but make sure we don't include the closing quote if it's there
+                    available_content = buffer[say_start_pos:]
+
+                    # If we see the closing quote, don't include it in streaming
+                    if available_content.endswith('")'):
+                        available_content = available_content[:-2]  # Remove ")
+                    elif available_content.endswith('"'):
+                        available_content = available_content[:-1]  # Remove just "
+
+                    # Don't stream if it ends with escape character (incomplete)
+                    if not available_content.endswith("\\"):
+                        if len(available_content) > len(current_say_content):
+                            new_content = available_content[len(current_say_content) :]
+                            current_say_content = available_content
+
+                            if new_content:
+                                await self.agent.stream_say_update(new_content)
+
+        # If we ended while still in a Say call, complete it
+        if in_say_call:
+            await self.agent.complete_streaming_say()
+
+        return buffer

@@ -1,0 +1,235 @@
+Loading playbooks from: ['tests/data/travel_advisor/travel-advisor.pb']
+Compiled playbooks program
+
+╭─ TravelAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Hello! Welcome to your personal travel advisory service! I'm here to help you discover amazing destinations that match your    │
+│ dreams and preferences. Whether you're looking for tropical beaches, bustling cities, cultural experiences, or adventure       │
+│ destinations, I can provide personalized recommendations just for you. What kind of travel experience are you hoping for? Tell │
+│ me about your ideal destination, budget, travel dates, or any specific preferences you have in mind!                           │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: beach
+
+╭─ TravelAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Wonderful! I have some fantastic beach destinations for you. Here are my top 3 recommendations:                                │
+│                                                                                                                                │
+│ 🏝️ **Aruba** - Known as 'One Happy Island' with year-round warm weather, pristine white sand beaches, and minimal rainfall.     │
+│ Perfect for guaranteed sunshine!                                                                                               │
+│                                                                                                                                │
+│ 🏖️ **Barbados** - Features beautiful beaches, rich Caribbean culture, and world-famous rum distilleries. Great for both         │
+│ relaxation and cultural exploration!                                                                                           │
+│                                                                                                                                │
+│ 🎵 **Jamaica** - Offers vibrant culture, stunning beaches, and the birthplace of reggae music. Ideal for those seeking both    │
+│ beach time and authentic Caribbean experiences!                                                                                │
+│                                                                                                                                │
+│ Each of these destinations offers something unique. Which one catches your interest, or would you like to know more about any  │
+│ of them? We can also explore other beach destinations if none of these feel quite right!                                       │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+╭─ TravelAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Which of these beautiful destinations speaks to you? I'd love to help you decide!                                              │
+│                                                                                                                                │
+│ If you're drawn to **Aruba**, you'll enjoy consistent 82°F weather, some of the Caribbean's safest beaches, and fantastic      │
+│ snorkeling at Eagle Beach.                                                                                                     │
+│                                                                                                                                │
+│ If **Barbados** interests you, you can explore historic Bridgetown, swim with sea turtles, and tour Mount Gay Rum Distillery.  │
+│                                                                                                                                │
+│ And if **Jamaica** calls to you, you could experience the Blue Mountains, visit Bob Marley's birthplace, and enjoy world-class │
+│ jerk cuisine along Seven Mile Beach.                                                                                           │
+│                                                                                                                                │
+│ What sounds most appealing to you, or do you have questions about any of these destinations?                                   │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: aruba
+╭─ TravelAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Excellent choice! Aruba is absolutely wonderful - you'll love the consistent sunshine and those gorgeous white sand beaches.   │
+│ The island truly lives up to its nickname 'One Happy Island'!                                                                  │
+│                                                                                                                                │
+│ Now that we've picked your perfect destination, would you like me to connect you with our hotel specialist to find the ideal   │
+│ accommodations in Aruba? They can help you find everything from luxury beachfront resorts to charming boutique hotels that     │
+│ match your style and budget.                                                                                                   │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: sure
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Hello! I'm your hotel specialist. I understand you're looking for hotel recommendations in Aruba - what a fantastic choice for │
+│ year-round warm weather and beautiful white sand beaches! I'd love to help you find the perfect accommodation there. Can you   │
+│ confirm that Aruba is indeed where you'd like me to focus my hotel recommendations?                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: yes.. travel dates are 6/1 to 6/8 and for 2 adults, 2 kids
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Perfect! So you're planning a family trip to Aruba from June 1st to 8th for 2 adults and 2 children - that sounds wonderful!   │
+│ To help me find the ideal hotels for your family, could you tell me about your preferences? For example: What's your budget    │
+│ range? Are you looking for an all-inclusive resort or would you prefer a hotel where you can explore local restaurants? Do you │
+│ want beachfront access? Any specific amenities that are important for the kids like pools, kids' clubs, or family activities?  │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: all inclusive would be great
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ I've found some great options for you! However, I notice that one of the top-rated resorts (Bucuti & Tara) is adults-only, so  │
+│ that won't work for your family trip. Let me focus on family-friendly options: **The Ritz-Carlton, Aruba** in Palm Beach is an │
+│ excellent luxury all-inclusive choice with exceptional service. It features multiple restaurants, spa facilities, casino, and  │
+│ direct beach access. The Palm Beach area is vibrant with lots of family activities nearby. For a family trip, I'd also         │
+│ recommend looking into other family-focused all-inclusive resorts like the Marriott Resort or Holiday Inn Resort which         │
+│ typically offer kids' clubs, family pools, and child-friendly dining options. Would you like me to get more specific           │
+│ information about family amenities at The Ritz-Carlton, or would you prefer I search for additional family-focused             │
+│ all-inclusive options?                                                                                                         │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: ritz
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Excellent choice! The Ritz-Carlton, Aruba is truly a premium resort. Since you're traveling with children, let me tell you     │
+│ more about their family amenities: they typically offer supervised kids' activities, family-friendly pools, and restaurants    │
+│ with children's menus. The Palm Beach location is perfect - it's right on the beach with calm waters great for kids, and there │
+│ are plenty of shops and restaurants within walking distance. Would you like me to proceed with checking availability and       │
+│ pricing for your June 1-8 dates, or do you have any specific questions about the resort's family facilities?                   │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: proceed
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Perfect! I'm glad you're interested in The Ritz-Carlton, Aruba. It's truly an exceptional choice for your family vacation.     │
+│ Would you like me to go ahead and book this hotel for your stay from June 1st to 8th?                                          │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: yes
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Wonderful! To proceed with booking The Ritz-Carlton, Aruba, I'll need to confirm your exact travel dates. You mentioned June   │
+│ 1st to 8th - could you please confirm the specific dates? Check-in on June 1st, 2024 and check-out on June 8th, 2024? And just │
+│ to double-check, that's for 2 adults and 2 children, correct?                                                                  │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: yes
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Fantastic! Your booking has been confirmed! Here are your reservation details: **The Ritz-Carlton, Aruba** - Check-in: June    │
+│ 1st, 2024 - Check-out: June 8th, 2024 - Guests: 2 adults and 2 children - Location: Palm Beach, Aruba. You're all set for an   │
+│ amazing family vacation! The resort will likely send you a confirmation email with additional details about check-in           │
+│ procedures, resort amenities, and any pre-arrival information. Is there anything else you'd like to know about your upcoming   │
+│ stay or any other travel arrangements I can help you with?                                                                     │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: flights?
+
+╭─ HotelAdvisor ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Absolutely! I'd be happy to help you with flights to Aruba as well. Since you have your hotel booked at The Ritz-Carlton from  │
+│ June 1-8, 2024, you'll want flights that arrive on June 1st and depart on June 8th. I can connect you with our flight          │
+│ specialist who can find the best flight options for your family of 4. Where will you be flying from?                           │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: seattle
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Hello! I'm your flight booking specialist. I see you're looking for flight options from Seattle to Aruba for June 1-8, 2024    │
+│ for a party of 4. Is that correct?                                                                                             │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: yes
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Great! To find the best flight options for your group of 4 traveling to Aruba, I'd like to know your preferences. What's most  │
+│ important to you - lowest price, shortest travel time, specific airlines, or particular departure times? Also, do you have a   │
+│ budget range in mind?                                                                                                          │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: travel time followed by price
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ I found some great flight options for your group of 4 from Seattle to Aruba for June 1-8, 2024! Here are the top choices:      │
+│                                                                                                                                │
+│ **Option 1: American Airlines**                                                                                                │
+│ - Price: $450 per person ($1,800 total for 4 passengers)                                                                       │
+│ - Duration: 3h 45m                                                                                                             │
+│ - This is your shortest travel time option!                                                                                    │
+│                                                                                                                                │
+│ **Option 2: Delta Airlines**                                                                                                   │
+│ - Price: $485 per person ($1,940 total for 4 passengers)                                                                       │
+│ - Duration: 4h 15m                                                                                                             │
+│ - Slightly longer but still a good option                                                                                      │
+│                                                                                                                                │
+│ Based on your preference for shortest travel time, the American Airlines flight would be ideal - it's also the better price!   │
+│ Both airlines offer good service to Aruba. Which option interests you most, or would you like more details about either        │
+│ flight?                                                                                                                        │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: sure let's go with first option
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Excellent choice! The American Airlines flight at $450 per person is perfect - shortest travel time and best price. That's     │
+│ $1,800 total for your party of 4 to Aruba. Before we proceed, let me mention that this price typically includes one carry-on   │
+│ bag per person, but checked bags may be extra. Also, since you're traveling internationally, you'll want to ensure everyone    │
+│ has valid passports. Would you like me to book this flight for you?                                                            │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: yes
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Perfect! I'll be happy to book the American Airlines flight for your group of 4 to Aruba. The flight details are $450 per      │
+│ person ($1,800 total) with a 3h 45m duration.                                                                                  │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ To complete your booking, I need to confirm the exact travel dates. You mentioned June 1-8, 2024. What specific departure date │
+│ would you prefer for your outbound flight to Aruba, and what date for your return flight to Seattle?                           │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: make the flights so that we get to hotel in the morning on 1st and depart 8th evening
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Fantastic! Your flight booking is confirmed! Here are your booking details:                                                    │
+│                                                                                                                                │
+│ ✈️ **Flight Confirmation**                                                                                                      │
+│ - Route: Seattle (SEA) to Aruba (AUA)                                                                                          │
+│ - Airline: American Airlines                                                                                                   │
+│ - Departure: June 1st (morning arrival in Aruba)                                                                               │
+│ - Return: June 8th evening                                                                                                     │
+│ - Passengers: 4 travelers                                                                                                      │
+│ - Total Cost: $1,800 ($450 per person)                                                                                         │
+│ - Duration: 3h 45m each way                                                                                                    │
+│                                                                                                                                │
+│ Your booking reference and tickets will be sent to your email shortly. Remember to arrive at the airport at least 2 hours      │
+│ early for international flights, and ensure all passengers have valid passports. Have a wonderful trip to Aruba!               │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+╭─ FlightAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Is there anything else I can help you with for your Aruba trip? I can also connect you with our hotel specialists or provide   │
+│ travel tips for your destination!                                                                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: no that's it thanks
+
+╭─ TravelAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Great! I hope the hotel specialist was able to help you find the perfect accommodations in Aruba. Now, would you like          │
+│ assistance with booking flights to get you there? Our flight specialist can help you find the best flight options and handle   │
+│ your reservations.                                                                                                             │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: flights are done too
+
+╭─ TravelAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Wonderful! It sounds like you're all set with both accommodations and flights for your Aruba adventure. Is there anything else │
+│ I can help you with for your trip? I could provide information about:                                                          │
+│                                                                                                                                │
+│ 🌴 Popular activities and attractions in Aruba                                                                                 │
+│ 🍽️ Restaurant recommendations and local cuisine                                                                                 │
+│ 🚗 Transportation options on the island                                                                                        │
+│ 📋 Travel tips and what to pack                                                                                                │
+│ 🏖️ Best beaches and snorkeling spots                                                                                            │
+│                                                                                                                                │
+│ Or if you're all set, I'm happy to wish you an amazing trip to One Happy Island!                                               │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+User: that's it
+
+╭─ TravelAdvisor ────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Perfect! You're all set for an incredible trip to Aruba! 🌴 I'm so excited for you - you're going to absolutely love the       │
+│ beautiful beaches, warm sunshine, and friendly island atmosphere. Have an amazing time on One Happy Island, and feel free to   │
+│ come back anytime you need travel advice for future adventures. Safe travels and enjoy every moment of your Aruba getaway!     │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯

@@ -36,7 +36,7 @@ yld <user | call | return | exit>
 ```
 
 **Rules**
-1. Wrap all function calls in backticks:  \`Play(P=$p)\` or  \`$r = Func(3)\`. Must use valid Python syntax or execution will break.
+1. Wrap all function calls in backticks:  \`Play(p=$p)\` or  \`$r = Func(3)\` or \`Func("abc")\`. Must use valid Python syntax or execution will break.
 2. After each ``Var[…]`` output, add a "trig?" line and queue any matched triggers.
 3. Check "trig?" after each step. Only trigger if not already triggered.
 4. Stop logging immediately after first yld … *or* \`Return[…]\`.
@@ -54,15 +54,20 @@ yld <user | call | return | exit>
 #### 3  Worked Examples (study carefully)
 
 **Ex 1 – Awaiting user input**
+- 01:QUE Say(Ask user for name); YLD user
+
 ```
 recap – beginning
 plan  – greet & ask name
 `Step["Welcome:01:QUE"]`  `Say("Hi! What's your name?")`
 trig? no
-`Step["Welcome:02:YLD"]`  yld user
+yld user
 ```
 
 **Ex 2 – Multi‑step, queued function, yld call & resume**
+- 02:QUE $result = magic_operator($n)
+- 03:YLD call
+
 *(first call)*
 ```
 recap – got number from user
@@ -73,19 +78,20 @@ trig? no
 trig? no
 `Step["DoMagic:03:YLD"]`  yld call
 ```
+
 *(second call after function returns)*
 ```
-recap – magic_operator returned → $result
+recap – magic_operator returned result
 plan  – tell user & finish
 `Var[$result, -4.1]`
 trig? no
-`Step["DoMagic:02:TNK"]`  Thinking! magic_operator has returned result. It is a number, so I can proceed. Wait.. It is a negative number, is that a problem? No, negative numbers are ok. I will proceed.
+`Step["DoMagic:04:TNK"]`  Thinking! magic_operator has returned result. It is a number, so I can proceed. Wait.. It is a negative number, is that a problem? No, negative numbers are ok. I will proceed.
 trig? no
-`Step["DoMagic:03:EXE"]`  Double of -4.1 is -8.2, so `Var[$double, -8.2]
+`Step["DoMagic:05:EXE"]`  Double of -4.1 is -8.2, so `Var[$double, -8.2]
 trig? no
-`Step["DoMagic:04:QUE"]`  `Say("Your magic result is -8.2.")` `Say("Artifact[derivation.txt]")`
+`Step["DoMagic:06:QUE"]`  `Say("Your magic result is -8.2.")` `Say("Artifact[derivation.txt]")`
 trig? no
-`Step["DoMagic:05:RET"]`  `Return[]` `Var[$__, "DoMagic() asked user for a number and applied magic operator on it. Then results were conveyed to the user along with detailed derivation steps."]
+`Step["DoMagic:07:RET"]`  `Return[]` `Var[$__, "DoMagic() asked user for a number and applied magic operator on it. Then results were conveyed to the user along with detailed derivation steps."]
 trig? no
 yld return
 ```

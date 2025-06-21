@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 from ..event_bus import EventBus
 from ..playbook import RemotePlaybook
@@ -133,53 +133,4 @@ class MCPAgent(RemoteAIAgent):
             logger.error(
                 f"Failed to discover MCP tools for agent {self.klass}: {str(e)}"
             )
-            raise
-
-    async def execute_playbook(
-        self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
-    ) -> Any:
-        """Execute an MCP tool playbook.
-
-        Args:
-            playbook_name: Name of the MCP tool to execute
-            args: Positional arguments for the tool
-            kwargs: Keyword arguments for the tool
-
-        Returns:
-            The result of executing the MCP tool
-        """
-        # Handle cross-agent calls (AgentName.PlaybookName format)
-        if "." in playbook_name:
-            agent_name, actual_playbook_name = playbook_name.split(".", 1)
-            if agent_name in self.other_agents:
-                return await self.other_agents[agent_name].execute_playbook(
-                    actual_playbook_name, args, kwargs
-                )
-            else:
-                raise ValueError(f"Unknown agent: {agent_name}")
-
-        # Ensure we're connected and have discovered playbooks
-        if not self._connected:
-            await self.connect()
-            await self.discover_playbooks()
-
-        # Check if playbook exists
-        if playbook_name not in self.playbooks:
-            raise ValueError(f"Unknown playbook: {playbook_name}")
-
-        playbook = self.playbooks[playbook_name]
-
-        try:
-            logger.debug(
-                f"Executing MCP playbook {playbook_name} with args={args}, kwargs={kwargs}"
-            )
-
-            # Execute the remote playbook
-            result = await playbook.execute(*args, **kwargs)
-
-            logger.debug(f"MCP playbook {playbook_name} completed successfully")
-            return result
-
-        except Exception as e:
-            logger.error(f"MCP playbook {playbook_name} failed: {str(e)}")
             raise

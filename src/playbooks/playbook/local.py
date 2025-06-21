@@ -2,6 +2,8 @@ import logging
 from abc import abstractmethod
 from typing import Any, Dict, Optional
 
+from playbooks.exceptions import ExecutionFinished
+
 from .base import Playbook
 
 logger = logging.getLogger(__name__)
@@ -56,6 +58,8 @@ class LocalPlaybook(Playbook):
             result = await self._execute_impl(*args, **kwargs)
             logger.debug(f"Local playbook {self.name} completed successfully")
             return result
+        except ExecutionFinished:
+            raise
         except Exception as e:
             logger.error(f"Local playbook {self.name} failed: {str(e)}")
             raise

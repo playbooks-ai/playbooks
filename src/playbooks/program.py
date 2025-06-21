@@ -10,7 +10,7 @@ from .agent_builder import AgentBuilder
 from .agents import AIAgent, HumanAgent
 from .debug.server import DebugServer
 from .event_bus import EventBus
-from .markdown_playbook_execution import ExecutionFinished
+from .exceptions import ExecutionFinished
 from .utils.markdown_to_ast import markdown_to_ast
 
 
