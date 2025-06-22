@@ -71,7 +71,7 @@ class SessionLogWrapper:
     def __str__(self):
         return str(self._session_log)
 
-    async def start_streaming_say(self):
+    async def start_streaming_say(self, recipient=None):
         """Start displaying a streaming Say() message."""
         agent_name = self.agent.klass if self.agent else "Agent"
         self.streaming_content = ""

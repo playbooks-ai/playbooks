@@ -48,7 +48,7 @@ class _OutboxWrapper:
     def __repr__(self):
         return self._session_log.__repr__()
 
-    async def start_streaming_say(self):
+    async def start_streaming_say(self, recipient=None):
         """Start streaming a Say() message."""
         self.streaming_content = ""
         self.is_streaming = True
@@ -57,6 +57,7 @@ class _OutboxWrapper:
             {
                 "type": "stream_start",
                 "agent": self.agent.klass if self.agent else "Agent",
+                "recipient": recipient,
             }
         )
 

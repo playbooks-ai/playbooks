@@ -254,6 +254,7 @@ class MarkdownPlaybookExecution:
         in_say_call = False
         current_say_content = ""
         say_start_pos = 0
+        say_recipient = ""
         processed_up_to = 0  # Track how much of buffer we've already processed
 
         for chunk in get_completion(
@@ -270,13 +271,36 @@ class MarkdownPlaybookExecution:
                 say_pattern = '`Say("'
                 say_match_pos = buffer.find(say_pattern, processed_up_to)
                 if say_match_pos != -1:
-                    in_say_call = True
-                    say_start_pos = say_match_pos + len(
-                        say_pattern
-                    )  # Position after `Say("
-                    current_say_content = ""
-                    processed_up_to = say_match_pos + len(say_pattern)
-                    await self.agent.start_streaming_say()
+                    # Found potential Say call - now we need to extract the recipient
+                    recipient_start = say_match_pos + len(say_pattern)
+
+                    # Look for the end of the recipient (first argument)
+                    recipient_end_pattern = '", "'
+                    recipient_end_pos = buffer.find(
+                        recipient_end_pattern, recipient_start
+                    )
+
+                    if recipient_end_pos != -1:
+                        # Extract the recipient
+                        say_recipient = buffer[recipient_start:recipient_end_pos]
+
+                        # Only start streaming if recipient is user, human, or Human
+                        if say_recipient.lower() in ["user", "human"]:
+                            in_say_call = True
+                            say_start_pos = recipient_end_pos + len(
+                                recipient_end_pattern
+                            )  # Position after recipient and ", "
+                            current_say_content = ""
+                            processed_up_to = say_start_pos
+                            await self.agent.start_streaming_say(say_recipient)
+                        else:
+                            # Not a user/human recipient, skip streaming for this Say call
+                            processed_up_to = recipient_end_pos + len(
+                                recipient_end_pattern
+                            )
+                    else:
+                        # Haven't found the end of recipient yet, continue processing
+                        pass
 
             # Stream Say content if we're in a call
             if in_say_call:
@@ -294,6 +318,7 @@ class MarkdownPlaybookExecution:
                     await self.agent.complete_streaming_say()
                     in_say_call = False
                     current_say_content = ""
+                    say_recipient = ""
                     processed_up_to = end_pos + len(end_pattern)
                 else:
                     # Still streaming - extract new content since last update
