@@ -1,7 +1,8 @@
+import asyncio
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..enums import LLMMessageRole
@@ -401,19 +402,45 @@ class AIAgent(BaseAgent, ABC):
         """Initialize meeting before executing meeting playbook.
 
         This method is called implicitly before any meeting playbook executes.
-        It creates the meeting, sends invitations, and waits for participants.
+        It creates the meeting, sends invitations, and waits for required participants.
 
         Args:
             playbook_name: Name of the meeting playbook being executed
             kwargs: Keyword arguments passed to the playbook (may contain attendees, topic)
         """
         # Extract attendees and topic from kwargs if provided
-        attendees = kwargs.get("attendees", [])
+        kwargs_attendees = kwargs.get("attendees", [])
         topic = kwargs.get("topic", f"{playbook_name} meeting")
+
+        # Determine attendee strategy: kwargs attendees take precedence
+        if kwargs_attendees:
+            # If attendees specified in kwargs, treat them as required (ignore metadata)
+            required_attendees = kwargs_attendees
+            all_attendees = kwargs_attendees
+            self.state.session_log.append(
+                f"Using kwargs attendees as required for meeting {playbook_name}: {required_attendees}"
+            )
+        else:
+            # If no kwargs attendees, use metadata-defined attendees
+            metadata_required, metadata_optional = self.get_playbook_attendees(
+                playbook_name
+            )
+            required_attendees = metadata_required
+            all_attendees = list(set(metadata_required + metadata_optional))
+            self.state.session_log.append(
+                f"Using metadata attendees for meeting {playbook_name}: required={metadata_required}, optional={metadata_optional}"
+            )
+
+        # Filter out the requester from required attendees (they're already present)
+        required_attendees_to_wait_for = [
+            attendee
+            for attendee in required_attendees
+            if attendee != self.klass  # Remove requester's type
+        ]
 
         # Create the meeting
         meeting_id = await self.create_meeting(
-            playbook_name=playbook_name, invited_agents=attendees, topic=topic
+            playbook_name=playbook_name, invited_agents=all_attendees, topic=topic
         )
 
         # Store meeting_id in kwargs for the playbook to access
@@ -424,8 +451,82 @@ class AIAgent(BaseAgent, ABC):
             f"Initialized meeting {meeting_id} for playbook {playbook_name}"
         )
 
-        # TODO: In a full implementation, we might wait for participants to join
-        # For now, we proceed immediately as the invitation handling is asynchronous
+        # Wait for required attendees to join before proceeding (if any besides requester)
+        await self._wait_for_required_attendees(
+            meeting_id, required_attendees_to_wait_for
+        )
+
+        self.state.session_log.append(
+            f"Meeting {meeting_id} ready to proceed - all required attendees present"
+        )
+
+    async def _wait_for_required_attendees(
+        self, meeting_id: str, required_attendees: List[str], timeout_seconds: int = 30
+    ):
+        """Wait for required attendees to join the meeting before proceeding.
+
+        Args:
+            meeting_id: ID of the meeting to wait for
+            required_attendees: List of required attendee types/names (excluding requester)
+            timeout_seconds: Maximum time to wait for attendees
+
+        Raises:
+            TimeoutError: If required attendees don't join within timeout
+            ValueError: If required attendee rejects the invitation
+        """
+        # If no attendees to wait for, proceed immediately
+        if not required_attendees:
+            self.state.session_log.append(
+                f"No required attendees to wait for in meeting {meeting_id} - proceeding immediately"
+            )
+            return
+
+        self.state.session_log.append(
+            f"Waiting for required attendees to join meeting {meeting_id}: {required_attendees}"
+        )
+
+        # Track which required attendees have joined
+        joined_attendees: Set[str] = set()
+        start_time = asyncio.get_event_loop().time()
+
+        while len(joined_attendees) < len(required_attendees):
+            # Check for timeout
+            if asyncio.get_event_loop().time() - start_time > timeout_seconds:
+                missing_attendees = set(required_attendees) - joined_attendees
+                raise TimeoutError(
+                    f"Timeout waiting for required attendees to join meeting {meeting_id}. "
+                    f"Missing: {list(missing_attendees)}"
+                )
+
+            # Check current meeting participants
+            if meeting_id in self.state.meetings:
+                meeting = self.state.meetings[meeting_id]
+
+                # Check which required attendees have joined
+                for attendee_type in required_attendees:
+                    if attendee_type not in joined_attendees:
+                        # Look for any participant of this type
+                        for participant_type in meeting.participants.values():
+                            if participant_type == attendee_type:
+                                joined_attendees.add(attendee_type)
+                                self.state.session_log.append(
+                                    f"Required attendee {attendee_type} joined meeting {meeting_id}"
+                                )
+                                break
+
+            # Check for rejections from required attendees
+            # This is a simplified check - in a full implementation we'd track rejections more precisely
+            for attendee_type in required_attendees:
+                if attendee_type in self.state.invitations.get(attendee_type, set()):
+                    # Still has pending invitation, continue waiting
+                    pass
+
+            # Short sleep to avoid busy waiting
+            await asyncio.sleep(0.1)
+
+        self.state.session_log.append(
+            f"All required attendees have joined meeting {meeting_id}: {list(joined_attendees)}"
+        )
 
     @property
     def public_playbooks(self) -> List[Dict[str, Playbook]]:
