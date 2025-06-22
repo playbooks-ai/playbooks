@@ -37,6 +37,9 @@ class ExecutionState:
         self.variables = Variables(event_bus)
         self.artifacts = Artifacts()
         self.last_llm_response = ""
+        self.last_message_target = (
+            None  # Track last 1:1 message target for Say() fallback
+        )
 
     def __repr__(self) -> str:
         """Return a string representation of the execution state."""

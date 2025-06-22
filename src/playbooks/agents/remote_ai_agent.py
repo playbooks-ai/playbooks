@@ -22,6 +22,7 @@ class RemoteAIAgent(AIAgent):
         event_bus: EventBus,
         remote_config: Dict[str, Any],
         source_line_number: int = None,
+        agent_id: str = None,
     ):
         """Initialize a remote AI agent.
 
@@ -32,8 +33,11 @@ class RemoteAIAgent(AIAgent):
             remote_config: Configuration for the remote connection.
             source_line_number: The line number in the source markdown where this
                 agent is defined.
+            agent_id: Optional agent ID. If not provided, will generate UUID.
         """
-        super().__init__(klass, description, event_bus, {}, source_line_number)
+        super().__init__(
+            klass, description, event_bus, {}, source_line_number, agent_id
+        )
         self.remote_config = remote_config
         self.transport = None
         self._connected = False

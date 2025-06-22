@@ -120,7 +120,7 @@ class AgentBuilder:
         source_line_number = h1.get("line_number")
 
         # Define __init__ for the new MCP agent class
-        def __init__(self, event_bus: EventBus):
+        def __init__(self, event_bus: EventBus, agent_id: str = None):
             MCPAgent.__init__(
                 self,
                 klass=klass,
@@ -128,6 +128,7 @@ class AgentBuilder:
                 event_bus=event_bus,
                 remote_config=remote_config,
                 source_line_number=source_line_number,
+                agent_id=agent_id,
             )
 
         # Create and return the new MCP Agent class
@@ -302,7 +303,7 @@ class AgentBuilder:
         source_line_number = h1.get("line_number")
 
         # Define __init__ for the new class
-        def __init__(self, event_bus: EventBus):
+        def __init__(self, event_bus: EventBus, agent_id: str = None):
             LocalAIAgent.__init__(
                 self,
                 klass=klass,
@@ -310,6 +311,7 @@ class AgentBuilder:
                 playbooks=playbooks,
                 event_bus=event_bus,
                 source_line_number=source_line_number,
+                agent_id=agent_id,
             )
 
         # Create and return the new Agent class

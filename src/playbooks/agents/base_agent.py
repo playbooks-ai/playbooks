@@ -48,15 +48,16 @@ class BaseAgent(AgentCommunicationMixin, ABC):
         klass: A string identifier for the agent class/type.
     """
 
-    def __init__(self, klass: str):
+    def __init__(self, klass: str, agent_id: str = None):
         """
         Initialize a new BaseAgent.
 
         Args:
             klass: The class/type identifier for this agent.
+            agent_id: Optional agent ID. If not provided, will generate UUID (for backward compatibility).
         """
         super().__init__()
-        self.id = str(uuid.uuid4())
+        self.id = agent_id if agent_id is not None else str(uuid.uuid4())
         self.klass = klass
 
     async def begin(self):

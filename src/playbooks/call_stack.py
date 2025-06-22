@@ -58,10 +58,14 @@ class CallStackFrame:
         instruction_pointer: InstructionPointer,
         llm_messages: List[Dict[str, str]],
         langfuse_span: Optional[Any] = None,
+        is_meeting: bool = False,
+        meeting_id: Optional[str] = None,
     ):
         self.instruction_pointer = instruction_pointer
         self.llm_messages = llm_messages
         self.langfuse_span = langfuse_span
+        self.is_meeting = is_meeting
+        self.meeting_id = meeting_id
 
     @property
     def source_line_number(self) -> int:
@@ -73,10 +77,14 @@ class CallStackFrame:
         Returns:
             A dictionary representation of the frame.
         """
-        return {
+        result = {
             "instruction_pointer": str(self.instruction_pointer),
             "langfuse_span": str(self.langfuse_span) if self.langfuse_span else None,
         }
+        if self.is_meeting:
+            result["is_meeting"] = self.is_meeting
+            result["meeting_id"] = self.meeting_id
+        return result
 
     def add_uncached_llm_message(
         self, message: str, role: str = LLMMessageRole.ASSISTANT
@@ -91,7 +99,10 @@ class CallStackFrame:
         self.llm_messages.append(make_cached_llm_message(message, role))
 
     def __repr__(self) -> str:
-        return str(self.instruction_pointer)
+        base_repr = str(self.instruction_pointer)
+        if self.is_meeting and self.meeting_id:
+            return f"{base_repr}[meeting {self.meeting_id}]"
+        return base_repr
 
     def get_llm_messages(self) -> List[Dict[str, str]]:
         """Get the messages for the call stack frame for the LLM."""

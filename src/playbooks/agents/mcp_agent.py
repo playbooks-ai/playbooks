@@ -23,6 +23,7 @@ class MCPAgent(RemoteAIAgent):
         event_bus: EventBus,
         remote_config: Dict[str, Any],
         source_line_number: int = None,
+        agent_id: str = None,
     ):
         """Initialize an MCP agent.
 
@@ -37,9 +38,10 @@ class MCPAgent(RemoteAIAgent):
                 - timeout: Optional timeout in seconds
             source_line_number: The line number in the source markdown where this
                 agent is defined.
+            agent_id: Optional agent ID. If not provided, will generate UUID.
         """
         super().__init__(
-            klass, description, event_bus, remote_config, source_line_number
+            klass, description, event_bus, remote_config, source_line_number, agent_id
         )
         self.transport = MCPTransport(remote_config)
 

@@ -26,6 +26,19 @@ class ProgramAgentsCommunicationMixin:
         await target_queue.put(message)
 
 
+class AgentIdRegistry:
+    """Manages sequential agent ID generation."""
+
+    def __init__(self):
+        self._next_id = 1000
+
+    def get_next_id(self) -> str:
+        """Get the next sequential agent ID."""
+        current_id = self._next_id
+        self._next_id += 1
+        return str(current_id)
+
+
 class Program(ProgramAgentsCommunicationMixin):
     def __init__(
         self, full_program: str, event_bus: EventBus, program_paths: List[str] = None
@@ -34,12 +47,16 @@ class Program(ProgramAgentsCommunicationMixin):
         self.event_bus = event_bus
         self.program_paths = program_paths or []
         self._debug_server = None
+        self.agent_id_registry = AgentIdRegistry()
 
         self.extract_public_json()
         self.parse_metadata()
         self.ast = markdown_to_ast(self.program_content)
         self.agent_klasses = AgentBuilder.create_agents_from_ast(self.ast)
-        self.agents = [klass(self.event_bus) for klass in self.agent_klasses.values()]
+        self.agents = [
+            klass(self.event_bus, self.agent_id_registry.get_next_id())
+            for klass in self.agent_klasses.values()
+        ]
         if not self.agents:
             raise ValueError("No agents found in program")
         if len(self.agents) != len(self.public_jsons):

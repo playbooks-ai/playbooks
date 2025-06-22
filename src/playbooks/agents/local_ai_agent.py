@@ -23,6 +23,7 @@ class LocalAIAgent(AIAgent):
         event_bus: EventBus,
         playbooks: Dict[str, Playbook] = None,
         source_line_number: int = None,
+        agent_id: str = None,
     ):
         """Initialize a new LocalAIAgent.
 
@@ -33,8 +34,11 @@ class LocalAIAgent(AIAgent):
             playbooks: Dictionary of playbooks available to this agent.
             source_line_number: The line number in the source markdown where this
                 agent is defined.
+            agent_id: Optional agent ID. If not provided, will generate UUID.
         """
-        super().__init__(klass, description, event_bus, playbooks, source_line_number)
+        super().__init__(
+            klass, description, event_bus, playbooks, source_line_number, agent_id
+        )
         # Set up agent reference for playbooks that need it
         for playbook in self.playbooks.values():
             if hasattr(playbook, "func") and playbook.func:

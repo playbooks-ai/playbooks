@@ -40,6 +40,7 @@ class AIAgent(BaseAgent, ABC):
         event_bus: EventBus,
         playbooks: Dict[str, Playbook] = None,
         source_line_number: int = None,
+        agent_id: str = None,
     ):
         """Initialize a new AIAgent.
 
@@ -50,8 +51,9 @@ class AIAgent(BaseAgent, ABC):
             playbooks: Dictionary of playbooks available to this agent.
             source_line_number: The line number in the source markdown where this
                 agent is defined.
+            agent_id: Optional agent ID. If not provided, will generate UUID.
         """
-        super().__init__(klass)
+        super().__init__(klass, agent_id)
         self.metadata, self.description = parse_metadata_and_description(description)
         self.playbooks: Dict[str, Playbook] = playbooks or {}
         self.state = ExecutionState(event_bus)
@@ -165,7 +167,7 @@ class AIAgent(BaseAgent, ABC):
             String containing public agent information
         """
         info_parts = []
-        info_parts.append(f"Agent: {self.klass}")
+        info_parts.append(f"Agent: {self.klass} (agent_id: {self.id})")
         if self.description:
             info_parts.append(f"Description: {self.description}")
 
