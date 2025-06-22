@@ -30,11 +30,89 @@ class AgentCommunicationMixin:
         if not messages:
             messages.append(await self.inboxes[source_agent_id].get())
 
+        # Process each message for special types
+        processed_messages = []
         for message in messages:
             self.state.session_log.append(
                 f"Received message from {source_agent_id}: {message}"
             )
-        return "\n".join(messages)
+
+            # Check for meeting response messages
+            if await self._handle_special_message(source_agent_id, message):
+                # Special message was handled, don't pass to LLM
+                continue
+
+            processed_messages.append(message)
+
+        return "\n".join(processed_messages)
+
+    async def _handle_special_message(self, source_agent_id: str, message: str) -> bool:
+        """Handle special message types automatically.
+
+        Args:
+            source_agent_id: ID of the agent that sent the message
+            message: The message content
+
+        Returns:
+            True if the message was handled as a special type, False otherwise
+        """
+        # Handle JOINED responses
+        if message.startswith("JOINED meeting "):
+            try:
+                # Parse "JOINED meeting <meeting_id>:" format
+                parts = message.split(":")
+                if len(parts) >= 1:
+                    meeting_part = parts[0]  # "JOINED meeting <meeting_id>"
+                    meeting_id = meeting_part.split(" ")[-1]  # Extract <meeting_id>
+                    if hasattr(self.state, "handle_join_request"):
+                        self.state.handle_join_request(
+                            source_agent_id, source_agent_id, meeting_id
+                        )
+                        self.state.session_log.append(
+                            f"Agent {source_agent_id} joined meeting {meeting_id}"
+                        )
+                    return True
+            except (ValueError, IndexError):
+                pass
+
+        # Handle REJECTED responses
+        elif message.startswith("REJECTED meeting "):
+            try:
+                # Parse "REJECTED meeting <meeting_id>:" format
+                parts = message.split(":")
+                if len(parts) >= 1:
+                    meeting_part = parts[0]  # "REJECTED meeting <meeting_id>"
+                    meeting_id = meeting_part.split(" ")[-1]  # Extract <meeting_id>
+                    # Remove from pending invitations
+                    if (
+                        hasattr(self.state, "invitations")
+                        and source_agent_id in self.state.invitations
+                    ):
+                        self.state.invitations[source_agent_id].discard(meeting_id)
+                        if not self.state.invitations[source_agent_id]:
+                            del self.state.invitations[source_agent_id]
+                    self.state.session_log.append(
+                        f"Agent {source_agent_id} rejected meeting {meeting_id}"
+                    )
+                    return True
+            except (ValueError, IndexError):
+                pass
+
+        # Handle ENDED meeting messages
+        elif message.startswith("ENDED meeting "):
+            try:
+                # Parse "ENDED meeting <meeting_id>:" format
+                parts = message.split(":")
+                if len(parts) >= 1:
+                    meeting_part = parts[0]  # "ENDED meeting <meeting_id>"
+                    meeting_id = meeting_part.split(" ")[-1]  # Extract <meeting_id>
+                    self.state.session_log.append(f"Meeting {meeting_id} has ended")
+                    return True
+            except (ValueError, IndexError):
+                pass
+
+        # Not a special message
+        return False
 
 
 class BaseAgent(AgentCommunicationMixin, ABC):

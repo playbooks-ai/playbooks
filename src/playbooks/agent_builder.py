@@ -519,7 +519,7 @@ class AgentBuilder:
     @staticmethod
     def _get_builtin_playbooks():
         """Add Say() Python playbook that prints given message."""
-        code_block = """
+        code_block = '''
 ```python
 @playbook
 async def SendMessage(target_agent_id: str, message: str):
@@ -546,7 +546,29 @@ async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_conte
 @playbook
 async def LoadArtifact(artifact_name: str):
     return agent.state.artifacts[artifact_name]
+
+@playbook
+async def InviteToMeeting(meeting_id: str, attendees: list):
+    """Invite additional agents to an existing meeting."""
+    for agent_spec in attendees:
+        await agent._send_invitation(meeting_id, agent_spec)
+        
+@playbook  
+async def EndMeeting(meeting_id: str = None):
+    """End a meeting."""
+    if meeting_id is None:
+        meeting_id = agent.state.get_current_meeting()
+    
+    if meeting_id and meeting_id in agent.state.meetings:
+        # Notify all participants that meeting has ended
+        meeting = agent.state.meetings[meeting_id]
+        for participant_id in meeting.participants:
+            if participant_id != agent.id:
+                await SendMessage(participant_id, f"ENDED meeting {meeting_id}: Meeting has concluded")
+        
+        # Remove meeting
+        del agent.state.meetings[meeting_id]
 ```        
-"""
+'''
 
         return markdown_to_ast(code_block)["children"]

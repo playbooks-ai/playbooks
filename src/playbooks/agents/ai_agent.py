@@ -1,11 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Tuple
+from datetime import datetime
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..enums import LLMMessageRole
 from ..event_bus import EventBus
-from ..execution_state import ExecutionState
+from ..execution_state import ExecutionState, Meeting
 from ..playbook import MarkdownPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.langfuse_helper import LangfuseHelper
@@ -245,9 +246,9 @@ class AIAgent(BaseAgent, ABC):
             return None
 
         # Fallback logic: current context → last 1:1 target → Human
-        # TODO: Phase 5 - Check current meeting context first
-        # if meeting_id := self.state.get_current_meeting():
-        #     return meeting_id
+        # Check current meeting context first
+        if meeting_id := self.state.get_current_meeting():
+            return f"meeting {meeting_id}"
 
         # Check last 1:1 target
         if self.state.last_message_target:
@@ -303,6 +304,129 @@ class AIAgent(BaseAgent, ABC):
         optional = playbook.optional_attendees
         return required, optional
 
+    async def _inject_meeting_parameters(
+        self, playbook_name: str, kwargs: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Auto-inject topic and attendees parameters for meeting playbooks.
+
+        Args:
+            playbook_name: Name of the meeting playbook
+            kwargs: Current keyword arguments
+
+        Returns:
+            Updated kwargs with injected meeting parameters
+        """
+        # Get current meeting context if available
+        current_meeting_id = self.state.get_current_meeting()
+        if current_meeting_id and current_meeting_id in self.state.meetings:
+            meeting = self.state.meetings[current_meeting_id]
+
+            # Inject topic if not already provided
+            if "topic" not in kwargs and meeting.topic:
+                kwargs["topic"] = meeting.topic
+
+            # Inject attendees if not already provided
+            if "attendees" not in kwargs:
+                # Get list of participant types/names
+                attendee_list = list(meeting.participants.values())
+                kwargs["attendees"] = attendee_list
+
+            # Inject meeting_id for context
+            if "meeting_id" not in kwargs:
+                kwargs["meeting_id"] = current_meeting_id
+
+        return kwargs
+
+    async def create_meeting(
+        self,
+        playbook_name: str,
+        invited_agents: List[str],
+        topic: Optional[str] = None,
+    ) -> str:
+        """Create meeting and send invitations.
+
+        Args:
+            playbook_name: Name of the playbook to execute for this meeting
+            invited_agents: List of agent types/IDs to invite
+            topic: Optional meeting topic
+
+        Returns:
+            Generated meeting ID
+        """
+        meeting_id = self.program.meeting_id_registry.get_next_id()
+
+        # Create meeting record
+        meeting = Meeting(
+            meeting_id=meeting_id,
+            playbook_name=playbook_name,
+            initiator_id=self.id,
+            participants={self.id: self.klass},
+            created_at=datetime.now(),
+            topic=topic,
+        )
+
+        self.state.meetings[meeting_id] = meeting
+
+        # Send invitations
+        for agent_spec in invited_agents:
+            await self._send_invitation(meeting_id, agent_spec)
+
+        return meeting_id
+
+    async def _send_invitation(self, meeting_id: str, agent_spec: str):
+        """Send invitation to an agent.
+
+        Args:
+            meeting_id: ID of the meeting
+            agent_spec: Agent type or ID to invite
+        """
+        meeting = self.state.meetings[meeting_id]
+
+        # Create invitation message
+        invitation_message = (
+            f"INVITATION for meeting {meeting_id}: {meeting.topic or 'Meeting'}"
+        )
+
+        # Track pending invitation
+        if agent_spec not in self.state.invitations:
+            self.state.invitations[agent_spec] = set()
+        self.state.invitations[agent_spec].add(meeting_id)
+
+        # Send the invitation
+        await self.SendMessage(agent_spec, invitation_message)
+
+    async def _initialize_meeting_playbook(
+        self, playbook_name: str, kwargs: Dict[str, Any]
+    ):
+        """Initialize meeting before executing meeting playbook.
+
+        This method is called implicitly before any meeting playbook executes.
+        It creates the meeting, sends invitations, and waits for participants.
+
+        Args:
+            playbook_name: Name of the meeting playbook being executed
+            kwargs: Keyword arguments passed to the playbook (may contain attendees, topic)
+        """
+        # Extract attendees and topic from kwargs if provided
+        attendees = kwargs.get("attendees", [])
+        topic = kwargs.get("topic", f"{playbook_name} meeting")
+
+        # Create the meeting
+        meeting_id = await self.create_meeting(
+            playbook_name=playbook_name, invited_agents=attendees, topic=topic
+        )
+
+        # Store meeting_id in kwargs for the playbook to access
+        kwargs["meeting_id"] = meeting_id
+
+        # Log the meeting initialization
+        self.state.session_log.append(
+            f"Initialized meeting {meeting_id} for playbook {playbook_name}"
+        )
+
+        # TODO: In a full implementation, we might wait for participants to join
+        # For now, we proceed immediately as the invitation handling is asynchronous
+
     @property
     def public_playbooks(self) -> List[Dict[str, Playbook]]:
         """Get list of public playbooks with their information.
@@ -348,6 +472,10 @@ class AIAgent(BaseAgent, ABC):
         call = PlaybookCall(playbook_name, args, kwargs)
         playbook = self.playbooks.get(playbook_name)
 
+        # Handle meeting playbook initialization
+        if playbook and self.is_meeting_playbook(playbook_name):
+            await self._initialize_meeting_playbook(playbook_name, kwargs)
+
         trace_str = self.klass + "." + call.to_log_full()
 
         if playbook:
@@ -381,10 +509,20 @@ class AIAgent(BaseAgent, ABC):
         else:
             first_step_line_number = 0
 
+        # Check if this is a meeting playbook and get meeting context
+        is_meeting = False
+        meeting_id = None
+        if playbook and self.is_meeting_playbook(playbook_name):
+            is_meeting = True
+            # Try to get meeting ID from kwargs or current context
+            meeting_id = kwargs.get("meeting_id") or self.state.get_current_meeting()
+
         call_stack_frame = CallStackFrame(
             InstructionPointer(call.playbook_klass, "01", first_step_line_number),
             llm_messages=[],
             langfuse_span=langfuse_span,
+            is_meeting=is_meeting,
+            meeting_id=meeting_id,
         )
         llm_message = []
         if playbook and isinstance(playbook, MarkdownPlaybook):
@@ -407,6 +545,10 @@ class AIAgent(BaseAgent, ABC):
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> Any:
+        # Auto-inject parameters for meeting playbooks
+        if self.is_meeting_playbook(playbook_name):
+            kwargs = await self._inject_meeting_parameters(playbook_name, kwargs)
+
         playbook, call, langfuse_span = await self._pre_execute(
             playbook_name, args, kwargs
         )
