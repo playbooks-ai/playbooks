@@ -178,6 +178,14 @@ class MarkdownPlaybookExecution:
                     # print("[EXECUTE] waiting for user input")
                     user_input = await self.agent.WaitForMessage("human")
                     user_inputs.append(user_input)
+                elif line.wait_for_agent_input:
+                    # print(f"[EXECUTE] waiting for agent input from {line.wait_for_agent_target}")
+                    target_agent_id = self._resolve_yld_target(
+                        line.wait_for_agent_target
+                    )
+                    if target_agent_id:
+                        agent_input = await self.agent.WaitForMessage(target_agent_id)
+                        user_inputs.append(agent_input)
                 elif line.playbook_finished:
                     # print("[EXECUTE] playbook_finished")
                     done = True
@@ -313,3 +321,19 @@ class MarkdownPlaybookExecution:
             await self.agent.complete_streaming_say()
 
         return buffer
+
+    def _resolve_yld_target(self, target: str) -> str:
+        """Resolve a YLD target to an agent ID.
+
+        Args:
+            target: The YLD target specification
+
+        Returns:
+            Resolved agent ID or None if target couldn't be resolved
+        """
+        if not target:
+            return None
+
+        # Use the unified target resolver with no fallback for YLD
+        # (YLD should be explicit about what it's waiting for)
+        return self.agent.resolve_target(target, allow_fallback=False)

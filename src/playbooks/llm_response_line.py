@@ -19,6 +19,8 @@ class LLMResponseLine:
         self.playbook_calls: List[PlaybookCall] = []
         self.playbook_finished = False
         self.wait_for_user_input = False
+        self.wait_for_agent_input = False
+        self.wait_for_agent_target = None  # Store the target for YLD
         self.exit_program = False
         self.return_value = None
         self.is_thinking = False
@@ -54,11 +56,11 @@ class LLMResponseLine:
         if re.search(r"\byld return\b", self.text):
             self.playbook_finished = True
 
-        if re.search(r"\byld user\b", self.text):
-            self.wait_for_user_input = True
-
         if re.search(r"\byld exit\b", self.text):
             self.exit_program = True
+
+        # Handle YLD patterns
+        self._parse_yld_patterns()
 
         # detect if return value in backticks somewhere in the line using regex
         match = re.search(r"`Return\[(.*?)\]`", self.text)
@@ -207,3 +209,60 @@ class LLMResponseLine:
         except (ValueError, SyntaxError):
             # If literal_eval fails, return as is
             return arg_value
+
+    def _parse_yld_patterns(self):
+        """Parse YLD patterns and set appropriate wait flags."""
+        text = self.text.lower()
+
+        # YLD for user (backward compatibility and explicit)
+        if re.search(r"\byld\s+user\b", text) or re.search(
+            r"\byld\s+for\s+user\b", text
+        ):
+            self.wait_for_user_input = True
+            return
+
+        # YLD for Human
+        if re.search(r"\byld\s+for\s+human\b", text):
+            self.wait_for_user_input = True
+            return
+
+        # YLD for meeting (Phase 5+)
+        meeting_match = re.search(r"\byld\s+for\s+meeting(?:\s+(\d+))?\b", text)
+        if meeting_match:
+            meeting_id = meeting_match.group(1) if meeting_match.group(1) else "current"
+            self.wait_for_agent_input = True
+            self.wait_for_agent_target = f"meeting {meeting_id}"
+            return
+
+        # YLD for agent <id>
+        agent_id_match = re.search(r"\byld\s+for\s+agent\s+(\w+)\b", text)
+        if agent_id_match:
+            agent_id = agent_id_match.group(1)
+            self.wait_for_agent_input = True
+            self.wait_for_agent_target = agent_id
+            return
+
+        # YLD for <agent_type>
+        agent_type_match = re.search(
+            r"\byld\s+for\s+([a-zA-Z][a-zA-Z0-9_]*(?:agent|Agent)?)\b", text
+        )
+        if agent_type_match:
+            agent_type = agent_type_match.group(1)
+            # Skip common words that aren't agent types
+            if agent_type.lower() not in [
+                "meeting",
+                "user",
+                "human",
+                "agent",
+                "return",
+                "exit",
+            ]:
+                self.wait_for_agent_input = True
+                self.wait_for_agent_target = agent_type
+                return
+
+        # YLD for agent (last 1:1 non-human target)
+        if re.search(r"\byld\s+for\s+agent\b", text):
+            self.wait_for_agent_input = True
+            self.wait_for_agent_target = "last_non_human_agent"
+            return

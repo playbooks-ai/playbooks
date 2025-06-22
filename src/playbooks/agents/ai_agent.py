@@ -189,6 +189,77 @@ class AIAgent(BaseAgent, ABC):
         """
         return [agent.get_public_information() for agent in self.other_agents.values()]
 
+    def resolve_target(self, target: str = None, allow_fallback: bool = True) -> str:
+        """Resolve a target specification to an agent ID.
+
+        Args:
+            target: Target specification (agent ID, agent type, "human", etc.)
+            allow_fallback: Whether to use fallback logic when target is None
+
+        Returns:
+            Resolved target agent ID, or None if no fallback allowed and target not found
+        """
+        if target is not None:
+            target = target.strip()
+
+            # Handle human aliases
+            if target.lower() in ["human", "user"]:
+                return "human"
+
+            # Handle meeting targets (Phase 5)
+            if target.startswith("meeting "):
+                return target  # Return as-is for now
+
+            # Handle agent ID targets
+            if target.startswith("agent "):
+                agent_id = target[6:].strip()  # Remove "agent " prefix
+                return agent_id
+
+            # Check if target is a numeric agent ID
+            if target.isdigit():
+                return target
+
+            # Handle special YLD targets
+            if target == "last_non_human_agent":
+                if (
+                    self.state.last_message_target
+                    and self.state.last_message_target != "human"
+                ):
+                    return self.state.last_message_target
+                return None  # No fallback for this case
+
+            # Handle agent type - find first agent of this type
+            for agent in self.other_agents.values():
+                if agent.klass == target:
+                    return agent.id
+
+            # If not found, check if Human agent exists with this type name
+            if target == "Human":
+                return "human"
+
+            # Target not found - fallback to human if allowed
+            return "human" if allow_fallback else None
+
+        # No target specified - use fallback logic if allowed
+        if not allow_fallback:
+            return None
+
+        # Fallback logic: current context → last 1:1 target → Human
+        # TODO: Phase 5 - Check current meeting context first
+        # if meeting_id := self.state.get_current_meeting():
+        #     return meeting_id
+
+        # Check last 1:1 target
+        if self.state.last_message_target:
+            return self.state.last_message_target
+
+        # Default to Human
+        return "human"
+
+    def resolve_say_target(self, target: str = None) -> str:
+        """Resolve the target for a Say() call using fallback logic."""
+        return self.resolve_target(target, allow_fallback=True)
+
     @property
     def public_playbooks(self) -> List[Dict[str, Playbook]]:
         """Get list of public playbooks with their information.

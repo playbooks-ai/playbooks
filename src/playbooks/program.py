@@ -83,7 +83,7 @@ class Program(ProgramAgentsCommunicationMixin):
                                 "description", ""
                             )
 
-        self.agents.append(HumanAgent("human", self.event_bus))
+        self.agents.append(HumanAgent("Human", self.event_bus, "human"))
         self.agents_by_klass = {}
         self.agents_by_id = {}
         for agent in self.agents:

@@ -530,8 +530,14 @@ async def WaitForMessage(source_agent_id: str) -> str | None:
     return await agent.WaitForMessage(source_agent_id)
 
 @playbook
-async def Say(message: str):
-    await SendMessage("human", message)
+async def Say(target: str,message: str):
+    resolved_target = agent.resolve_say_target(target)
+    
+    # Track last message target (only for 1:1 messages, not meetings)
+    if not (resolved_target.startswith("meeting ") or resolved_target == "human"):
+        agent.state.last_message_target = resolved_target
+    
+    await SendMessage(resolved_target, message)
 
 @playbook
 async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_content: str):
