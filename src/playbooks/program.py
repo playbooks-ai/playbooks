@@ -39,6 +39,19 @@ class AgentIdRegistry:
         return str(current_id)
 
 
+class MeetingIdRegistry:
+    """Manages sequential meeting ID generation."""
+
+    def __init__(self):
+        self._next_id = 100
+
+    def get_next_id(self) -> str:
+        """Get the next sequential meeting ID."""
+        current_id = self._next_id
+        self._next_id += 1
+        return str(current_id)
+
+
 class Program(ProgramAgentsCommunicationMixin):
     def __init__(
         self, full_program: str, event_bus: EventBus, program_paths: List[str] = None
@@ -48,6 +61,7 @@ class Program(ProgramAgentsCommunicationMixin):
         self.program_paths = program_paths or []
         self._debug_server = None
         self.agent_id_registry = AgentIdRegistry()
+        self.meeting_id_registry = MeetingIdRegistry()
 
         self.extract_public_json()
         self.parse_metadata()

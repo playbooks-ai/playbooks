@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Tuple
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..enums import LLMMessageRole
@@ -259,6 +259,49 @@ class AIAgent(BaseAgent, ABC):
     def resolve_say_target(self, target: str = None) -> str:
         """Resolve the target for a Say() call using fallback logic."""
         return self.resolve_target(target, allow_fallback=True)
+
+    def get_meeting_playbooks(self) -> List[str]:
+        """Get list of meeting playbook names.
+
+        Returns:
+            List of playbook names that are marked as meeting playbooks
+        """
+        meeting_playbooks = []
+        for playbook in self.playbooks.values():
+            if playbook.meeting:
+                meeting_playbooks.append(playbook.name)
+        return meeting_playbooks
+
+    def is_meeting_playbook(self, playbook_name: str) -> bool:
+        """Check if a playbook is a meeting playbook.
+
+        Args:
+            playbook_name: Name of the playbook to check
+
+        Returns:
+            True if the playbook is a meeting playbook
+        """
+        playbook = self.playbooks.get(playbook_name)
+        if not playbook:
+            return False
+        return playbook.meeting
+
+    def get_playbook_attendees(self, playbook_name: str) -> Tuple[List[str], List[str]]:
+        """Get required and optional attendees for a meeting playbook.
+
+        Args:
+            playbook_name: Name of the meeting playbook
+
+        Returns:
+            Tuple of (required_attendees, optional_attendees)
+        """
+        playbook = self.playbooks.get(playbook_name)
+        if not playbook:
+            return [], []
+
+        required = playbook.required_attendees
+        optional = playbook.optional_attendees
+        return required, optional
 
     @property
     def public_playbooks(self) -> List[Dict[str, Playbook]]:

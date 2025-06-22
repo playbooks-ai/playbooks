@@ -54,6 +54,35 @@ class Playbook(ABC):
         """
         return self.metadata.get("export", False)
 
+    @property
+    def meeting(self) -> bool:
+        """Return whether this playbook is a meeting playbook.
+
+        Meeting playbooks are designed to orchestrate meetings with multiple participants.
+
+        Returns:
+            True if the playbook is a meeting playbook, False otherwise
+        """
+        return self.metadata.get("meeting", False)
+
+    @property
+    def required_attendees(self) -> List[str]:
+        """Return the list of required attendees for meeting playbooks.
+
+        Returns:
+            List of required attendee identifiers, empty list if none specified
+        """
+        return self.metadata.get("required_attendees", [])
+
+    @property
+    def optional_attendees(self) -> List[str]:
+        """Return the list of optional attendees for meeting playbooks.
+
+        Returns:
+            List of optional attendee identifiers, empty list if none specified
+        """
+        return self.metadata.get("optional_attendees", [])
+
     @abstractmethod
     async def execute(self, *args, **kwargs) -> Any:
         """Execute the playbook with the given arguments.

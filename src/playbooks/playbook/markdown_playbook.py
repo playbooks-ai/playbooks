@@ -108,10 +108,15 @@ class MarkdownPlaybook(LocalPlaybook):
         steps = cls._parse_steps(h3s)
         notes = cls._parse_notes(h3s)
 
+        # Parse metadata from description
+        metadata, cleaned_description = parse_metadata_and_description(
+            description or ""
+        )
+
         return cls(
             klass=klass,
             signature=signature,
-            description=description,
+            description=cleaned_description,
             triggers=triggers,
             steps=steps,
             notes=notes,
@@ -119,6 +124,7 @@ class MarkdownPlaybook(LocalPlaybook):
             func=None,
             markdown=h2["markdown"],
             step_collection=steps,
+            metadata=metadata,
             source_line_number=h2.get("line_number"),
         )
 
