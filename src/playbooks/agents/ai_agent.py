@@ -573,10 +573,6 @@ class AIAgent(BaseAgent, ABC):
         call = PlaybookCall(playbook_name, args, kwargs)
         playbook = self.playbooks.get(playbook_name)
 
-        # Handle meeting playbook initialization
-        if playbook and self.is_meeting_playbook(playbook_name):
-            await self._initialize_meeting_playbook(playbook_name, kwargs)
-
         trace_str = self.klass + "." + call.to_log_full()
 
         if playbook:
@@ -653,6 +649,15 @@ class AIAgent(BaseAgent, ABC):
         playbook, call, langfuse_span = await self._pre_execute(
             playbook_name, args, kwargs
         )
+
+        try:
+            # Handle meeting playbook initialization
+            if playbook and self.is_meeting_playbook(playbook_name):
+                await self._initialize_meeting_playbook(playbook_name, kwargs)
+        except TimeoutError as e:
+            error_msg = f"Meeting initialization failed: {str(e)}"
+            await self._post_execute(call, error_msg, langfuse_span)
+            return error_msg
 
         # Replace variable names with actual values
         for arg in args:
