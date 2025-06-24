@@ -139,7 +139,7 @@ class MarkdownPlaybookExecution:
 
                 # Update variables
                 if len(line.vars) > 0:
-                    self.agent.state.variables.update(line.vars.to_dict())
+                    self.agent.state.variables.update(line.vars)
 
                 # Execute playbook calls
                 if line.playbook_calls:
