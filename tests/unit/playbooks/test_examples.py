@@ -1,8 +1,11 @@
+from unittest.mock import MagicMock
+
 import pytest
 
 from playbooks import Playbooks
 from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.agents.mcp_agent import MCPAgent
+from playbooks.constants import EOM
 from tests.unit.playbooks.test_mcp_end_to_end import InMemoryMCPTransport
 
 
@@ -143,3 +146,27 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
 
     # Check that the secret message appears in the log
     assert "Playbooks+MCP FTW!" in log
+
+
+@pytest.mark.asyncio
+async def test_example_12_timeout(test_data_dir):
+    playbooks = Playbooks([test_data_dir / "12-menu-design-meeting.pb"])
+    agent = playbooks.program.agents_by_klass["RestaurantConsultant"][0]
+    human = playbooks.program.agents_by_id["human"]
+
+    # mock such that `await self._initialize_meeting_playbook(playbook_name, kwargs)` raises TimeoutError
+    agent._initialize_meeting_playbook = MagicMock(side_effect=TimeoutError)
+
+    # AI will ask for a country, so seed response from human
+    await human.SendMessage(agent.id, "indian restaurant menu redesign")
+    await human.SendMessage(agent.id, EOM)
+    await human.SendMessage(agent.id, "Add creative fusion Chaat items")
+    await human.SendMessage(agent.id, EOM)
+    await human.SendMessage(agent.id, "Let's try later")
+    await human.SendMessage(agent.id, EOM)
+    await playbooks.program.run_till_exit()
+    log = agent.state.session_log.to_log_full()
+
+    assert "MenuRedesignMeeting() → Meeting initialization failed" in log
+    assert "apologize" in log
+    assert "RedesignMenu() finished" in log
