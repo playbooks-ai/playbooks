@@ -731,3 +731,6 @@ class AIAgent(BaseAgent, ABC):
                 call_result.to_log_full(), role=LLMMessageRole.ASSISTANT
             )
         langfuse_span.update(output=result)
+
+    def __str__(self):
+        return f"{self.klass}(agent {self.id})"

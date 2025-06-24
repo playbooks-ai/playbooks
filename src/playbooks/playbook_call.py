@@ -52,12 +52,16 @@ class PlaybookCallResult(SessionLogItem):
         ):
             return ""
 
+        output = []
         if self.execution_summary:
-            return self.execution_summary
+            output.append(self.execution_summary)
 
         if self.result is None:
-            return f"{self.call.to_log_full()} finished"
-        return f"{self.call.to_log_full()} → {result_str}"
+            output.append(f"{self.call.to_log_full()} finished")
+        else:
+            output.append(f"{self.call.to_log_full()} → {result_str}")
+
+        return "\n".join(output)
 
     def to_log_full(self) -> str:
         return self.to_log(str(self.result) if self.result else "")

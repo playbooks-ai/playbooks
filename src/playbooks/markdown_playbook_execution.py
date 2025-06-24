@@ -204,8 +204,8 @@ class MarkdownPlaybookExecution:
                 f"{str(self.agent.state.call_stack.peek())} was executed - "
                 "continue execution."
             )
-            if user_inputs:
-                instruction.append(f"User said: {' '.join(user_inputs)}")
+            # if user_inputs:
+            #     instruction.append(f"User said: {' '.join(user_inputs)}")
 
             instruction = "\n".join(instruction)
 

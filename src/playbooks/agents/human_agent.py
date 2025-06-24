@@ -10,3 +10,6 @@ class HumanAgent(BaseAgent):
 
         # TODO: HumanAgent should not have the same state as AI agents. Use a different state class.
         self.state = ExecutionState(event_bus)
+
+    def __str__(self):
+        return "user"

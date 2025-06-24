@@ -5,6 +5,7 @@ from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from playbooks.constants import EOM
+from playbooks.enums import LLMMessageRole
 
 if TYPE_CHECKING:
     from src.playbooks.program import Program
@@ -16,6 +17,18 @@ class AgentCommunicationMixin:
         self.inboxes = defaultdict(asyncio.Queue)
 
     async def SendMessage(self, target_agent_id: str, message: str):
+        target_agent = self.program.agents_by_id.get(target_agent_id)
+        current_frame = self.state.call_stack.peek()
+        if current_frame:
+            if target_agent:
+                target_agent_name = str(target_agent)
+            else:
+                target_agent_name = BaseAgent.unknown_agent_str(target_agent_id)
+            current_frame.add_uncached_llm_message(
+                f"I {str(self)} sent message to {target_agent_name}: {message}",
+                role=LLMMessageRole.ASSISTANT,
+            )
+
         await self.program.route_message(self.id, target_agent_id, message)
 
     async def WaitForMessage(self, source_agent_id: str) -> str | None:
@@ -36,7 +49,17 @@ class AgentCommunicationMixin:
             self.state.session_log.append(
                 f"Received message from {source_agent_id}: {message}"
             )
-
+            current_frame = self.state.call_stack.peek()
+            if current_frame:
+                source_agent = self.program.agents_by_id.get(source_agent_id)
+                if source_agent:
+                    source_agent_name = str(source_agent)
+                else:
+                    source_agent_name = BaseAgent.unknown_agent_str(source_agent_id)
+                current_frame.add_uncached_llm_message(
+                    f"{source_agent_name} said to me {str(self)}: {message}",
+                    role=LLMMessageRole.ASSISTANT,
+                )
             # Check for meeting response messages
             if await self._handle_special_message(source_agent_id, message):
                 # Special message was handled, don't pass to LLM
@@ -155,3 +178,7 @@ class BaseAgent(AgentCommunicationMixin, ABC):
     async def complete_streaming_say(self):
         """Complete the current streaming Say() message. Override in subclasses."""
         pass
+
+    @staticmethod
+    def unknown_agent_str(agent_id: str):
+        return f"Agent (agent {agent_id})"
