@@ -289,6 +289,7 @@ metadata2: "copied verbatim if exists"
 7. ✓ Add `YLD user` after asking for input, but only when asking for user input. Use `YLD call` when saying something to the user without waiting for user input.
 8. ✓ Add JMP for while loops, and CND for if/else
 9. ✓ Each agent must end with a public.json listing all public playbooks in that agent
+10. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. No made-up playbooks.
 
 ## Example Transformation
 
@@ -514,6 +515,6 @@ Says goodbye to the user
 
 ====
 
-Remember: Follow patterns exactly, output only the compiled result. Follow the output contract exactly; deviations break execution.
+Remember: Follow the output contract exactly; deviations break execution.
 
 **Output:**
