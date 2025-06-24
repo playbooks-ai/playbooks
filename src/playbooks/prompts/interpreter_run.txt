@@ -27,10 +27,10 @@ recap – one‑sentence summary
 plan  – one‑sentence immediate goal
 \`Var[$name, <value>]\`
 \`SaveArtifact($name, "one line summary", "long form content...")\`
-trig? <no | \`Trigger["PB:Ln:Code"]\`>
+trig? <no | \`Trigger["PB:Ln:Code"]\` \n yld call>
 \`Step["Playbook:Ln:Code"]\`  optional inline:  \`Say("user", "…")\`  or  \`$x = Func($y)\`
-trig? <no | \`Trigger["PB:Ln:Code"]\`>
-what? handle unexpected situation intelligently and safely
+trig? <no | \`Trigger["PB:Ln:Code"]\` \n yld call>
+what? handle unexpected situation intelligently and safely but within the bounds of what playbooks are available
 \`Step["Playbook:Ln:Code"]\` \`Return[<value> | ]\` \`Var[$__, 1-5 line summary of this playbook's execution with context useful for the calling playbook and overall conversation and agent execution]\`
 yld <user | call | return | exit>
 ```
@@ -123,6 +123,8 @@ yld return
 ```
 
 **Ex 3 – Trigger firing**
+If a trigger condition is met, fire the trigger and yld call.
+e.g. - When checkout amount is more than $50, `Trigger["Offer:01:CND"]` by enqueuing `Offer()`
 ```
 recap – set $amount
 plan  – continue checkout
