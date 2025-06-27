@@ -2,7 +2,7 @@ import asyncio
 import uuid
 from abc import ABC
 from collections import defaultdict
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict
 
 from playbooks.constants import EOM
 from playbooks.enums import LLMMessageRole
@@ -182,3 +182,6 @@ class BaseAgent(AgentCommunicationMixin, ABC):
     @staticmethod
     def unknown_agent_str(agent_id: str):
         return f"Agent (agent {agent_id})"
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {**self.kwargs, "type": self.klass, "agent_id": self.id}

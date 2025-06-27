@@ -123,8 +123,6 @@ class AgentBuilder:
         def __init__(self, event_bus: EventBus, agent_id: str = None):
             MCPAgent.__init__(
                 self,
-                klass=klass,
-                description=description,
                 event_bus=event_bus,
                 remote_config=remote_config,
                 source_line_number=source_line_number,
@@ -137,6 +135,8 @@ class AgentBuilder:
             (MCPAgent,),
             {
                 "__init__": __init__,
+                "klass": klass,
+                "description": description,
             },
         )
 
@@ -306,9 +306,6 @@ class AgentBuilder:
         def __init__(self, event_bus: EventBus, agent_id: str = None):
             LocalAIAgent.__init__(
                 self,
-                klass=klass,
-                description=description,
-                playbooks=playbooks,
                 event_bus=event_bus,
                 source_line_number=source_line_number,
                 agent_id=agent_id,
@@ -320,6 +317,9 @@ class AgentBuilder:
             (LocalAIAgent,),
             {
                 "__init__": __init__,
+                "klass": klass,
+                "description": description,
+                "playbooks": playbooks,
             },
         )
 

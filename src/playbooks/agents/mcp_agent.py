@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict
+from typing import TYPE_CHECKING, Any, Dict
 
 from ..event_bus import EventBus
 from ..playbook import RemotePlaybook
@@ -7,6 +7,9 @@ from ..transport import MCPTransport
 from .remote_ai_agent import RemoteAIAgent
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from ..program import Program
 
 
 class MCPAgent(RemoteAIAgent):
@@ -18,12 +21,11 @@ class MCPAgent(RemoteAIAgent):
 
     def __init__(
         self,
-        klass: str,
-        description: str,
         event_bus: EventBus,
         remote_config: Dict[str, Any],
         source_line_number: int = None,
         agent_id: str = None,
+        program: "Program" = None,
     ):
         """Initialize an MCP agent.
 
@@ -41,7 +43,11 @@ class MCPAgent(RemoteAIAgent):
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
         super().__init__(
-            klass, description, event_bus, remote_config, source_line_number, agent_id
+            event_bus=event_bus,
+            remote_config=remote_config,
+            source_line_number=source_line_number,
+            agent_id=agent_id,
+            program=program,
         )
         self.transport = MCPTransport(remote_config)
 
@@ -131,6 +137,7 @@ class MCPAgent(RemoteAIAgent):
                 f"Discovered {len(self.playbooks)} MCP tools for agent {self.klass}"
             )
 
+            self.__class__.playbooks = self.playbooks
         except Exception as e:
             logger.error(
                 f"Failed to discover MCP tools for agent {self.klass}: {str(e)}"

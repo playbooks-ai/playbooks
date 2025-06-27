@@ -39,6 +39,15 @@ class RemotePlaybook(Playbook):
         self.parameters = parameters or {}
         self.timeout = timeout
 
+    @property
+    def signature(self) -> str:
+        """Get the signature of the remote playbook.
+
+        Returns:
+            The signature of the remote playbook
+        """
+        return f"{self.name}({', '.join([f'{param}: {type(param).__name__}' for param in self.parameters])})"
+
     async def execute(self, *args, **kwargs) -> Any:
         """Execute the remote playbook.
 

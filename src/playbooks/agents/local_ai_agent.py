@@ -1,11 +1,13 @@
 import logging
-from typing import Dict
+from typing import TYPE_CHECKING
 
 from ..event_bus import EventBus
-from ..playbook import Playbook
 from .ai_agent import AIAgent
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from ..program import Program
 
 
 class LocalAIAgent(AIAgent):
@@ -18,12 +20,10 @@ class LocalAIAgent(AIAgent):
 
     def __init__(
         self,
-        klass: str,
-        description: str,
         event_bus: EventBus,
-        playbooks: Dict[str, Playbook] = None,
         source_line_number: int = None,
         agent_id: str = None,
+        program: "Program" = None,
     ):
         """Initialize a new LocalAIAgent.
 
@@ -37,7 +37,10 @@ class LocalAIAgent(AIAgent):
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
         super().__init__(
-            klass, description, event_bus, playbooks, source_line_number, agent_id
+            event_bus=event_bus,
+            source_line_number=source_line_number,
+            agent_id=agent_id,
+            program=program,
         )
         # Set up agent reference for playbooks that need it
         for playbook in self.playbooks.values():

@@ -15,7 +15,7 @@ from ..utils.parse_utils import parse_metadata_and_description
 from .base_agent import BaseAgent
 
 if TYPE_CHECKING:
-    pass
+    from ..program import Program
 
 logger = logging.getLogger(__name__)
 
@@ -32,17 +32,14 @@ class AIAgent(BaseAgent, ABC):
         klass: The class/type of this agent.
         description: Human-readable description of the agent.
         playbooks: Dictionary of playbooks available to this agent.
-        other_agents: Dictionary of other agents for direct communication.
     """
 
     def __init__(
         self,
-        klass: str,
-        description: str,
         event_bus: EventBus,
-        playbooks: Dict[str, Playbook] = None,
         source_line_number: int = None,
         agent_id: str = None,
+        program: "Program" = None,
     ):
         """Initialize a new AIAgent.
 
@@ -55,13 +52,19 @@ class AIAgent(BaseAgent, ABC):
                 agent is defined.
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
-        super().__init__(klass, agent_id)
-        self.metadata, self.description = parse_metadata_and_description(description)
-        self.playbooks: Dict[str, Playbook] = playbooks or {}
+        self.klass = self.__class__.klass
+        self.description = self.__class__.description
+        self.ensure_meeting_playbook_kwargs()
+        self.playbooks: Dict[str, Playbook] = (self.__class__.playbooks or {}).copy()
+
+        super().__init__(self.klass, agent_id)
+
+        self.metadata, self.description = parse_metadata_and_description(
+            self.description
+        )
         self.state = ExecutionState(event_bus)
         self.source_line_number = source_line_number
         self.public_json = None
-        self.other_agents: Dict[str, "AIAgent"] = {}
 
     @abstractmethod
     async def discover_playbooks(self) -> None:
@@ -72,14 +75,16 @@ class AIAgent(BaseAgent, ABC):
         """
         pass
 
-    def register_agent(self, agent_name: str, agent: "AIAgent") -> None:
-        """Register another agent for direct communication.
+    @property
+    def other_agents(self) -> List["AIAgent"]:
+        """Get list of other AI agents in the system.
 
-        Args:
-            agent_name: Name/identifier of the agent
-            agent: The agent instance to register
+        Returns:
+            List of other agent instances
         """
-        self.other_agents[agent_name] = agent
+        return list(
+            filter(lambda x: isinstance(x, AIAgent) and x != self, self.program.agents)
+        )
 
     def get_available_playbooks(self) -> List[str]:
         """Get a list of available playbook names.
@@ -162,34 +167,56 @@ class AIAgent(BaseAgent, ABC):
             instructions.extend(agent.trigger_instructions(with_namespace=True))
         return instructions
 
-    def get_public_information(self) -> str:
-        """Get public information about this agent.
+    @classmethod
+    def get_compact_information(cls) -> str:
+        info_parts = []
+        info_parts.append(f"# {cls.klass}")
+        if cls.description:
+            info_parts.append(f"{cls.description}")
+
+        if cls.playbooks:
+            for playbook in cls.playbooks.values():
+                if not playbook.hidden:
+                    info_parts.append(f"## {playbook.signature}")
+                    if playbook.description:
+                        info_parts.append(
+                            playbook.description[:100]
+                            + ("..." if len(playbook.description) > 100 else "")
+                        )
+                    info_parts.append("\n")
+
+        return "\n".join(info_parts)
+
+    @classmethod
+    def get_public_information(cls) -> str:
+        """Get public information about an agent klass
 
         Returns:
             String containing public agent information
         """
         info_parts = []
-        info_parts.append(f"Agent: {self.klass} (agent_id: {self.id})")
-        if self.description:
-            info_parts.append(f"Description: {self.description}")
+        info_parts.append(f"# {cls.klass}")
+        if cls.description:
+            info_parts.append(f"{cls.description}")
 
-        public_playbooks = self.public_playbooks
-        if public_playbooks:
-            info_parts.append("Public Playbooks:")
-            for playbook in public_playbooks:
-                info_parts.append(
-                    f"  - {self.klass}.{playbook.name}: {playbook.description}"
-                )
+        if cls.playbooks:
+            for playbook in cls.playbooks.values():
+                if playbook.public:
+                    info_parts.append(f"## {cls.klass}.{playbook.name}")
+                    info_parts.append(playbook.description)
 
         return "\n".join(info_parts)
 
-    def other_agents_information(self) -> List[str]:
+    def other_agent_klasses_information(self) -> List[str]:
         """Get information about other registered agents.
 
         Returns:
             List of information strings for other agents
         """
-        return [agent.get_public_information() for agent in self.other_agents.values()]
+        return [
+            agent_klass.get_public_information()
+            for agent_klass in self.program.agent_klasses.values()
+        ]
 
     def resolve_target(self, target: str = None, allow_fallback: bool = True) -> str:
         """Resolve a target specification to an agent ID.
@@ -231,7 +258,7 @@ class AIAgent(BaseAgent, ABC):
                 return None  # No fallback for this case
 
             # Handle agent type - find first agent of this type
-            for agent in self.other_agents.values():
+            for agent in self.other_agents:
                 if agent.klass == target:
                     return agent.id
 
@@ -529,7 +556,7 @@ class AIAgent(BaseAgent, ABC):
         )
 
     @property
-    def public_playbooks(self) -> List[Dict[str, Playbook]]:
+    def public_playbooks(self) -> List[Playbook]:
         """Get list of public playbooks with their information.
 
         Returns:
@@ -704,7 +731,7 @@ class AIAgent(BaseAgent, ABC):
                     return result
 
             # Try to execute playbook in other agents (fallback)
-            for agent in self.other_agents.values():
+            for agent in self.other_agents:
                 if (
                     playbook_name in agent.playbooks
                     and agent.playbooks[playbook_name].public

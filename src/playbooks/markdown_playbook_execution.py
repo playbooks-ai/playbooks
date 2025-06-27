@@ -241,7 +241,8 @@ class MarkdownPlaybookExecution:
             instruction=instruction,
             agent_instructions=agent_instructions,
             artifacts_to_load=artifacts_to_load,
-            other_agents_information=self.agent.other_agents_information(),
+            agent_information=self.agent.get_compact_information(),
+            other_agent_klasses_information=self.agent.other_agent_klasses_information(),
             trigger_instructions=self.agent.all_trigger_instructions(),
         )
 

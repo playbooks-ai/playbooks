@@ -55,6 +55,14 @@ class Playbook(ABC):
         return self.metadata.get("export", False)
 
     @property
+    def hidden(self) -> bool:
+        """Return whether this playbook is hidden.
+
+        Hidden playbooks are not shown in the agent's public information.
+        """
+        return self.metadata.get("hidden", False)
+
+    @property
     def meeting(self) -> bool:
         """Return whether this playbook is a meeting playbook.
 

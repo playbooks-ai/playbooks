@@ -1,4 +1,5 @@
 import ast
+import json
 import re
 from typing import Any, List
 
@@ -53,10 +54,10 @@ class LLMResponseLine:
         # Extract Trigger metadata, e.g., `Trigger["user_auth_failed"]`
         self.triggers = re.findall(r'`Trigger\["([^"]+)"\]`', self.text)
 
-        if re.search(r"\byld return\b", self.text):
+        if re.search(r"\byld\s+for\s+return\b", self.text):
             self.playbook_finished = True
 
-        if re.search(r"\byld exit\b", self.text):
+        if re.search(r"\byld\s+for\s+exit\b", self.text):
             self.exit_program = True
 
         # Handle YLD patterns
@@ -77,8 +78,10 @@ class LLMResponseLine:
                 self.return_value = literal_map[expression]
             elif expression.startswith("$"):
                 self.return_value = expression
+            elif expression.startswith('"') and expression.endswith('"'):
+                self.return_value = expression[1:-1]
             else:
-                self.return_value = eval(match.group(1), {}, {})
+                self.return_value = json.loads(match.group(1))
 
         # Extract playbook calls enclosed in backticks.
         # e.g., `MyPlaybook(arg1, arg2, kwarg1="value")` or `Playbook(key1=$var1)`
@@ -214,10 +217,8 @@ class LLMResponseLine:
         """Parse YLD patterns and set appropriate wait flags."""
         text = self.text.lower()
 
-        # YLD for user (backward compatibility and explicit)
-        if re.search(r"\byld\s+user\b", text) or re.search(
-            r"\byld\s+for\s+user\b", text
-        ):
+        # YLD for user
+        if re.search(r"\byld\s+for\s+user\b", text):
             self.wait_for_user_input = True
             return
 
@@ -266,3 +267,9 @@ class LLMResponseLine:
             self.wait_for_agent_input = True
             self.wait_for_agent_target = "last_non_human_agent"
             return
+
+        # YLD for call (yields for completion of a playbook call)
+        if re.search(r"\byld\s+for\s+call\b", text):
+            # For now, treat as equivalent to waiting for playbook completion
+            # This might need more sophisticated handling in the future
+            pass

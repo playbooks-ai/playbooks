@@ -7,7 +7,7 @@ and execution control flags.
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Any, Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 from playbooks.artifacts import Artifacts
 from playbooks.call_stack import CallStack
@@ -98,6 +98,7 @@ class ExecutionState(MeetingManager):
         self.call_stack = CallStack(event_bus)
         self.variables = Variables(event_bus)
         self.artifacts = Artifacts()
+        self.agents: List[Dict[str, Any]] = []
         self.last_llm_response = ""
         self.last_message_target = (
             None  # Track last 1:1 message target for Say() fallback
@@ -109,10 +110,28 @@ class ExecutionState(MeetingManager):
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary representation of the execution state."""
+        # Build meetings list for LLM visibility
+        meetings_list = []
+        for meeting_id, meeting in self.meetings.items():
+            participants_list = []
+            for participant_id, participant_type in meeting.participants.items():
+                participants_list.append(
+                    {"type": participant_type, "agent_id": participant_id}
+                )
+
+            meetings_list.append(
+                {"meeting_id": meeting_id, "participants": participants_list}
+            )
+
         return {
-            # "call_stack": self.call_stack.to_dict(), # Not needed because of llm_messages context
+            "call_stack": [
+                frame.instruction_pointer.to_compact_str()
+                for frame in self.call_stack.frames
+            ],
             "variables": self.variables.to_dict(),
             "artifacts": self.artifacts.to_dict(),
+            "agents": self.agents,
+            "meetings": meetings_list,
         }
 
     def __str__(self) -> str:

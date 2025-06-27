@@ -20,7 +20,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
       "console": "integratedTerminal",
-      "args": ["${file}", "--verbose"]
+      "args": ["${file}"]
     },
     {
       "name": "Web server for agent chat",
