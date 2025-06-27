@@ -107,12 +107,43 @@ class Program(ProgramAgentsCommunicationMixin):
             self.agents_by_id[agent.id] = agent
             agent.program = self
 
+        self.event_agents_changed()
+
+    def event_agents_changed(self):
         for agent in self.agents:
             if isinstance(agent, AIAgent):
-                # Register other agents for direct communication
-                for other_agent in self.agents:
-                    if other_agent != agent and isinstance(other_agent, AIAgent):
-                        agent.register_agent(other_agent.klass, other_agent)
+                agent.event_agents_changed()
+
+    def create_agent(self, agent_klass: str, **kwargs):
+        klass = self.agent_klasses.get(agent_klass)
+        if not klass:
+            raise ValueError(f"Agent class {agent_klass} not found")
+
+        agent = klass(self.event_bus, self.agent_id_registry.get_next_id())
+        agent.kwargs = kwargs
+
+        self.agents.append(agent)
+        self.agents_by_klass[agent.klass].append(agent)
+        self.agents_by_id[agent.id] = agent
+        agent.program = self
+        self.event_agents_changed()
+
+        # Initialize and start the agent to enable background processing
+        asyncio.create_task(self._initialize_new_agent(agent))
+
+        return agent.to_dict()
+
+    async def _initialize_new_agent(self, agent):
+        """Initialize and start a newly created agent."""
+        try:
+            await agent.initialize()
+            await agent.begin()
+        except Exception as e:
+            # Log error but don't crash the program
+            import logging
+
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error initializing new agent {agent.id}: {str(e)}")
 
     def _get_compiled_file_name(self) -> str:
         """Generate the compiled file name based on the first original file."""
@@ -167,6 +198,12 @@ class Program(ProgramAgentsCommunicationMixin):
             await self.begin()
         except ExecutionFinished:
             pass
+        finally:
+            await self.shutdown()
+
+    async def shutdown(self):
+        # Shutdown debug server if running
+        await self.shutdown_debug_server()
 
     async def start_debug_server(
         self, host: str = "127.0.0.1", port: int = 5678

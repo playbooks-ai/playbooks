@@ -540,6 +540,10 @@ async def Say(target: str,message: str):
     await SendMessage(resolved_target, message)
 
 @playbook
+async def CreateAgent(agent_klass: str, **kwargs):
+    agent.program.create_agent(agent_klass, **kwargs)
+
+@playbook
 async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_content: str):
     agent.state.artifacts.set(artifact_name, artifact_summary, artifact_content)
 

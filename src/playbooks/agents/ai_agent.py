@@ -86,6 +86,9 @@ class AIAgent(BaseAgent, ABC):
             filter(lambda x: isinstance(x, AIAgent) and x != self, self.program.agents)
         )
 
+    def event_agents_changed(self):
+        self.state.agents = [str(agent) for agent in self.program.agents]
+
     def get_available_playbooks(self) -> List[str]:
         """Get a list of available playbook names.
 
@@ -147,15 +150,6 @@ class AIAgent(BaseAgent, ABC):
             instructions.extend(playbook_instructions)
         return instructions
 
-    @property
-    def other_agents_list(self) -> List["AIAgent"]:
-        """Get list of other registered agents.
-
-        Returns:
-            List of other agent instances
-        """
-        return list(self.other_agents.values())
-
     def all_trigger_instructions(self) -> List[str]:
         """Get all trigger instructions including from other agents.
 
@@ -163,7 +157,7 @@ class AIAgent(BaseAgent, ABC):
             List of all trigger instruction strings
         """
         instructions = self.trigger_instructions(with_namespace=False)
-        for agent in self.other_agents.values():
+        for agent in self.other_agents:
             instructions.extend(agent.trigger_instructions(with_namespace=True))
         return instructions
 
