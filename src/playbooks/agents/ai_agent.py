@@ -111,6 +111,43 @@ class AIAgent(BaseAgent, ABC):
         for playbook in playbooks_to_execute:
             await self.execute_playbook(playbook.name)
 
+    # TODO: HACK: Figure out a better way to do this
+    def ensure_meeting_playbook_kwargs(self):
+        """Ensure that all meeting playbooks have the required kwargs."""
+        for playbook in self.__class__.playbooks.values():
+            if playbook.meeting and isinstance(playbook, MarkdownPlaybook):
+                signature = playbook.signature
+
+                # Check if topic and attendees are missing
+                missing_params = []
+                if "topic:" not in signature and "topic :" not in signature:
+                    missing_params.append("topic: str")
+                if "attendees:" not in signature and "attendees :" not in signature:
+                    missing_params.append("attendees: List[str]")
+
+                if missing_params:
+                    # Find the position to insert parameters (before the closing parenthesis)
+                    # Handle cases like "GameRoom() -> None" or "TaxPrepMeeting($form: str) -> None"
+                    if ") ->" in signature:
+                        # Has return type annotation
+                        before_return = signature.split(") ->")[0]
+                        after_return = ") ->" + signature.split(") ->", 1)[1]
+                    else:
+                        # No return type, just ends with )
+                        before_return = signature.rstrip(")")
+                        after_return = ")"
+
+                    # Check if there are existing parameters
+                    if before_return.endswith("("):
+                        # No existing parameters, add directly
+                        new_params = ", ".join(missing_params)
+                    else:
+                        # Has existing parameters, add with comma prefix
+                        new_params = ", " + ", ".join(missing_params)
+
+                    # Reconstruct the signature
+                    playbook.signature = before_return + new_params + after_return
+
     def parse_instruction_pointer(self, step: str) -> InstructionPointer:
         """Parse a step string into an InstructionPointer.
 
