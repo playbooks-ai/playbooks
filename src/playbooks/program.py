@@ -11,19 +11,39 @@ from .agents import AIAgent, HumanAgent
 from .debug.server import DebugServer
 from .event_bus import EventBus
 from .exceptions import ExecutionFinished
+from .meetings import MeetingRegistry
+from .message_system import AgentMessage, MessageDeliveryProcessor
 from .utils.markdown_to_ast import markdown_to_ast
 
 
 class ProgramAgentsCommunicationMixin:
     async def route_message(
-        self: "Program", sender_id: str, target_agent_id: str, message: str
+        self: "Program",
+        sender_id: str,
+        target_spec: str,
+        message: str,
+        message_type: str = "direct",
+        meeting_id: str = None,
     ):
-        """Routes a message to the target agent's inbox queue."""
-        target_agent = self.agents_by_id.get(target_agent_id)
-        if not target_agent:
+        """Routes a message to target agent(s) using the simplified system."""
+        # Create structured message
+        agent_message = AgentMessage(
+            sender_id=sender_id,
+            content=message,
+            message_type=message_type,
+            meeting_id=meeting_id,
+        )
+
+        # First try to find by agent ID
+        target_agent = self.agents_by_id.get(target_spec)
+        if target_agent:
+            target_agent.inbox.add_message(agent_message)
             return
-        target_queue = target_agent.inboxes[sender_id]
-        await target_queue.put(message)
+
+        # If not found by ID, try by class name and send to all agents of that class
+        agents_by_class = self.agents_by_klass.get(target_spec, [])
+        for agent in agents_by_class:
+            agent.inbox.add_message(agent_message)
 
 
 class AgentIdRegistry:
@@ -39,19 +59,6 @@ class AgentIdRegistry:
         return str(current_id)
 
 
-class MeetingIdRegistry:
-    """Manages sequential meeting ID generation."""
-
-    def __init__(self):
-        self._next_id = 100
-
-    def get_next_id(self) -> str:
-        """Get the next sequential meeting ID."""
-        current_id = self._next_id
-        self._next_id += 1
-        return str(current_id)
-
-
 class Program(ProgramAgentsCommunicationMixin):
     def __init__(
         self, full_program: str, event_bus: EventBus, program_paths: List[str] = None
@@ -61,7 +68,7 @@ class Program(ProgramAgentsCommunicationMixin):
         self.program_paths = program_paths or []
         self._debug_server = None
         self.agent_id_registry = AgentIdRegistry()
-        self.meeting_id_registry = MeetingIdRegistry()
+        self.meeting_id_registry = MeetingRegistry()
 
         self.extract_public_json()
         self.parse_metadata()
@@ -107,6 +114,9 @@ class Program(ProgramAgentsCommunicationMixin):
             self.agents_by_id[agent.id] = agent
             agent.program = self
 
+        # Initialize centralized message delivery processor
+        self.message_processor = MessageDeliveryProcessor(self.agents_by_id)
+
         self.event_agents_changed()
 
     def event_agents_changed(self):
@@ -114,7 +124,7 @@ class Program(ProgramAgentsCommunicationMixin):
             if isinstance(agent, AIAgent):
                 agent.event_agents_changed()
 
-    def create_agent(self, agent_klass: str, **kwargs):
+    async def create_agent(self, agent_klass: str, **kwargs):
         klass = self.agent_klasses.get(agent_klass)
         if not klass:
             raise ValueError(f"Agent class {agent_klass} not found")
@@ -126,10 +136,14 @@ class Program(ProgramAgentsCommunicationMixin):
         self.agents_by_klass[agent.klass].append(agent)
         self.agents_by_id[agent.id] = agent
         agent.program = self
+
+        # Update message processor with new agent
+        self.message_processor.agents_by_id = self.agents_by_id
+
         self.event_agents_changed()
 
-        # Initialize and start the agent to enable background processing
-        asyncio.create_task(self._initialize_new_agent(agent))
+        # Initialize and start the agent synchronously to avoid race conditions
+        await self._initialize_new_agent(agent)
 
         return agent.to_dict()
 
@@ -191,6 +205,12 @@ class Program(ProgramAgentsCommunicationMixin):
 
     async def begin(self):
         await asyncio.gather(*[agent.initialize() for agent in self.agents])
+
+        # Start the message delivery processor BEFORE starting agents
+        # This prevents deadlock where agents wait for messages but processor isn't started yet
+        await self.message_processor.start()
+
+        # Now start the agents (they can use message delivery)
         await asyncio.gather(*[agent.begin() for agent in self.agents])
 
     async def run_till_exit(self):
@@ -202,6 +222,10 @@ class Program(ProgramAgentsCommunicationMixin):
             await self.shutdown()
 
     async def shutdown(self):
+        """Shutdown all agents and clean up resources."""
+        # Stop the centralized message delivery processor
+        await self.message_processor.stop()
+
         # Shutdown debug server if running
         await self.shutdown_debug_server()
 
@@ -236,3 +260,19 @@ class Program(ProgramAgentsCommunicationMixin):
         if self._debug_server:
             await self._debug_server.shutdown()
             self._debug_server = None
+
+    # Meeting Management Methods
+
+    def find_meeting_owner(self, meeting_id: str):
+        """Find the agent who owns/created a meeting.
+
+        Args:
+            meeting_id: ID of the meeting
+
+        Returns:
+            Agent who owns the meeting, or None if not found
+        """
+        owner_id = self.meeting_id_registry.get_meeting_owner(meeting_id)
+        if owner_id:
+            return self.agents_by_id.get(owner_id)
+        return None

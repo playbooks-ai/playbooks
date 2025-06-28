@@ -72,6 +72,7 @@ class SessionLog:
             if not item.strip():
                 return
             item = SessionLogItemMessage(item)
+        print(item)
         self.log.append({"item": item, "level": level})
 
     def __str__(self) -> str:

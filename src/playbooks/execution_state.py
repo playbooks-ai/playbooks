@@ -5,77 +5,17 @@ tracked during interpreter execution, including call stack, exit conditions,
 and execution control flags.
 """
 
-from dataclasses import dataclass
-from datetime import datetime
-from typing import Any, Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional
 
 from playbooks.artifacts import Artifacts
 from playbooks.call_stack import CallStack
 from playbooks.event_bus import EventBus
 from playbooks.session_log import SessionLog
 from playbooks.variables import Variables
+from playbooks.meetings import Meeting
 
 
-@dataclass
-class Meeting:
-    """Represents an active meeting."""
-
-    meeting_id: str
-    playbook_name: str
-    initiator_id: str
-    participants: Dict[str, str]  # agent_id -> agent_type
-    created_at: datetime
-    topic: Optional[str] = None
-
-
-@dataclass
-class Message:
-    """Represents a message in the system."""
-
-    sender_id: str
-    sender_type: str
-    content: str
-    timestamp: datetime
-    meeting_id: Optional[str] = None
-    message_type: str = "text"
-
-
-class MeetingManager:
-    """Mixin for managing meeting state data only."""
-
-    def __init__(self):
-        self.meetings: Dict[str, Meeting] = {}
-        self.invitations: Dict[str, Set[str]] = {}  # agent_id -> meeting_ids
-
-    def handle_join_request(
-        self, agent_id: str, agent_type: str, meeting_id: str
-    ) -> bool:
-        """Process agent joining meeting (state update only).
-
-        Args:
-            agent_id: ID of the agent joining
-            agent_type: Type of the joining agent
-            meeting_id: ID of the meeting to join
-
-        Returns:
-            True if successfully joined, False otherwise
-        """
-        if meeting_id not in self.meetings:
-            return False
-
-        meeting = self.meetings[meeting_id]
-        meeting.participants[agent_id] = agent_type
-
-        # Remove from pending invitations
-        if agent_id in self.invitations:
-            self.invitations[agent_id].discard(meeting_id)
-            if not self.invitations[agent_id]:
-                del self.invitations[agent_id]
-
-        return True
-
-
-class ExecutionState(MeetingManager):
+class ExecutionState:
     """Encapsulates execution state including call stack, variables, and artifacts.
 
     Attributes:
@@ -92,7 +32,6 @@ class ExecutionState(MeetingManager):
         Args:
             bus: The event bus to use for all components
         """
-        MeetingManager.__init__(self)
         self.event_bus = event_bus
         self.session_log = SessionLog()
         self.call_stack = CallStack(event_bus)
@@ -104,20 +43,26 @@ class ExecutionState(MeetingManager):
             None  # Track last 1:1 message target for Say() fallback
         )
 
+        # Meetings initiated by this agent (agent is the owner/host)
+        self.owned_meetings: Dict[str, "Meeting"] = {}  # meeting_id -> Meeting
+
+        # Meetings this agent has joined as a participant
+        self.joined_meetings: Dict[
+            str, Dict[str, Any]
+        ] = {}  # meeting_id -> {"owner_agent_id": "...", "joined_at": datetime}
+
     def __repr__(self) -> str:
         """Return a string representation of the execution state."""
         return f"{self.call_stack.__repr__()};{self.variables.__repr__()};{self.artifacts.__repr__()}"
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary representation of the execution state."""
-        # Build meetings list for LLM visibility
+        # Build meetings list for LLM visibility from owned meetings
         meetings_list = []
-        for meeting_id, meeting in self.meetings.items():
+        for meeting_id, meeting in self.owned_meetings.items():
             participants_list = []
             for participant_id, participant_type in meeting.participants.items():
-                participants_list.append(
-                    {"type": participant_type, "agent_id": participant_id}
-                )
+                participants_list.append(f"{participant_type}(agent {participant_id})")
 
             meetings_list.append(
                 {"meeting_id": meeting_id, "participants": participants_list}

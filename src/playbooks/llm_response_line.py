@@ -7,6 +7,7 @@ from playbooks.agents import LocalAIAgent
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
+from playbooks.utils.spec_utils import SpecUtils
 from playbooks.variables import Variables
 
 
@@ -232,7 +233,7 @@ class LLMResponseLine:
         if meeting_match:
             meeting_id = meeting_match.group(1) if meeting_match.group(1) else "current"
             self.wait_for_agent_input = True
-            self.wait_for_agent_target = f"meeting {meeting_id}"
+            self.wait_for_agent_target = SpecUtils.to_meeting_spec(meeting_id)
             return
 
         # YLD for agent <id>

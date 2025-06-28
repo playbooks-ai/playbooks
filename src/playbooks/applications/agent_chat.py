@@ -104,32 +104,24 @@ original_wait_for_message = AgentCommunicationMixin.WaitForMessage
 @functools.wraps(original_wait_for_message)
 async def patched_wait_for_message(self, source_agent_id: str):
     """Patched version of WaitForMessage that shows a prompt when waiting for human input."""
-    messages = []
-    while not self.inboxes[source_agent_id].empty():
-        message = self.inboxes[source_agent_id].get_nowait()
-        if message == EOM:
-            break
-        messages.append(message)
+    # For human input, show a prompt before calling the normal WaitForMessage
+    if source_agent_id == "human":
+        # Check if there are already messages waiting
+        messages = self.inbox._peek_all_messages()
+        human_messages = [msg for msg in messages if msg.sender_id == "human"]
 
-    if not messages:
-        # Show User prompt only when waiting for a human message and the queue is empty
-        if source_agent_id == "human":
-            # Simple user prompt (not in a panel)
+        if not human_messages:
+            # No human messages waiting, show prompt
             console.print()  # Add a newline for spacing
             user_input = await asyncio.to_thread(
                 console.input, "[bold yellow]User:[/bold yellow] "
             )
+            # Send the user input and EOM
+            await self.program.route_message("human", self.id, user_input)
+            await self.program.route_message("human", self.id, EOM)
 
-            messages.append(user_input)
-        else:
-            # Wait for input
-            messages.append(await self.inboxes[source_agent_id].get())
-
-    for message in messages:
-        self.state.session_log.append(
-            f"Received message from {source_agent_id}: {message}"
-        )
-    return "\n".join(messages)
+    # Call the normal WaitForMessage which handles message delivery
+    return await original_wait_for_message(self, source_agent_id)
 
 
 async def handle_user_input(playbooks):

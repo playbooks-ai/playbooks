@@ -8,7 +8,7 @@ async def generate_report_summary():
   report_data = {"sales": 1000, "region": "North", "trend": "positive"}
   # Python calls the NL playbook 'FormatSummary', passing the dictionary
   summary = await FormatSummary(report_data)
-  await Say(f"Generated Summary: {summary}")
+  await Say("user", f"Generated Summary: {summary}")
 ```
 
 ## FormatSummary($report_data)

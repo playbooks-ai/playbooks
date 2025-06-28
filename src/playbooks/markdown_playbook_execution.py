@@ -2,6 +2,7 @@ from typing import List
 
 from playbooks.agents import LocalAIAgent
 from playbooks.config import LLMConfig
+from playbooks.utils.spec_utils import SpecUtils
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
 from playbooks.enums import LLMMessageRole
 from playbooks.events import (
@@ -58,7 +59,7 @@ class MarkdownPlaybookExecution:
             llm_response = LLMResponse(
                 await self.make_llm_call(
                     instruction=instruction,
-                    agent_instructions="Remember: " + self.agent.description,
+                    agent_instructions=f"Remember: You are {self.agent.__repr__()}. {self.agent.description}",
                     artifacts_to_load=artifacts_to_load,
                 ),
                 event_bus=self.agent.state.event_bus,
@@ -184,7 +185,18 @@ class MarkdownPlaybookExecution:
                         line.wait_for_agent_target
                     )
                     if target_agent_id:
-                        agent_input = await self.agent.WaitForMessage(target_agent_id)
+                        # Check if this is a meeting target
+                        if SpecUtils.is_meeting_spec(target_agent_id):
+                            meeting_id = SpecUtils.extract_meeting_id(target_agent_id)
+                            if meeting_id == "current":
+                                meeting_id = None  # Use current meeting
+                            agent_input = await self.agent.WaitForMeetingMessages(
+                                meeting_id
+                            )
+                        else:
+                            agent_input = await self.agent.WaitForMessage(
+                                target_agent_id
+                            )
                         user_inputs.append(agent_input)
                 elif line.playbook_finished:
                     # print("[EXECUTE] playbook_finished")

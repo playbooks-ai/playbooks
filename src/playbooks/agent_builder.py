@@ -521,11 +521,13 @@ class AgentBuilder:
         """Add Say() Python playbook that prints given message."""
         code_block = '''
 ```python
-@playbook
+from playbooks.utils.spec_utils import SpecUtils
+
+@playbook(hidden=True)
 async def SendMessage(target_agent_id: str, message: str):
     await agent.SendMessage(target_agent_id, message)
 
-@playbook
+@playbook(hidden=True)
 async def WaitForMessage(source_agent_id: str) -> str | None:
     return await agent.WaitForMessage(source_agent_id)
 
@@ -533,15 +535,21 @@ async def WaitForMessage(source_agent_id: str) -> str | None:
 async def Say(target: str,message: str):
     resolved_target = agent.resolve_say_target(target)
     
+    # Handle meeting targets with broadcasting
+    if SpecUtils.is_meeting_spec(resolved_target):
+        meeting_id = SpecUtils.extract_meeting_id(resolved_target)
+        await agent.broadcast_to_meeting(meeting_id, message)
+        return
+    
     # Track last message target (only for 1:1 messages, not meetings)
-    if not (resolved_target.startswith("meeting ") or resolved_target == "human"):
+    if not (SpecUtils.is_meeting_spec(resolved_target) or resolved_target == "human"):
         agent.state.last_message_target = resolved_target
     
     await SendMessage(resolved_target, message)
 
 @playbook
 async def CreateAgent(agent_klass: str, **kwargs):
-    agent.program.create_agent(agent_klass, **kwargs)
+    return await agent.program.create_agent(agent_klass, **kwargs)
 
 @playbook
 async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_content: str):
@@ -551,27 +559,33 @@ async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_conte
 async def LoadArtifact(artifact_name: str):
     return agent.state.artifacts[artifact_name]
 
+@playbook(hidden=True)
+async def WaitForMeetingMessages(meeting_id: str = None) -> str:
+    """Wait for messages in a meeting with buffering support."""
+    return await agent.WaitForMeetingMessages(meeting_id)
+
 @playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
-    for agent_spec in attendees:
-        await agent._send_invitation(meeting_id, agent_spec)
+    return await agent.InviteToMeeting(meeting_id, attendees)
         
 @playbook  
 async def EndMeeting(meeting_id: str = None):
     """End a meeting."""
     if meeting_id is None:
         meeting_id = agent.state.get_current_meeting()
+    elif SpecUtils.is_meeting_spec(meeting_id):
+        meeting_id = SpecUtils.extract_meeting_id(meeting_id)
     
-    if meeting_id and meeting_id in agent.state.meetings:
+    if meeting_id and meeting_id in agent.state.owned_meetings:
         # Notify all participants that meeting has ended
-        meeting = agent.state.meetings[meeting_id]
+        meeting = agent.state.owned_meetings[meeting_id]
         for participant_id in meeting.participants:
             if participant_id != agent.id:
                 await SendMessage(participant_id, f"ENDED meeting {meeting_id}: Meeting has concluded")
         
-        # Remove meeting
-        del agent.state.meetings[meeting_id]
+        # Clean up meeting from agent's state (only agent who created it)
+        del agent.state.owned_meetings[meeting_id]
 ```        
 '''
 
