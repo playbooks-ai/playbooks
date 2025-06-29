@@ -17,12 +17,11 @@ class RemoteAIAgent(AIAgent):
 
     def __init__(
         self,
-        klass: str,
-        description: str,
         event_bus: EventBus,
         remote_config: Dict[str, Any],
         source_line_number: int = None,
         agent_id: str = None,
+        **kwargs,
     ):
         """Initialize a remote AI agent.
 
@@ -36,7 +35,11 @@ class RemoteAIAgent(AIAgent):
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
         super().__init__(
-            klass, description, event_bus, {}, source_line_number, agent_id
+            event_bus=event_bus,
+            kwargs=kwargs,
+            source_line_number=source_line_number,
+            agent_id=agent_id,
+            **kwargs,
         )
         self.remote_config = remote_config
         self.transport = None

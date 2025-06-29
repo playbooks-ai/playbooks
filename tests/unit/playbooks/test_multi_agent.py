@@ -21,4 +21,4 @@ async def test_multi_agent(test_data_dir):
     # assert "FirstAgent.A(num=5) → 2.23" in log
     # assert "GetCountryPopulation(India) → 2.23" in log
     assert "→ 32.0" in log
-    assert "yld exit" in log
+    assert "yld for exit" in log

@@ -5,8 +5,10 @@ from unittest.mock import AsyncMock
 import pytest
 
 from src.playbooks.agents import MCPAgent
+from src.playbooks.agents.ai_agent import AIAgent
 from src.playbooks.event_bus import EventBus
 from src.playbooks.playbook import RemotePlaybook
+from src.playbooks.program import Program
 
 
 @pytest.fixture
@@ -33,16 +35,25 @@ def mock_transport():
     return transport
 
 
+@pytest.fixture
+def mock_program():
+    """Create a mock program for testing."""
+    program = AsyncMock(spec=Program)
+    program.agents = []
+    return program
+
+
 class TestMCPAgent:
     """Test cases for MCPAgent."""
 
-    def test_mcp_agent_initialization(self, event_bus, mcp_config):
+    def test_mcp_agent_initialization(self, event_bus, mcp_config, mock_program):
         """Test MCPAgent initialization."""
         agent = MCPAgent(
             klass="TestMCPAgent",
             description="Test MCP agent",
             event_bus=event_bus,
             remote_config=mcp_config,
+            program=mock_program,
         )
 
         assert agent.klass == "TestMCPAgent"
@@ -52,13 +63,16 @@ class TestMCPAgent:
         assert not agent._connected
 
     @pytest.mark.asyncio
-    async def test_connect_and_disconnect(self, event_bus, mcp_config, mock_transport):
+    async def test_connect_and_disconnect(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
         """Test connecting and disconnecting from MCP server."""
         agent = MCPAgent(
             klass="TestMCPAgent",
             description="Test MCP agent",
             event_bus=event_bus,
             remote_config=mcp_config,
+            program=mock_program,
         )
 
         # Replace transport with mock
@@ -75,7 +89,9 @@ class TestMCPAgent:
         mock_transport.disconnect.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_discover_playbooks(self, event_bus, mcp_config, mock_transport):
+    async def test_discover_playbooks(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
         """Test discovering MCP tools as playbooks."""
         # Mock tools response
         mock_tools = [
@@ -103,6 +119,7 @@ class TestMCPAgent:
             description="Test MCP agent",
             event_bus=event_bus,
             remote_config=mcp_config,
+            program=mock_program,
         )
         agent.transport = mock_transport
         agent._connected = True
@@ -123,7 +140,9 @@ class TestMCPAgent:
         assert add_numbers_pb.agent_name == "TestMCPAgent"
 
     @pytest.mark.asyncio
-    async def test_execute_playbook(self, event_bus, mcp_config, mock_transport):
+    async def test_execute_playbook(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
         """Test executing an MCP tool playbook."""
         # Setup mock transport
         mock_transport.call_tool.return_value = {"result": 8}
@@ -133,6 +152,7 @@ class TestMCPAgent:
             description="Test MCP agent",
             event_bus=event_bus,
             remote_config=mcp_config,
+            program=mock_program,
         )
         agent.transport = mock_transport
         agent._connected = True
@@ -155,19 +175,26 @@ class TestMCPAgent:
         mock_execute_fn.assert_called_once_with(a=3, b=5)
 
     @pytest.mark.asyncio
-    async def test_execute_playbook_cross_agent_call(self, event_bus, mcp_config):
+    async def test_execute_playbook_cross_agent_call(
+        self, event_bus, mcp_config, mock_program
+    ):
         """Test cross-agent playbook execution."""
         agent = MCPAgent(
             klass="TestMCPAgent",
             description="Test MCP agent",
             event_bus=event_bus,
             remote_config=mcp_config,
+            program=mock_program,
         )
 
         # Create mock other agent
-        other_agent = AsyncMock()
+        other_agent = AsyncMock(
+            spec=AIAgent,
+            klass="OtherAgent",
+            playbooks={"some_playbook": AsyncMock(spec=RemotePlaybook, public=True)},
+        )
         other_agent.execute_playbook = AsyncMock(return_value="other_result")
-        agent.register_agent("OtherAgent", other_agent)
+        mock_program.agents = [other_agent]
 
         # Execute cross-agent call
         result = await agent.execute_playbook(
@@ -181,28 +208,32 @@ class TestMCPAgent:
         )
 
     @pytest.mark.asyncio
-    async def test_execute_unknown_playbook(self, event_bus, mcp_config):
+    async def test_execute_unknown_playbook(self, event_bus, mcp_config, mock_program):
         """Test executing an unknown playbook raises error."""
         agent = MCPAgent(
             klass="TestMCPAgent",
             description="Test MCP agent",
             event_bus=event_bus,
             remote_config=mcp_config,
+            program=mock_program,
         )
         agent._connected = True
 
         # Try to execute unknown playbook
-        with pytest.raises(ValueError, match="Unknown playbook: unknown_playbook"):
-            await agent.execute_playbook("unknown_playbook")
+        result = await agent.execute_playbook("unknown_playbook")
+        assert "Playbook 'unknown_playbook' not found" in result
 
     @pytest.mark.asyncio
-    async def test_context_manager(self, event_bus, mcp_config, mock_transport):
+    async def test_context_manager(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
         """Test using MCPAgent as async context manager."""
         agent = MCPAgent(
             klass="TestMCPAgent",
             description="Test MCP agent",
             event_bus=event_bus,
             remote_config=mcp_config,
+            program=mock_program,
         )
         agent.transport = mock_transport
 

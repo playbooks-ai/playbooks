@@ -21,17 +21,18 @@ class MCPAgent(RemoteAIAgent):
 
     def __init__(
         self,
+        klass: str,
+        description: str,
         event_bus: EventBus,
         remote_config: Dict[str, Any],
         source_line_number: int = None,
         agent_id: str = None,
         program: "Program" = None,
+        **kwargs,
     ):
         """Initialize an MCP agent.
 
         Args:
-            klass: The class/type of this agent.
-            description: Human-readable description of the agent.
             event_bus: The event bus for publishing events.
             remote_config: MCP server configuration containing:
                 - url: MCP server URL or command
@@ -42,12 +43,16 @@ class MCPAgent(RemoteAIAgent):
                 agent is defined.
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
+        self.__class__.klass = klass
+        self.__class__.description = description
+        self.__class__.playbooks = {}
         super().__init__(
             event_bus=event_bus,
             remote_config=remote_config,
             source_line_number=source_line_number,
             agent_id=agent_id,
             program=program,
+            **kwargs,
         )
         self.transport = MCPTransport(remote_config)
 

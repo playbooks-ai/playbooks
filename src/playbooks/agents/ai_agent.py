@@ -42,6 +42,7 @@ class AIAgent(BaseAgent, ABC):
         source_line_number: int = None,
         agent_id: str = None,
         program: "Program" = None,
+        **kwargs,
     ):
         """Initialize a new AIAgent.
 
@@ -57,7 +58,7 @@ class AIAgent(BaseAgent, ABC):
         self.klass = self.__class__.klass
         self.description = self.__class__.description
 
-        super().__init__(self.klass, agent_id)
+        super().__init__(klass=self.klass, agent_id=agent_id, program=program, **kwargs)
 
         # Initialize meeting manager
         self.meeting_manager = MeetingManager(self.id, self.klass)
@@ -923,5 +924,6 @@ class AIAgent(BaseAgent, ABC):
         return f"{self.klass}(agent {self.id})"
 
     def __repr__(self):
-        kwargs = str(self.kwargs) if self.kwargs else ""
-        return f"{self.klass}(agent {self.id}{kwargs})"
+        # kwargs = str(self.kwargs) if self.kwargs else ""
+        # return f"{self.klass}(agent {self.id})"
+        return self.klass

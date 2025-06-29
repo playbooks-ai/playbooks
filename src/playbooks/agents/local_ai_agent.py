@@ -24,6 +24,7 @@ class LocalAIAgent(AIAgent):
         source_line_number: int = None,
         agent_id: str = None,
         program: "Program" = None,
+        **kwargs,
     ):
         """Initialize a new LocalAIAgent.
 
@@ -41,6 +42,7 @@ class LocalAIAgent(AIAgent):
             source_line_number=source_line_number,
             agent_id=agent_id,
             program=program,
+            **kwargs,
         )
         # Set up agent reference for playbooks that need it
         for playbook in self.playbooks.values():

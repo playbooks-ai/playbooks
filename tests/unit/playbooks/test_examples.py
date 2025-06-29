@@ -22,11 +22,13 @@ async def test_example_02(test_data_dir):
     playbooks = Playbooks([test_data_dir / "02-personalized-greeting.pb"])
     ai_agent = playbooks.program.agents[0]
 
-    # AI will ask name, so seed message from human
+    # AI will ask name, so seed message from human with EOM
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, "John")
+    await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
 
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
+    print(log)
     assert "John" in log
 
 
@@ -37,6 +39,7 @@ async def test_example_03(test_data_dir):
 
     # AI will ask for a number, so seed response from human
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, "10")
+    await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
 
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()

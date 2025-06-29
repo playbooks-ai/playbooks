@@ -1,10 +1,13 @@
 import asyncio
 import json
+import queue
 import re
+import threading
 from pathlib import Path
-from typing import List
+from typing import Dict, List
 
 import frontmatter
+from yaml.scanner import ScannerError
 
 from .agent_builder import AgentBuilder
 from .agents import AIAgent, HumanAgent
@@ -12,12 +15,112 @@ from .debug.server import DebugServer
 from .event_bus import EventBus
 from .exceptions import ExecutionFinished
 from .meetings import MeetingRegistry
-from .message_system import AgentMessage, MessageDeliveryProcessor
+from .simple_message import SimpleMessage
 from .utils.markdown_to_ast import markdown_to_ast
 
 
+class AgentRuntime:
+    """
+    Runtime that manages agent execution.
+
+    Responsible for creating threads, managing message queues, and coordinating execution.
+    Agents focus on behavior, runtime focuses on execution.
+    """
+
+    def __init__(self):
+        self.agent_threads: Dict[str, threading.Thread] = {}
+        self.agent_queues: Dict[str, queue.Queue] = {}
+        self.agent_shutdown_events: Dict[str, threading.Event] = {}
+        self.running_agents: Dict[str, bool] = {}
+
+    def start_agent(self, agent):
+        """Start an agent in its own thread."""
+        if agent.id in self.running_agents and self.running_agents[agent.id]:
+            return
+
+        # Create thread infrastructure for this agent
+        message_queue = queue.Queue()
+        shutdown_event = threading.Event()
+
+        self.agent_queues[agent.id] = message_queue
+        self.agent_shutdown_events[agent.id] = shutdown_event
+        self.running_agents[agent.id] = True
+
+        # Create and start thread
+        thread = threading.Thread(
+            target=self._agent_thread_main,
+            args=(agent, message_queue, shutdown_event),
+            daemon=True,
+        )
+        self.agent_threads[agent.id] = thread
+        thread.start()
+
+    def stop_agent(self, agent_id: str):
+        """Stop an agent gracefully."""
+        if agent_id not in self.running_agents:
+            return
+
+        # Signal shutdown
+        self.running_agents[agent_id] = False
+        if agent_id in self.agent_shutdown_events:
+            self.agent_shutdown_events[agent_id].set()
+
+        # Wait for thread to finish
+        if agent_id in self.agent_threads:
+            thread = self.agent_threads[agent_id]
+            if thread.is_alive():
+                thread.join(timeout=5.0)
+
+        # Clean up
+        self.agent_threads.pop(agent_id, None)
+        self.agent_queues.pop(agent_id, None)
+        self.agent_shutdown_events.pop(agent_id, None)
+        self.running_agents.pop(agent_id, None)
+
+    def stop_all_agents(self):
+        """Stop all running agents."""
+        agent_ids = list(self.running_agents.keys())
+        for agent_id in agent_ids:
+            self.stop_agent(agent_id)
+
+    def send_message_to_agent(self, agent_id: str, message):
+        """Send a message to an agent's queue."""
+        if agent_id in self.agent_queues:
+            self.agent_queues[agent_id].put(message)
+
+    def _agent_thread_main(self, agent, message_queue, shutdown_event):
+        """Main function for agent thread."""
+        # Create async loop for this thread
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        try:
+            # Initialize and start the agent
+            loop.run_until_complete(agent.initialize())
+            loop.run_until_complete(agent.begin())
+
+            # Main message processing loop
+            while (
+                self.running_agents.get(agent.id, False) and not shutdown_event.is_set()
+            ):
+                try:
+                    # Poll for messages with timeout
+                    message = message_queue.get(timeout=0.1)
+                    if message:
+                        loop.run_until_complete(agent.process_message(message))
+                except queue.Empty:
+                    continue  # Keep polling
+                except Exception as e:
+                    print(f"Error processing message in {agent.id}: {e}")
+
+        except Exception as e:
+            print(f"Fatal error in agent {agent.id} thread: {e}")
+        finally:
+            loop.close()
+
+
 class ProgramAgentsCommunicationMixin:
-    async def route_message(
+    def route_message(
         self: "Program",
         sender_id: str,
         target_spec: str,
@@ -25,25 +128,35 @@ class ProgramAgentsCommunicationMixin:
         message_type: str = "direct",
         meeting_id: str = None,
     ):
-        """Routes a message to target agent(s) using the simplified system."""
-        # Create structured message
-        agent_message = AgentMessage(
+        """Routes a message to target agent(s) via the runtime."""
+        # Create simple message
+        simple_message = SimpleMessage(
             sender_id=sender_id,
             content=message,
             message_type=message_type,
             meeting_id=meeting_id,
         )
 
-        # First try to find by agent ID
-        target_agent = self.agents_by_id.get(target_spec)
-        if target_agent:
-            target_agent.inbox.add_message(agent_message)
-            return
+        # Thread-safe access to agent registry
+        with self.agents_lock:
+            # First try to find by agent ID
+            target_agent = self.agents_by_id.get(target_spec)
+            if target_agent:
+                if target_agent.id == "human":
+                    # Send to human agent via runtime thread
+                    self.runtime.send_message_to_agent(target_agent.id, simple_message)
+                else:
+                    # Send to AI agent directly to message buffer
+                    target_agent._message_buffer.append(simple_message)
+                return
 
-        # If not found by ID, try by class name and send to all agents of that class
-        agents_by_class = self.agents_by_klass.get(target_spec, [])
-        for agent in agents_by_class:
-            agent.inbox.add_message(agent_message)
+            # If not found by ID, try by class name and send to all agents of that class
+            agents_by_class = self.agents_by_klass.get(target_spec, [])
+            for agent in agents_by_class:
+                if agent.id == "human":
+                    self.runtime.send_message_to_agent(agent.id, simple_message)
+                else:
+                    agent._message_buffer.append(simple_message)
 
 
 class AgentIdRegistry:
@@ -70,12 +183,22 @@ class Program(ProgramAgentsCommunicationMixin):
         self.agent_id_registry = AgentIdRegistry()
         self.meeting_id_registry = MeetingRegistry()
 
+        # Thread-safe agent registry
+        self.agents_lock = threading.RLock()
+
+        # Agent runtime manages execution
+        self.runtime = AgentRuntime()
+
         self.extract_public_json()
         self.parse_metadata()
         self.ast = markdown_to_ast(self.program_content)
         self.agent_klasses = AgentBuilder.create_agents_from_ast(self.ast)
         self.agents = [
-            klass(self.event_bus, self.agent_id_registry.get_next_id())
+            klass(
+                self.event_bus,
+                self.agent_id_registry.get_next_id(),
+                program=self,
+            )
             for klass in self.agent_klasses.values()
         ]
         if not self.agents:
@@ -104,18 +227,24 @@ class Program(ProgramAgentsCommunicationMixin):
                                 "description", ""
                             )
 
-        self.agents.append(HumanAgent("Human", self.event_bus, "human"))
+        self.agents.append(
+            HumanAgent(
+                klass="Human", agent_id="human", program=self, event_bus=self.event_bus
+            )
+        )
         self.agents_by_klass = {}
         self.agents_by_id = {}
-        for agent in self.agents:
-            if agent.klass not in self.agents_by_klass:
-                self.agents_by_klass[agent.klass] = []
-            self.agents_by_klass[agent.klass].append(agent)
-            self.agents_by_id[agent.id] = agent
-            agent.program = self
 
-        # Initialize centralized message delivery processor
-        self.message_processor = MessageDeliveryProcessor(self.agents_by_id)
+        # Thread-safe agent registration
+        with self.agents_lock:
+            for agent in self.agents:
+                if agent.klass not in self.agents_by_klass:
+                    self.agents_by_klass[agent.klass] = []
+                self.agents_by_klass[agent.klass].append(agent)
+                self.agents_by_id[agent.id] = agent
+                agent.program = self
+
+        # No complex message processor needed - agents handle their own queues
 
         self.event_agents_changed()
 
@@ -132,13 +261,16 @@ class Program(ProgramAgentsCommunicationMixin):
         agent = klass(self.event_bus, self.agent_id_registry.get_next_id())
         agent.kwargs = kwargs
 
-        self.agents.append(agent)
-        self.agents_by_klass[agent.klass].append(agent)
-        self.agents_by_id[agent.id] = agent
-        agent.program = self
+        # Thread-safe agent registration
+        with self.agents_lock:
+            self.agents.append(agent)
+            if agent.klass not in self.agents_by_klass:
+                self.agents_by_klass[agent.klass] = []
+            self.agents_by_klass[agent.klass].append(agent)
+            self.agents_by_id[agent.id] = agent
+            agent.program = self
 
-        # Update message processor with new agent
-        self.message_processor.agents_by_id = self.agents_by_id
+        # No message processor to update
 
         self.event_agents_changed()
 
@@ -180,7 +312,16 @@ class Program(ProgramAgentsCommunicationMixin):
         self.event_bus.publish(event)
 
     def parse_metadata(self):
-        frontmatter_data = frontmatter.loads(self.full_program)
+        try:
+            frontmatter_data = frontmatter.loads(self.full_program)
+        except ScannerError:
+            self.metadata = {}
+            self.title = None
+            self.description = None
+            self.application = "MultiAgentChat"
+            self.program_content = self.full_program
+            return
+
         self.metadata = frontmatter_data.metadata
         self.title = frontmatter_data.get("title", None)
         self.description = frontmatter_data.get("description", None)
@@ -204,14 +345,18 @@ class Program(ProgramAgentsCommunicationMixin):
                 self.full_program = self.full_program.replace(match[0], "")
 
     async def begin(self):
-        await asyncio.gather(*[agent.initialize() for agent in self.agents])
+        # Hybrid approach: only thread the human agent, run AI agents synchronously
+        for agent in self.agents:
+            if agent.id == "human":
+                # Start human agent in thread for message processing
+                self.runtime.start_agent(agent)
+            else:
+                # Initialize AI agents synchronously but don't start threads
+                await agent.initialize()
 
-        # Start the message delivery processor BEFORE starting agents
-        # This prevents deadlock where agents wait for messages but processor isn't started yet
-        await self.message_processor.start()
-
-        # Now start the agents (they can use message delivery)
-        await asyncio.gather(*[agent.begin() for agent in self.agents])
+        # Start AI agents synchronously
+        ai_agents = [agent for agent in self.agents if agent.id != "human"]
+        await asyncio.gather(*[agent.begin() for agent in ai_agents])
 
     async def run_till_exit(self):
         try:
@@ -223,8 +368,8 @@ class Program(ProgramAgentsCommunicationMixin):
 
     async def shutdown(self):
         """Shutdown all agents and clean up resources."""
-        # Stop the centralized message delivery processor
-        await self.message_processor.stop()
+        # Stop all agent threads via runtime
+        self.runtime.stop_all_agents()
 
         # Shutdown debug server if running
         await self.shutdown_debug_server()

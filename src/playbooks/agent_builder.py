@@ -2,7 +2,7 @@ import ast
 import inspect
 import re
 import types
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, Union
 
 from playbooks.event_bus import EventBus
 from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
@@ -14,6 +14,9 @@ from .playbook import MarkdownPlaybook, PlaybookTriggers, PythonPlaybook
 from .playbook_decorator import playbook_decorator
 from .utils.markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
 from .utils.parse_utils import parse_metadata_and_description
+
+if TYPE_CHECKING:
+    pass
 
 
 class AgentBuilder:
@@ -120,13 +123,21 @@ class AgentBuilder:
         source_line_number = h1.get("line_number")
 
         # Define __init__ for the new MCP agent class
-        def __init__(self, event_bus: EventBus, agent_id: str = None):
+        def __init__(
+            self,
+            event_bus: EventBus,
+            agent_id: str = None,
+            **kwargs,
+        ):
             MCPAgent.__init__(
                 self,
+                klass=klass,
+                description=description,
                 event_bus=event_bus,
                 remote_config=remote_config,
                 source_line_number=source_line_number,
                 agent_id=agent_id,
+                **kwargs,
             )
 
         # Create and return the new MCP Agent class
@@ -137,6 +148,7 @@ class AgentBuilder:
                 "__init__": __init__,
                 "klass": klass,
                 "description": description,
+                "playbooks": {},
             },
         )
 
@@ -303,12 +315,13 @@ class AgentBuilder:
         source_line_number = h1.get("line_number")
 
         # Define __init__ for the new class
-        def __init__(self, event_bus: EventBus, agent_id: str = None):
+        def __init__(self, event_bus: EventBus, agent_id: str = None, **kwargs):
             LocalAIAgent.__init__(
                 self,
                 event_bus=event_bus,
                 source_line_number=source_line_number,
                 agent_id=agent_id,
+                **kwargs,
             )
 
         # Create and return the new Agent class
@@ -550,7 +563,7 @@ async def Say(target: str,message: str):
 @playbook
 async def CreateAgent(agent_klass: str, **kwargs):
     return await agent.program.create_agent(agent_klass, **kwargs)
-
+    
 @playbook
 async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_content: str):
     agent.state.artifacts.set(artifact_name, artifact_summary, artifact_content)

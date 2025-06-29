@@ -1,11 +1,18 @@
+from typing import TYPE_CHECKING
+
 from ..event_bus import EventBus
 from ..execution_state import ExecutionState
 from .base_agent import BaseAgent
 
+if TYPE_CHECKING:
+    from ..program import Program
+
 
 class HumanAgent(BaseAgent):
-    def __init__(self, klass: str, event_bus: EventBus, agent_id: str):
-        super().__init__(klass, agent_id)
+    def __init__(
+        self, klass: str, event_bus: EventBus, agent_id: str, program: "Program"
+    ):
+        super().__init__(klass=klass, agent_id=agent_id, program=program)
         self.id = agent_id
 
         # TODO: HumanAgent should not have the same state as AI agents. Use a different state class.
