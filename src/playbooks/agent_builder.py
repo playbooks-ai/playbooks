@@ -572,11 +572,6 @@ async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_conte
 async def LoadArtifact(artifact_name: str):
     return agent.state.artifacts[artifact_name]
 
-@playbook(hidden=True)
-async def WaitForMeetingMessages(meeting_id: str = None) -> str:
-    """Wait for messages in a meeting with buffering support."""
-    return await agent.WaitForMeetingMessages(meeting_id)
-
 @playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
