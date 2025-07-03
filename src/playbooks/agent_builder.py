@@ -576,24 +576,6 @@ async def LoadArtifact(artifact_name: str):
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
     return await agent.InviteToMeeting(meeting_id, attendees)
-        
-@playbook  
-async def EndMeeting(meeting_id: str = None):
-    """End a meeting."""
-    if meeting_id is None:
-        meeting_id = agent.state.get_current_meeting()
-    elif SpecUtils.is_meeting_spec(meeting_id):
-        meeting_id = SpecUtils.extract_meeting_id(meeting_id)
-    
-    if meeting_id and meeting_id in agent.state.owned_meetings:
-        # Notify all participants that meeting has ended
-        meeting = agent.state.owned_meetings[meeting_id]
-        for participant_id in meeting.participants:
-            if participant_id != agent.id:
-                await SendMessage(participant_id, f"ENDED meeting {meeting_id}: Meeting has concluded")
-        
-        # Clean up meeting from agent's state (only agent who created it)
-        del agent.state.owned_meetings[meeting_id]
 ```        
 '''
 
