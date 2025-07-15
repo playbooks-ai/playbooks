@@ -5,21 +5,24 @@ import pytest
 from playbooks import Playbooks
 from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.agents.mcp_agent import MCPAgent
-from playbooks.constants import EOM
+from playbooks.constants import EOM, EXECUTION_FINISHED
 from tests.unit.playbooks.test_mcp_end_to_end import InMemoryMCPTransport
 
 
 @pytest.mark.asyncio
 async def test_example_01(test_data_dir):
     playbooks = Playbooks([test_data_dir / "01-hello-playbooks.pb"])
+    await playbooks.initialize()
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
-    assert "SendMessage(human" in log
+    assert 'Say("user"' in log
+    assert EXECUTION_FINISHED in log
 
 
 @pytest.mark.asyncio
 async def test_example_02(test_data_dir):
     playbooks = Playbooks([test_data_dir / "02-personalized-greeting.pb"])
+    await playbooks.initialize()
     ai_agent = playbooks.program.agents[0]
 
     # AI will ask name, so seed message from human with EOM
@@ -35,6 +38,7 @@ async def test_example_02(test_data_dir):
 @pytest.mark.asyncio
 async def test_example_03(test_data_dir):
     playbooks = Playbooks([test_data_dir / "03-md-calls-python.pb"])
+    await playbooks.initialize()
     ai_agent = playbooks.program.agents[0]
 
     # AI will ask for a number, so seed response from human
@@ -49,6 +53,7 @@ async def test_example_03(test_data_dir):
 @pytest.mark.asyncio
 async def test_example_04(test_data_dir):
     playbooks = Playbooks([test_data_dir / "04-md-python-md.pb"])
+    await playbooks.initialize()
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert "generate_report_summary()" in log
@@ -59,7 +64,7 @@ async def test_example_04(test_data_dir):
 @pytest.mark.asyncio
 async def test_example_05(test_data_dir):
     playbooks = Playbooks([test_data_dir / "05-country-facts.pb"])
-
+    await playbooks.initialize()
     # AI will ask for a country, so seed response from human
     await playbooks.program.agents_by_id["human"].SendMessage(
         playbooks.program.agents[0].id, "Bhutan"
@@ -114,17 +119,19 @@ async def test_example_05(test_data_dir):
 @pytest.mark.asyncio
 async def test_example_10(test_data_dir):
     playbooks = Playbooks([test_data_dir / "10-configs.pb"])
-
+    await playbooks.initialize()
+    await playbooks.program.create_agent("Accountant")
+    await playbooks.program.create_agent("Paralegal")
     assert len(playbooks.program.agents) == 3
 
-    accountant = playbooks.program.agents[0]
+    accountant = playbooks.program.agents_by_klass["Accountant"][0]
     assert accountant.metadata["framework"] == "GAAP"
     assert accountant.metadata["author"] == "John Doe"
     assert accountant.metadata["specialization"][0] == "accounting"
     assert accountant.metadata["specialization"][1] == "tax"
     assert "metadata" not in accountant.description
 
-    paralegal = playbooks.program.agents[1]
+    paralegal = playbooks.program.agents_by_klass["Paralegal"][0]
     assert paralegal.metadata["mcp"]["url"] == "http://lawoffice.com/Paralegal"
     assert paralegal.metadata["mcp"]["timeout"] == 10
     assert "metadata" not in paralegal.description
@@ -133,7 +140,7 @@ async def test_example_10(test_data_dir):
 @pytest.mark.asyncio
 async def test_example_11(test_data_dir, test_mcp_server_instance):
     playbooks = Playbooks([test_data_dir / "11-mcp-agent.pb"])
-
+    await playbooks.initialize()
     mcp_agent = next(
         filter(lambda x: isinstance(x, MCPAgent), playbooks.program.agents)
     )
@@ -142,6 +149,7 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
     )
 
     mcp_agent.transport = InMemoryMCPTransport(test_mcp_server_instance)
+    # await mcp_agent.initialize()
 
     await playbooks.program.run_till_exit()
 
@@ -154,11 +162,15 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
 @pytest.mark.asyncio
 async def test_example_12_timeout(test_data_dir):
     playbooks = Playbooks([test_data_dir / "12-menu-design-meeting.pb"])
+    await playbooks.initialize()
     agent = playbooks.program.agents_by_klass["RestaurantConsultant"][0]
     human = playbooks.program.agents_by_id["human"]
-
-    # mock such that `await self._initialize_meeting_playbook(playbook_name, kwargs)` raises TimeoutError
-    agent._initialize_meeting_playbook = MagicMock(side_effect=TimeoutError)
+    # mock such that `await self.meeting_manager._wait_for_required_attendees(meeting)` raises TimeoutError
+    agent.meeting_manager._wait_for_required_attendees = MagicMock(
+        side_effect=TimeoutError(
+            "Timeout waiting for required attendees to join meeting. Missing: [HeadChef, MarketingSpecialist]"
+        )
+    )
 
     # AI will ask for a country, so seed response from human
     await human.SendMessage(agent.id, "indian restaurant menu redesign")
@@ -167,17 +179,19 @@ async def test_example_12_timeout(test_data_dir):
     await human.SendMessage(agent.id, EOM)
     await human.SendMessage(agent.id, "Let's try later")
     await human.SendMessage(agent.id, EOM)
+    await human.SendMessage(agent.id, "Goodbye")
+    await human.SendMessage(agent.id, EOM)
     await playbooks.program.run_till_exit()
     log = agent.state.session_log.to_log_full()
 
-    assert "MenuRedesignMeeting() → Meeting initialization failed" in log
+    assert "Meeting initialization failed" in log
     assert "apologize" in log
-    assert "RedesignMenu() finished" in log
 
 
 @pytest.mark.asyncio
 async def test_example_two_player_game(test_data_dir):
     playbooks = Playbooks([test_data_dir / "two-player-game.pb"])
+    await playbooks.initialize()
     agent = playbooks.program.agents_by_klass["Host"][0]
     human = playbooks.program.agents_by_id["human"]
 
@@ -187,4 +201,4 @@ async def test_example_two_player_game(test_data_dir):
     await playbooks.program.run_till_exit()
     log = agent.state.session_log.to_log_full()
     print(log)
-    assert "GameRoom()" in log
+    assert "GameRoom(" in log

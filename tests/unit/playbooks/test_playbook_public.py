@@ -4,16 +4,13 @@ from playbooks import Playbooks
 
 
 @pytest.fixture
-def md_file_name():
-    return "multi-agent.pb"
+def playbooks(test_data_dir):
+    return Playbooks([test_data_dir / "multi-agent.pb"])
 
 
-@pytest.fixture
-def playbooks(md_path):
-    return Playbooks([md_path])
-
-
-def test_public(playbooks):
+@pytest.mark.asyncio
+async def test_public(playbooks):
+    await playbooks.initialize()
     agent0, agent1, _ = playbooks.program.agents
     pp = agent0.public_playbooks
     assert len(pp) == 1

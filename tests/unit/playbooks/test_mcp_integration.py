@@ -37,6 +37,7 @@ This is a weather MCP agent that provides weather information.
 
         # Create program
         program = Program(program_text, event_bus)
+        await program.initialize()
 
         # Find the weather agent
         weather_agent = None
@@ -152,6 +153,9 @@ This is a test MCP agent.
 This is a local agent.
 
 ## greet
+metadata:
+  public: true
+---
 This is a greeting playbook.
 
 ### Steps
@@ -171,14 +175,13 @@ This is a remote MCP agent.
 
         # Create program
         program = Program(program_text, event_bus)
+        await program.initialize()
 
         # Find agents
-        local_agent = None
+        local_agent = await program.create_agent("LocalAgent")
         mcp_agent = None
         for agent in program.agents:
-            if agent.klass == "LocalAgent":
-                local_agent = agent
-            elif agent.klass == "RemoteMCPAgent":
+            if agent.klass == "RemoteMCPAgent":
                 mcp_agent = agent
 
         assert local_agent is not None
@@ -210,8 +213,8 @@ This is a remote MCP agent.
         await mcp_agent.discover_playbooks()
 
         # Verify agents can see each other
-        assert "RemoteMCPAgent" in local_agent.other_agents
-        assert "LocalAgent" in mcp_agent.other_agents
+        assert "RemoteMCPAgent" in [agent.klass for agent in local_agent.other_agents]
+        assert "LocalAgent" in [agent.klass for agent in mcp_agent.other_agents]
 
         # Test cross-agent call from MCP agent to local agent
         result = await mcp_agent.execute_playbook("LocalAgent.greet")

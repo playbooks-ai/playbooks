@@ -1,8 +1,8 @@
 # Example MCP Server
 remote:
   type: mcp
-  transport: streamable-http
-  url: http://localhost:8088/mcp
+  url: memory://test
+  transport: memory
 
 
 # Example MCP Client Agent

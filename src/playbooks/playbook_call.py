@@ -26,7 +26,7 @@ class PlaybookCall(SessionLogItem):
 
     def to_log_full(self) -> str:
         if self.playbook_klass == "Say" or self.playbook_klass == "SaveArtifact":
-            return ""
+            return self.to_log_minimal()
         return str(self)
 
     def to_log_compact(self) -> str:

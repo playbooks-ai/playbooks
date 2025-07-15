@@ -1,3 +1,4 @@
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
 SYSTEM_PROMPT_DELIMITER = "====SYSTEM_PROMPT_DELIMITER===="
 EOM = "<eom>"
+EXECUTION_FINISHED = "Execution finished"

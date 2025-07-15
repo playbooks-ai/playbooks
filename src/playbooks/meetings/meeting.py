@@ -1,74 +1,112 @@
 """Meeting data structure and related functionality."""
 
-from dataclasses import dataclass
+import enum
+from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Dict, List, Optional, Set
+from typing import Dict, List, Optional
+
+from ..agents.base_agent import BaseAgent
+from ..message import Message
+
+
+class MeetingInvitationStatus(enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    REJECTED = "rejected"
+
+
+@dataclass
+class MeetingInvitation:
+    """Represents an invitation to a meeting."""
+
+    agent: BaseAgent
+    created_at: datetime
+    status: MeetingInvitationStatus = MeetingInvitationStatus.PENDING
+    resolved_at: Optional[datetime] = None
 
 
 @dataclass
 class Meeting:
     """Represents an active meeting."""
 
-    meeting_id: str
-    initiator_id: str
-    participants: Dict[str, str]  # agent_id -> agent_type
+    id: str
     created_at: datetime
+    owner_id: str
     topic: Optional[str] = None
-    message_history: List["Message"] = None  # All messages in this meeting
-    agent_last_message_index: Dict[
-        str, int
-    ] = None  # agent_id -> last message index they received
-    pending_invitations: Set[
-        str
-    ] = None  # set of agent_specs that have been invited but not yet joined/rejected
 
-    def __post_init__(self):
-        if self.message_history is None:
-            self.message_history = []
-        if self.agent_last_message_index is None:
-            self.agent_last_message_index = {}
-        if self.pending_invitations is None:
-            self.pending_invitations = set()
+    required_attendees: List[BaseAgent] = field(default_factory=list)
+    optional_attendees: List[BaseAgent] = field(default_factory=list)
+    joined_attendees: List[BaseAgent] = field(default_factory=list)
+    invitations: Dict[str, MeetingInvitation] = field(default_factory=dict)
 
-    def add_participant(self, agent_id: str, agent_type: str) -> None:
+    message_history: List["Message"] = field(
+        default_factory=list
+    )  # All messages in this meeting
+    agent_last_message_index: Dict[str, int] = field(default_factory=dict)
+
+    def agent_joined(self, agent: BaseAgent) -> None:
         """Add a participant to the meeting."""
-        self.participants[agent_id] = agent_type
-        self.pending_invitations.discard(agent_id)
+        self.joined_attendees.append(agent)
+        invitation = self.invitations.get(agent.id)
+        if invitation:
+            invitation.status = MeetingInvitationStatus.ACCEPTED
+            invitation.resolved_at = datetime.now()
 
-    def remove_participant(self, agent_id: str) -> None:
+    def agent_rejected(self, agent: BaseAgent) -> None:
+        invitation = self.invitations.get(agent.id)
+        if invitation:
+            invitation.status = MeetingInvitationStatus.REJECTED
+            invitation.resolved_at = datetime.now()
+
+    def agent_left(self, agent: BaseAgent) -> None:
         """Remove a participant from the meeting."""
-        self.participants.pop(agent_id, None)
-        self.agent_last_message_index.pop(agent_id, None)
+        self.joined_attendees.remove(agent)
+        self.agent_last_message_index.pop(agent.id, None)
 
-    def add_message(self, message: "Message") -> None:
+    def has_pending_invitations(self) -> bool:
+        """Check if there are any pending invitations."""
+        return any(
+            invitation.status == MeetingInvitationStatus.PENDING
+            for invitation in self.invitations.values()
+        )
+
+    def missing_required_attendees(self) -> List[BaseAgent]:
+        """Get the list of required attendees that are not present."""
+        return [
+            attendee
+            for attendee in self.required_attendees
+            if attendee not in self.joined_attendees
+        ]
+
+    def log_message(self, message: "Message") -> None:
         """Add a message to the meeting history."""
         self.message_history.append(message)
 
-    def get_unread_messages(self, agent_id: str) -> List["Message"]:
+    def get_unread_messages(self, agent: BaseAgent) -> List["Message"]:
         """Get unread messages for a specific agent."""
-        last_index = self.agent_last_message_index.get(agent_id, 0)
+        last_index = self.agent_last_message_index.get(agent.id, 0)
         return self.message_history[last_index:]
 
-    def mark_messages_read(self, agent_id: str) -> None:
+    def mark_messages_read(self, agent: BaseAgent) -> None:
         """Mark all messages as read for a specific agent."""
-        self.agent_last_message_index[agent_id] = len(self.message_history)
+        self.agent_last_message_index[agent.id] = len(self.message_history)
 
-    def is_participant(self, agent_id: str) -> bool:
+    def is_participant(self, agent: BaseAgent) -> bool:
         """Check if an agent is a participant in the meeting."""
-        return agent_id in self.participants
+        return agent in self.joined_attendees
 
-    def has_pending_invitation(self, agent_id: str) -> bool:
+    def has_pending_invitation(self, agent: BaseAgent) -> bool:
         """Check if an agent has a pending invitation."""
-        return agent_id in self.pending_invitations
+        return (
+            agent.id in self.invitations
+            and self.invitations[agent.id].status == MeetingInvitationStatus.PENDING
+        )
 
 
 @dataclass
-class Message:
-    """Represents a message in the system."""
+class JoinedMeeting:
+    """Represents a meeting that an agent has joined."""
 
-    sender_id: str
-    sender_type: str
-    content: str
-    timestamp: datetime
-    meeting_id: Optional[str] = None
-    message_type: str = "text"
+    id: str
+    owner_id: str
+    joined_at: datetime

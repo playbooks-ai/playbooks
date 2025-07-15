@@ -80,9 +80,7 @@ class AgentBuilder:
 
         # Check if this is a remote MCP agent
         if "remote" in metadata and metadata["remote"].get("type") == "mcp":
-            return self._create_mcp_agent_class(
-                klass, description, h1, metadata["remote"]
-            )
+            return self._create_mcp_agent_class(klass, description, h1, metadata)
 
         # Default to local agent
         self.playbooks = {}
@@ -99,14 +97,14 @@ class AgentBuilder:
         refresh_markdown_attributes(h1)
 
         # Create Agent class
-        return self._create_local_agent_class(klass, description, h1)
+        return self._create_local_agent_class(klass, description, metadata, h1)
 
     def _create_mcp_agent_class(
         self,
         klass: str,
         description: str,
         h1: Dict,
-        remote_config: Dict[str, Any],
+        metadata: Dict[str, Any],
     ) -> Type[MCPAgent]:
         """Create an MCP agent class."""
         agent_class_name = self.make_agent_class_name(klass)
@@ -118,9 +116,10 @@ class AgentBuilder:
             )
 
         # Comprehensive MCP configuration validation
-        self._validate_mcp_configuration(klass, remote_config)
+        self._validate_mcp_configuration(klass, metadata["remote"])
 
         source_line_number = h1.get("line_number")
+        remote_config = metadata["remote"]
 
         # Define __init__ for the new MCP agent class
         def __init__(
@@ -149,6 +148,7 @@ class AgentBuilder:
                 "klass": klass,
                 "description": description,
                 "playbooks": {},
+                "metadata": metadata,
             },
         )
 
@@ -299,6 +299,7 @@ class AgentBuilder:
         self,
         klass: str,
         description: Optional[str],
+        metadata: Dict[str, Any],
         h1: Dict,
     ) -> Type[LocalAIAgent]:
         """Create and return a new local Agent class."""
@@ -333,6 +334,7 @@ class AgentBuilder:
                 "klass": klass,
                 "description": description,
                 "playbooks": playbooks,
+                "metadata": metadata,
             },
         )
 
@@ -545,24 +547,14 @@ async def WaitForMessage(source_agent_id: str) -> str | None:
     return await agent.WaitForMessage(source_agent_id)
 
 @playbook
-async def Say(target: str,message: str):
-    resolved_target = agent.resolve_say_target(target)
-    
-    # Handle meeting targets with broadcasting
-    if SpecUtils.is_meeting_spec(resolved_target):
-        meeting_id = SpecUtils.extract_meeting_id(resolved_target)
-        await agent.broadcast_to_meeting(meeting_id, message)
-        return
-    
-    # Track last message target (only for 1:1 messages, not meetings)
-    if not (SpecUtils.is_meeting_spec(resolved_target) or resolved_target == "human"):
-        agent.state.last_message_target = resolved_target
-    
-    await SendMessage(resolved_target, message)
+async def Say(target: str, message: str):
+    await agent.Say(target, message)
 
 @playbook
 async def CreateAgent(agent_klass: str, **kwargs):
-    return await agent.program.create_agent(agent_klass, **kwargs)
+    new_agent = await agent.program.create_agent(agent_klass, **kwargs)
+    await agent.program.runtime.start_agent(new_agent)
+    return new_agent
     
 @playbook
 async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_content: str):
@@ -575,7 +567,7 @@ async def LoadArtifact(artifact_name: str):
 @playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
-    return await agent.InviteToMeeting(meeting_id, attendees)
+    return await agent.invite_to_meeting(meeting_id, attendees)
 ```        
 '''
 

@@ -48,8 +48,8 @@ Step numbering is sequential within each playbook.
 - Example: `01:EXE List 5 $cities:list near $city`
 
 **QUE** - Enqueue playbook calls
-- Without result: `01:QUE Say(user, Say hello to the user); YLD for call`
-- With result: `01:QUE $result:type = FunctionName(param=$value); YLD for call`
+- Without result: `01:QUE Say(user, Say hello to the user)<br>02:YLD for call`
+- With result: `01:QUE $result:type = FunctionName(param=$value)<br>02:YLD for call`
 
 **YLD** - Yield control (ALWAYS follows specific patterns)
 - **YLD for call**: Execute queued operations without waiting for user, agent or meeting to respond
@@ -89,40 +89,46 @@ These playbooks are always available without declaration:
 - Display message to specified recipient
 - Keep instructions instead of making a specific string, e.g. Say(user, Say hello to the user) instead of Say(user, "Hello!")
 - Examples:
-  - Ask something from user: `QUE Say(user, Ask user for their $name:str); YLD for user`
-  - Say something to user: `QUE Say(user, Tell user your favorite color); YLD for call`
-  - Say something in a meeting: `QUE Say(meeting, Explain the rules of the game); YLD for call`
-  - Ask a question in a meeting: `QUE Say(meeting, Ask player for next move); YLD for meeting`
-  - When not in meeting or in a side-conversation during a meeting, say something to an agent: `QUE Say(AccountantAgent, Provide income information); YLD for call`
-  - When not in meeting or in a side-conversation during a meeting, ask something from an agent: `QUE Say(AccountantAgent, Ask what the tax rate is); YLD for agent`
+  - Say something to user: `01:QUE Say(user, Tell user your favorite color)<br>02:YLD for call`
+  - Ask something from user: `01:QUE Say(user, Ask user for their $name:str)<br>02:YLD for user`
+  - Say something in a meeting: `01:QUE Say(meeting, Explain the rules of the game)<br>02:YLD for meeting`
+  - Ask a question in a meeting: `01:QUE Say(meeting, Ask player for next move)<br>02:YLD for meeting`
+  - When not in meeting or in a side-conversation during a meeting, say something to an agent: `01:QUE Say(AccountantAgent, Provide income information)<br>02:YLD for call`
+  - When not in meeting or in a side-conversation during a meeting, ask something from an agent: `01:QUE Say(AccountantAgent, Ask what the tax rate is)<br>02:YLD for agent`
 
 **CreateAgent(agent type, ...params)**
 - Create new agent instance from the agent type
-- Example: `QUE CreateAgent(MyWorker, name="MW001", age=25); YLD for call`
+- Example: `01:QUE CreateAgent(MyWorker, name="MW001", age=25)<br>02:YLD for call`
+
+**Create meeting**
+- To create/start a meeting, call appropriate playbook with meeting:true, e.g. "PlanningMeeting($quarter)"
+- **Implicit arguments** Meeting playbooks take two implict arguments - $topic:str and $attendees:List[str], e.g. `PlanningMeeting($quarter=current quarter, $topic=quarterly planning, $attendees=[GeneralManager, CTO, ScrumMaster])`
 
 **InviteToMeeting(meeting, agent)**
-- Invite participant to current meeting
-- Example: `QUE InviteToMeeting(meeting, AccountantAgent); YLD for call`
+- Invite participants to current meeting
+- Example: `01:QUE InviteToMeeting(meeting, AccountantAgent)<br>02:QUE InviteToMeeting(meeting, TaxAgent)<br>03:YLD for call`
 
 **EndMeeting()**
 - Terminate current meeting
-- Example: `QUE EndMeeting(); YLD for call`
+- Example
+  - If meeting host, just return from the meeting playbook `01:RET`
+  - If meeting participant, request openly `01:QUE Say(meeting, request to end the meeting with reason)` or privately to the host `01:QUE Say(HostAgent, request to end the meeting with reason)`
 
 **LoadArtifact(filename)**
 - Load artifact into memory (artifact will be available when program continues)
-- Example: `QUE LoadArtifact(report artifact); YLD for call`
+- Example: `01:QUE LoadArtifact(report artifact)<br>02:YLD for call`
 
 **SaveArtifact(filename, summary, content)**
 - Create or update artifact
-- Example: `QUE SaveArtifact("results.json", One line about $task, Summary of $data); YLD for call`
+- Example: `01:QUE SaveArtifact("results.json", One line about $task, Summary of $data)<br>02:YLD for call`
 
 ## Natural Language Elements
 
 Some elements use natural language that the LLM runtime interprets:
 
 1. **Completion conditions after YLD**
-   - `YLD for user; done after 4 turns`
-   - `YLD for user; done when user provides email or gives up`
+   - `Say(ask user to pick a product); YLD for user; done after 4 turns or user gives up`
+   - `Say(ask user for email); YLD for user; done when user provides email or gives up`
    
 2. **Informal step descriptions**
    - `EXE List 5 cities near user's location`
@@ -130,7 +136,7 @@ Some elements use natural language that the LLM runtime interprets:
    - `QUE Create 3 agents with CreateAgent(worker agent, name=sequential names like "MW001", "MW002", age=random age)`
 
 3. **Artifact references**
-   - Show artifact to user/Agent/meeting: `QUE Say(user/Agent/meeting, Here is your report - Artifact[report.md])`
+   - Show artifact to user/Agent/meeting: `01:QUE Say(user/Agent/meeting, Here is your report - Artifact[report.md])`
 
 The LLM runtime understands context and intent rather than requiring strict syntax.
 
@@ -140,15 +146,18 @@ The LLM runtime understands context and intent rather than requiring strict synt
 ```
 Raw: Load account for the user
 Compiled (assuming LoadAccount is a listed playbook and $email and $pin are available at this point):
-01:QUE $account:dict = LoadAccount(email=$email, pin=$pin); YLD for call
+01:QUE $account:dict = LoadAccount(email=$email, pin=$pin)<br>02:YLD for call
 ```
 
 ### Pattern B: Nested function calls
 ```
-Raw: FuncA(FuncB(x))
+Raw: FuncA(FuncB(x)+FuncC(x))
 Compiled (assuming FuncA and FuncB are listed playbooks and $x is available at this point):
-01:QUE $temp:type = FuncB(x=$x); YLD for call
-02:QUE $result:type = FuncA(param=$temp); YLD for call
+01:QUE $temp1:type = FuncB(x=$x) # Note no YLD for call needed after this
+01:QUE $temp2:type = FuncC(x=$x)
+02:YLD for call
+03:QUE $result:type = FuncA(param=$temp)
+04:YLD for call
 ```
 
 ### Pattern C: Calling public playbooks from another agent
@@ -156,14 +165,16 @@ Compiled (assuming FuncA and FuncB are listed playbooks and $x is available at t
 ```
 Raw: Get current weather for 98053 from the weather agent
 Compiled (assuming WeatherAgent exists with a GetCurrentWeather(zip) playbook):
-01:QUE $current_weather:dict = WeatherAgent.GetCurrentWeather(98053); YLD for call
+01:QUE $current_weather:dict = WeatherAgent.GetCurrentWeather(98053)
+02:YLD for call
 ```
 
 **When playbook is not known, e.g. the agent is an MCP server so list of playbooks will only be available at run time, or the playbook is not public**, keep instruction to be resolved at run time
 ```
 Raw: Get current weather for 98053 from the weather agent
 Compiled (assuming WeatherAgent exists but playbooks are not listed):
-01:QUE Get $current_weather:dict for 98053 from the WeatherAgent; YLD for call
+01:QUE Get $current_weather:dict for 98053 from the WeatherAgent
+02:YLD for call
 ```
 
 ### Pattern D: Saying something to user
@@ -171,7 +182,10 @@ Queue Say() to show text to the user. Keep instructions instead of making a spec
 ```
 Raw: Inform user about the weather
 Compiled:
-01:QUE Say(user, Inform user about the weather); YLD for call
+01:QUE Say(user, Inform user about the weather); no need to yield yet
+02:... 
+03:...
+04:YLD for call
 ```
 
 ### Pattern E: Having a multi-turn conversation with the user
@@ -179,8 +193,9 @@ Queue Say() with an instruction to continue conversation unless condition to mov
 ```
 Raw: Welcome the user, ask how you can help and do some ice breaking chitchat for up to 4 turns
 Compiled:
-01:QUE Say(user, Welcome the user and ask how you can help); YLD for user
-02:QUE Say(user, Do some ice breaking chitchat with user); YLD for user; done after 4 turns or chitchat finished
+01:QUE Say(user, Welcome the user and ask how you can help)
+02:YLD for user
+03:QUE Say(user, Do some ice breaking chitchat with user); YLD for user; done after 4 turns or chitchat finished
 ```
 
 ### Pattern F: Asking user for information
@@ -191,16 +206,29 @@ Compiled:
 01:QUE Say(user, Ask user for their $name:str); YLD for user; done when user provides name or gives up
 ```
 
-### Pattern G: Batch multiple QUE calls
+### Pattern G: Batch multiple QUE calls (YLD only after all calls are queued)
 When QUE calls don't depend on each other's results, batch them together without yielding between calls. The runtime maintains execution history for contextual reference.
 ```
 Raw: load weather for the cities
 Compiled (assuming LoadWeather is a listed playbook and $cities:list is available at this point):
 01:EXE Initialize empty $weather:dict
 02:CND For each $city in $cities
-  02.01:QUE LoadWeather(city=$city); do not yield because we do not need results yet
+  02.01:QUE LoadWeather(city=$city); no need to yield because we do not need the results yet
 03:YLD for call to execute all queued calls concurrently
 04:EXE Fill $weather dict by collecting loaded weather by $city
+```
+
+```
+Raw:
+- Create two players with gamer names
+- Welcome the players
+- Ask player 1 to start the game
+Compiled (note YLD only after queueing all calls):
+01:QUE CreateAgent(Player, name="creative gamer name 1"); no need to yield
+02:QUE CreateAgent(Player, name="creative gamer name 2"); no need to yield
+03:QUE Say(Wecome the players); no need to yield
+04:QUE Say(Ask player 1 to start the game)
+04:YLD for call
 ```
 
 ## Specific Transformations
@@ -219,14 +247,14 @@ Raw:
   - Ask user for next number
 Compiled:
 01:CND Until number is even
-  01.01:QUE Say(user, Ask user for next $number:int); YLD for user
+  01.01:QUE Say(user, Ask user for next $number:int); YLD for user; done when user provides number or gives up
   01.02:JMP 01
 ```
 
 ### Artifact Operations
-- Load: `QUE LoadArtifact(filename); YLD for call`
-- Save: `QUE SaveArtifact(filename, summary, content); YLD for call`
-- Show to user: `QUE Say(user, Here is your report - Artifact[filename]); YLD for call`
+- Load: `QUE LoadArtifact(filename)`
+- Save: `QUE SaveArtifact(filename, summary, content)`
+- Show to user: `QUE Say(user, Here is your report - Artifact[filename])`
 
 ### Complex Instructions
 Split when instruction contains multiple actions that cannot or should not be executed together:
@@ -237,9 +265,9 @@ Split when instruction contains multiple actions that cannot or should not be ex
 Raw: Tell user the price and if they want it, add to cart
 Compiled:
 01:QUE Say(user, Tell user the price); no need to yield
-02:QUE Say(user, Ask if user wants to purchase); YLD for user
+02:QUE Say(user, Ask if user wants to purchase); YLD for user; done when user decides whether to purchase
 03:CND If user wants to purchase
-  03.01:QUE Add to cart; YLD for call
+  03.01:QUE Add to cart
 ```
 
 ### Public Playbooks
@@ -361,12 +389,14 @@ info2: "copied verbatim if exists"
 4. ✓ Add :CODE to each step
 5. ✓ Declare all variables with :type on first use only
 6. ✓ Decompose complex instructions into multiple steps if necessary
-7. ✓ Add `YLD for user` only when waiting for user response, `YLD for call` for function execution
+7. ✓ Add `YLD for user` only when waiting for user response, `YLD for meeting` to listen to meeting, `YLD for call` for function execution
 8. ✓ Add JMP for while/until loops
 9. ✓ Each agent must end with a public.json listing all public playbooks in that agent
-10. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. No made-up playbooks
+10. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
 11. ✓ In a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, explain rules of the game)` unless private side conversation is needed
 12. ✓ Extract metadata into yaml blocks for agents and playbooks
+13. ✓ Each YLD is expensive to execute (need a new LLM call), so batch as many calls as possible before YLD
+14. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
 
 ## Example Transformation
 
@@ -409,8 +439,9 @@ def LookupInfo(query:str):
 - When program starts
 
 ### Steps
+- Greet user
 - Ask user for name and city they are from
-- Greet the user and give an interesting fact about the city
+- Give an interesting fact about the city
 - GetWeather(city)
 - Tell user what the weather is like
 - List 5 cities near user's city
@@ -495,15 +526,18 @@ Main interaction loop that guides user conversations through a friendly informat
 ### Triggers
 - T1:BGN When program starts
 ### Steps
-- 01:QUE Say(user, Ask user for their $name:str and $city:str they are from); YLD for user
-- 02:CHK N1
-- 03:QUE Say(user, Greet the user and give an interesting fact about the city); YLD for call
-- 04:QUE $weather:dict = GetWeather(city=$city); YLD for call
-- 05:QUE Say(user, Tell user what the weather is like); YLD for call
-- 06:EXE List 5 $cities:list near $city
-- 07:TNK Think deeply about something common among these 5 cities
-- 08:QUE Say(user, Tell user about that common thing); YLD for call
-- 09:RET
+- 01:QUE Say(Greet the user); no need to YLD
+- 02:QUE Say(user, Ask user for their $name:str and $city:str they are from)
+- 03:YLD for user
+- 04:CHK N1
+- 05:QUE Say(user, Give an interesting fact about the $city)
+- 06:QUE $weather:dict = GetWeather(city=$city)
+- 07:YLD for call
+- 08:QUE Say(user, Tell user what the weather is like); no need to YLD
+- 09:EXE List 5 $cities:list near $city
+- 10:TNK Think deeply about something common among these 5 cities
+- 11:QUE Say(user, Tell user about that common thing)
+- 12:RET # RET implicitly does `YLD for call`
 
 ### Notes
 - N1 If name is a Jack Sparrow, start speaking in pirate speak
@@ -562,10 +596,11 @@ metadata:
 ---
 Says hello to the user
 ### Steps
-- 01:QUE Say(user, Say hello $name); YLD for call
-- 02:QUE $info:str = ExampleAgent.LookupInfo(query=$name); YLD for call
-- 03:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info"); YLD for call
-- 04:RET
+- 01:QUE Say(user, Say hello $name)
+- 02:QUE $info:str = ExampleAgent.LookupInfo(query=$name)
+- 03:YLD for call
+- 04:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info")
+- 04:RET # RET implicitly does `YLD for call`
 
 ## P2() -> None
 metadata:
@@ -573,9 +608,10 @@ metadata:
 ---
 Says goodbye to the user
 ### Steps
-- 01:QUE LoadArtifact("greeting.txt"); YLD for call
-- 02:QUE Say(user, Here is your greeting - Artifact[greeting.txt]); YLD for call
-- 03:RET
+- 01:QUE LoadArtifact("greeting.txt")
+- 02:YLD for call # must YLD for the artifact to load
+- 02:QUE Say(user, Here is your greeting - Artifact[greeting.txt])
+- 03:RET # RET implicitly does `YLD for call`
 
 ```public.json
 [

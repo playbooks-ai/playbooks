@@ -33,8 +33,11 @@ class Playbooks:
             self.compiled_program_content, self.event_bus, program_paths
         )
 
-    def begin(self):
-        self.program.begin()
+    async def initialize(self):
+        await self.program.initialize()
+
+    async def begin(self):
+        await self.program.begin()
 
     def compile_program(self, program_content: str) -> str:
         compiler = Compiler(self.llm_config)

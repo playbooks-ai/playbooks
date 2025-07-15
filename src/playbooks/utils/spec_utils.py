@@ -29,8 +29,14 @@ class SpecUtils:
             Agent ID without prefix (e.g., "1000")
         """
         if cls.is_agent_spec(agent_spec):
-            return agent_spec[len(cls.AGENT_PREFIX) :].strip()
-        return agent_spec  # Already an ID
+            agent_id = agent_spec[len(cls.AGENT_PREFIX) :].strip()
+        else:
+            agent_id = agent_spec
+
+        if agent_id in ["human", "user", "HUMAN", "USER"]:
+            agent_id = "human"
+
+        return agent_id
 
     @classmethod
     def extract_meeting_id(cls, meeting_spec: str) -> str:

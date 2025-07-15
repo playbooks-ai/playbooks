@@ -1,15 +1,20 @@
-# PersonalizedGreeting
-This program greets the user by name and welcomes them to Playbooks.
+Compiled playbook content
+# CustomerSupportAgent
+A demo customer support agent for Playbooks AI that welcomes users with personalized greetings and provides information about the platform.
 
-## Greet() -> None
-Greets the user by name and welcomes them to Playbooks
+## GreetTheUser() -> None
+In this playbook, the customer support agent welcomes the user
 ### Triggers
 - T1:BGN At the beginning
 ### Steps
-- 01:QUE Ask the user for their $name:str
-- 02:YLD user
-- 03:QUE Say hello to the user by $name and welcome them to Playbooks
-- 04:YLD exit
+- 01:QUE Say(Tell user about yourself)
+- 02:YLD call
+- 03:QUE Say(Ask the user for their $name:str)
+- 04:YLD user
+- 05:QUE Say(Say hello to the user by $name)
+- 06:QUE Say(Welcome user to Playbooks AI and say goodbye)
+- 07:YLD call
+- 08:YLD exit
 
 ```public.json
 []

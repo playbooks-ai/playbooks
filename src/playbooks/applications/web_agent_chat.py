@@ -107,19 +107,19 @@ class _Handler(BaseHTTPRequestHandler):
         if body:
             self.wfile.write(body.encode())
 
-    def do_POST(self):
+    async def do_POST(self):
         if self.path == "/runs/new":
-            self._handle_new_run()
+            await self._handle_new_run()
             return
         if self.path.startswith("/runs/") and self.path.endswith("/messages"):
-            self._handle_run_message()
+            await self._handle_run_message()
             return
         if self.path.startswith("/runs/") and self.path.endswith("/stream"):
-            self._handle_stream_message()
+            await self._handle_stream_message()
             return
         self._send(404, "Not Found")
 
-    def _handle_new_run(self) -> None:
+    async def _handle_new_run(self) -> None:
         run_id = str(uuid.uuid4())
         length = int(self.headers.get("Content-Length", 0))
         data = json.loads(self.rfile.read(length)) if length else {}
@@ -179,7 +179,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         self._send(200, body, "application/json")
 
-    def _handle_run_message(self) -> None:
+    async def _handle_run_message(self) -> None:
         """Handle traditional (non-streaming) message requests."""
         parts = self.path.strip("/").split("/")
         if len(parts) != 3:
@@ -199,7 +199,9 @@ class _Handler(BaseHTTPRequestHandler):
 
         # Process message and collect all responses
         asyncio.run_coroutine_threadsafe(
-            run.playbooks.program.route_message("human", run.main_agent.id, message),
+            await run.playbooks.program.route_message(
+                "human", run.main_agent.id, message
+            ),
             self.server.loop,
         ).result()
         asyncio.run_coroutine_threadsafe(asyncio.sleep(0.1), self.server.loop).result()
@@ -217,7 +219,7 @@ class _Handler(BaseHTTPRequestHandler):
         )
         self._send(200, body, "application/json")
 
-    def _handle_stream_message(self) -> None:
+    async def _handle_stream_message(self) -> None:
         """Handle streaming message requests using Server-Sent Events."""
         parts = self.path.strip("/").split("/")
         if len(parts) != 3:
@@ -265,7 +267,7 @@ class _Handler(BaseHTTPRequestHandler):
             # Start the message processing in background
             def process_message():
                 asyncio.run_coroutine_threadsafe(
-                    run.playbooks.program.route_message(
+                    await run.playbooks.program.route_message(
                         "human", run.main_agent.id, message
                     ),
                     self.server.loop,

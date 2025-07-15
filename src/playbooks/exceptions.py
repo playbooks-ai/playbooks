@@ -41,3 +41,9 @@ class ExecutionFinished(Exception):
     """Custom exception to indicate that the playbook execution is finished."""
 
     pass
+
+
+class KlassNotFoundError(PlaybooksError):
+    """Raised when a klass is not found."""
+
+    pass

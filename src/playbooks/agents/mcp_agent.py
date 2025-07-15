@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict
 from ..event_bus import EventBus
 from ..playbook import RemotePlaybook
 from ..transport import MCPTransport
+from .ai_agent import AIAgentMeta
 from .remote_ai_agent import RemoteAIAgent
 
 logger = logging.getLogger(__name__)
@@ -12,7 +13,18 @@ if TYPE_CHECKING:
     from ..program import Program
 
 
-class MCPAgent(RemoteAIAgent):
+class MCPAgentMeta(AIAgentMeta):
+    """Meta class for MCPAgent."""
+
+    def should_create_instance_at_start(self) -> bool:
+        """Whether to create an instance of the agent at start.
+
+        MCP agents are always created at start in standby mode.
+        """
+        return True
+
+
+class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
     """
     MCP (Model Context Protocol) agent implementation.
 
@@ -112,7 +124,11 @@ class MCPAgent(RemoteAIAgent):
                                 # Multiple args - create numbered parameters
                                 kwargs = {f"arg_{i}": arg for i, arg in enumerate(args)}
 
-                        return await self.transport.call_tool(tool_name, kwargs)
+                        result = await self.transport.call_tool(tool_name, kwargs)
+                        result_str = str(result.data)
+                        if result.is_error:
+                            result_str = f"Error: {result_str}"
+                        return result_str
 
                     return execute_fn
 
@@ -148,3 +164,7 @@ class MCPAgent(RemoteAIAgent):
                 f"Failed to discover MCP tools for agent {self.klass}: {str(e)}"
             )
             raise
+
+    async def begin(self):
+        # MCP agent does not receive messages, nor has BGN playbooks, so we do nothing
+        pass

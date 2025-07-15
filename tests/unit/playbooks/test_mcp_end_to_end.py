@@ -127,17 +127,17 @@ class TestMCPEndToEnd:
 
             # Test simple tool execution
             result = await agent.execute_playbook("add_numbers", [], {"a": 10, "b": 20})
-            assert result[0].text == "30"
+            assert result.content[0].text == "30"
 
             # Test tool with string parameters
             result = await agent.execute_playbook(
                 "greet", [], {"name": "World", "greeting": "Hi"}
             )
-            assert result[0].text == "Hi, World!"
+            assert result.content[0].text == "Hi, World!"
 
             # Test tool with default parameters
             result = await agent.execute_playbook("greet", [], {"name": "Test"})
-            assert result[0].text == "Hello, Test!"
+            assert result.content[0].text == "Hello, Test!"
 
             # Test complex tool execution
             result = await agent.execute_playbook(
@@ -149,7 +149,9 @@ class TestMCPEndToEnd:
                     "priority": "high",
                 },
             )
-            task_data = json.loads(result[0].text)  # Use json.loads instead of eval
+            task_data = json.loads(
+                result.content[0].text
+            )  # Use json.loads instead of eval
             assert task_data["title"] == "Test Task"
             assert task_data["priority"] == "high"
 
@@ -157,7 +159,9 @@ class TestMCPEndToEnd:
             result = await agent.execute_playbook(
                 "list_users", [], {"active_only": True}
             )
-            users_data = json.loads(result[0].text)  # Use json.loads instead of eval
+            users_data = json.loads(
+                result.content[0].text
+            )  # Use json.loads instead of eval
             assert len(users_data) >= 2  # Should have active users
 
         finally:
@@ -197,8 +201,8 @@ class TestMCPEndToEnd:
                 )
 
             # Test calling non-existent tool
-            with pytest.raises(ValueError, match="Unknown playbook: non_existent_tool"):
-                await agent.execute_playbook("non_existent_tool")
+            response = await agent.execute_playbook("non_existent_tool")
+            assert "Playbook 'non_existent_tool' not found" in response
 
             # Test tool with invalid user ID
             with pytest.raises(Exception):
@@ -230,6 +234,7 @@ This agent manages tasks using MCP tools.
 
         event_bus = EventBus("test-session")
         program = Program(program_text, event_bus)
+        await program.initialize()
 
         # Find the task manager agent
         task_agent = None
@@ -260,23 +265,23 @@ This agent manages tasks using MCP tools.
                     "priority": "medium",
                 },
             )
-            task_data = json.loads(result[0].text)
+            task_data = json.loads(result.content[0].text)
             assert task_data["title"] == "Integration Test Task"
 
             # List tasks
             result = await task_agent.execute_playbook("list_tasks")
-            tasks_data = json.loads(result[0].text)
+            tasks_data = json.loads(result.content[0].text)
             assert len(tasks_data) >= 1
 
             # Test counter operations
             result = await task_agent.execute_playbook("increment_counter")
-            assert result[0].text == "1"
+            assert result.content[0].text == "1"
 
             result = await task_agent.execute_playbook("get_counter")
-            assert result[0].text == "1"
+            assert result.content[0].text == "1"
 
             result = await task_agent.execute_playbook("reset_counter")
-            assert result[0].text == "0"
+            assert result.content[0].text == "0"
 
         finally:
             await task_agent.disconnect()
@@ -300,7 +305,7 @@ This agent manages tasks using MCP tools.
 This is a local calculator agent.
 
 ```python
-@playbook
+@playbook(public=True)
 async def calculate_sum(a: int, b: int) -> int:
     return a + b
 ```
@@ -317,14 +322,13 @@ This is a remote task management agent.
 
         event_bus = EventBus("test-session")
         program = Program(program_text, event_bus)
+        await program.initialize()
 
         # Find agents
-        local_agent = None
         remote_agent = None
+        local_agent = await program.create_agent("LocalCalculator")
         for agent in program.agents:
-            if agent.klass == "LocalCalculator":
-                local_agent = agent
-            elif agent.klass == "RemoteTaskManager":
+            if agent.klass == "RemoteTaskManager":
                 remote_agent = agent
 
         assert local_agent is not None
@@ -343,7 +347,7 @@ This is a remote task management agent.
             result = await local_agent.execute_playbook(
                 "RemoteTaskManager.add_numbers", [], {"a": 15, "b": 25}
             )
-            assert result[0].text == "40"
+            assert result.content[0].text == "40"
 
             # Remote agent should be able to call local agent
             # First verify the local agent has the playbook
@@ -528,7 +532,7 @@ This is a comprehensive MCP agent configuration test.
             result = await agent.execute_playbook(
                 "add_numbers", [], {"a": 100, "b": 200}
             )
-            assert result[0].text == "300"
+            assert result.content[0].text == "300"
 
         # Should be disconnected after context
         assert not agent._connected
@@ -562,11 +566,11 @@ This is a comprehensive MCP agent configuration test.
             # Test multiple tool calls
             for i in range(5):
                 result = await agent.execute_playbook("increment_counter")
-                assert result[0].text == str(i + 1)
+                assert result.content[0].text == str(i + 1)
 
             # Verify counter state
             result = await agent.execute_playbook("get_counter")
-            assert result[0].text == "5"
+            assert result.content[0].text == "5"
 
         finally:
             await agent.disconnect()

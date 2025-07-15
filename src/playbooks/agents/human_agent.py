@@ -16,7 +16,14 @@ class HumanAgent(BaseAgent):
         self.id = agent_id
 
         # TODO: HumanAgent should not have the same state as AI agents. Use a different state class.
-        self.state = ExecutionState(event_bus)
+        self.state = ExecutionState(event_bus, klass, agent_id)
+
+    async def begin(self):
+        # Human agent does not process messages, nor has BGN playbooks, so we do nothing
+        pass
 
     def __str__(self):
-        return "user"
+        return self.__repr__()
+
+    def __repr__(self):
+        return "HumanAgent(agent user)"

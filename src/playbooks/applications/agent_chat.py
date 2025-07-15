@@ -3,6 +3,7 @@
 CLI application for interactive agent chat using playbooks.
 Provides a simple terminal interface for communicating with AI agents.
 """
+
 import argparse
 import asyncio
 import functools
@@ -15,10 +16,13 @@ import litellm
 from rich.console import Console
 
 from playbooks import Playbooks
-from playbooks.agents import AgentCommunicationMixin
-from playbooks.constants import EOM
+from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.constants import EOM, EXECUTION_FINISHED
 from playbooks.events import Event
 from playbooks.exceptions import ExecutionFinished
+from playbooks.meetings.meeting_manager import MeetingManager
+from playbooks.message import MessageType
+from playbooks.program import Program
 from playbooks.session_log import SessionLogItemLevel
 
 # Add the src directory to the Python path to import playbooks
@@ -97,8 +101,10 @@ class SessionLogWrapper:
             self.streaming_content = ""
 
 
-# Store original method for restoring later
-original_wait_for_message = AgentCommunicationMixin.WaitForMessage
+# Store original methods for restoring later
+original_wait_for_message = MessagingMixin.WaitForMessage
+original_broadcast_to_meeting = None  # Will be set after MeetingManager is imported
+original_route_message = None  # Will be set after Program is loaded
 
 
 @functools.wraps(original_wait_for_message)
@@ -107,7 +113,7 @@ async def patched_wait_for_message(self, source_agent_id: str):
     # For human input, show a prompt before calling the normal WaitForMessage
     if source_agent_id == "human":
         # Check if there are already messages waiting
-        messages = self.inbox._peek_all_messages()
+        messages = self._message_buffer
         human_messages = [msg for msg in messages if msg.sender_id == "human"]
 
         if not human_messages:
@@ -117,24 +123,89 @@ async def patched_wait_for_message(self, source_agent_id: str):
                 console.input, "[bold yellow]User:[/bold yellow] "
             )
             # Send the user input and EOM
-            await self.program.route_message("human", self.id, user_input)
-            await self.program.route_message("human", self.id, EOM)
+            program: Program = self.program
+            for message in [user_input, EOM]:
+                await program.route_message(
+                    sender_id="human",
+                    sender_klass="human",
+                    receiver_spec=f"agent {self.id}",
+                    message=message,
+                )
 
     # Call the normal WaitForMessage which handles message delivery
     return await original_wait_for_message(self, source_agent_id)
 
 
-async def handle_user_input(playbooks):
-    """Handle user input and send it to the AI agent."""
-    while True:
-        # User input is now handled in patched_wait_for_message
-        # Just check if we need to exit
-        if len(playbooks.program.agents) == 0:
-            console.print("[yellow]No agents available. Exiting...[/yellow]")
-            break
+async def patched_broadcast_to_meeting_as_owner(
+    self,
+    meeting_id: str,
+    message: str,
+    from_agent_id: str = None,
+    from_agent_klass: str = None,
+):
+    """Patched version of broadcast_to_meeting_as_owner that displays meeting messages nicely."""
+    # Display the meeting message with formatting
+    if not from_agent_id or not from_agent_klass:
+        from_agent_id = self.agent.id
+        from_agent_klass = self.agent.klass
 
-        # Small delay to prevent CPU spinning
-        await asyncio.sleep(0.1)
+    # Format and display the meeting broadcast
+    console.print(
+        f"\n[bold blue]📢 Meeting {meeting_id}[/bold blue] - [cyan]{from_agent_klass}({from_agent_id})[/cyan]: {message}"
+    )
+
+    # Call the original method
+    if original_broadcast_to_meeting:
+        return await original_broadcast_to_meeting(
+            self, meeting_id, message, from_agent_id, from_agent_klass
+        )
+
+
+async def patched_route_message(
+    self,
+    sender_id: str,
+    sender_klass: str,
+    receiver_spec: str,
+    message: str,
+    message_type=MessageType.DIRECT,
+    meeting_id: str = None,
+):
+    """Patched version of route_message that displays agent-to-agent messages."""
+    # Extract receiver info
+    from playbooks.utils.spec_utils import SpecUtils
+
+    recipient_id = SpecUtils.extract_agent_id(receiver_spec)
+
+    # Skip display for:
+    # 1. Messages from human (already handled)
+    # 2. EOM markers
+    # 3. Messages TO human (Say() messages are already streamed)
+    # 4. Non-direct messages
+    if (
+        sender_id != "human"
+        and message != EOM
+        and recipient_id != "human"
+        and message_type == MessageType.DIRECT
+    ):
+        recipient = self.agents_by_id.get(recipient_id)
+        recipient_klass = recipient.klass if recipient else "Unknown"
+
+        # Display agent-to-agent message with formatting
+        console.print(
+            f"\n[bold magenta]💬 Message[/bold magenta]: [purple]{sender_klass}({sender_id})[/purple] → [purple]{recipient_klass}({recipient_id})[/purple]: {message}"
+        )
+
+    # Call the original method
+    if original_route_message:
+        return await original_route_message(
+            self,
+            sender_id,
+            sender_klass,
+            receiver_spec,
+            message,
+            message_type,
+            meeting_id,
+        )
 
 
 async def main(
@@ -169,7 +240,7 @@ async def main(
     # )
 
     # Patch the WaitForMessage method before loading agents
-    AgentCommunicationMixin.WaitForMessage = patched_wait_for_message
+    MessagingMixin.WaitForMessage = patched_wait_for_message
 
     console.print(f"[green]Loading playbooks from:[/green] {program_paths}")
 
@@ -178,9 +249,19 @@ async def main(
         program_paths = [program_paths]
     try:
         playbooks = Playbooks(program_paths, session_id=session_id)
+        await playbooks.initialize()
     except litellm.exceptions.AuthenticationError as e:
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise
+
+    # Store original methods and apply patches after playbooks are loaded
+    global original_broadcast_to_meeting, original_route_message
+    original_broadcast_to_meeting = MeetingManager.broadcast_to_meeting_as_owner
+    original_route_message = Program.route_message
+
+    # Apply patches
+    MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting_as_owner
+    Program.route_message = patched_route_message
 
     pubsub = PubSub()
 
@@ -233,9 +314,9 @@ async def main(
     try:
         if verbose:
             playbooks.event_bus.subscribe("*", log_event)
-        await asyncio.gather(playbooks.program.begin(), handle_user_input(playbooks))
+        await playbooks.program.run_till_exit()
     except ExecutionFinished:
-        console.print("[green]Execution finished. Exiting...[/green]")
+        console.print(f"[green]{EXECUTION_FINISHED}. Exiting...[/green]")
     except KeyboardInterrupt:
         console.print("\n[yellow]Exiting...[/yellow]")
     except Exception as e:
@@ -247,8 +328,12 @@ async def main(
         # Shutdown debug server if it was started
         if debug and playbooks.program._debug_server:
             await playbooks.program.shutdown_debug_server()
-        # Restore the original method when we're done
-        AgentCommunicationMixin.WaitForMessage = original_wait_for_message
+        # Restore the original methods when we're done
+        MessagingMixin.WaitForMessage = original_wait_for_message
+        if original_broadcast_to_meeting:
+            MeetingManager.broadcast_to_meeting_as_owner = original_broadcast_to_meeting
+        if original_route_message:
+            Program.route_message = original_route_message
 
 
 if __name__ == "__main__":

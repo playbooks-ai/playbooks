@@ -55,7 +55,7 @@ class LLMResponseLine:
         # Extract Trigger metadata, e.g., `Trigger["user_auth_failed"]`
         self.triggers = re.findall(r'`Trigger\["([^"]+)"\]`', self.text)
 
-        if re.search(r"\byld\s+for\s+return\b", self.text):
+        if re.search(r"`Return\[", self.text):
             self.playbook_finished = True
 
         if re.search(r"\byld\s+for\s+exit\b", self.text):
@@ -228,7 +228,7 @@ class LLMResponseLine:
             self.wait_for_user_input = True
             return
 
-        # YLD for meeting (Phase 5+)
+        # YLD for meeting
         meeting_match = re.search(r"\byld\s+for\s+meeting(?:\s+(\d+))?\b", text)
         if meeting_match:
             meeting_id = meeting_match.group(1) if meeting_match.group(1) else "current"
@@ -244,14 +244,14 @@ class LLMResponseLine:
             self.wait_for_agent_target = agent_id
             return
 
-        # YLD for <agent_type>
-        agent_type_match = re.search(
+        # YLD for <yld_type>
+        yld_type_match = re.search(
             r"\byld\s+for\s+([a-zA-Z][a-zA-Z0-9_]*(?:agent|Agent)?)\b", text
         )
-        if agent_type_match:
-            agent_type = agent_type_match.group(1)
+        if yld_type_match:
+            yld_type = yld_type_match.group(1)
             # Skip common words that aren't agent types
-            if agent_type.lower() not in [
+            if yld_type.lower() not in [
                 "meeting",
                 "user",
                 "human",
@@ -260,7 +260,7 @@ class LLMResponseLine:
                 "exit",
             ]:
                 self.wait_for_agent_input = True
-                self.wait_for_agent_target = agent_type
+                self.wait_for_agent_target = yld_type
                 return
 
         # YLD for agent (last 1:1 non-human target)

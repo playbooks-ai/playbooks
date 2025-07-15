@@ -6,6 +6,7 @@ from playbooks import Playbooks
 @pytest.mark.asyncio
 async def test_multi_agent(test_data_dir):
     playbooks = Playbooks([test_data_dir / "multi-agent.pb"])
+    await playbooks.initialize()
     assert len(playbooks.program.agents) == 3
 
     await playbooks.program.run_till_exit()

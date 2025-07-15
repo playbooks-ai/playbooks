@@ -15,3 +15,8 @@ class LLMMessageRole(str, Enum):
     SYSTEM = "system"
     USER = "user"
     ASSISTANT = "assistant"
+
+
+class StartupMode(str, Enum):
+    DEFAULT = "default"
+    STANDBY = "standby"

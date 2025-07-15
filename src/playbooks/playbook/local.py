@@ -62,7 +62,7 @@ class LocalPlaybook(Playbook):
             raise
         except Exception as e:
             logger.error(f"Local playbook {self.name} failed: {str(e)}")
-            raise
+            raise e
 
     @abstractmethod
     async def _execute_impl(self, *args, **kwargs) -> Any:

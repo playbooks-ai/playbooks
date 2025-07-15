@@ -1,20 +1,21 @@
 import asyncio
 import logging
-import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
-from ..enums import LLMMessageRole
+from ..enums import LLMMessageRole, StartupMode
 from ..event_bus import EventBus
+from ..exceptions import ExecutionFinished
 from ..execution_state import ExecutionState
 from ..meetings import MeetingManager
+from ..message import Message, MessageType
 from ..playbook import MarkdownPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.parse_utils import parse_metadata_and_description
 from ..utils.spec_utils import SpecUtils
-from .base_agent import BaseAgent
+from .base_agent import BaseAgent, BaseAgentMeta
 
 if TYPE_CHECKING:
     from ..program import Program
@@ -22,7 +23,45 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class AIAgent(BaseAgent, ABC):
+class AIAgentMeta(BaseAgentMeta):
+    """Meta class for AIAgent."""
+
+    def __new__(cls, name, bases, attrs):
+        cls = super().__new__(cls, name, bases, attrs)
+        cls.validate_metadata()
+        return cls
+
+    @property
+    def startup_mode(self) -> StartupMode:
+        """Get the startup mode for this agent."""
+        return getattr(self, "metadata", {}).get("startup_mode", StartupMode.DEFAULT)
+
+    def validate_metadata(self):
+        """Validate the metadata for this agent."""
+        if self.startup_mode not in [StartupMode.DEFAULT, StartupMode.STANDBY]:
+            raise ValueError(f"Invalid startup mode: {self.startup_mode}")
+
+    def should_create_instance_at_start(self) -> bool:
+        """Whether to create an instance of the agent at start.
+
+        Override in subclasses to control whether to create an instance at start.
+        """
+        # If there is any playbook with a BGN trigger, return True
+        for playbook in self.playbooks.values():
+            if playbook.triggers:
+                for trigger in playbook.triggers.triggers:
+                    if trigger.is_begin:
+                        return True
+
+        # This agent does not have any BGN playbook
+        # Check if it should be created in standby mode
+        if self.startup_mode == StartupMode.STANDBY:
+            return True
+
+        return False
+
+
+class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
     """
     Abstract base class for AI agents.
 
@@ -61,7 +100,7 @@ class AIAgent(BaseAgent, ABC):
         super().__init__(klass=self.klass, agent_id=agent_id, program=program, **kwargs)
 
         # Initialize meeting manager
-        self.meeting_manager = MeetingManager(self.id, self.klass)
+        self.meeting_manager = MeetingManager(agent=self)
 
         self.playbooks: Dict[str, Playbook] = (self.__class__.playbooks or {}).copy()
         self.meeting_manager.ensure_meeting_playbook_kwargs(self.playbooks)
@@ -69,7 +108,7 @@ class AIAgent(BaseAgent, ABC):
         self.metadata, self.description = parse_metadata_and_description(
             self.description
         )
-        self.state = ExecutionState(event_bus)
+        self.state = ExecutionState(event_bus, self.klass, self.id)
         self.source_line_number = source_line_number
         self.public_json = None
 
@@ -89,6 +128,13 @@ class AIAgent(BaseAgent, ABC):
         Returns:
             List of other agent instances
         """
+        if (
+            not self.program
+            or not hasattr(self.program, "agents")
+            or not self.program.agents
+        ):
+            return []
+
         return list(
             filter(lambda x: isinstance(x, AIAgent) and x != self, self.program.agents)
         )
@@ -106,17 +152,85 @@ class AIAgent(BaseAgent, ABC):
 
     async def begin(self):
         """Execute playbooks with BGN trigger."""
+        # Create a list to track BGN playbook tasks
+        bgn_tasks = []
+
+        def create_idle_task():
+            asyncio.create_task(self._idle_loop())
+            # idle_task.add_done_callback(
+            #     lambda t: print(f"{str(self)} : Idle loop task done")
+            # )
+
         # Find playbooks with a BGN trigger and execute them
-        playbooks_to_execute = []
         for playbook in self.playbooks.values():
             if hasattr(playbook, "triggers") and playbook.triggers:
                 for trigger in playbook.triggers.triggers:
                     if trigger.is_begin:
-                        playbooks_to_execute.append(playbook)
+                        # Create task for each BGN playbook
+                        task = asyncio.create_task(self.execute_playbook(playbook.name))
+                        # print(f"{str(self)} : BGN task created - {playbook.name}")
 
-        # TODO: execute the playbooks in parallel
-        for playbook in playbooks_to_execute:
-            await self.execute_playbook(playbook.name)
+                        def task_done_callback(t):
+                            # print(f"{str(self)} : BGN task done - {playbook.name}")
+                            create_idle_task()
+
+                        task.add_done_callback(task_done_callback)
+                        bgn_tasks.append(task)
+                        break  # Only need one BGN trigger per playbook
+
+        # If there are BGN tasks, we can optionally wait for them
+        # But the idle loop continues running regardless
+        if bgn_tasks:
+            # Wait for all BGN playbooks to complete
+            await asyncio.gather(*bgn_tasks, return_exceptions=True)
+        else:
+            # Start idle loop because there are no BGN tasks
+            create_idle_task()
+
+    async def _idle_loop(self):
+        """Idle loop that processes incoming messages."""
+        sleep_turns = 0
+        sleep_turns_max = 5
+        while True:
+            if self.program.execution_finished:
+                break
+            # print(f"\n{str(self)}: _idle_loop")
+            # If playbooks are running, we let them receive messages
+            if not self.state.call_stack.is_empty():
+                # print(f"{str(self)} : _idle_loop - playbooks are running, sleeping...")
+                await asyncio.sleep(5)
+                sleep_turns += 1
+                if sleep_turns >= sleep_turns_max:
+                    # print(
+                    #     f"{str(self)} : _idle_loop - max sleep turns reached, forcing a continue message"
+                    # )
+                    self._message_buffer.append(
+                        Message(
+                            sender_id="human",
+                            sender_klass="Human",
+                            recipient_id=self.id,
+                            recipient_klass=self.klass,
+                            content="Continue",
+                            message_type=MessageType.DIRECT,
+                            meeting_id=self.state.get_current_meeting(),
+                        )
+                    )
+                    self._message_event.set()
+                    sleep_turns = 0
+                continue
+
+            sleep_turns = 0
+            try:
+                # Wait for message event with timeout to allow graceful shutdown
+                await asyncio.wait_for(self._message_event.wait(), timeout=1.0)
+                self._process_collected_messages()
+                self._message_event.clear()
+            except asyncio.TimeoutError:
+                # Timeout is normal - just check if we should continue
+                continue
+            except asyncio.CancelledError:
+                # Task is being cancelled - exit gracefully
+                break
 
     def parse_instruction_pointer(self, step: str) -> InstructionPointer:
         """Parse a step string into an InstructionPointer.
@@ -217,6 +331,7 @@ class AIAgent(BaseAgent, ABC):
         return [
             agent_klass.get_public_information()
             for agent_klass in self.program.agent_klasses.values()
+            if agent_klass.klass != self.klass
         ]
 
     def resolve_target(self, target: str = None, allow_fallback: bool = True) -> str:
@@ -291,418 +406,6 @@ class AIAgent(BaseAgent, ABC):
 
         # Default to Human
         return "human"
-
-    def resolve_say_target(self, target: str = None) -> str:
-        """Resolve the target for a Say() call using fallback logic."""
-        return self.resolve_target(target, allow_fallback=True)
-
-    def get_meeting_playbooks(self) -> List[str]:
-        """Get list of meeting playbook names."""
-        return self.meeting_manager.get_meeting_playbooks(self.playbooks)
-
-    def is_meeting_playbook(self, playbook_name: str) -> bool:
-        """Check if a playbook is a meeting playbook."""
-        return self.meeting_manager.is_meeting_playbook(playbook_name, self.playbooks)
-
-    def get_playbook_attendees(self, playbook_name: str) -> Tuple[List[str], List[str]]:
-        """Get required and optional attendees for a meeting playbook."""
-        return self.meeting_manager.get_playbook_attendees(
-            playbook_name, self.playbooks
-        )
-
-    async def _inject_meeting_parameters(
-        self, playbook_name: str, kwargs: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """Auto-inject meeting_id parameter for meeting playbooks."""
-        return self.meeting_manager.inject_meeting_parameters(
-            playbook_name, kwargs, self.state.call_stack
-        )
-
-    async def create_meeting(
-        self,
-        invited_agents: List[str],
-        topic: Optional[str] = None,
-    ) -> str:
-        """Create meeting and send invitations."""
-        meeting_id = await self.meeting_manager.create_meeting(
-            invited_agents, topic, self.program.meeting_id_registry
-        )
-
-        # Copy meeting to execution state for backward compatibility
-        meeting = self.meeting_manager.get_meeting(meeting_id)
-        if meeting:
-            self.state.owned_meetings[meeting_id] = meeting
-
-        # Send invitations
-        for agent_spec in invited_agents:
-            await self._send_invitation(meeting_id, agent_spec)
-
-        return meeting_id
-
-    async def _send_invitation(self, meeting_id: str, agent_spec: str):
-        """Send invitation to an agent using the message system.
-
-        Args:
-            meeting_id: ID of the meeting
-            agent_spec: Agent type or ID to invite
-        """
-        meeting = self.state.owned_meetings[meeting_id]
-
-        # Track pending invitation on the meeting
-        meeting.pending_invitations.add(agent_spec)
-
-        # Send structured invitation message
-        invitation_content = f"You are invited to join meeting {meeting_id}: {meeting.topic or 'Meeting'}"
-
-        # Resolve agent spec to proper agent ID
-        resolved_target = self.resolve_target(agent_spec, allow_fallback=False)
-        if resolved_target:
-            await self.program.route_message(
-                self.id,
-                resolved_target,
-                invitation_content,
-                message_type="meeting_invite",
-                meeting_id=meeting_id,
-            )
-        else:
-            self.state.session_log.append(
-                f"Could not resolve invitation target: {agent_spec}"
-            )
-
-    async def _initialize_meeting_playbook(
-        self, playbook_name: str, kwargs: Dict[str, Any]
-    ):
-        """Initialize meeting before executing meeting playbook.
-
-        This method is called implicitly before any meeting playbook executes.
-        For new meetings, it creates the meeting, sends invitations, and waits for required participants.
-        For existing meetings (when meeting_id is provided), it joins the existing meeting.
-
-        Args:
-            playbook_name: Name of the meeting playbook being executed
-            kwargs: Keyword arguments passed to the playbook (may contain attendees, topic, meeting_id)
-        """
-        # Check if we're joining an existing meeting (meeting_id provided) or creating a new one
-        existing_meeting_id = kwargs.get("meeting_id")
-
-        if existing_meeting_id:
-            # Joining an existing meeting - just proceed with execution
-            # The meeting system will handle participant management via messages
-            self.state.session_log.append(
-                f"Joining existing meeting {existing_meeting_id} for playbook {playbook_name}"
-            )
-            return  # No need to create meeting or wait for attendees
-
-        # Creating a new meeting (original logic)
-        # Extract attendees and topic from kwargs if provided
-        kwargs_attendees = kwargs.get("attendees", [])
-        topic = kwargs.get("topic", f"{playbook_name} meeting")
-
-        # Determine attendee strategy: kwargs attendees take precedence
-        if kwargs_attendees:
-            # If attendees specified in kwargs, treat them as required (ignore metadata)
-            required_attendees = kwargs_attendees
-            all_attendees = kwargs_attendees
-            self.state.session_log.append(
-                f"Using kwargs attendees as required for meeting {playbook_name}: {required_attendees}"
-            )
-        else:
-            # If no kwargs attendees, use metadata-defined attendees
-            metadata_required, metadata_optional = self.get_playbook_attendees(
-                playbook_name
-            )
-            required_attendees = metadata_required
-            all_attendees = list(set(metadata_required + metadata_optional))
-            self.state.session_log.append(
-                f"Using metadata attendees for meeting {playbook_name}: required={metadata_required}, optional={metadata_optional}"
-            )
-
-        # Filter out the requester from required attendees (they're already present)
-        required_attendees_to_wait_for = [
-            attendee
-            for attendee in required_attendees
-            if attendee != self.klass
-            and attendee != self.id  # Remove both requester's type and ID
-        ]
-
-        # Create the meeting
-        meeting_id = await self.create_meeting(
-            invited_agents=all_attendees, topic=topic
-        )
-
-        # Store meeting_id in kwargs for the playbook to access
-        kwargs["meeting_id"] = meeting_id
-
-        # Log the meeting initialization
-        self.state.session_log.append(
-            f"Initialized meeting {meeting_id} for playbook {playbook_name}"
-        )
-
-        # Wait for required attendees to join before proceeding (if any besides requester)
-        await self._wait_for_required_attendees(
-            meeting_id, required_attendees_to_wait_for
-        )
-
-        self.state.session_log.append(
-            f"Meeting {meeting_id} ready to proceed - all required attendees present"
-        )
-
-        return meeting_id
-
-    async def _wait_for_required_attendees(
-        self, meeting_id: str, required_attendees: List[str], timeout_seconds: int = 30
-    ):
-        """Wait for required attendees to join the meeting before proceeding.
-
-        Args:
-            meeting_id: ID of the meeting to wait for
-            required_attendees: List of required attendee types/names (excluding requester)
-            timeout_seconds: Maximum time to wait for attendees
-
-        Raises:
-            TimeoutError: If required attendees don't join within timeout
-            ValueError: If required attendee rejects the invitation
-        """
-        # If no attendees to wait for, proceed immediately
-        if not required_attendees:
-            self.state.session_log.append(
-                f"No required attendees to wait for in meeting {meeting_id} - proceeding immediately"
-            )
-            return
-
-        self.state.session_log.append(
-            f"Waiting for required attendees to join meeting {meeting_id}: {required_attendees}"
-        )
-
-        # Track which required attendees have joined
-        joined_attendees: Set[str] = set()
-        start_time = asyncio.get_event_loop().time()
-
-        while len(joined_attendees) < len(required_attendees):
-            # Check for timeout
-            if asyncio.get_event_loop().time() - start_time > timeout_seconds:
-                missing_attendees = set(required_attendees) - joined_attendees
-                raise TimeoutError(
-                    f"Timeout waiting for required attendees to join meeting {meeting_id}. "
-                    f"Missing: {list(missing_attendees)}"
-                )
-
-            # Meeting responses are handled automatically by the centralized processor
-            # Just wait a brief moment to allow message processing to occur
-            await asyncio.sleep(0.1)
-            processed_any_messages = True  # Assume processing happened
-
-            # Check current meeting participants (after processing messages)
-            if meeting_id in self.state.owned_meetings:
-                meeting = self.state.owned_meetings[meeting_id]
-
-                # Check which required attendees have joined
-                for attendee in required_attendees:
-                    if attendee not in joined_attendees:
-                        # Check if attendee is an agent ID (e.g., "agent 1002" or starts with "agent ")
-                        if SpecUtils.is_agent_spec(attendee):
-                            # It's an agent ID with prefix - strip the prefix and check
-                            agent_id = SpecUtils.extract_agent_id(attendee)
-                            if agent_id in meeting.participants:
-                                joined_attendees.add(attendee)
-                                self.state.session_log.append(
-                                    f"Required attendee {attendee} (ID) joined meeting {meeting_id}"
-                                )
-                        elif attendee in meeting.participants:
-                            # It's an agent ID without prefix - check directly
-                            joined_attendees.add(attendee)
-                            self.state.session_log.append(
-                                f"Required attendee {attendee} (ID) joined meeting {meeting_id}"
-                            )
-                        else:
-                            # It's an agent type - look for any participant of this type
-                            for (
-                                participant_id,
-                                participant_type,
-                            ) in meeting.participants.items():
-                                if participant_type == attendee:
-                                    joined_attendees.add(attendee)
-                                    self.state.session_log.append(
-                                        f"Required attendee {attendee} (type) joined meeting {meeting_id}"
-                                    )
-                                    break
-
-            # Check for rejections from required attendees
-            # Check if any required attendees are still in pending invitations
-            if meeting_id in self.state.owned_meetings:
-                meeting = self.state.owned_meetings[meeting_id]
-                for attendee in required_attendees:
-                    if attendee in meeting.pending_invitations:
-                        # Still has pending invitation, continue waiting
-                        pass
-
-            # Short sleep to avoid busy waiting (shorter if we processed messages)
-            sleep_time = 0.05 if processed_any_messages else 0.1
-            await asyncio.sleep(sleep_time)
-
-        self.state.session_log.append(
-            f"All required attendees have joined meeting {meeting_id}: {list(joined_attendees)}"
-        )
-
-    async def broadcast_to_meeting(
-        self,
-        meeting_id: str,
-        message: str,
-        exclude_sender: bool = True,
-    ):
-        """Broadcast a message to all participants in a meeting.
-
-        Args:
-            meeting_id: ID of the meeting to broadcast to
-            message: Message content to send
-            exclude_sender: Whether to exclude the sender from receiving the message
-        """
-        # Check if I'm the owner of this meeting
-        if meeting_id in self.state.owned_meetings:
-            # I'm the owner - add directly to message history
-            from datetime import datetime
-
-            from playbooks.execution_state import Message
-
-            msg = Message(
-                sender_id=self.id,
-                sender_type=self.klass,
-                content=message,
-                timestamp=datetime.now(),
-                meeting_id=meeting_id,
-            )
-            self.state.owned_meetings[meeting_id].message_history.append(msg)
-
-            self.state.session_log.append(
-                f"Added message to owned meeting {meeting_id}: {message}"
-            )
-
-        elif meeting_id in self.state.joined_meetings:
-            # I'm a participant - escape message and send to owner
-            owner_id = self.state.joined_meetings[meeting_id]["owner_agent_id"]
-
-            # Escape any MEETING: prefix at the beginning to prevent injection
-            escaped_message = re.sub(r"^MEETING:", "~~MEETING:", message)
-
-            # Send to meeting owner with protocol prefix
-            await self.program.route_message(
-                self.id, owner_id, f"MEETING:{meeting_id}:{escaped_message}"
-            )
-
-            self.state.session_log.append(
-                f"Sent message to meeting {meeting_id} owner {owner_id}: {message}"
-            )
-
-        else:
-            # Error: not in this meeting
-            self.state.session_log.append(
-                f"Cannot broadcast to meeting {meeting_id} - not a participant"
-            )
-
-    async def _process_meeting_invitation(
-        self, inviter_id: str, meeting_id: str, topic: str
-    ):
-        """Process a meeting invitation by checking for suitable meeting playbooks.
-
-        Args:
-            inviter_id: ID of the agent that sent the invitation
-            meeting_id: ID of the meeting
-            topic: Topic/description of the meeting
-        """
-        self.state.session_log.append(
-            f"Received meeting invitation {meeting_id} from {inviter_id} for '{topic}'"
-        )
-
-        # Check if agent is busy (has active call stack)
-        if len(self.state.call_stack.frames) > 0:
-            self.state.session_log.append(
-                f"Rejecting meeting {meeting_id} - agent is busy"
-            )
-            if self.program:
-                await self.program.route_message(
-                    self.id,
-                    inviter_id,
-                    "Meeting invitation rejected: Agent is currently busy",
-                    message_type="meeting_response",
-                    meeting_id=meeting_id,
-                )
-            return
-
-        # Find matching meeting playbooks
-        meeting_playbooks = []
-        for playbook in self.playbooks.values():
-            if playbook.meeting:
-                meeting_playbooks.append(playbook)
-
-        if not meeting_playbooks:
-            # No meeting playbooks available
-            self.state.session_log.append(
-                f"Rejecting meeting {meeting_id} - no meeting playbooks available"
-            )
-            available_types = self.get_meeting_playbooks()
-            rejection_message = f"Meeting invitation rejected: Cannot handle this type of meeting. Available meeting types: {available_types}"
-
-            if self.program:
-                await self.program.route_message(
-                    self.id,
-                    inviter_id,
-                    rejection_message,
-                    message_type="meeting_response",
-                    meeting_id=meeting_id,
-                )
-            return
-
-        # Accept the invitation and join the meeting
-        self.state.session_log.append(f"Accepting meeting invitation {meeting_id}")
-
-        # Store meeting info in joined_meetings for future message routing
-        from datetime import datetime
-
-        self.state.joined_meetings[meeting_id] = {
-            "owner_agent_id": inviter_id,
-            "joined_at": datetime.now(),
-        }
-
-        # Send structured JOINED response
-        if self.program:
-            await self.program.route_message(
-                self.id,
-                inviter_id,
-                "Meeting invitation accepted: Ready to participate",
-                message_type="meeting_response",
-                meeting_id=meeting_id,
-            )
-
-        # The initiator will add us as a participant when they receive our JOINED message
-        # We don't directly access the meeting object here to support remote agents
-
-        # Execute the first available meeting playbook
-        # In a more sophisticated implementation, we could match playbook by topic/type
-        meeting_playbook = meeting_playbooks[0]
-
-        try:
-            self.state.session_log.append(
-                f"Starting meeting playbook '{meeting_playbook.name}' for meeting {meeting_id}"
-            )
-
-            # Execute the meeting playbook with meeting context
-            await self.execute_playbook(
-                meeting_playbook.name,
-                args=[],
-                kwargs={"meeting_id": meeting_id, "topic": topic},
-            )
-
-        except Exception as e:
-            self.state.session_log.append(
-                f"Error executing meeting playbook for {meeting_id}: {str(e)}"
-            )
-            # Send error message to meeting
-            if self.program:
-                await self.program.route_message(
-                    self.id,
-                    inviter_id,
-                    f"Meeting {meeting_id}: Error in playbook execution - {str(e)}",
-                )
 
     @property
     def public_playbooks(self) -> List[Playbook]:
@@ -785,7 +488,7 @@ class AIAgent(BaseAgent, ABC):
         # Check if this is a meeting playbook and get meeting context
         is_meeting = False
         meeting_id = None
-        if playbook and self.is_meeting_playbook(playbook_name):
+        if playbook and playbook.meeting:
             is_meeting = True
             # Try to get meeting ID from kwargs or current context
             meeting_id = kwargs.get("meeting_id") or self.state.get_current_meeting()
@@ -818,10 +521,6 @@ class AIAgent(BaseAgent, ABC):
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> Any:
-        # Auto-inject parameters for meeting playbooks
-        if self.is_meeting_playbook(playbook_name):
-            kwargs = await self._inject_meeting_parameters(playbook_name, kwargs)
-
         playbook, call, langfuse_span = await self._pre_execute(
             playbook_name, args, kwargs
         )
@@ -830,13 +529,20 @@ class AIAgent(BaseAgent, ABC):
             # Handle meeting playbook initialization (only for new meetings, not when joining existing ones)
             if (
                 playbook
-                and self.is_meeting_playbook(playbook_name)
-                and not kwargs.get("meeting_id")
+                and playbook.meeting
+                and not self.meeting_manager.get_current_meeting_from_call_stack()
             ):
-                meeting_id = await self._initialize_meeting_playbook(
+                meeting = await self.meeting_manager.create_meeting(
                     playbook_name, kwargs
                 )
-                self.state.call_stack.peek().meeting_id = meeting_id
+
+                # Wait for required attendees to join before proceeding (if any besides requester)
+                await self.meeting_manager._wait_for_required_attendees(meeting)
+
+                message = f"Meeting {meeting.id} ready to proceed - all required attendees present"
+                self.state.session_log.append(message)
+                self.add_uncached_llm_message(message)
+
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
             await self._post_execute(call, error_msg, langfuse_span)
@@ -867,8 +573,14 @@ class AIAgent(BaseAgent, ABC):
                 result = await playbook.execute(*args, **kwargs)
                 await self._post_execute(call, result, langfuse_span)
                 return result
+            except ExecutionFinished as e:
+                self.program.execution_finished_event.set()
+                message = str(e)
+                await self._post_execute(call, message, langfuse_span)
+                return message
             except Exception as e:
-                await self._post_execute(call, f"Error: {str(e)}", langfuse_span)
+                message = f"Error: {str(e)}"
+                await self._post_execute(call, message, langfuse_span)
                 raise
         else:
             # Handle cross-agent playbook calls (AgentName.PlaybookName format)
@@ -914,16 +626,16 @@ class AIAgent(BaseAgent, ABC):
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
-        if self.state.call_stack.peek() is not None:
-            self.state.call_stack.peek().add_uncached_llm_message(
-                call_result.to_log_full(), role=LLMMessageRole.ASSISTANT
-            )
+        self.add_uncached_llm_message(message=call_result.to_log_full())
+
         langfuse_span.update(output=result)
 
     def __str__(self):
-        return f"{self.klass}(agent {self.id})"
+        if self.kwargs:
+            kwargs_msg = ", ".join([f"{k}:{v}" for k, v in self.kwargs.items()])
+            return f"{self.klass}(agent {self.id}, {kwargs_msg})"
+        else:
+            return f"{self.klass}(agent {self.id})"
 
     def __repr__(self):
-        # kwargs = str(self.kwargs) if self.kwargs else ""
-        # return f"{self.klass}(agent {self.id})"
-        return self.klass
+        return f"{self.klass}(agent {self.id})"

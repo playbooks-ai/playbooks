@@ -10,9 +10,9 @@ from typing import Any, Dict, List, Optional
 from playbooks.artifacts import Artifacts
 from playbooks.call_stack import CallStack
 from playbooks.event_bus import EventBus
+from playbooks.meetings import JoinedMeeting, Meeting
 from playbooks.session_log import SessionLog
 from playbooks.variables import Variables
-from playbooks.meetings import Meeting
 
 
 class ExecutionState:
@@ -26,14 +26,16 @@ class ExecutionState:
         artifacts: Store for execution artifacts
     """
 
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus, klass: str, agent_id: str):
         """Initialize execution state with an event bus.
 
         Args:
             bus: The event bus to use for all components
         """
         self.event_bus = event_bus
-        self.session_log = SessionLog()
+        self.klass = klass
+        self.agent_id = agent_id
+        self.session_log = SessionLog(klass, agent_id)
         self.call_stack = CallStack(event_bus)
         self.variables = Variables(event_bus)
         self.artifacts = Artifacts()
@@ -47,9 +49,7 @@ class ExecutionState:
         self.owned_meetings: Dict[str, "Meeting"] = {}  # meeting_id -> Meeting
 
         # Meetings this agent has joined as a participant
-        self.joined_meetings: Dict[
-            str, Dict[str, Any]
-        ] = {}  # meeting_id -> {"owner_agent_id": "...", "joined_at": datetime}
+        self.joined_meetings: Dict[str, JoinedMeeting] = {}
 
     def __repr__(self) -> str:
         """Return a string representation of the execution state."""
@@ -61,8 +61,8 @@ class ExecutionState:
         meetings_list = []
         for meeting_id, meeting in self.owned_meetings.items():
             participants_list = []
-            for participant_id, participant_type in meeting.participants.items():
-                participants_list.append(f"{participant_type}(agent {participant_id})")
+            for participant in meeting.joined_attendees:
+                participants_list.append(f"{participant.klass}(agent {participant.id})")
 
             meetings_list.append(
                 {"meeting_id": meeting_id, "participants": participants_list}

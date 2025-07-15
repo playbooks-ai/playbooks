@@ -11,10 +11,13 @@ def md_file_name():
 
 @pytest.fixture
 def playbooks(md_path):
-    return Playbooks([md_path])
+    pb = Playbooks([md_path])
+    return pb
 
 
-def test_load_playbooks(playbooks):
+@pytest.mark.asyncio
+async def test_load_playbooks(playbooks):
+    await playbooks.initialize()
     assert playbooks.program_content is not None
     assert playbooks.program_content != playbooks.compiled_program_content
     assert "BAXY" in playbooks.program_content
@@ -23,17 +26,22 @@ def test_load_playbooks(playbooks):
     assert "BAXY" in playbooks.compiled_program_content
 
 
-def test_load_program(playbooks):
+@pytest.mark.asyncio
+async def test_load_program(playbooks):
+    await playbooks.initialize()
     assert playbooks.program is not None
     assert playbooks.program.title == "Interop"
 
 
-def test_load_agents(playbooks):
+@pytest.mark.asyncio
+async def test_load_agents(playbooks):
+    await playbooks.initialize()
     assert playbooks.program is not None
     assert len(playbooks.program.agents) == 2  # One human agent
     assert playbooks.program.agents[0].klass == "Interop"
 
     agent = playbooks.program.agents[0]
+    await agent.initialize()
     assert len(agent.playbooks) >= 10
     assert "X" in agent.playbooks
     assert isinstance(agent.playbooks["X"], MarkdownPlaybook)
@@ -44,6 +52,7 @@ def test_load_agents(playbooks):
 @pytest.mark.asyncio
 async def test_execute_playbook_A(playbooks):
     """Call a python playbook"""
+    await playbooks.initialize()
     assert (
         await playbooks.program.agents[0].execute_playbook("A", kwargs={"num": 16}) == 4
     )
@@ -52,12 +61,14 @@ async def test_execute_playbook_A(playbooks):
 @pytest.mark.asyncio
 async def test_execute_playbook_AB(playbooks):
     """Call a python playbook that calls another python playbook"""
+    await playbooks.program.agents[0].initialize()
     assert await playbooks.program.agents[0].execute_playbook("AB", args=[4]) == 4
 
 
 @pytest.mark.asyncio
 async def test_execute_playbook_X(playbooks):
     """Call a markdown playbook"""
+    await playbooks.program.agents[0].initialize()
     assert (
         await playbooks.program.agents[0].execute_playbook("X", kwargs={"num": 2}) == 4
     )

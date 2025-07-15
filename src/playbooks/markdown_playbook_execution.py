@@ -2,7 +2,7 @@ from typing import List
 
 from playbooks.agents import LocalAIAgent
 from playbooks.config import LLMConfig
-from playbooks.utils.spec_utils import SpecUtils
+from playbooks.constants import EXECUTION_FINISHED
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
 from playbooks.enums import LLMMessageRole
 from playbooks.events import (
@@ -17,6 +17,7 @@ from playbooks.playbook import MarkdownPlaybook
 from playbooks.playbook_call import PlaybookCall
 from playbooks.session_log import SessionLogItemLevel, SessionLogItemMessage
 from playbooks.utils.llm_helper import get_completion
+from playbooks.utils.spec_utils import SpecUtils
 
 
 class MarkdownPlaybookExecution:
@@ -59,7 +60,7 @@ class MarkdownPlaybookExecution:
             llm_response = LLMResponse(
                 await self.make_llm_call(
                     instruction=instruction,
-                    agent_instructions=f"Remember: You are {self.agent.__repr__()}. {self.agent.description}",
+                    agent_instructions=f"Remember: You are {str(self.agent)}. {self.agent.description}",
                     artifacts_to_load=artifacts_to_load,
                 ),
                 event_bus=self.agent.state.event_bus,
@@ -176,11 +177,11 @@ class MarkdownPlaybookExecution:
 
                 # Wait for external event
                 if line.wait_for_user_input:
-                    # print("[EXECUTE] waiting for user input")
+                    # print(f"\n{str(self.agent)}: [EXECUTE] waiting for user input")
                     user_input = await self.agent.WaitForMessage("human")
+                    # print(f"\n{str(self.agent)}: [EXECUTE] user input: {user_input}")
                     user_inputs.append(user_input)
                 elif line.wait_for_agent_input:
-                    # print(f"[EXECUTE] waiting for agent input from {line.wait_for_agent_target}")
                     target_agent_id = self._resolve_yld_target(
                         line.wait_for_agent_target
                     )
@@ -189,24 +190,37 @@ class MarkdownPlaybookExecution:
                         if SpecUtils.is_meeting_spec(target_agent_id):
                             meeting_id = SpecUtils.extract_meeting_id(target_agent_id)
                             if meeting_id == "current":
-                                meeting_id = None  # Use current meeting
-                            agent_input = await self.agent.WaitForMeetingMessages(
-                                meeting_id
+                                meeting_id = (
+                                    self.agent.state.call_stack.peek().meeting_id
+                                )
+                            # print(
+                            #     f"\n{str(self.agent)}: [EXECUTE] waiting for meeting messages from {meeting_id}"
+                            # )
+                            agent_input = await self.agent.WaitForMessage(
+                                f"meeting {meeting_id}"
                             )
+                            # print(
+                            #     f"\n{str(self.agent)}: [EXECUTE] agent input: {agent_input}"
+                            # )
                         else:
+                            # print(
+                            #     f"\n{str(self.agent)}: [EXECUTE] waiting for agent input from {target_agent_id}"
+                            # )
                             agent_input = await self.agent.WaitForMessage(
                                 target_agent_id
                             )
+                            # print(
+                            #     f"\n{str(self.agent)}: [EXECUTE] agent input: {agent_input}"
+                            # )
                         user_inputs.append(agent_input)
                 elif line.playbook_finished:
                     # print("[EXECUTE] playbook_finished")
                     done = True
-                    break
 
                 # Raise an exception if line.finished is true
                 if line.exit_program:
                     # print("[EXECUTE] exit_program")
-                    raise ExecutionFinished("Execution finished.")
+                    raise ExecutionFinished(EXECUTION_FINISHED)
 
             # Update instruction
             instruction = []
@@ -222,7 +236,7 @@ class MarkdownPlaybookExecution:
             instruction = "\n".join(instruction)
 
         if self.agent.state.call_stack.is_empty():
-            raise ExecutionFinished("Call stack is empty. Execution finished.")
+            raise ExecutionFinished(f"Call stack is empty. {EXECUTION_FINISHED}.")
 
         # Publish playbook end event
         call_stack_depth = len(self.agent.state.call_stack.frames)
