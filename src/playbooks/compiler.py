@@ -83,7 +83,9 @@ class Compiler:
         refresh_markdown_attributes(ast)
         program_content = ast["markdown"]
         if len(frontmatter_data.metadata) > 0:
-            program_content = frontmatter.dumps(frontmatter_data) + program_content
+            program_content = (
+                frontmatter.dumps(frontmatter_data) + "\n\n" + program_content
+            )
 
         return program_content
 
