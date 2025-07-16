@@ -274,3 +274,8 @@ class LLMResponseLine:
             # For now, treat as equivalent to waiting for playbook completion
             # This might need more sophisticated handling in the future
             pass
+
+        # yld for return
+        if re.search(r"\byld\s+for\s+return\b", text):
+            self.playbook_finished = True
+            return
