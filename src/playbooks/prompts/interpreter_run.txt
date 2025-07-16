@@ -149,7 +149,8 @@ trig? no
 yld? no, DoMagic:07:RET return will execute all queued calls
 `Step["DoMagic:07:RET"]`  `Return[]` `Var[$__, "DoMagic() asked user for a number and applied magic operator on it. Then results were conveyed to the user along with detailed derivation steps."]
 trig? no
-yld? no, returning
+yld? yes, returning
+`Step["DoMagic:07:RET"]` yld for return
 ```
 
 **Ex 3 – Trigger firing**

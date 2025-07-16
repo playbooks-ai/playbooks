@@ -15,7 +15,11 @@
 - Tell the user that you will coordinate the menu redesign process
 - Ask user for reasons for the menu redesign and specific constraints like budget, timeline, any must-keep dishes, etc.
 - Have a menu redesign meeting to develop new menu options
-- If the meeting was successful, present final menu recommendations to user with rationale. Otherwise, apologize and suggest trying again later.
+- If the meeting was successful
+  - present final menu recommendations to user with rationale
+- Otherwise
+  - apologize and suggest trying again later
+- End program
 
 ## Menu Redesign Meeting
 meeting: true

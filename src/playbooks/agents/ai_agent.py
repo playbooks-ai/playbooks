@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List
@@ -94,7 +95,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
         super().__init__(agent_id=agent_id, program=program, **kwargs)
-        self.playbooks: Dict[str, Playbook] = (self.__class__.playbooks or {}).copy()
+        self.playbooks: Dict[str, Playbook] = copy.deepcopy(
+            self.__class__.playbooks or {}
+        )
 
         # Create instance-specific namespace manager if available
         if (
