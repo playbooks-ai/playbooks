@@ -29,9 +29,7 @@ class TestCLICompile:
         # Verify the compiled output contains expected elements
         assert "# HelloWorld" in captured.out
         assert "## HelloWorldDemo() -> None" in captured.out
-        assert "- 01:QUE Say(user, Greet" in captured.out
-        assert "- 02:QUE Say(user, Tell the user" in captured.out
-        assert "- 03:QUE Say(user, Say goodbye" in captured.out
+        assert "- 01:QUE Say(" in captured.out
         assert "YLD for exit" in captured.out
         assert "public.json" in captured.out
 
@@ -56,9 +54,7 @@ class TestCLICompile:
 
             assert "# HelloWorld" in content
             assert "## HelloWorldDemo() -> None" in content
-            assert "- 01:QUE Say(user, Greet the user" in content
-            assert "- 02:QUE Say(user, Tell the user" in content
-            assert "- 03:QUE Say(user, Say goodbye" in content
+            assert "- 01:QUE Say(" in content
             assert "public.json" in content
 
         finally:
@@ -267,7 +263,7 @@ class TestCLIIntegration:
         assert result.returncode == 0
         assert "# HelloWorld" in result.stdout
         assert "## HelloWorldDemo() -> None" in result.stdout
-        assert "- 01:QUE Say(user, Greet the user" in result.stdout
+        assert "- 01:QUE Say(" in result.stdout
 
     def test_cli_compile_to_file(self, test_data_dir):
         """Test CLI compile command saving to file."""

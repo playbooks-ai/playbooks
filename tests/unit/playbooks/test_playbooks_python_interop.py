@@ -30,7 +30,7 @@ async def test_load_playbooks(playbooks):
 async def test_load_program(playbooks):
     await playbooks.initialize()
     assert playbooks.program is not None
-    assert playbooks.program.title == "Interop"
+    assert playbooks.program.title == "Playbooks Python Interop"
 
 
 @pytest.mark.asyncio

@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.playbooks.agents import MCPAgent
-from src.playbooks.agents.ai_agent import AIAgent
-from src.playbooks.event_bus import EventBus
-from src.playbooks.playbook import RemotePlaybook
-from src.playbooks.program import Program
+from playbooks.agents import MCPAgent
+from playbooks.agents.ai_agent import AIAgent
+from playbooks.event_bus import EventBus
+from playbooks.playbook import RemotePlaybook
+from playbooks.program import Program
 
 
 @pytest.fixture

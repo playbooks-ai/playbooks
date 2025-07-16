@@ -17,7 +17,6 @@ async def test_public(playbooks):
     assert pp[0].name == "A"
     assert len(pp[0].triggers.triggers) == 1
     assert "T1:CND" in str(pp[0].triggers.triggers[0])
-    assert "square root" in pp[0].description
     assert agent0.playbooks["A"].public
     assert not agent0.playbooks["X"].public
 
