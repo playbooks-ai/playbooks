@@ -99,6 +99,14 @@ class RemotePlaybook(Playbook):
         """
         return self.description or self.name
 
+    def create_namespace_function(self, agent) -> "Callable":
+        """RemotePlaybooks should not be added to namespace.
+
+        Raises:
+            NotImplementedError: RemotePlaybooks don't support namespace functions
+        """
+        raise NotImplementedError("RemotePlaybooks should not be added to namespace")
+
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""
         return f"RemotePlaybook {self.agent_name}.{self.name}: {self.description}"

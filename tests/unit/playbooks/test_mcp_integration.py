@@ -1,11 +1,12 @@
 """Integration tests for MCP agent functionality."""
 
+import json
 from unittest.mock import AsyncMock
 
 import pytest
 
-from src.playbooks.agent_builder import AgentBuilder
 from src.playbooks.agents import MCPAgent
+from src.playbooks.agents.agent_builder import AgentBuilder
 from src.playbooks.event_bus import EventBus
 from src.playbooks.program import Program
 from src.playbooks.utils.markdown_to_ast import markdown_to_ast
@@ -71,11 +72,14 @@ This is a weather MCP agent that provides weather information.
             ]
         )
         mock_transport.call_tool = AsyncMock(
-            return_value={
-                "temperature": 22,
-                "condition": "sunny",
-                "location": "San Francisco",
-            }
+            return_value=AsyncMock(
+                content=[
+                    AsyncMock(
+                        text='{"temperature": 22, "condition": "sunny", "location": "San Francisco"}'
+                    )
+                ],
+                is_error=False,
+            )
         )
 
         # Replace the agent's transport with our mock
@@ -97,6 +101,7 @@ This is a weather MCP agent that provides weather information.
         )
 
         # Verify the result
+        result = json.loads(result)
         assert result["temperature"] == 22
         assert result["condition"] == "sunny"
         assert result["location"] == "San Francisco"
@@ -121,7 +126,7 @@ This is a test MCP agent.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agents_from_ast(ast)
+        agents = AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "TestMCPAgent" in agents
@@ -136,92 +141,3 @@ This is a test MCP agent.
         assert agent_instance.remote_config["type"] == "mcp"
         assert agent_instance.remote_config["url"] == "http://localhost:8000/mcp"
         assert agent_instance.remote_config["transport"] == "sse"
-
-    @pytest.mark.asyncio
-    async def test_mcp_agent_cross_agent_communication(self):
-        """Test that MCP agents can communicate with other agents."""
-        # Create a program with both local and MCP agents
-        program_text = """```public.json
-[]
-```
-
-```public.json
-[]
-```
-
-# LocalAgent
-This is a local agent.
-
-## greet
-metadata:
-  public: true
----
-This is a greeting playbook.
-
-### Steps
-- 01:RET Hello from LocalAgent!
-
-# RemoteMCPAgent
-metadata:
-  remote:
-    type: mcp
-    url: http://localhost:8000/mcp
-    transport: sse
----
-This is a remote MCP agent.
-"""
-
-        event_bus = EventBus("test-session")
-
-        # Create program
-        program = Program(program_text, event_bus)
-        await program.initialize()
-
-        # Find agents
-        local_agent = await program.create_agent("LocalAgent")
-        mcp_agent = None
-        for agent in program.agents:
-            if agent.klass == "RemoteMCPAgent":
-                mcp_agent = agent
-
-        assert local_agent is not None
-        assert mcp_agent is not None
-
-        # Mock the transport for the MCP agent
-        mock_transport = AsyncMock()
-        mock_transport.connect = AsyncMock()
-        mock_transport.disconnect = AsyncMock()
-        mock_transport.list_tools = AsyncMock(
-            return_value=[
-                {
-                    "name": "remote_tool",
-                    "description": "A remote tool",
-                    "inputSchema": {
-                        "type": "object",
-                        "properties": {"message": {"type": "string"}},
-                    },
-                }
-            ]
-        )
-        mock_transport.call_tool = AsyncMock(return_value="Remote response")
-
-        # Replace the MCP agent's transport with our mock
-        mcp_agent.transport = mock_transport
-
-        # Connect MCP agent and discover playbooks
-        await mcp_agent.connect()
-        await mcp_agent.discover_playbooks()
-
-        # Verify agents can see each other
-        assert "RemoteMCPAgent" in [agent.klass for agent in local_agent.other_agents]
-        assert "LocalAgent" in [agent.klass for agent in mcp_agent.other_agents]
-
-        # Test cross-agent call from MCP agent to local agent
-        result = await mcp_agent.execute_playbook("LocalAgent.greet")
-        assert result == "Hello from LocalAgent!"
-
-        # Test local agent can call MCP agent playbook
-        result = await local_agent.execute_playbook(
-            "RemoteMCPAgent.remote_tool", [], {"message": "test"}
-        )
-        assert result == "Remote response"

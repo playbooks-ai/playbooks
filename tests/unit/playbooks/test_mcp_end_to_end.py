@@ -5,15 +5,22 @@ import json
 import pytest
 from fastmcp import Client
 
-from src.playbooks.agent_builder import AgentBuilder
 from src.playbooks.agents import MCPAgent
+from src.playbooks.agents.agent_builder import AgentBuilder
 from src.playbooks.event_bus import EventBus
-from src.playbooks.exceptions import AgentConfigurationError
+from playbooks.exceptions import AgentConfigurationError
 from src.playbooks.program import Program
 from src.playbooks.transport.mcp_transport import MCPTransport
 from src.playbooks.utils.markdown_to_ast import markdown_to_ast
 
 from .test_mcp_server import get_test_server
+
+
+class TestMCPAgent(MCPAgent):
+    klass = "TestMCPAgent"
+    description = "Test MCP agent"
+    playbooks = {}
+    metadata = {}
 
 
 class InMemoryMCPTransport(MCPTransport):
@@ -95,9 +102,8 @@ class TestMCPEndToEnd:
 
         # Create MCP agent
         event_bus = EventBus("test-session")
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test", "transport": "memory"},
         )
@@ -127,17 +133,17 @@ class TestMCPEndToEnd:
 
             # Test simple tool execution
             result = await agent.execute_playbook("add_numbers", [], {"a": 10, "b": 20})
-            assert result.content[0].text == "30"
+            assert result == "30"
 
             # Test tool with string parameters
             result = await agent.execute_playbook(
                 "greet", [], {"name": "World", "greeting": "Hi"}
             )
-            assert result.content[0].text == "Hi, World!"
+            assert result == "Hi, World!"
 
             # Test tool with default parameters
             result = await agent.execute_playbook("greet", [], {"name": "Test"})
-            assert result.content[0].text == "Hello, Test!"
+            assert result == "Hello, Test!"
 
             # Test complex tool execution
             result = await agent.execute_playbook(
@@ -149,9 +155,7 @@ class TestMCPEndToEnd:
                     "priority": "high",
                 },
             )
-            task_data = json.loads(
-                result.content[0].text
-            )  # Use json.loads instead of eval
+            task_data = json.loads(result)
             assert task_data["title"] == "Test Task"
             assert task_data["priority"] == "high"
 
@@ -159,9 +163,7 @@ class TestMCPEndToEnd:
             result = await agent.execute_playbook(
                 "list_users", [], {"active_only": True}
             )
-            users_data = json.loads(
-                result.content[0].text
-            )  # Use json.loads instead of eval
+            users_data = json.loads(result)
             assert len(users_data) >= 2  # Should have active users
 
         finally:
@@ -175,9 +177,7 @@ class TestMCPEndToEnd:
         mcp_server = test_server.get_server()
 
         event_bus = EventBus("test-session")
-        agent = MCPAgent(
-            klass="ErrorTestAgent",
-            description="Error testing agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test"},
         )
@@ -265,23 +265,23 @@ This agent manages tasks using MCP tools.
                     "priority": "medium",
                 },
             )
-            task_data = json.loads(result.content[0].text)
+            task_data = json.loads(result)
             assert task_data["title"] == "Integration Test Task"
 
             # List tasks
             result = await task_agent.execute_playbook("list_tasks")
-            tasks_data = json.loads(result.content[0].text)
+            tasks_data = json.loads(result)
             assert len(tasks_data) >= 1
 
             # Test counter operations
             result = await task_agent.execute_playbook("increment_counter")
-            assert result.content[0].text == "1"
+            assert result == "1"
 
             result = await task_agent.execute_playbook("get_counter")
-            assert result.content[0].text == "1"
+            assert result == "1"
 
             result = await task_agent.execute_playbook("reset_counter")
-            assert result.content[0].text == "0"
+            assert result == "0"
 
         finally:
             await task_agent.disconnect()
@@ -347,7 +347,7 @@ This is a remote task management agent.
             result = await local_agent.execute_playbook(
                 "RemoteTaskManager.add_numbers", [], {"a": 15, "b": 25}
             )
-            assert result.content[0].text == "40"
+            assert result == "40"
 
             # Remote agent should be able to call local agent
             # First verify the local agent has the playbook
@@ -460,9 +460,7 @@ This is a remote task management agent.
 
         for config in configs:
             event_bus = EventBus("test-session")
-            agent = MCPAgent(
-                klass="ConfigTestAgent",
-                description="Configuration test agent",
+            agent = TestMCPAgent(
                 event_bus=event_bus,
                 remote_config=config,
             )
@@ -489,7 +487,7 @@ This is a comprehensive MCP agent configuration test.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agents_from_ast(ast)
+        agents = AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "ComprehensiveMCPAgent" in agents
@@ -512,9 +510,7 @@ This is a comprehensive MCP agent configuration test.
         mcp_server = test_server.get_server()
 
         event_bus = EventBus("test-session")
-        agent = MCPAgent(
-            klass="ContextTestAgent",
-            description="Context manager test agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test"},
         )
@@ -532,7 +528,7 @@ This is a comprehensive MCP agent configuration test.
             result = await agent.execute_playbook(
                 "add_numbers", [], {"a": 100, "b": 200}
             )
-            assert result.content[0].text == "300"
+            assert result == "300"
 
         # Should be disconnected after context
         assert not agent._connected
@@ -544,9 +540,7 @@ This is a comprehensive MCP agent configuration test.
         mcp_server = test_server.get_server()
 
         event_bus = EventBus("test-session")
-        agent = MCPAgent(
-            klass="PerformanceTestAgent",
-            description="Performance test agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test"},
         )
@@ -566,11 +560,11 @@ This is a comprehensive MCP agent configuration test.
             # Test multiple tool calls
             for i in range(5):
                 result = await agent.execute_playbook("increment_counter")
-                assert result.content[0].text == str(i + 1)
+                assert result == str(i + 1)
 
             # Verify counter state
             result = await agent.execute_playbook("get_counter")
-            assert result.content[0].text == "5"
+            assert result == "5"
 
         finally:
             await agent.disconnect()
@@ -634,4 +628,4 @@ Transport URL mismatch.
         for config_text in error_configs:
             ast = markdown_to_ast(config_text)
             with pytest.raises(AgentConfigurationError):
-                AgentBuilder.create_agents_from_ast(ast)
+                AgentBuilder.create_agent_classes_from_ast(ast)

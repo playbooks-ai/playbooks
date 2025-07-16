@@ -61,14 +61,14 @@ async def test_execute_playbook_A(playbooks):
 @pytest.mark.asyncio
 async def test_execute_playbook_AB(playbooks):
     """Call a python playbook that calls another python playbook"""
-    await playbooks.program.agents[0].initialize()
+    await playbooks.program.initialize()
     assert await playbooks.program.agents[0].execute_playbook("AB", args=[4]) == 4
 
 
 @pytest.mark.asyncio
 async def test_execute_playbook_X(playbooks):
     """Call a markdown playbook"""
-    await playbooks.program.agents[0].initialize()
+    await playbooks.program.initialize()
     assert (
         await playbooks.program.agents[0].execute_playbook("X", kwargs={"num": 2}) == 4
     )
@@ -77,23 +77,27 @@ async def test_execute_playbook_X(playbooks):
 @pytest.mark.asyncio
 async def test_execute_playbook_XY(playbooks):
     """Call a markdown playbook that calls another markdown playbook"""
+    await playbooks.program.initialize()
     assert await playbooks.program.agents[0].execute_playbook("XY", args=[2]) == 2
 
 
 @pytest.mark.asyncio
 async def test_execute_playbook_CallX(playbooks):
     """Call a python playbook that calls a markdown playbook"""
+    await playbooks.program.initialize()
     assert await playbooks.program.agents[0].execute_playbook("CallX", args=[2]) == 4
 
 
 @pytest.mark.asyncio
 async def test_execute_playbook_CallA(playbooks):
     """Call a markdown playbook that calls a python playbook"""
+    await playbooks.program.initialize()
     assert await playbooks.program.agents[0].execute_playbook("CallA", args=[4]) == 2
 
 
 @pytest.mark.asyncio
 async def test_execute_playbook_Call_Complex(playbooks):
     """Test a complex call chain"""
+    await playbooks.program.initialize()
     assert await playbooks.program.agents[0].execute_playbook("BAXY1", args=[8]) == 64
     assert await playbooks.program.agents[0].execute_playbook("BAXY2", args=[8]) == 64

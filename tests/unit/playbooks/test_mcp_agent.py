@@ -43,14 +43,19 @@ def mock_program():
     return program
 
 
-class TestMCPAgent:
+class TestMCPAgent(MCPAgent):
+    klass = "TestMCPAgent"
+    description = "Test MCP agent"
+    playbooks = {}
+    metadata = {}
+
+
+class TestMCPAgentAll:
     """Test cases for MCPAgent."""
 
     def test_mcp_agent_initialization(self, event_bus, mcp_config, mock_program):
         """Test MCPAgent initialization."""
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -67,9 +72,7 @@ class TestMCPAgent:
         self, event_bus, mcp_config, mock_transport, mock_program
     ):
         """Test connecting and disconnecting from MCP server."""
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -114,9 +117,7 @@ class TestMCPAgent:
         ]
         mock_transport.list_tools.return_value = mock_tools
 
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -147,9 +148,7 @@ class TestMCPAgent:
         # Setup mock transport
         mock_transport.call_tool.return_value = {"result": 8}
 
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -179,9 +178,7 @@ class TestMCPAgent:
         self, event_bus, mcp_config, mock_program
     ):
         """Test cross-agent playbook execution."""
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -210,9 +207,7 @@ class TestMCPAgent:
     @pytest.mark.asyncio
     async def test_execute_unknown_playbook(self, event_bus, mcp_config, mock_program):
         """Test executing an unknown playbook raises error."""
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -228,9 +223,7 @@ class TestMCPAgent:
         self, event_bus, mcp_config, mock_transport, mock_program
     ):
         """Test using MCPAgent as async context manager."""
-        agent = MCPAgent(
-            klass="TestMCPAgent",
-            description="Test MCP agent",
+        agent = TestMCPAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,

@@ -34,8 +34,8 @@ trig? <no | \`Trigger["PB:Ln:Code"]\` \n yld for call>
 what? handle unexpected situation intelligently and safely but within the bounds of what playbooks are available
 yld? <no | yes>, reason
 \`Step["Playbook:Ln:Code"]\` \`Return[<value> | ]\` \`Var[$__, 1-5 line summary of this playbook's execution with context useful for the calling playbook and overall conversation and agent execution]\`
-yld? <no | yes>, reason
-yld for <user | meeting | agent | call | exit>
+yld? <no | yes | wait>, reason
+\`Step["Playbook:Ln:Code"]\` yld for <user | meeting | agent | call | exit>
 ```
 
 #### 3 Rules
@@ -94,7 +94,7 @@ plan  – ask user for name
 `Step["Welcome:01:QUE"]`  `Say("user", "Hi! What's your name?")`
 trig? no
 yld? yes, Welcome:02:QUE requires user's name
-yld for user
+`Step["Welcome:02:QUE"]` yld for user
 ```
 
 *(second call)*
@@ -107,7 +107,7 @@ yld? no, Welcome:03:QUE does not need results of any queued calls
 `Step["Welcome:03:QUE"]`  `Say("user", "Goodbye!")`
 trig? no
 yld? no, 04:RET returning from playbook will execute all queued calls
-`Step["Welcome:04:RET"]`  `Return[]` `Var[$__, "Welcome() asked user for name, greeted the user and said goodbye"]
+`Step["Welcome:04:RET"]` `Return[]` `Var[$__, "Welcome() asked user for name, greeted the user and said goodbye"]
 ```
 
 **Ex 2 – Multi‑step, queued function, yld for call & resume**
@@ -127,8 +127,8 @@ trig? no
 yld? no, nothing queued
 `Step["DoMagic:02:QUE"]`  `$result = magic_operator($n)`
 trig? no
-yld? yes, DoMagic:03:YLD will yield
-`Step["DoMagic:03:YLD"]`  yld for call
+yld? yes, but wait, DoMagic:03:YLD will yield
+`Step["DoMagic:03:YLD"]` yld for call
 ```
 
 *(second call after function returns)*
@@ -161,7 +161,7 @@ plan  – continue checkout
 `Var[$amount, 99]`
 trig? `Trigger["Offer:01:CND"]` `Offer(code="SPRING", total=$amount)`
 yld? yes, execute trigger
-yld for call
+`Step["Offer:01"]` yld for call
 ```
 
 **Ex 4 – Exit program**
@@ -172,7 +172,7 @@ plan  – exit the program
 `Step["Support:09:EXE"]` exiting program
 trig? no
 yld? yes, exiting program
-yld for exit
+`Step["Support:09:EXE"]` yld for exit
 ```
 
 **Ex 5 - Handling unexpected situation**
@@ -184,7 +184,7 @@ plan  – compute magic result
 trig? no
 what? no playbook found to compute magic result. I will act intelligently safely and within the bounds of provided playbooks. In this case, I will set set an error result.
 yld? no, nothing queued
-`Step["DoMagic:02:QUE"]`  `$result = "I don't know how to compute magic result"`
+`Step["DoMagic:02:QUE"]` `$result = "I don't know how to compute magic result"`
 ```
 
 **Ex 6 - Creating agents**
@@ -195,7 +195,7 @@ Assuming MyWorker agent is defined
 `Step[PB:01:QUE]` `CreateAgent("MyWorker", name="MW001", age=38)` `CreateAgent("MyWorker", name="MW002", age=22)` `CreateAgent("MyWorker", name="MW003", age=61)`
 trig? no
 yld? yes, PB:02:QUE requires agent ids that I will get after executing CreateAgent calls
-yld for call
+`Step[PB:02:QUE]` yld for call
 ```
 
 #### 8  Quick Mapping Cheatsheet

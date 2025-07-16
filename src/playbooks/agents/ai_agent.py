@@ -13,7 +13,6 @@ from ..message import Message, MessageType
 from ..playbook import MarkdownPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.langfuse_helper import LangfuseHelper
-from ..utils.parse_utils import parse_metadata_and_description
 from ..utils.spec_utils import SpecUtils
 from .base_agent import BaseAgent, BaseAgentMeta
 
@@ -94,20 +93,51 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                 agent is defined.
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
-        self.klass = self.__class__.klass
-        self.description = self.__class__.description
+        super().__init__(agent_id=agent_id, program=program, **kwargs)
+        self.playbooks: Dict[str, Playbook] = (self.__class__.playbooks or {}).copy()
 
-        super().__init__(klass=self.klass, agent_id=agent_id, program=program, **kwargs)
+        # Create instance-specific namespace manager if available
+        if (
+            hasattr(self.__class__, "namespace_manager")
+            and self.__class__.namespace_manager
+        ):
+            # Use shallow copy of namespace - most objects are safe to share
+            from .namespace_manager import AgentNamespaceManager
+
+            self.namespace_manager = AgentNamespaceManager(
+                namespace=self.__class__.namespace_manager.namespace.copy()
+            )
+            self.namespace_manager.namespace["agent"] = self
+
+            # Create cross-playbook wrapper functions for this instance
+            for playbook_name, playbook in self.playbooks.items():
+                call_through = playbook.create_namespace_function(self)
+                self.namespace_manager.namespace[playbook_name] = call_through
+
+            # Create instance-specific wrapper functions that bind the correct agent
+            for playbook_name, playbook in self.playbooks.items():
+                if hasattr(playbook, "func") and playbook.func:
+                    # For MarkdownPlaybook, create agent-specific function
+                    if hasattr(playbook, "create_agent_specific_function"):
+                        agent_specific_func = playbook.create_agent_specific_function(
+                            self
+                        )
+                        # Copy globals from original for cross-agent access
+                        agent_specific_func.__globals__.update(
+                            self.namespace_manager.namespace
+                        )
+                        self.playbooks[playbook_name].func = agent_specific_func
+                    else:
+                        # For other playbook types, just update globals
+                        playbook.func.__globals__.update(
+                            self.namespace_manager.namespace
+                        )
 
         # Initialize meeting manager
         self.meeting_manager = MeetingManager(agent=self)
 
-        self.playbooks: Dict[str, Playbook] = (self.__class__.playbooks or {}).copy()
         self.meeting_manager.ensure_meeting_playbook_kwargs(self.playbooks)
 
-        self.metadata, self.description = parse_metadata_and_description(
-            self.description
-        )
         self.state = ExecutionState(event_bus, self.klass, self.id)
         self.source_line_number = source_line_number
         self.public_json = None
@@ -566,10 +596,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         # Execute local playbook in this agent
         if playbook:
             try:
-                # Set agent reference for playbooks that need it
-                if hasattr(playbook, "func") and playbook.func:
-                    playbook.func.__globals__.update({"agent": self})
-
                 result = await playbook.execute(*args, **kwargs)
                 await self._post_execute(call, result, langfuse_span)
                 return result

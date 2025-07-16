@@ -52,7 +52,6 @@ class Compiler:
         Returns:
             str: Preprocessed program content
         """
-        edited = False
         # Strip out the frontmatter
         frontmatter_data = frontmatter.loads(program_content)
         program_content = frontmatter_data.content
@@ -80,13 +79,11 @@ class Compiler:
                     react_steps = f.read()
                     steps_h3 = parse_markdown_to_dict(react_steps)
                     h2["children"].append(steps_h3)
-                    edited = True
 
-        if edited:
-            refresh_markdown_attributes(ast)
-            program_content = ast["markdown"]
-            if len(frontmatter_data.metadata) > 0:
-                program_content = frontmatter.dumps(frontmatter_data) + program_content
+        refresh_markdown_attributes(ast)
+        program_content = ast["markdown"]
+        if len(frontmatter_data.metadata) > 0:
+            program_content = frontmatter.dumps(frontmatter_data) + program_content
 
         return program_content
 

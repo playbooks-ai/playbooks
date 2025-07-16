@@ -1,10 +1,13 @@
 import logging
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Type
 
-from ..event_bus import EventBus
-from ..playbook import RemotePlaybook
-from ..transport import MCPTransport
+from playbooks.event_bus import EventBus
+from playbooks.exceptions import AgentConfigurationError
+from playbooks.playbook import RemotePlaybook
+from playbooks.transport import MCPTransport
+
 from .ai_agent import AIAgentMeta
+from .registry import AgentClassRegistry
 from .remote_ai_agent import RemoteAIAgent
 
 logger = logging.getLogger(__name__)
@@ -31,10 +34,196 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
     This agent connects to MCP servers and exposes their tools as playbooks.
     """
 
-    def __init__(
-        self,
+    @classmethod
+    def can_handle(cls, metadata: Dict[str, Any]) -> bool:
+        """Check if this agent class can handle the given metadata.
+
+        MCPAgent handles configurations with remote.type == "mcp".
+
+        Args:
+            metadata: Agent metadata from playbook
+
+        Returns:
+            bool: True if this agent can handle the metadata
+        """
+        return (
+            "remote" in metadata
+            and isinstance(metadata["remote"], dict)
+            and metadata["remote"].get("type") == "mcp"
+        )
+
+    @staticmethod
+    def create_class(
         klass: str,
         description: str,
+        metadata: Dict[str, Any],
+        h1: Dict,
+        source_line_number: int,
+        namespace_manager=None,
+    ) -> Type["MCPAgent"]:
+        """Create an MCP agent class.
+
+        Args:
+            klass: Agent class name
+            description: Agent description
+            metadata: Agent metadata containing remote config
+            h1: AST node for the agent definition
+            source_line_number: Line number in source where agent is defined
+
+        Returns:
+            Type[MCPAgent]: Dynamically created MCP Agent class
+
+        Raises:
+            AgentConfigurationError: If agent class already exists
+        """
+        MCPAgent.validate(klass, metadata["remote"])
+
+        remote_config = metadata["remote"]
+
+        # Define __init__ for the new MCP agent class
+        def __init__(
+            self,
+            event_bus: EventBus,
+            agent_id: str = None,
+            **kwargs,
+        ):
+            MCPAgent.__init__(
+                self,
+                event_bus=event_bus,
+                remote_config=remote_config,
+                source_line_number=source_line_number,
+                agent_id=agent_id,
+                **kwargs,
+            )
+
+        # Create and return the new MCP Agent class
+        return type(
+            klass,
+            (MCPAgent,),
+            {
+                "__init__": __init__,
+                "klass": klass,
+                "description": description,
+                "playbooks": {},
+                "metadata": metadata,
+            },
+        )
+
+    @staticmethod
+    def validate(agent_name: str, remote_config: Dict[str, Any]) -> None:
+        """Validate MCP agent configuration comprehensively.
+
+        Args:
+            agent_name: Name of the agent being configured
+            remote_config: Remote configuration dictionary
+
+        Raises:
+            AgentConfigurationError: If configuration is invalid
+        """
+        # Check if URL is present
+        if "url" not in remote_config:
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires 'url' in remote configuration"
+            )
+
+        # Validate URL format
+        url = remote_config["url"]
+        if not isinstance(url, str):
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires a valid URL string, got: {type(url).__name__}"
+            )
+
+        if not url.strip():
+            raise AgentConfigurationError(
+                f"MCP agent '{agent_name}' requires a valid URL string, got empty string"
+            )
+
+        # Validate transport type if specified
+        transport = remote_config.get("transport")
+        if transport is not None:
+            valid_transports = [
+                "sse",
+                "stdio",
+                "websocket",
+                "streamable-http",
+                "memory",
+            ]
+            if transport not in valid_transports:
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' has invalid transport '{transport}'. "
+                    f"Valid options: {', '.join(valid_transports)}"
+                )
+
+        # Validate timeout if specified
+        timeout = remote_config.get("timeout")
+        if timeout is not None:
+            if not isinstance(timeout, (int, float)) or timeout <= 0:
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' timeout must be a positive number, got: {timeout}"
+                )
+
+        # Validate auth configuration if specified
+        auth = remote_config.get("auth")
+        if auth is not None:
+            if not isinstance(auth, dict):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' auth configuration must be a dictionary, got: {type(auth).__name__}"
+                )
+
+            # Validate auth type if specified
+            auth_type = auth.get("type")
+            if auth_type is not None:
+                valid_auth_types = ["api_key", "bearer", "basic", "mtls"]
+                if auth_type not in valid_auth_types:
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' has invalid auth type '{auth_type}'. "
+                        f"Valid options: {', '.join(valid_auth_types)}"
+                    )
+
+                # Validate required fields for each auth type
+                if auth_type == "api_key" and not auth.get("key"):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with api_key auth requires 'key' field"
+                    )
+                elif auth_type == "bearer" and not auth.get("token"):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with bearer auth requires 'token' field"
+                    )
+                elif auth_type == "basic" and (
+                    not auth.get("username") or not auth.get("password")
+                ):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with basic auth requires 'username' and 'password' fields"
+                    )
+                elif auth_type == "mtls" and (
+                    not auth.get("cert") or not auth.get("key")
+                ):
+                    raise AgentConfigurationError(
+                        f"MCP agent '{agent_name}' with mtls auth requires 'cert' and 'key' fields"
+                    )
+
+        # Validate URL scheme matches transport
+        if transport == "stdio":
+            # For stdio, URL should be a file path or command
+            if url.startswith(("http://", "https://", "ws://", "wss://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with stdio transport should not use HTTP/WebSocket URL"
+                )
+        elif transport in ["sse", "streamable-http"]:
+            # For HTTP-based transports, URL should be HTTP(S)
+            if not url.startswith(("http://", "https://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with {transport} transport requires HTTP(S) URL"
+                )
+        elif transport == "websocket":
+            # For WebSocket, URL should be ws(s)://
+            if not url.startswith(("ws://", "wss://", "http://", "https://")):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with websocket transport requires WebSocket or HTTP URL"
+                )
+
+    def __init__(
+        self,
         event_bus: EventBus,
         remote_config: Dict[str, Any],
         source_line_number: int = None,
@@ -55,9 +244,6 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                 agent is defined.
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
-        self.__class__.klass = klass
-        self.__class__.description = description
-        self.__class__.playbooks = {}
         super().__init__(
             event_bus=event_bus,
             remote_config=remote_config,
@@ -125,7 +311,7 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                                 kwargs = {f"arg_{i}": arg for i, arg in enumerate(args)}
 
                         result = await self.transport.call_tool(tool_name, kwargs)
-                        result_str = str(result.data)
+                        result_str = str(result.content[0].text)
                         if result.is_error:
                             result_str = f"Error: {result_str}"
                         return result_str
@@ -168,3 +354,7 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
     async def begin(self):
         # MCP agent does not receive messages, nor has BGN playbooks, so we do nothing
         pass
+
+
+# Register MCPAgent with the registry with higher priority than LocalAIAgent
+AgentClassRegistry.register(MCPAgent, priority=10)

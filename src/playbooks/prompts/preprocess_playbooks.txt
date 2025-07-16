@@ -397,6 +397,7 @@ info2: "copied verbatim if exists"
 12. ✓ Extract metadata into yaml blocks for agents and playbooks
 13. ✓ Each YLD is expensive to execute (need a new LLM call), so batch as many calls as possible before YLD
 14. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
+15. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as react:true
 
 ## Example Transformation
 
@@ -470,6 +471,9 @@ Only consider cities in the United States.
 ### Steps
 - While the city is not a US city or unclear which state the city is from
   - Ask user to specify a US city or disambiguate
+
+# ProcessMe($report)
+You are a processor who will take each line of the report and count how many lines it has. You have tools like LookupInfo that you can call. 
 
 # SecondAgent
 
@@ -563,6 +567,10 @@ Only consider cities in the United States.
   - 01.01:QUE Say(user, Ask user to specify a US city or disambiguate); YLD for user
   - 01.02:JMP 01
 - 02:RET $city in "Austin, TX" format
+
+# ProcessMe($report: str) -> int
+react:true
+You are a processor who will take each line of the report and count how many lines it has. You have tools like LookupInfo that you can call. 
 
 ```public.json
 [

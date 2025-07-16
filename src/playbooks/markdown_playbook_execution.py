@@ -72,7 +72,6 @@ class MarkdownPlaybookExecution:
             )
             # print(f"[EXECUTE] llm_response: {llm_response.response}")
 
-            user_inputs = []
             artifacts_to_load = []
 
             all_steps = []
@@ -178,9 +177,8 @@ class MarkdownPlaybookExecution:
                 # Wait for external event
                 if line.wait_for_user_input:
                     # print(f"\n{str(self.agent)}: [EXECUTE] waiting for user input")
-                    user_input = await self.agent.WaitForMessage("human")
+                    await self.agent.WaitForMessage("human")
                     # print(f"\n{str(self.agent)}: [EXECUTE] user input: {user_input}")
-                    user_inputs.append(user_input)
                 elif line.wait_for_agent_input:
                     target_agent_id = self._resolve_yld_target(
                         line.wait_for_agent_target
@@ -196,9 +194,7 @@ class MarkdownPlaybookExecution:
                             # print(
                             #     f"\n{str(self.agent)}: [EXECUTE] waiting for meeting messages from {meeting_id}"
                             # )
-                            agent_input = await self.agent.WaitForMessage(
-                                f"meeting {meeting_id}"
-                            )
+                            await self.agent.WaitForMessage(f"meeting {meeting_id}")
                             # print(
                             #     f"\n{str(self.agent)}: [EXECUTE] agent input: {agent_input}"
                             # )
@@ -206,13 +202,10 @@ class MarkdownPlaybookExecution:
                             # print(
                             #     f"\n{str(self.agent)}: [EXECUTE] waiting for agent input from {target_agent_id}"
                             # )
-                            agent_input = await self.agent.WaitForMessage(
-                                target_agent_id
-                            )
+                            await self.agent.WaitForMessage(target_agent_id)
                             # print(
                             #     f"\n{str(self.agent)}: [EXECUTE] agent input: {agent_input}"
                             # )
-                        user_inputs.append(agent_input)
                 elif line.playbook_finished:
                     # print("[EXECUTE] playbook_finished")
                     done = True
@@ -230,8 +223,6 @@ class MarkdownPlaybookExecution:
                 f"{str(self.agent.state.call_stack.peek())} was executed - "
                 "continue execution."
             )
-            # if user_inputs:
-            #     instruction.append(f"User said: {' '.join(user_inputs)}")
 
             instruction = "\n".join(instruction)
 

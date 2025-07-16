@@ -4,8 +4,9 @@
 @playbook(triggers=["When user provides a PIN"])
 async def Validation1(pin: str) -> bool:
   while len(pin) != 4 or not pin.isdigit():
-    await Say("Sorry, that's not a valid PIN. Please try again.")
-    pin = await WaitForMessage("human")
+    await Say("user","Sorry, that's not a valid PIN. Please try again.")
+    messages = await WaitForMessage("human")
+    pin = messages[0].content
   agent.state.variables["$pin"] = pin
   return pin
 ```

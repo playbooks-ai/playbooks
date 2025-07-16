@@ -4,9 +4,10 @@ MessagingMixin for event-driven message processing.
 
 import asyncio
 import time
-from typing import List, Optional
+from typing import List
 
 from ..constants import EOM
+from ..message import Message
 
 
 class MessagingMixin:
@@ -14,7 +15,7 @@ class MessagingMixin:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._message_buffer: List = []
+        self._message_buffer: List[Message] = []
         self._message_event = asyncio.Event()
 
     async def _add_message_to_buffer(self, message) -> None:
@@ -33,7 +34,7 @@ class MessagingMixin:
         # Wake up any agents waiting for messages
         self._message_event.set()
 
-    async def WaitForMessage(self, wait_for_message_from: str) -> Optional[str]:
+    async def WaitForMessage(self, wait_for_message_from: str) -> List[Message]:
         """Unified message waiting with smart buffering.
 
         Args:
@@ -118,7 +119,9 @@ class MessagingMixin:
             ):
                 return True
 
-    def _process_collected_messages(self, num_messages_to_process: int = None) -> str:
+    def _process_collected_messages(
+        self, num_messages_to_process: int = None
+    ) -> List[Message]:
         """Process and format collected messages.
 
         Args:
@@ -155,4 +158,4 @@ class MessagingMixin:
         # Remove processed messages from buffer
         self._message_buffer = self._message_buffer[num_messages_to_process:]
 
-        return messages_str
+        return messages

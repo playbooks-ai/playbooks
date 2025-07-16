@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..triggers import PlaybookTriggers
 
@@ -151,3 +151,18 @@ class Playbook(ABC):
                     continue
                 instructions.append(trigger.trigger_instruction(namespace))
         return instructions
+
+    def create_namespace_function(self, agent) -> "Callable":
+        """Create a call-through function for cross-playbook calls.
+
+        Args:
+            agent: The agent that owns this playbook
+
+        Returns:
+            Callable: A function that routes calls to agent.execute_playbook()
+        """
+
+        def call_through_agent(*args, **kwargs):
+            return agent.execute_playbook(self.name, args, kwargs)
+
+        return call_through_agent

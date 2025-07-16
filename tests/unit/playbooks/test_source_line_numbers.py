@@ -2,7 +2,7 @@
 
 import pytest
 
-from playbooks.agent_builder import AgentBuilder
+from playbooks.agents.agent_builder import AgentBuilder
 from playbooks.event_bus import EventBus
 from playbooks.utils.markdown_to_ast import markdown_to_ast
 
@@ -32,7 +32,7 @@ This is a test playbook description.
     ast = markdown_to_ast(markdown_text)
 
     # Create agents from AST
-    agents = AgentBuilder.create_agents_from_ast(ast)
+    agents = AgentBuilder.create_agent_classes_from_ast(ast)
     assert len(agents) == 1
 
     # Create agent instance
@@ -106,7 +106,7 @@ This is a test playbook.
     ast = markdown_to_ast(markdown_text)
 
     # Create agents from AST
-    agents = AgentBuilder.create_agents_from_ast(ast)
+    agents = AgentBuilder.create_agent_classes_from_ast(ast)
     agent_class = agents.get("TestAgent")
     assert agent_class is not None
 
@@ -143,7 +143,7 @@ def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
     ast = markdown_to_ast(markdown_text)
 
     # Create agents from AST
-    agents = AgentBuilder.create_agents_from_ast(ast)
+    agents = AgentBuilder.create_agent_classes_from_ast(ast)
     assert len(agents) == 2
 
     # Create agent instances

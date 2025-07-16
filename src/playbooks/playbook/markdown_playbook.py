@@ -15,6 +15,69 @@ class MarkdownPlaybook(LocalPlaybook):
     """
 
     @classmethod
+    def create_playbooks_from_h1(
+        cls, h1: Dict, namespace_manager
+    ) -> Dict[str, "MarkdownPlaybook"]:
+        """Create MarkdownPlaybook instances from H1 AST node.
+
+        Args:
+            h1: H1 AST node containing agent definition
+            namespace_manager: Namespace manager for setting up execution context
+
+        Returns:
+            Dict[str, MarkdownPlaybook]: Dictionary of created playbooks
+        """
+        from playbooks.config import LLMConfig
+        from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
+
+        playbooks = {}
+
+        for child in h1["children"]:
+            if child.get("type") == "h2":
+                playbook = cls.from_h2(child)
+
+                # Create Python wrapper for the markdown playbook
+                def create_wrapper(pb):
+                    async def wrapper(*args, **kwargs):
+                        # This wrapper will be replaced with agent-specific version during agent initialization
+                        # For now, try to get agent from globals as fallback
+                        agent = wrapper.__globals__.get("agent")
+                        if agent is None:
+                            raise RuntimeError(
+                                f"No agent available for playbook {pb.name}"
+                            )
+                        execution = MarkdownPlaybookExecution(
+                            agent, pb.name, LLMConfig()
+                        )
+                        return await execution.execute(*args, **kwargs)
+
+                    return wrapper
+
+                playbook.func = create_wrapper(playbook)
+                playbook.func.__globals__.update(namespace_manager.namespace)
+
+                # Add call-through wrapper to namespace if agent is available
+                agent = namespace_manager.namespace.get("agent")
+                if agent is not None:
+                    call_through = playbook.create_namespace_function(agent)
+                    namespace_manager.namespace[playbook.name] = call_through
+
+                playbooks[playbook.name] = playbook
+
+        return playbooks
+
+    def create_agent_specific_function(self, agent):
+        """Create an agent-specific function that bypasses globals lookup."""
+        from playbooks.config import LLMConfig
+        from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
+
+        async def agent_specific_wrapper(*args, **kwargs):
+            execution = MarkdownPlaybookExecution(agent, self.name, LLMConfig())
+            return await execution.execute(*args, **kwargs)
+
+        return agent_specific_wrapper
+
+    @classmethod
     def from_h2(cls, h2: Dict[str, Any]) -> "MarkdownPlaybook":
         """Create a MarkdownPlaybook from an H2 AST node.
 

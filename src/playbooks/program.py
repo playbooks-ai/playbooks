@@ -12,8 +12,8 @@ from yaml.scanner import ScannerError
 from playbooks.agents.base_agent import BaseAgent
 from playbooks.constants import EXECUTION_FINISHED
 
-from .agent_builder import AgentBuilder
 from .agents import AIAgent, HumanAgent
+from .agents.agent_builder import AgentBuilder
 from .debug.server import DebugServer
 from .event_bus import EventBus
 from .exceptions import ExecutionFinished, KlassNotFoundError
@@ -167,7 +167,7 @@ class Program(ProgramAgentsCommunicationMixin):
         self.extract_public_json()
         self.parse_metadata()
         self.ast = markdown_to_ast(self.program_content)
-        self.agent_klasses = AgentBuilder.create_agents_from_ast(self.ast)
+        self.agent_klasses = AgentBuilder.create_agent_classes_from_ast(self.ast)
 
         self.agents = []
         self.agents_by_klass = {}
