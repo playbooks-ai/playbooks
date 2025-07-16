@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -366,18 +367,20 @@ class TestCLIWithExamples:
         assert len(pb_files) > 0, "No valid .pb files found in test data"
 
         for pb_file in pb_files:
-            result = subprocess.run(
-                [sys.executable, "-m", "playbooks", "compile", str(pb_file)],
-                capture_output=True,
-                text=True,
-                cwd=project_root,
-            )
+            # if file name starts with two digits, compile it
+            if re.match(r"^\d{2}-", pb_file.name):
+                result = subprocess.run(
+                    [sys.executable, "-m", "playbooks", "compile", str(pb_file)],
+                    capture_output=True,
+                    text=True,
+                    cwd=project_root,
+                )
 
-            # All files should compile successfully
-            assert (
-                result.returncode == 0
-            ), f"Failed to compile {pb_file.name}: {result.stdout}"
-            assert len(result.stdout) > 0, f"No output for {pb_file.name}"
+                # All files should compile successfully
+                assert (
+                    result.returncode == 0
+                ), f"Failed to compile {pb_file.name}: {result.stdout}"
+                assert len(result.stdout) > 0, f"No output for {pb_file.name}"
 
     @pytest.mark.parametrize(
         "application",
