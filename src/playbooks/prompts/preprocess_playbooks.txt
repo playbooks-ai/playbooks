@@ -65,7 +65,7 @@ Step numbering is sequential within each playbook.
 - Example: `01:CND If $name == "Jack"`
 - Pattern for loop: CND → sub-steps → JMP
 - Pattern for if: CND → sub-steps
-- Pattern for if else: if CND → sub-steps → else CND → sub-steps
+- Pattern for if else: If CND → sub-steps → Otherwise CND → sub-steps
 
 **JMP** - Jump to line
 - Used for loops: `01.04:JMP 01`
@@ -243,12 +243,23 @@ Apply these for triggers on both Python and Markdown playbooks
 ### Loops
 ```
 Raw:
-- Until number is even
+- Until number is perfect square
   - Ask user for next number
+  - When user asks what type
+    - Say positive integer only
+  - When user provides 0
+    - Inform user that it must be nonzero
+- Tell user the square root of the number
 Compiled:
-01:CND Until number is even
-  01.01:QUE Say(user, Ask user for next $number:int); YLD for user; done when user provides number or gives up
-  01.02:JMP 01
+01:CND Until $number:int is perfect square
+  01.01:QUE Say(user, Ask user for next $number)
+  01.02:CND When user asks what type
+    01.02.01:QUE Say(user, positive integer only)
+  01.03:CND When user provides 0
+    01.02.01:QUE Say(Inform user that it must be nonzero)
+  01.04:JMP 01
+02:EXE $square_root = square root of the $number
+03:QUE Say(Tell user the $square_root of the $number)
 ```
 
 ### Artifact Operations
