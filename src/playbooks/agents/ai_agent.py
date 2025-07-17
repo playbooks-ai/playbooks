@@ -559,6 +559,21 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             playbook_name, args, kwargs
         )
 
+        # Replace variable names with actual values
+        for arg in args:
+            if isinstance(arg, str) and arg.startswith("$"):
+                var_name = arg
+                if var_name in self.state.variables.variables:
+                    args[args.index(arg)] = self.state.variables.variables[
+                        var_name
+                    ].value
+
+        for key, value in kwargs.items():
+            if isinstance(value, str) and value.startswith("$"):
+                var_name = value
+                if var_name in self.state.variables.variables:
+                    kwargs[key] = self.state.variables.variables[var_name].value
+
         try:
             # Handle meeting playbook initialization (only for new meetings, not when joining existing ones)
             if (
@@ -581,21 +596,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             error_msg = f"Meeting initialization failed: {str(e)}"
             await self._post_execute(call, error_msg, langfuse_span)
             return error_msg
-
-        # Replace variable names with actual values
-        for arg in args:
-            if isinstance(arg, str) and arg.startswith("$"):
-                var_name = arg
-                if var_name in self.state.variables.variables:
-                    args[args.index(arg)] = self.state.variables.variables[
-                        var_name
-                    ].value
-
-        for key, value in kwargs.items():
-            if isinstance(value, str) and value.startswith("$"):
-                var_name = value
-                if var_name in self.state.variables.variables:
-                    kwargs[key] = self.state.variables.variables[var_name].value
 
         # Execute local playbook in this agent
         if playbook:
