@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING
 
+from ..constants import HUMAN_AGENT_KLASS
 from ..event_bus import EventBus
 from ..execution_state import ExecutionState
 from .base_agent import BaseAgent
@@ -9,7 +10,7 @@ if TYPE_CHECKING:
 
 
 class HumanAgent(BaseAgent):
-    klass = "HumanAgent"
+    klass = HUMAN_AGENT_KLASS
     description = "A human agent."
     metadata = {}
 

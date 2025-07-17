@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from playbooks.constants import HUMAN_AGENT_KLASS
 from playbooks.exceptions import KlassNotFoundError
 from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
 
@@ -198,7 +199,7 @@ class MeetingManager:
         # Check if the target agent is already a participant
         if meeting.is_participant(target_agent.id):
             response = f"Agent {target_agent.id} is already a participant of meeting {meeting.id}"
-        elif target_agent.klass == "Human":
+        elif target_agent.klass == HUMAN_AGENT_KLASS:
             response = f"User joined meeting {meeting.id}"
             meeting.agent_joined(target_agent)
         else:

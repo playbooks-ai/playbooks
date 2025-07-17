@@ -5,6 +5,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
+from ..constants import HUMAN_AGENT_KLASS
 from ..enums import LLMMessageRole, StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
@@ -240,7 +241,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                     self._message_buffer.append(
                         Message(
                             sender_id="human",
-                            sender_klass="Human",
+                            sender_klass=HUMAN_AGENT_KLASS,
                             recipient_id=self.id,
                             recipient_klass=self.klass,
                             content="Continue",
@@ -418,7 +419,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                     return agent.id
 
             # If not found, check if Human agent exists with this type name
-            if target == "Human":
+            if target == HUMAN_AGENT_KLASS:
                 return "human"
 
             # Target not found - fallback to human if allowed

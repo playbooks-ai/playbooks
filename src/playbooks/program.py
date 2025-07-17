@@ -10,7 +10,7 @@ import frontmatter
 from yaml.scanner import ScannerError
 
 from playbooks.agents.base_agent import BaseAgent
-from playbooks.constants import EXECUTION_FINISHED
+from playbooks.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
@@ -210,7 +210,10 @@ class Program(ProgramAgentsCommunicationMixin):
 
         self.agents.append(
             HumanAgent(
-                klass="Human", agent_id="human", program=self, event_bus=self.event_bus
+                klass=HUMAN_AGENT_KLASS,
+                agent_id="human",
+                program=self,
+                event_bus=self.event_bus,
             )
         )
 
@@ -404,7 +407,7 @@ class Program(ProgramAgentsCommunicationMixin):
 
     def get_agent_by_klass(self, klass: str) -> BaseAgent:
         if klass in ["human", "user", "HUMAN", "USER"]:
-            klass = "Human"
+            klass = HUMAN_AGENT_KLASS
         try:
             return self.agents_by_klass[klass]
         except KeyError as e:
