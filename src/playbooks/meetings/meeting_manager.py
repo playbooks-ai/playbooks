@@ -466,8 +466,8 @@ class MeetingManager:
             self.agent.add_uncached_llm_message(log)
             if self.agent.program:
                 await self.agent.program.route_message(
-                    sender_id=self.id,
-                    sender_klass=self.klass,
+                    sender_id=self.agent.id,
+                    sender_klass=self.agent.klass,
                     receiver_spec=f"agent {inviter_id}",
                     message=f"REJECTED {meeting_id}",
                     message_type=MessageType.MEETING_INVITATION_RESPONSE,
@@ -491,7 +491,7 @@ class MeetingManager:
 
             if self.agent.program:
                 await self.agent.program.route_message(
-                    self.id,
+                    self.agent.id,
                     inviter_id,
                     f"REJECTED {meeting_id}: {rejection_message}",
                     message_type="meeting_response",

@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="nord">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Playbooks playground</title>
+    
+    <!-- Tailwind CSS with DaisyUI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/daisyui@4.12.14/dist/full.min.css" rel="stylesheet" type="text/css" />
+    
+    <!-- React and ReactDOM from CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel for JSX transformation -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Heroicons -->
+    <script src="https://unpkg.com/heroicons@2.0.18/24/outline/index.js" type="module"></script>
+    
+    <!-- Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@11.1.1/marked.min.js"></script>
+    
+    <!-- Prism.js for syntax highlighting -->
+    <link href="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/themes/prism.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/components/prism-core.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
+    
+    <style>
+        /* Custom styles for syntax highlighting and markdown */
+        .markdown-content {
+            line-height: 1.6;
+        }
+        
+        .markdown-content pre {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        
+        .markdown-content code {
+            background: #f1f5f9;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-size: 0.875em;
+        }
+        
+        .markdown-content pre code {
+            background: none;
+            padding: 0;
+        }
+    </style>
+</head>
+<body class="bg-base-200 min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+        
+        // Message component with markdown support
+        function Message({ message }) {
+            const messageRef = useRef(null);
+            
+            useEffect(() => {
+                if (messageRef.current && window.Prism) {
+                    window.Prism.highlightAllUnder(messageRef.current);
+                }
+            }, [message.content]);
+            
+            const renderContent = (content) => {
+                if (typeof content === 'string' && (content.includes('```') || content.includes('`'))) {
+                    const html = marked.parse(content);
+                    return <div className="markdown-content" dangerouslySetInnerHTML={{ __html: html }} />;
+                }
+                return <div>{content}</div>;
+            };
+            
+            const getBadgeColor = (role) => {
+                switch (role) {
+                    case 'user': return 'badge';
+                    case 'assistant': return 'badge';
+                    case 'system': return 'badge';
+                    default: return 'badge';
+                }
+            };
+            
+            const getChatBubbleClass = (role) => {
+                switch (role) {
+                    case 'user': return 'chat-bubble chat-bubble-info';
+                    case 'assistant': return 'chat-bubble chat-bubble-success';
+                    case 'system': return 'text-xs pl-3';
+                    default: return 'chat-bubble-neutral';
+                }
+            };
+            
+            const renderChatHeader = (message) => {
+                if (message.role === 'system') {
+                    return null;
+                }
+                return (
+                    <div className="chat-header">
+                        <span className="text-xs">
+                            {message.sender}
+                        </span>
+                        {message.timestamp && (
+                            <time className="text-xs opacity-50 ml-2">
+                                {new Date(message.timestamp).toLocaleTimeString()}
+                            </time>
+                        )}
+                    </div>
+                );
+            };
+            
+            return (
+                <div className={`chat ${message.role === 'user' ? 'chat-end' : 'chat-start'}`} ref={messageRef}>
+                    {renderChatHeader(message)}
+                    
+                    <div className={`${getChatBubbleClass(message.role)}`}>
+                        {renderContent(message.content)}
+                    </div>
+                </div>
+            );
+        }
+        
+        // Status indicator component
+        function StatusIndicator({ status, text, eventCount }) {
+            const getStatusColor = () => {
+                switch (status) {
+                    case 'connected': return 'bg-success';
+                    case 'connecting': return 'bg-warning';
+                    case 'disconnected': return 'bg-error';
+                    default: return 'bg-base-300';
+                }
+            };
+            
+            return (
+                <div className="flex items-center gap-4 justify-center">
+                    <div className="flex items-center gap-2">
+                        <div className={`w-3 h-3 rounded-full ${getStatusColor()}`}></div>
+                        <span className="text-sm">{text}</span>
+                    </div>
+                    <div className="badge badge-outline badge-sm">
+                        Events: {eventCount}
+                    </div>
+                </div>
+            );
+        }
+        
+        // Welcome screen component
+        function WelcomeScreen() {
+            return (
+                <div className="text-center p-8">
+                    <h3 className="text-2xl font-bold mb-4">Welcome to Playbooks!</h3>
+                    <p className="text-base-content/70 mb-6">
+                        This is a playground to run and interact with Playbooks programs. 
+                        It also serves as documentation for how to integrate web UI with Playbooks web server.
+                    </p>
+                    <div className="steps steps-vertical lg:steps-horizontal">
+                        <div className="step step-primary">
+                            <div className="text-left">
+                                <div className="font-semibold">Start Web Server</div>
+                                <div className="text-sm opacity-70">
+                                    Run <code className="bg-base-200 px-2 py-1 rounded">
+                                        python -m playbooks.applications.web_server
+                                    </code>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="step step-primary">
+                            <div className="text-left">
+                                <div className="font-semibold">Enter Playbook Path</div>
+                                <div className="text-sm opacity-70">Use the default or enter your own</div>
+                            </div>
+                        </div>
+                        <div className="step step-primary">
+                            <div className="text-left">
+                                <div className="font-semibold">Run Program</div>
+                                <div className="text-sm opacity-70">Click "Run program" to begin</div>
+                            </div>
+                        </div>
+                        <div className="step step-primary">
+                            <div className="text-left">
+                                <div className="font-semibold">Chat with AI</div>
+                                <div className="text-sm opacity-70">Interact with your agents in real-time!</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // Main App component
+        function App() {
+            const [ws, setWs] = useState(null);
+            const [runId, setRunId] = useState(null);
+            const [eventCounter, setEventCounter] = useState(0);
+            const [isConnected, setIsConnected] = useState(false);
+            const [status, setStatus] = useState('disconnected');
+            const [statusText, setStatusText] = useState('Disconnected');
+            const [messages, setMessages] = useState([]);
+            const [playbookPath, setPlaybookPath] = useState('tests/data/02-personalized-greeting.pb');
+            const [messageInput, setMessageInput] = useState('');
+            const [showWelcome, setShowWelcome] = useState(true);
+            const messagesEndRef = useRef(null);
+            
+            const scrollToBottom = () => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            };
+            
+            useEffect(() => {
+                scrollToBottom();
+            }, [messages]);
+            
+            const updateStatus = (newStatus, text) => {
+                setStatus(newStatus);
+                setStatusText(text);
+            };
+            
+            const addMessage = (role, sender, content, timestamp = null) => {
+                const message = {
+                    id: Date.now(),
+                    role,
+                    sender,
+                    content,
+                    timestamp: timestamp || new Date().toISOString()
+                };
+                setMessages(prev => [...prev, message]);
+            };
+            
+            const handleEvent = (event) => {
+                setEventCounter(prev => prev + 1);
+                
+                const type = event.type;
+                const timestamp = event.timestamp;
+                
+                switch (type) {
+                    case 'connection_established':
+                        addMessage('system', 'System', `Connected to session ${event.run_id.slice(0, 8)}...`, timestamp);
+                        break;
+                        
+                    case 'agent_message':
+                        const sender = `${event.sender_klass}(${event.sender_id})`;
+                        const message = event.message;
+                        if (message && message !== '<eom>') {
+                            addMessage('assistant', sender, message, timestamp);
+                        }
+                        break;
+                        
+                    case 'human_input_requested':
+                        addMessage('system', 'System', 'Waiting for your input...', timestamp);
+                        break;
+                        
+                    case 'human_message':
+                        addMessage('system', 'System', 'You sent a message', timestamp);
+                        break;
+                        
+                    case 'meeting_broadcast':
+                        const meetingSender = `${event.sender_klass}(${event.sender_id})`;
+                        addMessage('system', `Meeting ${event.meeting_id}`, `${meetingSender}: ${event.message}`, timestamp);
+                        break;
+                        
+                    case 'run_terminated':
+                        addMessage('system', 'System', 'Playbook execution completed', timestamp);
+                        break;
+                        
+                    case 'error':
+                        addMessage('system', 'Error', event.message || 'Unknown error occurred', timestamp);
+                        break;
+                        
+                    default:
+                        console.log('Unhandled event type:', type, event);
+                }
+            };
+            
+            const connectWebSocket = (runId) => {
+                try {
+                    const websocket = new WebSocket(`ws://localhost:8001/ws/${runId}`);
+                    
+                    websocket.onopen = () => {
+                        updateStatus('connected', `Connected (${runId.slice(0, 8)}...)`);
+                        setIsConnected(true);
+                        setShowWelcome(false);
+                    };
+                    
+                    websocket.onmessage = (event) => {
+                        try {
+                            const data = JSON.parse(event.data);
+                            handleEvent(data);
+                        } catch (error) {
+                            console.error('Error parsing WebSocket message:', error);
+                        }
+                    };
+                    
+                    websocket.onclose = () => {
+                        updateStatus('disconnected', 'Disconnected');
+                        setIsConnected(false);
+                    };
+                    
+                    websocket.onerror = (error) => {
+                        addMessage('system', 'Error', 'WebSocket connection error');
+                        console.error('WebSocket error:', error);
+                    };
+                    
+                    setWs(websocket);
+                    
+                } catch (error) {
+                    addMessage('system', 'Error', `WebSocket connection failed: ${error.message}`);
+                    updateStatus('disconnected', 'Error');
+                }
+            };
+            
+            const startChat = async () => {
+                try {
+                    updateStatus('connecting', 'Connecting...');
+                    
+                    const response = await fetch('http://localhost:8000/runs/new', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            path: playbookPath
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                    }
+                    
+                    const data = await response.json();
+                    setRunId(data.run_id);
+                    connectWebSocket(data.run_id);
+                    
+                } catch (error) {
+                    addMessage('system', 'Error', `Failed to start chat: ${error.message}`);
+                    updateStatus('disconnected', 'Error');
+                }
+            };
+            
+            const stopChat = () => {
+                if (ws) {
+                    ws.close();
+                    setWs(null);
+                }
+                setRunId(null);
+                setEventCounter(0);
+                updateStatus('disconnected', 'Disconnected');
+                setIsConnected(false);
+            };
+            
+            const sendMessage = () => {
+                const message = messageInput.trim();
+                if (!message || !isConnected) return;
+                
+                addMessage('user', 'You', message);
+                
+                ws.send(JSON.stringify({
+                    type: 'human_message',
+                    run_id: runId,
+                    message: message
+                }));
+                
+                setMessageInput('');
+            };
+            
+            const handleKeyPress = (e) => {
+                if (e.key === 'Enter') {
+                    sendMessage();
+                }
+            };
+            
+            return (
+                <div className="flex flex-col h-screen">
+                    {/* Header */}
+                    <div className="bg-primary text-primary-content p-4 text-center">
+                        <h1 className="text-2xl font-bold mb-2">▶ Playbooks playground</h1>
+                        <StatusIndicator status={status} text={statusText} eventCount={eventCounter} />
+                    </div>
+                    
+                    {/* Controls */}
+                    <div className="bg-base-100 p-4 border-b border-base-300">
+                        <div className="flex gap-4 items-center flex-wrap">
+                            <input
+                                type="text"
+                                placeholder="Playbook path"
+                                className="input input-bordered flex-1 min-w-[200px]"
+                                value={playbookPath}
+                                onChange={(e) => setPlaybookPath(e.target.value)}
+                            />
+                            <button
+                                className="btn btn-primary"
+                                onClick={startChat}
+                                disabled={isConnected}
+                            >
+                                {isConnected ? 'Running...' : 'Run Program'}
+                            </button>
+                            <button
+                                className="btn btn-secondary"
+                                onClick={stopChat}
+                                disabled={!isConnected}
+                            >
+                                Stop Program
+                            </button>
+                        </div>
+                    </div>
+                    
+                    {/* Chat Container */}
+                    <div className="flex-1 flex flex-col bg-base-100 m-4 rounded-lg shadow-lg overflow-hidden">
+                        {/* Messages */}
+                        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                            {showWelcome && <WelcomeScreen />}
+                            {messages.map((message) => (
+                                <Message key={message.id} message={message} />
+                            ))}
+                            <div ref={messagesEndRef} />
+                        </div>
+                        
+                        {/* Input Area */}
+                        <div className="p-4 border-t border-base-300">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="Type your message..."
+                                    className="input input-bordered flex-1"
+                                    value={messageInput}
+                                    onChange={(e) => setMessageInput(e.target.value)}
+                                    onKeyPress={handleKeyPress}
+                                    disabled={!isConnected}
+                                />
+                                <button
+                                    className="btn btn-primary"
+                                    onClick={sendMessage}
+                                    disabled={!isConnected || !messageInput.trim()}
+                                >
+                                    Send
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+        
+        // Initialize the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
+
+<!--
+Playbooks Playground - Enhanced with React, Tailwind CSS, and DaisyUI
+
+Usage Instructions:
+1. Start the Playbooks web server: python -m playbooks.applications.web_server
+2. Open this HTML file in a web browser
+3. Enter a playbook path (default: tests/data/02-personalized-greeting.pb)
+4. Click "Run program" to create a new session
+5. Chat with your AI agents in real-time!
+
+Features:
+- Modern React-based UI with hooks and state management
+- Tailwind CSS + DaisyUI for beautiful, responsive design
+- Real-time WebSocket communication
+- Markdown rendering with syntax highlighting (Prism.js)
+- Modern chat interface with avatars and message bubbles
+- Enhanced status indicators and progress tracking
+- Responsive design that works on all devices
+- All modern frameworks loaded via CDN (no build process)
+
+Technologies Used:
+- React 18 with in-browser JSX compilation (Babel standalone)
+- Tailwind CSS 3.x for utility-first styling
+- DaisyUI 4.x for component library
+- Marked.js for markdown rendering
+- Prism.js for syntax highlighting
+- Heroicons for consistent iconography
+
+API Endpoints Used:
+- POST http://localhost:8000/runs/new - Create new playbook run
+- WebSocket ws://localhost:8001/ws/{run_id} - Real-time events
+-->
