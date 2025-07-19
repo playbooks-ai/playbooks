@@ -321,9 +321,9 @@ class PlaybookRun:
             print(f"Sending connection established event: {event.to_dict()}")
             await client.send_event(event)
 
-            # Send recent event history
-            print(f"Sending {len(self.event_history[-50:])} historical events")
-            for event in self.event_history[-50:]:  # Last 50 events
+            # Send event history
+            print(f"Sending {len(self.event_history)} historical events")
+            for event in self.event_history:
                 await client.send_event(event)
 
             print(f"Client successfully added and initialized for run {self.run_id}")

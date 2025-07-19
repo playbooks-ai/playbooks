@@ -33,6 +33,41 @@
             line-height: 1.6;
         }
         
+        .markdown-content p {
+            margin: 0.5rem 0;
+        }
+        
+        .markdown-content p:first-child {
+            margin-top: 0;
+        }
+        
+        .markdown-content p:last-child {
+            margin-bottom: 0;
+        }
+        
+        .markdown-content h1, .markdown-content h2, .markdown-content h3, 
+        .markdown-content h4, .markdown-content h5, .markdown-content h6 {
+            margin: 1rem 0 0.5rem 0;
+            font-weight: bold;
+        }
+        
+        .markdown-content ul, .markdown-content ol {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+        }
+        
+        .markdown-content li {
+            margin: 0.25rem 0;
+        }
+        
+        .markdown-content blockquote {
+            border-left: 4px solid #e5e7eb;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: #6b7280;
+            font-style: italic;
+        }
+        
         .markdown-content pre {
             background: #f8f9fa;
             padding: 1rem;
@@ -51,6 +86,33 @@
         .markdown-content pre code {
             background: none;
             padding: 0;
+        }
+        
+        .markdown-content strong {
+            font-weight: bold;
+        }
+        
+        .markdown-content em {
+            font-style: italic;
+        }
+        
+        .markdown-content a {
+            color: #3b82f6;
+            text-decoration: underline;
+        }
+        
+        .markdown-content a:hover {
+            color: #1d4ed8;
+        }
+
+        .chat-bubble.chat-bubble-assistant::before {
+            display: none;
+        }
+        .chat-bubble.chat-bubble-assistant {
+            background: none;
+            padding: 0;
+            margin: 0;
+            color: black;
         }
     </style>
 </head>
@@ -71,7 +133,12 @@
             }, [message.content]);
             
             const renderContent = (content) => {
-                if (typeof content === 'string' && (content.includes('```') || content.includes('`'))) {
+                if (typeof content === 'string') {
+                    // Configure marked to handle line breaks properly
+                    marked.setOptions({
+                        breaks: true, // Convert \n to <br>
+                        gfm: true     // GitHub Flavored Markdown
+                    });
                     const html = marked.parse(content);
                     return <div className="markdown-content" dangerouslySetInnerHTML={{ __html: html }} />;
                 }
@@ -89,8 +156,8 @@
             
             const getChatBubbleClass = (role) => {
                 switch (role) {
-                    case 'user': return 'chat-bubble chat-bubble-info';
-                    case 'assistant': return 'chat-bubble chat-bubble-success';
+                    case 'user': return 'chat-bubble chat-bubble-info chat-bubble-user';
+                    case 'assistant': return 'chat-bubble chat-bubble-assistant';
                     case 'system': return 'text-xs pl-3';
                     default: return 'chat-bubble-neutral';
                 }
@@ -103,7 +170,11 @@
                 return (
                     <div className="chat-header">
                         <span className="text-xs">
-                            {message.sender}
+                            {message.messageType === 'MEETING_BROADCAST_REQUEST' && message.meetingId 
+                                ? `MEETING: ${message.sender} → Meeting(${message.meetingId})` 
+                                : message.messageType 
+                                    ? `${message.messageType}: ${message.sender} → ${message.recipient}` 
+                                    : `${message.sender} → ${message.recipient}`}
                         </span>
                         {message.timestamp && (
                             <time className="text-xs opacity-50 ml-2">
@@ -118,8 +189,11 @@
                 <div className={`chat ${message.role === 'user' ? 'chat-end' : 'chat-start'}`} ref={messageRef}>
                     {renderChatHeader(message)}
                     
-                    <div className={`${getChatBubbleClass(message.role)}`}>
+                    <div className={`${getChatBubbleClass(message.role)} ${message.isStreaming ? 'relative' : ''}`}>
                         {renderContent(message.content)}
+                        {message.isStreaming && (
+                            <span className="inline-block ml-1 w-2 h-4 bg-current opacity-75 animate-pulse">|</span>
+                        )}
                     </div>
                 </div>
             );
@@ -201,6 +275,7 @@
             const [status, setStatus] = useState('disconnected');
             const [statusText, setStatusText] = useState('Disconnected');
             const [messages, setMessages] = useState([]);
+            const [streamingMessages, setStreamingMessages] = useState(new Map()); // Track streaming messages by agent_id
             const [playbookPath, setPlaybookPath] = useState('tests/data/02-personalized-greeting.pb');
             const [messageInput, setMessageInput] = useState('');
             const [showWelcome, setShowWelcome] = useState(true);
@@ -212,18 +287,21 @@
             
             useEffect(() => {
                 scrollToBottom();
-            }, [messages]);
+            }, [messages, streamingMessages]);
             
             const updateStatus = (newStatus, text) => {
                 setStatus(newStatus);
                 setStatusText(text);
             };
             
-            const addMessage = (role, sender, content, timestamp = null) => {
+            const addMessage = (role, sender, content, timestamp = null, recipient = null, messageType = null, meetingId = null) => {
                 const message = {
                     id: Date.now(),
                     role,
                     sender,
+                    recipient,
+                    messageType,
+                    meetingId,
                     content,
                     timestamp: timestamp || new Date().toISOString()
                 };
@@ -236,17 +314,67 @@
                 const type = event.type;
                 const timestamp = event.timestamp;
                 
+                // Debug logging
+                console.log(`Event received: ${type}`, event);
+                
                 switch (type) {
                     case 'connection_established':
                         addMessage('system', 'System', `Connected to session ${event.run_id.slice(0, 8)}...`, timestamp);
                         break;
                         
-                    case 'agent_message':
-                        const sender = `${event.sender_klass}(${event.sender_id})`;
-                        const message = event.message;
-                        if (message && message !== '<eom>') {
-                            addMessage('assistant', sender, message, timestamp);
-                        }
+                    // Non-streaming agent messages (commented out in favor of streaming)
+                    // Uncomment this case if you want to use non-streaming messages instead
+                    // case 'agent_message':
+                    //     const sender = `${event.sender_klass}(${event.sender_id})`;
+                    //     const recipient = `${event.recipient_klass}(${event.recipient_id})`;
+                    //     const messageType = event.message_type;
+                    //     const meetingId = event.metadata?.meeting_id;
+                    //     const message = event.message;
+                    //     
+                    //     if (message && message !== '<eom>') {
+                    //         addMessage('assistant', sender, message, timestamp, recipient, messageType, meetingId);
+                    //     }
+                    //     break;
+                        
+                    case 'agent_streaming_update':
+                        const streamingSender = `${event.agent_klass}(${event.agent_id})`;
+                        const streamingRecipient = event.recipient_id ? `${event.recipient_klass || 'Unknown'}(${event.recipient_id})` : 'HumanAgent(human)';
+                        const streamingKey = `${event.agent_klass}-${event.agent_id}`;
+                        
+                        setStreamingMessages(prev => {
+                            const newMap = new Map(prev);
+                            const existing = newMap.get(streamingKey) || { 
+                                role: 'assistant',
+                                sender: streamingSender,
+                                recipient: streamingRecipient,
+                                messageType: event.message_type || 'DIRECT',
+                                content: '', 
+                                timestamp: timestamp,
+                                id: `streaming-${streamingKey}-${Date.now()}`,
+                                isStreaming: true
+                            };
+                            existing.content += event.content;
+                            newMap.set(streamingKey, existing);
+                            return newMap;
+                        });
+                        break;
+                        
+                    case 'agent_streaming_complete':
+                        const completedKey = `${event.agent_klass}-${event.agent_id}`;
+                        
+                        setStreamingMessages(prev => {
+                            const newMap = new Map(prev);
+                            const streamingMessage = newMap.get(completedKey);
+                            
+                            if (streamingMessage) {
+                                // Add the completed streaming message as a regular message
+                                addMessage('assistant', streamingMessage.sender, streamingMessage.content, streamingMessage.timestamp, streamingMessage.recipient, streamingMessage.messageType);
+                                
+                                // Remove from streaming messages
+                                newMap.delete(completedKey);
+                            }
+                            return newMap;
+                        });
                         break;
                         
                     case 'human_input_requested':
@@ -413,6 +541,9 @@
                         <div className="flex-1 overflow-y-auto p-4 space-y-4">
                             {showWelcome && <WelcomeScreen />}
                             {messages.map((message) => (
+                                <Message key={message.id} message={message} />
+                            ))}
+                            {Array.from(streamingMessages.values()).map((message) => (
                                 <Message key={message.id} message={message} />
                             ))}
                             <div ref={messagesEndRef} />
