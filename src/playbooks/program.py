@@ -402,8 +402,21 @@ class Program(ProgramAgentsCommunicationMixin):
             return [
                 self.agents_by_id[SpecUtils.extract_agent_id(spec)] for spec in specs
             ]
-        except KeyError as e:
-            raise ValueError(f"Agent id {e} not found")
+        except KeyError:
+            pass
+
+        # Try to get agents by name
+        agents = []
+        for agent in self.agents:
+            name = agent.kwargs.get("name")
+
+            if name and name in specs:
+                agents.append(agent)
+
+        if agents and len(agents) == len(specs):
+            return agents
+
+        raise ValueError(f"Agent not found. Specs: {specs}")
 
     def get_agent_by_klass(self, klass: str) -> BaseAgent:
         if klass in ["human", "user", "HUMAN", "USER"]:

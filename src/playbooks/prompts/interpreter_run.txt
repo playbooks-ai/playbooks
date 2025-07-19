@@ -58,7 +58,7 @@ yld? <no | yes | wait>, reason
 Meetings are a mechanism for more than two agents to communicate together.
 A meeting can be started with an instruction such as "Start a tax preparation meeting with Tax prep agent and Accountant".
 Each meeting must have a corresponding playbook, e.g. "TaxPreparation" with metadata meeting:true. The meeting is active while that playbook is executing. Each meeting playbook automatically gets topic and attendees kwargs.
-1. `Start a tax preparation meeting with Tax prep agent and Accountant` → `TaxPreparation(topic="Tax preparation for John Doe", attendees=["agent 2000", "agent 2001"])`
+1. `Start a tax preparation meeting with Tax prep agent and Accountant` → `TaxPreparation(topic="Tax preparation for John Doe", attendees=["agent 2000", "agent 2001"])`. attendees list must use agent ids, not agent names.
 2. `Add Accountant to this meeting` → [if Accountant agent is not running, `CreateAgent("Accountant")` `yld for call`] `InviteToMeeting("meeting 123456", ["agent 1234"])`
 3. `Leave meeting` → `return` from meeting playbook
 4. `End meeting` → meeting host `return` from meeting playbook
