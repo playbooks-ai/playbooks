@@ -1,9 +1,14 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="nord">
+<html lang="en" data-theme="wireframe">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Playbooks playground</title>
+    
+    <!-- Google Fonts - Lato -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap" rel="stylesheet">
     
     <!-- Tailwind CSS with DaisyUI -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -28,6 +33,15 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
     
     <style>
+        /* Set Lato as the default font family */
+        body {
+            font-family: 'Lato', sans-serif;
+        }
+
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 300 !important;
+        }
+        
         /* Custom styles for syntax highlighting and markdown */
         .markdown-content {
             line-height: 1.6;
@@ -156,7 +170,7 @@
             
             const getChatBubbleClass = (role) => {
                 switch (role) {
-                    case 'user': return 'chat-bubble chat-bubble-info chat-bubble-user';
+                    case 'user': return 'chat-bubble chat-bubble-primary chat-bubble-user';
                     case 'assistant': return 'chat-bubble chat-bubble-assistant';
                     case 'system': return 'text-xs pl-3';
                     default: return 'chat-bubble-neutral';
@@ -167,22 +181,36 @@
                 if (message.role === 'system') {
                     return null;
                 }
-                return (
-                    <div className="chat-header">
-                        <span className="text-xs">
-                            {message.messageType === 'MEETING_BROADCAST_REQUEST' && message.meetingId 
-                                ? `MEETING: ${message.sender} → Meeting(${message.meetingId})` 
-                                : message.messageType 
-                                    ? `${message.messageType}: ${message.sender} → ${message.recipient}` 
-                                    : `${message.sender} → ${message.recipient}`}
-                        </span>
-                        {message.timestamp && (
-                            <time className="text-xs opacity-50 ml-2">
-                                {new Date(message.timestamp).toLocaleTimeString()}
-                            </time>
-                        )}
-                    </div>
-                );
+                if (message.role === 'assistant') {
+                    return (
+                        <div className="chat-header">
+                            <span className="text-xs">
+                                {message.messageType === 'MEETING_BROADCAST_REQUEST' && message.meetingId 
+                                    ? `MEETING: ${message.sender} → Meeting(${message.meetingId})` 
+                                    : message.messageType 
+                                        ? `${message.messageType}: ${message.sender} → ${message.recipient}` 
+                                        : `${message.sender} → ${message.recipient}`}
+                            </span>
+                            {message.timestamp && (
+                                <time className="text-xs opacity-50 ml-2">
+                                    {new Date(message.timestamp).toLocaleTimeString()}
+                                </time>
+                            )}
+                        </div>
+                    );
+                }
+
+                if (message.role === 'user') {
+                    return (
+                        <div className="chat-header">
+                            {message.timestamp && (
+                                <time className="text-xs opacity-50 ml-2">
+                                    {new Date(message.timestamp).toLocaleTimeString()}
+                                </time>
+                            )}
+                        </div>
+                    );
+                }
             };
             
             return (
