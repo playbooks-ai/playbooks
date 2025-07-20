@@ -6,10 +6,10 @@ repos:
         name: Run Linter Check (Ruff)
         args:
           - --fix
-        files: "^.*\\.py$"
+        files: ^.*\.py$
   - repo: https://github.com/psf/black
     rev: 23.12.1
     hooks:
       - id: black
         name: Run Formatter (Black)
-        files: "^.*\\.py$"
+        files: ^.*\.py$
