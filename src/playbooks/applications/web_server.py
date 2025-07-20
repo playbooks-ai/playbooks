@@ -171,14 +171,27 @@ class PlaybookRun:
             message_type=MessageType.DIRECT,
             meeting_id=None,
         ):
-            await playbook_run._intercept_route_message(
-                sender_id,
-                sender_klass,
-                receiver_spec,
-                message,
-                message_type,
-                meeting_id,
-            )
+            # Check if playbook_run is properly captured and not corrupted
+            try:
+                # Validate that playbook_run has the expected attributes
+                if (
+                    hasattr(playbook_run, "playbooks")
+                    and hasattr(playbook_run.playbooks, "program")
+                    and hasattr(playbook_run, "_intercept_route_message")
+                ):
+                    await playbook_run._intercept_route_message(
+                        sender_id,
+                        sender_klass,
+                        receiver_spec,
+                        message,
+                        message_type,
+                        meeting_id,
+                    )
+                # If playbook_run is corrupted or doesn't have expected attributes,
+                # skip interception and just call original method
+            except AttributeError:
+                # If there's an AttributeError, just skip the interception
+                pass
             return await playbook_run._original_methods["route_message"](
                 program_self,
                 sender_id,
