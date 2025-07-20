@@ -159,6 +159,9 @@ class PlaybookRun:
         # Note: Session log streaming is now setup in _setup_early_streaming
 
         # Create bound methods for this specific run
+        # Capture self in local variable to ensure proper closure
+        playbook_run = self
+
         async def patched_route_message(
             program_self,
             sender_id,
@@ -168,7 +171,7 @@ class PlaybookRun:
             message_type=MessageType.DIRECT,
             meeting_id=None,
         ):
-            await self._intercept_route_message(
+            await playbook_run._intercept_route_message(
                 sender_id,
                 sender_klass,
                 receiver_spec,
@@ -176,7 +179,7 @@ class PlaybookRun:
                 message_type,
                 meeting_id,
             )
-            return await self._original_methods["route_message"](
+            return await playbook_run._original_methods["route_message"](
                 program_self,
                 sender_id,
                 sender_klass,
@@ -187,29 +190,29 @@ class PlaybookRun:
             )
 
         async def patched_wait_for_message(agent_self, source_agent_id: str):
-            await self._intercept_wait_for_message(source_agent_id)
-            return await self._original_methods["wait_for_message"](
+            await playbook_run._intercept_wait_for_message(source_agent_id)
+            return await playbook_run._original_methods["wait_for_message"](
                 agent_self, source_agent_id
             )
 
         async def patched_broadcast_to_meeting(
             manager_self, meeting_id, message, from_agent_id=None, from_agent_klass=None
         ):
-            await self._intercept_meeting_broadcast(
+            await playbook_run._intercept_meeting_broadcast(
                 meeting_id, message, from_agent_id, from_agent_klass
             )
-            return await self._original_methods["broadcast_to_meeting"](
+            return await playbook_run._original_methods["broadcast_to_meeting"](
                 manager_self, meeting_id, message, from_agent_id, from_agent_klass
             )
 
         async def patched_create_agent(program_self, agent_klass, **kwargs):
             # Call original create_agent method
-            agent = await self._original_methods["create_agent"](
+            agent = await playbook_run._original_methods["create_agent"](
                 program_self, agent_klass, **kwargs
             )
 
             # Set up streaming for the newly created agent
-            await self._setup_streaming_for_new_agent(agent)
+            await playbook_run._setup_streaming_for_new_agent(agent)
 
             return agent
 
