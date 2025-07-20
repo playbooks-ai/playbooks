@@ -226,7 +226,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         sleep_turns = 0
         sleep_turns_max = 5
         while True:
-            if self.program.execution_finished:
+            if self.program and self.program.execution_finished:
                 break
             # print(f"\n{str(self)}: _idle_loop")
             # If playbooks are running, we let them receive messages
@@ -571,7 +571,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> Any:
-        if self.program.execution_finished:
+        if self.program and self.program.execution_finished:
             return EXECUTION_FINISHED
 
         playbook, call, langfuse_span = await self._pre_execute(
@@ -604,7 +604,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                     playbook_name, kwargs
                 )
 
-                if self.program.execution_finished:
+                if self.program and self.program.execution_finished:
                     return EXECUTION_FINISHED
 
                 # Wait for required attendees to join before proceeding (if any besides requester)
@@ -620,8 +620,11 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             return error_msg
 
         # Execute local playbook in this agent
-        if playbook and not self.program.execution_finished:
+        if playbook:
             try:
+                if self.program and self.program.execution_finished:
+                    return EXECUTION_FINISHED
+
                 result = await playbook.execute(*args, **kwargs)
                 await self._post_execute(call, result, langfuse_span)
                 return result
