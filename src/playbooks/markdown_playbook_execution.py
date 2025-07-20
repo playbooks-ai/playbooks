@@ -88,6 +88,14 @@ class MarkdownPlaybookExecution:
             for line in llm_response.lines:
                 # print(f"[EXECUTE] line: {line.text}")
                 if "`SaveArtifact(" not in line.text:
+                    for step in line.steps:
+                        if step.step:
+                            self.agent.state.session_log.append(
+                                SessionLogItemMessage(
+                                    f"{self.playbook.name}:{step.step.raw_text}"
+                                ),
+                                level=SessionLogItemLevel.HIGH,
+                            )
                     self.agent.state.session_log.append(
                         SessionLogItemMessage(line.text),
                         level=SessionLogItemLevel.LOW,

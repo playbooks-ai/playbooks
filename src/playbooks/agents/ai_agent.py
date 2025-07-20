@@ -266,7 +266,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                 # Task is being cancelled - exit gracefully
                 break
 
-    def parse_instruction_pointer(self, step: str) -> InstructionPointer:
+    def parse_instruction_pointer(self, step_id: str) -> InstructionPointer:
         """Parse a step string into an InstructionPointer.
 
         Args:
@@ -276,8 +276,24 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             InstructionPointer: Parsed instruction pointer
         """
         # Extract the step number from the step string
-        step_number = step.split(".")[0]
-        return InstructionPointer(self.klass, step_number, 0)
+        playbook_name = step_id.split(":")[0]
+        step_number = step_id.split(":")[1]
+        playbook = self.playbooks.get(playbook_name)
+        if playbook:
+            line = playbook.steps.get_step(step_number)
+            if line:
+                return InstructionPointer(
+                    playbook=playbook_name,
+                    line_number=step_number,
+                    source_line_number=line.source_line_number,
+                    step=line,
+                )
+        return InstructionPointer(
+            playbook=playbook_name,
+            line_number=step_number,
+            source_line_number=0,
+            step=None,
+        )
 
     def trigger_instructions(
         self,

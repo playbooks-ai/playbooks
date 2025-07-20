@@ -8,6 +8,7 @@ from playbooks.utils.llm_helper import (
 
 from .event_bus import EventBus
 from .events import CallStackPopEvent, CallStackPushEvent, InstructionPointerEvent
+from .playbook_step import PlaybookStep
 
 
 class InstructionPointer:
@@ -19,10 +20,17 @@ class InstructionPointer:
         source_line_number: The source line number in the markdown.
     """
 
-    def __init__(self, playbook: str, line_number: str, source_line_number: int):
+    def __init__(
+        self,
+        playbook: str,
+        line_number: str,
+        source_line_number: int,
+        step: PlaybookStep = None,
+    ):
         self.playbook = playbook
         self.line_number = line_number
         self.source_line_number = source_line_number
+        self.step = step
 
     def to_compact_str(self) -> str:
         compact_str = (

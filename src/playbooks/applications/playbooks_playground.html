@@ -128,6 +128,20 @@
             margin: 0;
             color: black;
         }
+
+        .chat.chat-log {
+            margin: 0 !important;
+            padding: 0 !important;
+        }
+
+        /* Event visibility controls */
+        body:not(.show-messages) .event-message {
+            display: none !important;
+        }
+        
+        body:not(.show-execution-logs) .event-session-log {
+            display: none !important;
+        }
     </style>
 </head>
 <body class="bg-base-200 min-h-screen">
@@ -146,7 +160,23 @@
                 }
             }, [message.content]);
             
-            const renderContent = (content) => {
+            const renderContent = (content, message) => {
+                // Handle log entries specially
+                if (message.role === 'log' && message.content.indicator) {
+                    const logData = message.content;
+                    const levelColors = {
+                        'HIGH': 'text-red-600',
+                        'MEDIUM': 'text-yellow-600',
+                        'LOW': 'text-gray-600'
+                    };
+                    
+                    return (
+                        <div className={`flex items-start gap-2 ${levelColors[logData.level] || 'text-gray-600'}`}>
+                            <span className="flex-1 font-mono text-xs">{message.sender}: {logData.content}</span>
+                        </div>
+                    );
+                }
+                
                 if (typeof content === 'string') {
                     // Configure marked to handle line breaks properly
                     marked.setOptions({
@@ -168,17 +198,33 @@
                 }
             };
             
+            const getChatClass = (role) => {
+                const side = role === 'user' ? 'chat-start' : 'chat-start';
+                let eventClass = '';
+                
+                // Add event type classes for filtering
+                if (role === 'assistant' || role === 'user') {
+                    eventClass += ' event-message';
+                }
+                if (role === 'log') {
+                    eventClass += ' event-session-log';
+                }
+                
+                return `chat ${side} chat-${role}${eventClass}`;
+            };
+
             const getChatBubbleClass = (role) => {
                 switch (role) {
                     case 'user': return 'chat-bubble chat-bubble-primary chat-bubble-user';
                     case 'assistant': return 'chat-bubble chat-bubble-assistant';
                     case 'system': return 'text-xs pl-3';
+                    case 'log': return 'text-sm pl-3 opacity-75';
                     default: return 'chat-bubble-neutral';
                 }
             };
             
             const renderChatHeader = (message) => {
-                if (message.role === 'system') {
+                if (message.role === 'system' || message.role === 'log') {
                     return null;
                 }
                 if (message.role === 'assistant') {
@@ -214,11 +260,11 @@
             };
             
             return (
-                <div className={`chat ${message.role === 'user' ? 'chat-end' : 'chat-start'}`} ref={messageRef}>
+                <div className={`${getChatClass(message.role)}`} ref={messageRef}>
                     {renderChatHeader(message)}
                     
                     <div className={`${getChatBubbleClass(message.role)} ${message.isStreaming ? 'relative' : ''}`}>
-                        {renderContent(message.content)}
+                        {renderContent(message.content, message)}
                         {message.isStreaming && (
                             <span className="inline-block ml-1 w-2 h-4 bg-current opacity-75 animate-pulse">|</span>
                         )}
@@ -307,6 +353,8 @@
             const [playbookPath, setPlaybookPath] = useState('tests/data/02-personalized-greeting.pb');
             const [messageInput, setMessageInput] = useState('');
             const [showWelcome, setShowWelcome] = useState(true);
+            const [showMessages, setShowMessages] = useState(true);
+            const [showExecutionLogs, setShowExecutionLogs] = useState(false);
             const messagesEndRef = useRef(null);
             
             const scrollToBottom = () => {
@@ -317,12 +365,47 @@
                 scrollToBottom();
             }, [messages, streamingMessages]);
             
+            // Update body classes for event filtering
+            useEffect(() => {
+                const body = document.body;
+                if (showMessages) {
+                    body.classList.add('show-messages');
+                } else {
+                    body.classList.remove('show-messages');
+                }
+                
+                if (showExecutionLogs) {
+                    body.classList.add('show-execution-logs');
+                } else {
+                    body.classList.remove('show-execution-logs');
+                }
+            }, [showMessages, showExecutionLogs]);
+            
+            // Set initial body classes
+            useEffect(() => {
+                const body = document.body;
+                if (showMessages) {
+                    body.classList.add('show-messages');
+                }
+                if (showExecutionLogs) {
+                    body.classList.add('show-execution-logs');
+                }
+            }, []);
+            
             const updateStatus = (newStatus, text) => {
                 setStatus(newStatus);
                 setStatusText(text);
             };
             
-            const addMessage = (role, sender, content, timestamp = null, recipient = null, messageType = null, meetingId = null) => {
+            const toggleEventDisplay = (eventType) => {
+                if (eventType === 'messages') {
+                    setShowMessages(prev => !prev);
+                } else if (eventType === 'session_log_entry') {
+                    setShowExecutionLogs(prev => !prev);
+                }
+            };
+            
+            const addMessage = (role, sender, content, timestamp = null, recipient = null, messageType = null, meetingId = null, metadata = null) => {
                 const message = {
                     id: Date.now(),
                     role,
@@ -331,9 +414,41 @@
                     messageType,
                     meetingId,
                     content,
-                    timestamp: timestamp || new Date().toISOString()
+                    timestamp: timestamp || new Date().toISOString(),
+                    metadata
                 };
                 setMessages(prev => [...prev, message]);
+            };
+            
+            const formatSessionLogEntry = (event) => {
+                // Use appropriate log format based on item type
+                const logFormat = event.log_compact || event.log_full || event.content;
+                
+                // Add visual indicators based on item type
+                const typeIndicators = {
+                    'playbookcall': '📞',
+                    'playbookcallresult': '✅',
+                    'sessionlogitemplaybook_start': '▶️',
+                    'sessionlogitemplaybook_end': '⏹️',
+                    'sessionlogitemllm_request': '🤖',
+                    'sessionlogitemllm_response': '💬',
+                    'sessionlogitemstep_execution': '→',
+                    'sessionlogitemvariable_update': '📝',
+                    'sessionlogitemagent_message': '📨',
+                    'sessionlogitemerror': '❌',
+                    'sessionlogitemdebug': '🐛',
+                    'message': '💭'
+                };
+                
+                const indicator = typeIndicators[event.item_type] || '📄';
+                
+                return {
+                    type: event.item_type,
+                    level: event.level,
+                    indicator: indicator,
+                    content: logFormat,
+                    metadata: event.metadata
+                };
             };
             
             const handleEvent = (event) => {
@@ -348,6 +463,10 @@
                 switch (type) {
                     case 'connection_established':
                         addMessage('system', 'System', `Connected to session ${event.run_id.slice(0, 8)}...`, timestamp);
+                        break;
+                        
+                    case 'run_started':
+                        addMessage('system', 'System', 'Playbook execution started', timestamp);
                         break;
                         
                     // Non-streaming agent messages (commented out in favor of streaming)
@@ -426,6 +545,17 @@
                         addMessage('system', 'Error', event.message || 'Unknown error occurred', timestamp);
                         break;
                         
+                    case 'session_log_entry':
+                        console.log('Session log entry received:', event);
+                        const logSender = `${event.agent_klass}(${event.agent_id})`;
+                        const formattedLog = formatSessionLogEntry(event);
+                        addMessage('log', logSender, formattedLog, timestamp, null, null, null, event);
+                        break;
+                        
+                    case 'agent_created':
+                        addMessage('system', 'System', `New agent created: ${event.agent_klass}(${event.agent_id})`, timestamp);
+                        break;
+                        
                     default:
                         console.log('Unhandled event type:', type, event);
                 }
@@ -443,6 +573,7 @@
                     
                     websocket.onmessage = (event) => {
                         try {
+                            console.log('WebSocket message received:', event.data);
                             const data = JSON.parse(event.data);
                             handleEvent(data);
                         } catch (error) {
@@ -560,6 +691,29 @@
                             >
                                 Stop Program
                             </button>
+                        </div>
+                        
+                        {/* Event Type Filters - Always visible */}
+                        <div className="mt-4 flex gap-4 items-center flex-wrap">
+                            <span className="text-sm font-semibold">Show Events:</span>
+                            <label className="label cursor-pointer gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="checkbox checkbox-sm"
+                                    checked={showMessages}
+                                    onChange={() => toggleEventDisplay('messages')}
+                                />
+                                <span className="label-text">Messages</span>
+                            </label>
+                            <label className="label cursor-pointer gap-2">
+                                <input
+                                    type="checkbox"
+                                    className="checkbox checkbox-sm"
+                                    checked={showExecutionLogs}
+                                    onChange={() => toggleEventDisplay('session_log_entry')}
+                                />
+                                <span className="label-text">Execution Logs</span>
+                            </label>
                         </div>
                     </div>
                     

@@ -19,6 +19,7 @@ from playbooks.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.message import MessageType
 from playbooks.program import Program
+from playbooks.streaming_session_log import StreamingSessionLog
 from playbooks.utils.spec_utils import SpecUtils
 
 
@@ -47,6 +48,12 @@ class EventType(Enum):
     # System events
     ERROR = "error"
     DEBUG = "debug"
+
+    # Session log events
+    SESSION_LOG_ENTRY = "session_log_entry"
+
+    # Agent lifecycle events
+    AGENT_CREATED = "agent_created"
 
 
 @dataclass
@@ -100,6 +107,25 @@ class AgentStreamingEvent(BaseEvent):
     total_content: Optional[str] = None
 
 
+@dataclass
+class SessionLogEvent(BaseEvent):
+    agent_id: str
+    agent_klass: str
+    level: str
+    content: str
+    item_type: str
+    metadata: Optional[Dict] = None
+    log_full: Optional[str] = None
+    log_compact: Optional[str] = None
+    log_minimal: Optional[str] = None
+
+
+@dataclass
+class AgentCreatedEvent(BaseEvent):
+    agent_id: str
+    agent_klass: str
+
+
 class PlaybookRun:
     """Enhanced run management with comprehensive event tracking."""
 
@@ -110,11 +136,13 @@ class PlaybookRun:
         self.event_history: List[BaseEvent] = []
         self.terminated = False
         self.task: Optional[asyncio.Task] = None
+        self.execution_started = False
+        self.client_connected_event = asyncio.Event()
 
         # Store original methods for restoration
         self._original_methods = {}
 
-        # Setup message interception
+        # Setup message interception (but not streaming logs yet)
         self._setup_message_interception()
 
     def _setup_message_interception(self):
@@ -126,6 +154,9 @@ class PlaybookRun:
         self._original_methods[
             "broadcast_to_meeting"
         ] = MeetingManager.broadcast_to_meeting_as_owner
+        self._original_methods["create_agent"] = Program.create_agent
+
+        # Note: Session log streaming is now setup in _setup_early_streaming
 
         # Create bound methods for this specific run
         async def patched_route_message(
@@ -171,15 +202,159 @@ class PlaybookRun:
                 manager_self, meeting_id, message, from_agent_id, from_agent_klass
             )
 
+        async def patched_create_agent(program_self, agent_klass, **kwargs):
+            # Call original create_agent method
+            agent = await self._original_methods["create_agent"](
+                program_self, agent_klass, **kwargs
+            )
+
+            # Set up streaming for the newly created agent
+            await self._setup_streaming_for_new_agent(agent)
+
+            return agent
+
         # Patch methods
         Program.route_message = patched_route_message
         MessagingMixin.WaitForMessage = patched_wait_for_message
         MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting
+        Program.create_agent = patched_create_agent
 
-        # Setup streaming for all AI agents
+        # Note: Agent streaming is now setup in _setup_early_streaming
+
+    def _setup_streaming_session_logs(self):
+        """Replace agent session logs with streaming versions."""
+
+        def create_session_log_callback(agent_id, agent_klass):
+            """Create a callback for a specific agent's session log."""
+
+            async def callback(event_data):
+                print(
+                    f"[DEBUG] Session log callback called for {agent_klass}({agent_id}): {event_data.get('item_type', 'unknown')}"
+                )
+                # Create SessionLogEvent
+                event = SessionLogEvent(
+                    type=EventType.SESSION_LOG_ENTRY,
+                    timestamp=event_data["timestamp"],
+                    run_id=self.run_id,
+                    agent_id=agent_id,
+                    agent_klass=agent_klass,
+                    level=event_data["level"],
+                    content=event_data["content"],
+                    item_type=event_data["item_type"],
+                    metadata=event_data.get("metadata"),
+                    log_full=event_data.get("log_full"),
+                    log_compact=event_data.get("log_compact"),
+                    log_minimal=event_data.get("log_minimal"),
+                )
+                await self._broadcast_event(event)
+
+            return callback
+
+        # Replace session logs for all agents
+        print(
+            f"[DEBUG] Setting up streaming session logs for {len(self.playbooks.program.agents)} agents"
+        )
+        for agent in self.playbooks.program.agents:
+            if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+                print(
+                    f"[DEBUG] Setting up streaming for agent {agent.id} ({agent.klass})"
+                )
+                # Create streaming callback for this agent
+                callback = create_session_log_callback(agent.id, agent.klass)
+
+                # Replace with streaming version, preserving existing data
+                original_log = agent.state.session_log
+                streaming_log = StreamingSessionLog(
+                    original_log.klass, original_log.agent_id, callback
+                )
+                # Copy existing log entries
+                streaming_log.log = original_log.log.copy()
+                agent.state.session_log = streaming_log
+                print(
+                    f"[DEBUG] Replaced session log for agent {agent.id}, existing entries: {len(streaming_log.log)}"
+                )
+            else:
+                print(f"[DEBUG] Agent {agent.id} has no session_log or state")
+
+    def _setup_early_streaming(self):
+        """Setup streaming before execution starts to catch all events."""
+        print(f"[DEBUG] Setting up early streaming for run {self.run_id}")
+
+        # Setup session log streaming for all agents
+        self._setup_streaming_session_logs()
+
+        # Setup agent streaming for AI agents
         for agent in self.playbooks.program.agents:
             if hasattr(agent, "klass") and agent.klass != "human":
                 self._setup_agent_streaming(agent)
+
+    async def _setup_streaming_for_new_agent(self, agent):
+        """Set up streaming for a newly created agent."""
+        print(
+            f"[DEBUG] Setting up streaming for newly created agent {agent.id} ({agent.klass})"
+        )
+
+        # Set up session log streaming if the agent has one
+        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+            print(f"[DEBUG] Setting up session log streaming for new agent {agent.id}")
+
+            def create_session_log_callback(agent_id, agent_klass):
+                """Create a callback for a specific agent's session log."""
+
+                async def callback(event_data):
+                    print(
+                        f"[DEBUG] Session log callback called for newly created {agent_klass}({agent_id}): {event_data.get('item_type', 'unknown')}"
+                    )
+                    # Create SessionLogEvent
+                    event = SessionLogEvent(
+                        type=EventType.SESSION_LOG_ENTRY,
+                        timestamp=event_data["timestamp"],
+                        run_id=self.run_id,
+                        agent_id=agent_id,
+                        agent_klass=agent_klass,
+                        level=event_data["level"],
+                        content=event_data["content"],
+                        item_type=event_data["item_type"],
+                        metadata=event_data.get("metadata"),
+                        log_full=event_data.get("log_full"),
+                        log_compact=event_data.get("log_compact"),
+                        log_minimal=event_data.get("log_minimal"),
+                    )
+                    await self._broadcast_event(event)
+
+                return callback
+
+            # Create streaming callback for this agent
+            callback = create_session_log_callback(agent.id, agent.klass)
+
+            # Replace with streaming version, preserving existing data
+            original_log = agent.state.session_log
+            streaming_log = StreamingSessionLog(
+                original_log.klass, original_log.agent_id, callback
+            )
+            # Copy existing log entries
+            streaming_log.log = original_log.log.copy()
+            agent.state.session_log = streaming_log
+            print(
+                f"[DEBUG] Replaced session log for new agent {agent.id}, existing entries: {len(streaming_log.log)}"
+            )
+
+        # Set up agent message streaming if it's not a human agent
+        if hasattr(agent, "klass") and agent.klass != "human":
+            print(
+                f"[DEBUG] Setting up agent message streaming for new agent {agent.id}"
+            )
+            self._setup_agent_streaming(agent)
+
+        # Broadcast agent created event
+        agent_created_event = AgentCreatedEvent(
+            type=EventType.AGENT_CREATED,
+            timestamp=datetime.now().isoformat(),
+            run_id=self.run_id,
+            agent_id=agent.id,
+            agent_klass=agent.klass,
+        )
+        await self._broadcast_event(agent_created_event)
 
     def _setup_agent_streaming(self, agent):
         """Setup streaming capabilities for an agent."""
@@ -312,6 +487,9 @@ class PlaybookRun:
                 f"Added client to run {self.run_id}, total clients: {len(self.websocket_clients)}"
             )
 
+            # Signal that a client has connected
+            self.client_connected_event.set()
+
             # Send connection established event
             event = BaseEvent(
                 type=EventType.CONNECTION_ESTABLISHED,
@@ -326,10 +504,73 @@ class PlaybookRun:
             for event in self.event_history:
                 await client.send_event(event)
 
+            # Always send existing session logs
+            await self._send_existing_session_logs(client)
+
             print(f"Client successfully added and initialized for run {self.run_id}")
         except Exception as e:
             print(f"Error adding client to run {self.run_id}: {e}")
             raise
+
+    async def _send_existing_session_logs(self, client):
+        """Send existing session log entries to a newly connected client."""
+        print(f"[DEBUG] Sending existing session logs to client {client.client_id}")
+
+        for agent in self.playbooks.program.agents:
+            if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+                session_log = agent.state.session_log
+                print(
+                    f"[DEBUG] Agent {agent.id} has {len(session_log.log)} session log entries"
+                )
+
+                for entry in session_log.log:
+                    item = entry["item"]
+                    level = entry["level"]
+
+                    # Create event data similar to what StreamingSessionLog creates
+                    event_data = {
+                        "timestamp": datetime.now().isoformat(),
+                        "agent_id": agent.id,
+                        "agent_klass": agent.klass,
+                        "level": level.name,
+                        "content": str(item),
+                    }
+
+                    # Add metadata if it's an enhanced SessionLogItem
+                    if hasattr(item, "to_metadata"):
+                        event_data["metadata"] = item.to_metadata()
+                        event_data["item_type"] = item.item_type
+                    elif hasattr(item, "__class__"):
+                        event_data["item_type"] = item.__class__.__name__.lower()
+                    else:
+                        event_data["item_type"] = "message"
+
+                    # Add different log representations
+                    if hasattr(item, "to_log_full"):
+                        event_data["log_full"] = item.to_log_full()
+                    if hasattr(item, "to_log_compact"):
+                        event_data["log_compact"] = item.to_log_compact()
+                    if hasattr(item, "to_log_minimal"):
+                        event_data["log_minimal"] = item.to_log_minimal()
+
+                    # Create SessionLogEvent
+                    event = SessionLogEvent(
+                        type=EventType.SESSION_LOG_ENTRY,
+                        timestamp=event_data["timestamp"],
+                        run_id=self.run_id,
+                        agent_id=agent.id,
+                        agent_klass=agent.klass,
+                        level=event_data["level"],
+                        content=event_data["content"],
+                        item_type=event_data["item_type"],
+                        metadata=event_data.get("metadata"),
+                        log_full=event_data.get("log_full"),
+                        log_compact=event_data.get("log_compact"),
+                        log_minimal=event_data.get("log_minimal"),
+                    )
+
+                    # Send to client
+                    await client.send_event(event)
 
     async def send_human_message(self, message: str):
         """Send a message from human to the main agent."""
@@ -358,6 +599,7 @@ class PlaybookRun:
         MeetingManager.broadcast_to_meeting_as_owner = self._original_methods[
             "broadcast_to_meeting"
         ]
+        Program.create_agent = self._original_methods["create_agent"]
 
 
 class WebSocketClient:
@@ -366,6 +608,7 @@ class WebSocketClient:
     def __init__(self, websocket, client_id: str):
         self.websocket = websocket
         self.client_id = client_id
+        # Always send all events - filtering now handled by CSS in the client
         self.subscriptions = {
             EventType.AGENT_MESSAGE: True,
             EventType.MEETING_BROADCAST: True,
@@ -374,24 +617,24 @@ class WebSocketClient:
             EventType.AGENT_STREAMING_COMPLETE: True,
             EventType.HUMAN_INPUT_REQUESTED: True,
             EventType.HUMAN_MESSAGE: True,
+            EventType.SESSION_LOG_ENTRY: True,  # Always send, let client control display
         }
 
     async def send_event(self, event: BaseEvent):
-        """Send event to client if subscribed."""
-        if self.subscriptions.get(event.type, False):
-            try:
-                event_data = event.to_dict()
-                print(f"Sending event to client {self.client_id}: {event_data}")
-                await self.websocket.send(json.dumps(event_data))
-            except (
-                websockets.exceptions.ConnectionClosed,
-                websockets.exceptions.ConnectionClosedError,
-            ):
-                print(f"Client {self.client_id} connection closed during send")
-                raise  # Re-raise to trigger cleanup
-            except Exception as e:
-                print(f"Error sending event to client {self.client_id}: {e}")
-                raise
+        """Send event to client - always send all events."""
+        try:
+            event_data = event.to_dict()
+            print(f"Sending event to client {self.client_id}: {event_data}")
+            await self.websocket.send(json.dumps(event_data))
+        except (
+            websockets.exceptions.ConnectionClosed,
+            websockets.exceptions.ConnectionClosedError,
+        ):
+            print(f"Client {self.client_id} connection closed during send")
+            raise  # Re-raise to trigger cleanup
+        except Exception as e:
+            print(f"Error sending event to client {self.client_id}: {e}")
+            raise
 
     async def handle_message(self, message: str, run_manager: "RunManager"):
         """Handle incoming message from client."""
@@ -399,16 +642,7 @@ class WebSocketClient:
             data = json.loads(message)
             msg_type = data.get("type")
 
-            if msg_type == "subscribe":
-                # Update subscriptions
-                for event_type_str, enabled in data.get("events", {}).items():
-                    try:
-                        event_type = EventType(event_type_str)
-                        self.subscriptions[event_type] = enabled
-                    except ValueError:
-                        pass  # Invalid event type
-
-            elif msg_type == "human_message":
+            if msg_type == "human_message":
                 # Send human message to run
                 run_id = data.get("run_id")
                 message = data.get("message")
@@ -447,6 +681,9 @@ class RunManager:
             run = PlaybookRun(run_id, playbooks)
             self.runs[run_id] = run
 
+            # Setup streaming BEFORE starting execution to catch all events
+            run._setup_early_streaming()
+
             # Start the playbook execution
             run.task = asyncio.create_task(self._run_playbook(run))
 
@@ -458,6 +695,24 @@ class RunManager:
     async def _run_playbook(self, run: PlaybookRun):
         """Execute a playbook run."""
         try:
+            # Wait for at least one WebSocket client to connect before starting execution
+            print(
+                f"[DEBUG] Waiting for WebSocket client to connect to run {run.run_id}"
+            )
+            await run.client_connected_event.wait()
+            print(f"[DEBUG] Client connected, starting execution for run {run.run_id}")
+
+            # Mark execution as started
+            run.execution_started = True
+
+            # Send RUN_STARTED event
+            start_event = BaseEvent(
+                type=EventType.RUN_STARTED,
+                timestamp=datetime.now().isoformat(),
+                run_id=run.run_id,
+            )
+            await run._broadcast_event(start_event)
+
             await run.playbooks.program.run_till_exit()
         except ExecutionFinished:
             pass  # Normal termination
