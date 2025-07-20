@@ -40,6 +40,7 @@ def mock_program():
     """Create a mock program for testing."""
     program = AsyncMock(spec=Program)
     program.agents = []
+    program.execution_finished = False
     return program
 
 
