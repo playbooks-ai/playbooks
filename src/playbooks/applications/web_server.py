@@ -151,9 +151,9 @@ class PlaybookRun:
         # Store original methods
         self._original_methods["route_message"] = Program.route_message
         self._original_methods["wait_for_message"] = MessagingMixin.WaitForMessage
-        self._original_methods[
-            "broadcast_to_meeting"
-        ] = MeetingManager.broadcast_to_meeting_as_owner
+        self._original_methods["broadcast_to_meeting"] = (
+            MeetingManager.broadcast_to_meeting_as_owner
+        )
         self._original_methods["create_agent"] = Program.create_agent
 
         # Note: Session log streaming is now setup in _setup_early_streaming
