@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
-from ..constants import HUMAN_AGENT_KLASS
+from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 from ..enums import LLMMessageRole, StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
@@ -571,6 +571,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> Any:
+        if self.program.execution_finished:
+            return EXECUTION_FINISHED
+
         playbook, call, langfuse_span = await self._pre_execute(
             playbook_name, args, kwargs
         )
@@ -601,6 +604,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                     playbook_name, kwargs
                 )
 
+                if self.program.execution_finished:
+                    return EXECUTION_FINISHED
+
                 # Wait for required attendees to join before proceeding (if any besides requester)
                 await self.meeting_manager._wait_for_required_attendees(meeting)
 
@@ -614,13 +620,13 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             return error_msg
 
         # Execute local playbook in this agent
-        if playbook:
+        if playbook and not self.program.execution_finished:
             try:
                 result = await playbook.execute(*args, **kwargs)
                 await self._post_execute(call, result, langfuse_span)
                 return result
             except ExecutionFinished as e:
-                self.program.execution_finished_event.set()
+                self.program.set_execution_finished()
                 message = str(e)
                 await self._post_execute(call, message, langfuse_span)
                 return message

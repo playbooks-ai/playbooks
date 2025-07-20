@@ -30,7 +30,8 @@ class AsyncAgentRuntime:
     Uses asyncio tasks instead of threads for concurrent agent execution.
     """
 
-    def __init__(self):
+    def __init__(self, program: "Program"):
+        self.program = program
         self.agent_tasks: Dict[str, asyncio.Task] = {}
         self.running_agents: Dict[str, bool] = {}
 
@@ -80,13 +81,12 @@ class AsyncAgentRuntime:
         try:
             # Initialize and start the agent
             # await agent.initialize()
-            await agent.begin()
+            if not self.program.execution_finished:
+                await agent.begin()
 
         except ExecutionFinished as e:
             # Signal that execution is finished
-            self.execution_finished = True
-            if hasattr(self, "execution_finished_event"):
-                self.execution_finished_event.set()
+            self.set_execution_finished()
             print(f"Agent {agent.id} {EXECUTION_FINISHED}: {e}")
             raise e
         except asyncio.CancelledError:
@@ -162,7 +162,7 @@ class Program(ProgramAgentsCommunicationMixin):
         self.meeting_id_registry = MeetingRegistry()
 
         # Agent runtime manages execution with asyncio
-        self.runtime = AsyncAgentRuntime()
+        self.runtime = AsyncAgentRuntime(program=self)
 
         self.extract_public_json()
         self.parse_metadata()
@@ -348,13 +348,18 @@ class Program(ProgramAgentsCommunicationMixin):
             # Agent threads are designed to run indefinitely until this exception
             await self.execution_finished_event.wait()
         except ExecutionFinished:
-            self.execution_finished = True
+            self.set_execution_finished()
         finally:
             await self.shutdown()
 
+    def set_execution_finished(self):
+        self.execution_finished = True
+        if hasattr(self, "execution_finished_event"):
+            self.execution_finished_event.set()
+
     async def shutdown(self):
         """Shutdown all agents and clean up resources."""
-        self.execution_finished = True
+        self.set_execution_finished()
 
         # Stop all agent tasks via runtime
         await self.runtime.stop_all_agents()

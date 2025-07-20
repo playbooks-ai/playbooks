@@ -57,6 +57,9 @@ class MarkdownPlaybookExecution:
         )
 
         while not done:
+            if self.agent.program.execution_finished:
+                break
+
             llm_response = LLMResponse(
                 await self.make_llm_call(
                     instruction=instruction,
@@ -86,6 +89,9 @@ class MarkdownPlaybookExecution:
                     next_steps[all_steps[i]] = all_steps[i + 1]
 
             for line in llm_response.lines:
+                if self.agent.program.execution_finished:
+                    break
+
                 # print(f"[EXECUTE] line: {line.text}")
                 if "`SaveArtifact(" not in line.text:
                     for step in line.steps:
@@ -153,6 +159,9 @@ class MarkdownPlaybookExecution:
                 # Execute playbook calls
                 if line.playbook_calls:
                     for playbook_call in line.playbook_calls:
+                        if self.agent.program.execution_finished:
+                            break
+
                         if playbook_call.playbook_klass == "Return":
                             # print(f"[EXECUTE] Return: {playbook_call.args}")
                             if playbook_call.args:
@@ -233,6 +242,9 @@ class MarkdownPlaybookExecution:
             )
 
             instruction = "\n".join(instruction)
+
+        if self.agent.program.execution_finished:
+            return EXECUTION_FINISHED
 
         if self.agent.state.call_stack.is_empty():
             raise ExecutionFinished(f"Call stack is empty. {EXECUTION_FINISHED}.")

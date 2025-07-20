@@ -6,7 +6,8 @@ import asyncio
 import time
 from typing import List
 
-from ..constants import EOM
+from ..constants import EOM, EXECUTION_FINISHED
+from ..exceptions import ExecutionFinished
 from ..message import Message
 
 
@@ -44,6 +45,9 @@ class MessagingMixin:
             Collected messages as string
         """
         while True:
+            if self.program.execution_finished:
+                raise ExecutionFinished(EXECUTION_FINISHED)
+
             first_message_time = None
             buffer_timeout = 5.0  # 5s maximum buffer time
 
