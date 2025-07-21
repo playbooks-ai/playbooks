@@ -272,14 +272,28 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
 
     async def cleanup(self):
         """Cancel all background tasks and clean up resources."""
-        # Cancel all background tasks
+        # Only cleanup if execution is truly finished
+        if not (self.program and self.program.execution_finished):
+            return
+
+        # For Python 3.11 compatibility, gently cancel background tasks
+        # that might not exit naturally when execution_finished is set
+        cancelled_tasks = []
         for task in self._background_tasks:
             if not task.done():
                 task.cancel()
+                cancelled_tasks.append(task)
 
-        # Wait for all tasks to complete cancellation
-        if self._background_tasks:
-            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+        # Give cancelled tasks a brief moment to complete
+        if cancelled_tasks:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*cancelled_tasks, return_exceptions=True),
+                    timeout=0.5,
+                )
+            except asyncio.TimeoutError:
+                # Tasks didn't complete in time, that's okay
+                pass
 
         # Clear the task list
         self._background_tasks.clear()
