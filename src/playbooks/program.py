@@ -95,6 +95,10 @@ class AsyncAgentRuntime:
         except Exception as e:
             print(f"Fatal error in agent {agent.id}: {e}")
             raise
+        finally:
+            # Cleanup agent resources
+            if hasattr(agent, "cleanup"):
+                await agent.cleanup()
 
 
 class ProgramAgentsCommunicationMixin:

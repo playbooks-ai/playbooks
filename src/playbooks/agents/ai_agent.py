@@ -146,6 +146,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.source_line_number = source_line_number
         self.public_json = None
 
+        # Track background tasks for cleanup
+        self._background_tasks = []
+
     @abstractmethod
     async def discover_playbooks(self) -> None:
         """Discover and load playbooks for this agent.
@@ -190,7 +193,8 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         bgn_tasks = []
 
         def create_idle_task():
-            asyncio.create_task(self._idle_loop())
+            task = asyncio.create_task(self._idle_loop())
+            self._background_tasks.append(task)
             # idle_task.add_done_callback(
             #     lambda t: print(f"{str(self)} : Idle loop task done")
             # )
@@ -265,6 +269,20 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             except asyncio.CancelledError:
                 # Task is being cancelled - exit gracefully
                 break
+
+    async def cleanup(self):
+        """Cancel all background tasks and clean up resources."""
+        # Cancel all background tasks
+        for task in self._background_tasks:
+            if not task.done():
+                task.cancel()
+
+        # Wait for all tasks to complete cancellation
+        if self._background_tasks:
+            await asyncio.gather(*self._background_tasks, return_exceptions=True)
+
+        # Clear the task list
+        self._background_tasks.clear()
 
     def parse_instruction_pointer(self, step_id: str) -> InstructionPointer:
         """Parse a step string into an InstructionPointer.
