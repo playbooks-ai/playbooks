@@ -128,7 +128,7 @@ await pb.program.run_till_exit()
 ## Technical Requirements
 
 ### Dependencies
-- **Python**: 3.11+ (actively developed on Python 3.11)
+- **Python**: 3.12+
 - **Core Libraries**: 
   - `rich` for enhanced console output
   - `litellm` for LLM integration
@@ -260,7 +260,7 @@ ruff check .
 - **Documentation**: https://playbooks-ai.github.io/playbooks-docs/
 - **Homepage**: https://runplaybooks.ai/
 - **License**: MIT
-- **Python Version**: 3.11+
+- **Python Version**: 3.12+
 - **Package Manager**: Poetry
 
 ## Keywords for Claude Code

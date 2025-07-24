@@ -276,8 +276,8 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         if not (self.program and self.program.execution_finished):
             return
 
-        # For Python 3.11 compatibility, gently cancel background tasks
-        # that might not exit naturally when execution_finished is set
+        # Cancel background tasks that might not exit naturally when
+        # execution_finished is set
         cancelled_tasks = []
         for task in self._background_tasks:
             if not task.done():
