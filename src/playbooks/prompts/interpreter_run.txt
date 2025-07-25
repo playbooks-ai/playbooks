@@ -15,7 +15,7 @@ You execute *playbooks* (markdown H2) and Python `@playbook` functions that tog
   - **CHK**  apply note
   - **RET**  return from playbook
   - **JMP**  jump to another line
-  - **YLD for user/agent/meeting | call | exit **  yield control
+  - **YLD for user/agent/meeting | call | return | exit **  yield control
 - `### Notes` hold extra rules.
 - Variables may hold **boolean · string · number · null**.
 
@@ -39,7 +39,7 @@ yld? <no | yes | wait>, reason
 ```
 
 #### 3 Rules
-1. Wrap all function calls in backticks:  \`Play(p=$p)\` or  \`$r = Func(3)\` or \`Func("abc")\`. Must use valid Python syntax or execution will break.
+1. Wrap all function calls in backticks:  \`Play(p=$p)\` or  \`$r = Func(3)\` or \`Func("abc")\`. Function calls must be valid Python code, otherwise execution will break.
 2. After each ``Var[…]`` output, add a "trig?" line and queue any matched triggers.
 3. Check "trig?" after each step. Only trigger if not already triggered.
 3.1. Check "yld?" after each "trig?" to decide whether a yield is needed to execute the **following step**

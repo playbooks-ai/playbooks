@@ -18,15 +18,35 @@ class Playbooks:
         self.program_paths = program_paths
         self.llm_config = llm_config or LLMConfig()
         self.session_id = session_id or str(uuid.uuid4())
-        self.program_content, self.do_not_compile = Loader.read_program(program_paths)
 
-        # Skip compilation if any of the files are already compiled (.pbasm)
-        if self.do_not_compile:
-            # For compiled files, use the content as-is without compilation
-            self.compiled_program_content = self.program_content
-        else:
-            # For source files, compile the program content
-            self.compiled_program_content = self.compile_program(self.program_content)
+        # Load files
+        self.program_files = Loader.read_program_files(program_paths)
+        compiler = Compiler(self.llm_config)
+        self.compiled_program_files = compiler.process_files(self.program_files)
+
+        # Extract and apply frontmatter from all files (.pb and .pbasm)
+        self.program_metadata = {}
+        compiled_content = []
+        for i, (file_path, fm, file_content, is_compiled) in enumerate(
+            self.compiled_program_files
+        ):
+            if fm:
+                # Check for duplicate attributes
+                for key, value in fm.items():
+                    if key in self.program_metadata:
+                        raise ValueError(
+                            f"Duplicate frontmatter attribute '{key}' found in {file_path}. "
+                            f"Previously defined with value: {self.program_metadata[key]}"
+                        )
+                    self.program_metadata[key] = value
+
+            compiled_content.append(file_content)
+
+        # Compiled agents without frontmatter
+        self.compiled_program_content = "\n\n".join(compiled_content)
+
+        # Apply program metadata
+        self._apply_program_metadata()
 
         self.event_bus = EventBus(self.session_id)
         self.program = Program(
@@ -39,6 +59,13 @@ class Playbooks:
     async def begin(self):
         await self.program.begin()
 
+    def _apply_program_metadata(self):
+        """Apply program-level metadata from frontmatter."""
+        for key, value in self.program_metadata.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
     def compile_program(self, program_content: str) -> str:
+        """Legacy method for backward compatibility."""
         compiler = Compiler(self.llm_config)
         return compiler.process(program_content)

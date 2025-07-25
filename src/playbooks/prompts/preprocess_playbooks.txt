@@ -19,15 +19,14 @@ The PBAsm runtime is LLM-based with these features:
 ## Understand Input Structure
 
 Input is in markdown format. It contains:
-- Optional front matter (title, author)
-- Agent sections starting with `#` 
-- Python playbooks with `@playbook` decorator
-- Markdown playbook sections with `##`
-- Triggers, Steps, and Notes `###` subsections
+- One agent H1 section starting with `#` 
+- Python playbooks, i.e. functions, with `@playbook` decorator
+- Markdown playbooks, i.e. functions, H2 sections with `##`
+- Triggers, Steps, and Notes H3 subsections with `###`
 
 ## Variable Declaration Rules
 
-Variables are declared on FIRST reference with :type suffix:
+Variables are declared on FIRST reference with Python :type suffix:
 - First use (declaration): `$varname:type`
 - Subsequent uses: `$varname` (no type suffix)
 
@@ -37,49 +36,50 @@ Examples:
 - `03:QUE Say(user, Hello $name)` ← Subsequent use, no :type needed
 - `04:EXE Process $name` ← Still no :type needed
 
-Common types: str, int, float, list, dict, bool
+Allowed Python types: str, int, float, list, dict, bool
 
 ## Command Codes (MEMORIZE THIS)
 
 Each step starts with NN(.NN)*:CODE format (NN = two digits, sub-steps use dot notation: `01.01:`, `01.02:`, etc)
 Step numbering is sequential within each playbook.
 
-**EXE** - Direct assignments or actions without function/playbook calls
+**EXE** - Immediately executed direct assignments or actions without function/playbook calls
 - Example: `01:EXE List 5 $cities:list near $city`
 
 **QUE** - Enqueue playbook calls
-- Without result: `01:QUE Say(user, Say hello to the user)<br>02:YLD for call`
-- With result: `01:QUE $result:type = FunctionName(param=$value)<br>02:YLD for call`
+- Without result: `- 01:QUE Say(user, Say hello to the user)`
+- With result: `- 01:QUE $result:type = FunctionName(param=$value)`
 
 **YLD** - Yield control (ALWAYS follows specific patterns)
 - **YLD for call**: Execute queued operations without waiting for user, agent or meeting to respond
-  - Use after Say() when just displaying information
-  - Use after QUE when you need the results before proceeding
-  - Use after multiple QUE commands to execute all batched calls concurrently
-- **YLD for user/agent id/meeting id**: Wait for user, agent or meeting to respond
+  - Use when you need the results of previous QUEed calls or Say() messages must be delivered before proceeding
+  - Use after multiple QUE commands to execute all queued calls concurrently
+- **YLD for user/agent agent_id/meeting meeting_id**: Wait for messages from user, agent or meeting
   - Use after Say() when asking a question that needs an answer
-  - Only use when the next step depends on user input
+  - Use only when the next step depends on receiving the input
+- **YLD for return**: Return from current playbook
 - **YLD for exit**: Terminate program
 
 **CND** - Conditions (if/while/for)
-- Example: `01:CND If $name == "Jack"`
+- Example: `- 01:CND If name starts with J`
 - Pattern for loop: CND → sub-steps → JMP
 - Pattern for if: CND → sub-steps
-- Pattern for if else: If CND → sub-steps → Otherwise CND → sub-steps
+- Pattern for if else: CND If.. → sub-steps → CND Otherwise → sub-steps
+- Pattern for switch-case: CND When → sub-steps → CND When → sub-steps → .. → CND Otherwise → sub-steps
 
 **JMP** - Jump to line
-- Used for loops: `01.04:JMP 01`
+- Used for loops: `- 01.04:JMP 01`
 
 **RET** - Return from playbook
-- Without value: `01:RET`
-- With value (from variable): `01:RET $result`
-- With value (literal): `01:RET weather summary`
+- Without value: `- 09:RET`
+- With value (from variable): `- 09:RET $result`
+- With value (literal): `- 05:RET weather summary`
 
-**CHK** - Check/apply a note, inserted wherever applying to the note is important
-- Example: `01:CHK N1`
+**CHK** - Check/apply a note, inserted wherever adhering to the note is important
+- Example: `- 01:CHK N1`
 
-**TNK** - Think step (internal reasoning)
-- Example: `01:TNK Consider which cities to recommend`
+**TNK** - Think step (internal deep reasoning)
+- Example: `- 01:TNK Consider which cities to recommend`
 
 ## Built-in Playbooks
 
@@ -88,93 +88,90 @@ These playbooks are always available without declaration:
 **Say(recipient, message)**
 - Display message to specified recipient
 - Keep instructions instead of making a specific string, e.g. Say(user, Say hello to the user) instead of Say(user, "Hello!")
-- Examples:
-  - Say something to user: `01:QUE Say(user, Tell user your favorite color)<br>02:YLD for call`
-  - Ask something from user: `01:QUE Say(user, Ask user for their $name:str)<br>02:YLD for user`
-  - Say something in a meeting: `01:QUE Say(meeting, Explain the rules of the game)<br>02:YLD for meeting`
-  - Ask a question in a meeting: `01:QUE Say(meeting, Ask player for next move)<br>02:YLD for meeting`
-  - When not in meeting or in a side-conversation during a meeting, say something to an agent: `01:QUE Say(AccountantAgent, Provide income information)<br>02:YLD for call`
-  - When not in meeting or in a side-conversation during a meeting, ask something from an agent: `01:QUE Say(AccountantAgent, Ask what the tax rate is)<br>02:YLD for agent`
+- Patterns:
+  - Say something to user: `- 01:QUE Say(user, Tell user your favorite color)<br>- 02:YLD for call`
+  - Ask something from user: `- 01:QUE Say(user, Ask user for their $name:str)<br>- 02:YLD for user`
+  - Say something in a meeting: `- 01:QUE Say(meeting, Explain the rules of the game)<br>02:YLD for call`
+  - Ask a question in a meeting: `- 01:QUE Say(meeting, Ask player agent for next move)<br>02:YLD for meeting`
+  - Send direct message to an agent: `- 01:QUE Say(AccountantAgent, Provide income information)<br>02:YLD for call`
+  - Ask with direct message to an agent: `- 01:QUE Say(AccountantAgent, Ask what the tax rate is)<br>02:YLD for agent`
 
 **CreateAgent(agent type, ...params)**
 - Create new agent instance from the agent type
-- Example: `01:QUE CreateAgent(MyWorker, name="MW001", age=25)<br>02:YLD for call`
+- Example: `- 01:QUE CreateAgent(MyWorker, name="MW001", age=25)`
 
 **Create meeting**
-- To create/start a meeting, call appropriate playbook with meeting:true, e.g. "PlanningMeeting($quarter)"
-- **Implicit arguments** Meeting playbooks take two implict arguments - $topic:str and $attendees:List[str], e.g. `PlanningMeeting($quarter=current quarter, $topic=quarterly planning, $attendees=[GeneralManager, CTO, ScrumMaster])`
+- To create/start a meeting, call playbook with metadata meeting:true, e.g. "PlanningMeeting(...)"
+- **Implicit arguments** Meeting playbooks always take two implict arguments - $topic:str and $attendees:List[str], e.g. `PlanningMeeting($quarter=current quarter, $topic=quarterly planning, $attendees=[GeneralManager, CTO, ScrumMaster])`
 
 **InviteToMeeting(meeting, agent)**
-- Invite participants to current meeting
-- Example: `01:QUE InviteToMeeting(meeting, AccountantAgent)<br>02:QUE InviteToMeeting(meeting, TaxAgent)<br>03:YLD for call`
+- Invite agents to an ongoing meeting
+- Example: `- 01:QUE InviteToMeeting(meeting, AccountantAgent)<br>- 02:QUE InviteToMeeting(meeting, TaxAgent)<br>- 03:YLD for call`
 
-**EndMeeting()**
-- Terminate current meeting
-- Example
-  - If meeting host, just return from the meeting playbook `01:RET`
-  - If meeting participant, request openly `01:QUE Say(meeting, request to end the meeting with reason)` or privately to the host `01:QUE Say(HostAgent, request to end the meeting with reason)`
+**Ending a meeting**
+- Meeting ends with host returns from the meeting playbook. So, if agent is meeting host, just return from the meeting playbook `- 09:RET`
+- If agent is a meeting participant, request openly `- 01:QUE Say(meeting, request to end the meeting with reason)` or privately to the host `- 01:QUE Say(Conductor, request to end the meeting with reason)`
 
 **LoadArtifact(filename)**
-- Load artifact into memory (artifact will be available when program continues)
-- Example: `01:QUE LoadArtifact(report artifact)<br>02:YLD for call`
+- Load artifact into memory (artifact will be available after YLD)
+- Example: `- 01:QUE LoadArtifact(report artifact)`
 
 **SaveArtifact(filename, summary, content)**
 - Create or update artifact
-- Example: `01:QUE SaveArtifact("results.json", One line about $task, Summary of $data)<br>02:YLD for call`
+- Example: `- 01:QUE SaveArtifact("results.json", One line about $task, Summary of $data)`
 
 ## Natural Language Elements
 
 Some elements use natural language that the LLM runtime interprets:
 
 1. **Completion conditions after YLD**
-   - `Say(ask user to pick a product); YLD for user; done after 4 turns or user gives up`
-   - `Say(ask user for email); YLD for user; done when user provides email or gives up`
+   - `- 01:QUE Say(ask user to pick a product); YLD for user; done after 4 turns or user gives up`
+   - `- 01:QUE Say(ask user for email); YLD for user; done when user provides valid email or gives up`
    
 2. **Informal step descriptions**
-   - `EXE List 5 cities near user's location`
-   - `EXE Fill weather dict by collecting loaded weather by $city`
-   - `QUE Create 3 agents with CreateAgent(worker agent, name=sequential names like "MW001", "MW002", age=random age)`
+   - `- 01:EXE List 5 cities near user's location`
+   - `- 01:EXE Fill weather dict by collecting loaded weather info by $city`
+   - `- 01:QUE Create 3 player agents with sequential names like "MW001", "MW002" and random age`
 
 3. **Artifact references**
-   - Show artifact to user/Agent/meeting: `01:QUE Say(user/Agent/meeting, Here is your report - Artifact[report.md])`
+   - Show artifact to user/Agent/meeting: `- 01:QUE Say(user/Agent/meeting, Here is your report - Artifact[report.md])`
 
 The LLM runtime understands context and intent rather than requiring strict syntax.
 
-## Function Call Patterns (CRITICAL)
+## Playbook, i.e. function, Call Patterns (CRITICAL)
 
-### Pattern A: Simple function call
+### Pattern A: Simple playbook call (use Python-like syntax)
 ```
 Raw: Load account for the user
 Compiled (assuming LoadAccount is a listed playbook and $email and $pin are available at this point):
-01:QUE $account:dict = LoadAccount(email=$email, pin=$pin)<br>02:YLD for call
+- 01:QUE $account:dict = LoadAccount(email=$email, pin=$pin)
 ```
 
-### Pattern B: Nested function calls
+### Pattern B: Nested playbook calls (use Python-like syntax)
 ```
 Raw: FuncA(FuncB(x)+FuncC(x))
 Compiled (assuming FuncA and FuncB are listed playbooks and $x is available at this point):
-01:QUE $temp1:type = FuncB(x=$x) # Note no YLD for call needed after this
-01:QUE $temp2:type = FuncC(x=$x)
-02:YLD for call
-03:QUE $result:type = FuncA(param=$temp)
-04:YLD for call
+- 01:QUE $temp1:float = FuncB(x=$x)
+- 02:QUE $temp2:float = FuncC(x=$x)
+- 03:YLD for call ← next step depends on playbook return values, so yield
+- 04:QUE $temp3:float = FuncA(param=$temp1)
+- 05:YLD for call
+- 06:QUE $temp:float = $temp2 + $temp3
 ```
 
 ### Pattern C: Calling public playbooks from another agent
-**When the playbook exists on the agent and is public** convert to a function call syntax
+**When the playbook exists on the agent and is public**, convert to a playbook call syntax
 ```
 Raw: Get current weather for 98053 from the weather agent
 Compiled (assuming WeatherAgent exists with a GetCurrentWeather(zip) playbook):
-01:QUE $current_weather:dict = WeatherAgent.GetCurrentWeather(98053)
-02:YLD for call
+- 01:QUE $current_weather:dict = WeatherAgent.GetCurrentWeather(98053)
 ```
 
 **When playbook is not known, e.g. the agent is an MCP server so list of playbooks will only be available at run time, or the playbook is not public**, keep instruction to be resolved at run time
 ```
 Raw: Get current weather for 98053 from the weather agent
 Compiled (assuming WeatherAgent exists but playbooks are not listed):
-01:QUE Get $current_weather:dict for 98053 from the WeatherAgent
-02:YLD for call
+- 01:QUE Get $current_weather:dict for 98053 from the WeatherAgent
 ```
 
 ### Pattern D: Saying something to user
@@ -182,10 +179,7 @@ Queue Say() to show text to the user. Keep instructions instead of making a spec
 ```
 Raw: Inform user about the weather
 Compiled:
-01:QUE Say(user, Inform user about the weather); no need to yield yet
-02:... 
-03:...
-04:YLD for call
+- 01:QUE Say(user, Inform user about the weather)
 ```
 
 ### Pattern E: Having a multi-turn conversation with the user
@@ -193,9 +187,9 @@ Queue Say() with an instruction to continue conversation unless condition to mov
 ```
 Raw: Welcome the user, ask how you can help and do some ice breaking chitchat for up to 4 turns
 Compiled:
-01:QUE Say(user, Welcome the user and ask how you can help)
-02:YLD for user
-03:QUE Say(user, Do some ice breaking chitchat with user); YLD for user; done after 4 turns or chitchat finished
+- 01:QUE Say(user, Welcome the user and ask how you can help)
+- 02:YLD for user
+- 03:QUE Say(user, Do some ice breaking chitchat with user); YLD for user; done after 4 turns or chitchat finished
 ```
 
 ### Pattern F: Asking user for information
@@ -203,42 +197,17 @@ Use Say() to show text to the user with a YLD for user to wait for user input.
 ```
 Raw: Ask user for their name
 Compiled:
-01:QUE Say(user, Ask user for their $name:str); YLD for user; done when user provides name or gives up
-```
-
-### Pattern G: Batch multiple QUE calls (YLD only after all calls are queued)
-When QUE calls don't depend on each other's results, batch them together without yielding between calls. The runtime maintains execution history for contextual reference.
-```
-Raw: load weather for the cities
-Compiled (assuming LoadWeather is a listed playbook and $cities:list is available at this point):
-01:EXE Initialize empty $weather:dict
-02:CND For each $city in $cities
-  02.01:QUE LoadWeather(city=$city); no need to yield because we do not need the results yet
-03:YLD for call to execute all queued calls concurrently
-04:EXE Fill $weather dict by collecting loaded weather by $city
-```
-
-```
-Raw:
-- Create two players with gamer names
-- Welcome the players
-- Ask player 1 to start the game
-Compiled (note YLD only after queueing all calls):
-01:QUE CreateAgent(Player, name="creative gamer name 1"); no need to yield
-02:QUE CreateAgent(Player, name="creative gamer name 2"); no need to yield
-03:QUE Say(Wecome the players); no need to yield
-04:QUE Say(Ask player 1 to start the game)
-04:YLD for call
+- 01:QUE Say(user, Ask user for their $name:str); YLD for user; done when user provides a valid name or gives up
 ```
 
 ## Specific Transformations
 
 ### Triggers
 Apply these for triggers on both Python and Markdown playbooks
-- Add prefix: `T1:BGN` (begins), `T1:CND` (conditional), `T1:EVT` (event)
-- "When program starts" → `T1:BGN When program starts`
-- "When user provides X" → `T1:CND When user provides X`
-- "When we receive message from Accountant agent" → `T1:EVT When we receive message from Accountant agent`
+- Add prefix: `T1:BGN` (execute when program begins), `T1:CND` (when condition is met), `T1:EVT` (when event received)
+- "When program starts" → `- T1:BGN When program starts`
+- "When user provides X" → `- T1:CND When user provides X`
+- "Upon receiving message from Accountant agent" → `- T1:EVT Upon receiving message from Accountant agent`
 
 ### Loops
 ```
@@ -251,21 +220,21 @@ Raw:
     - Inform user that it must be nonzero
 - Tell user the square root of the number
 Compiled:
-01:CND Until $number:int is perfect square
-  01.01:QUE Say(user, Ask user for next $number)
-  01.02:CND When user asks what type
-    01.02.01:QUE Say(user, positive integer only)
-  01.03:CND When user provides 0
-    01.02.01:QUE Say(Inform user that it must be nonzero)
-  01.04:JMP 01
-02:EXE $square_root = square root of the $number
-03:QUE Say(Tell user the $square_root of the $number)
+- 01:CND Until $number:int is a perfect square
+  - 01.01:QUE Say(user, Ask user for $number)
+  - 01.02:CND When user asks what type
+    - 01.02.01:QUE Say(user, positive integer only)
+  - 01.03:CND When user provides 0
+    - 01.02.01:QUE Say(Inform user that it must be nonzero)
+  - 01.04:JMP 01
+- 02:EXE $square_root = square root of the $number
+- 03:QUE Say(Tell user the $square_root of the $number)
 ```
 
 ### Artifact Operations
-- Load: `QUE LoadArtifact(filename)`
-- Save: `QUE SaveArtifact(filename, summary, content)`
-- Show to user: `QUE Say(user, Here is your report - Artifact[filename])`
+- Load artifact: `- 01:QUE LoadArtifact(filename)`
+- Save artifact: `- 01:QUE SaveArtifact(filename, summary, content)`
+- Show artifact: `- 01:QUE Say(user, Here is your report - Artifact[filename])`
 
 ### Complex Instructions
 Split when instruction contains multiple actions that cannot or should not be executed together:
@@ -275,10 +244,10 @@ Split when instruction contains multiple actions that cannot or should not be ex
 ```
 Raw: Tell user the price and if they want it, add to cart
 Compiled:
-01:QUE Say(user, Tell user the price); no need to yield
-02:QUE Say(user, Ask if user wants to purchase); YLD for user; done when user decides whether to purchase
-03:CND If user wants to purchase
-  03.01:QUE Add to cart
+- 01:QUE Say(user, Tell user the price)
+- 02:QUE Say(user, Ask if user wants to purchase); YLD for user; done when user decides whether to purchase or not or gives up
+- 03:CND If user wants to purchase
+  - 03.01:QUE Add to cart
 ```
 
 ### Public Playbooks
@@ -297,7 +266,7 @@ model: claude-sonnet-4.0
 This is an example agent
 author:
   name: Amol Kelkar
-  email: kelkar.amol@gmail.com
+  email: contact@runplaybooks.ai
 ```
 Compiled:
 ```
@@ -306,7 +275,7 @@ metadata:
   model: claude-sonnet-4.0
   author:
     name: Amol Kelkar
-    email: kelkar.amol@gmail.com
+    email: contact@runplaybooks.ai
 ---
 This is an example agent
 ```
@@ -315,25 +284,21 @@ Raw:
 ```
 # WeatherMCPServer
 MCP server for weather tools
-mcp: http://mydomain.com/mcp
+remote:
+  mcp: http://mydomain.com/mcp
 ```
 Compiled:
 ```
 # WeatherMCPServer
 metadata:
-  mcp: http://mydomain.com/mcp
+  remote:
+    mcp: http://mydomain.com/mcp
 ---
 MCP server for weather tools
 ```
 
 ## Output Structure Template
 ````
----
-info1: "copied verbatim if exists"
-info2: "copied verbatim if exists"
-...
----
-
 # AgentName
 [metadata yaml block if any metadata specified]
 [--- separator only if metadata yaml block is present]
@@ -352,12 +317,12 @@ info2: "copied verbatim if exists"
 - T2:TYPE trigger text
 - ...
 ### Steps (if any)
-- 01:CODE step description
-  - 01.01:CODE step description
-  - 01.02:CODE step description
+- 01:CODE step instruction
+  - 01.01:CODE step instruction
+  - 01.02:CODE step instruction
   - ...
-- 02:CODE step description
-- 03:CODE step description
+- 02:CODE step instruction
+- 03:CODE step instruction
 - ...
 ### Notes (if any)
 - N1 note text
@@ -383,32 +348,30 @@ info2: "copied verbatim if exists"
 
 ## Common Mistakes to Avoid
 
-1. **Missing YLD**: Every QUE that needs results or user input requires appropriate YLD
-2. **Wrong variable syntax**: Use $varname:type on first use, then just $varname
-3. **Forgetting JMP in loops**: While/Until loops need JMP back to CND
-4. **Not decomposing nested calls**: Break down from innermost to outermost
-5. **Adding extra content**: Only include what's in the input, appropriately transformed for PBAsm
-6. **Not generating public.json**: Each agent must end with a public.json, even if empty []
-7. **Wrong YLD type**: Use `YLD for call` for function execution, `YLD for user` only when waiting for user response
-8. **Type on variable usage**: Never add :type when using an already declared variable
+1. **Forgetting JMP in loops**: While/Until loops must JMP back to CND
+2. **Not decomposing nested calls**: Break down from innermost to outermost calls
+3. **Adding extra content**: Only include what's in the input, appropriately transformed for PBAsm
+4. **Not generating public.json**: Agent must end with a public.json, even if empty []
+5. **Wrong YLD type**: Use `YLD for call` for playbook execution, `YLD for user` only when waiting for user response
 
 ## Processing Checklist
 
 1. ✓ Convert trigger format (add T1:BGN/CND/EVT)
-2. ✓ Add parameter types to function signature
+2. ✓ Add parameter types to playbook signature
 3. ✓ Number all steps (01, 02, ... use 01.01 for sub-steps)
 4. ✓ Add :CODE to each step
 5. ✓ Declare all variables with :type on first use only
 6. ✓ Decompose complex instructions into multiple steps if necessary
-7. ✓ Add `YLD for user` only when waiting for user response, `YLD for meeting` to listen to meeting, `YLD for call` for function execution
+7. ✓ Add `YLD for user` only when waiting for user response, `YLD for meeting` to listen to meeting, `YLD for call` for playbook execution
 8. ✓ Add JMP for while/until loops
-9. ✓ Each agent must end with a public.json listing all public playbooks in that agent
+9. ✓ End with a public.json listing all public playbooks in the agent
 10. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
-11. ✓ In a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, explain rules of the game)` unless private side conversation is needed
+11. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
 12. ✓ Extract metadata into yaml blocks for agents and playbooks
-13. ✓ Each YLD is expensive to execute (need a new LLM call), so batch as many calls as possible before YLD
+13. ✓ Each YLD is expensive to execute (needs a new LLM call), so batch as many calls as possible before YLD
 14. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
-15. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as react:true
+15. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as execution_mode:react unless it is marked as execution_mode:raw
+16. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
 
 ## Example Transformation
 
@@ -485,19 +448,6 @@ Only consider cities in the United States.
 
 # ProcessMe($report)
 You are a processor who will take each line of the report and count how many lines it has. You have tools like LookupInfo that you can call. 
-
-# SecondAgent
-
-## P1($name, $age)
-model: gpt-4o
-- Say hello $name
-- Lookup $info for $name from Example agent
-- Save "greeting.txt" with summary "Greeting" and content "Hello $name, your info is $info"
-
-## P2
-public: true
-- Load "greeting.txt"
-- Show "greeting.txt" to user
 
 **Output:**
 ---
@@ -580,7 +530,7 @@ Only consider cities in the United States.
 - 02:RET $city in "Austin, TX" format
 
 # ProcessMe($report: str) -> int
-react:true
+execution_mode:react
 You are a processor who will take each line of the report and count how many lines it has. You have tools like LookupInfo that you can call. 
 
 ```public.json
@@ -606,7 +556,27 @@ You are a processor who will take each line of the report and count how many lin
 ]
 ```
 
-# SecondAgent
+**Input:**
+# GreetAgent
+
+## P1($name, $age)
+model: gpt-4o
+- Say hello $name
+- Lookup $info for $name from Example agent
+- Save "greeting.txt" with summary "Greeting" and content "Hello $name, your info is $info"
+
+## P2
+public: true
+- Load "greeting.txt"
+- Show "greeting.txt" to user
+
+## summarize the given report artifact
+execution_mode: raw
+Produce a 1 paragraph summary of the following document:
+{{Artifact[greeting.txt]}}
+
+**Output:**
+# GreetAgent
 This is a second agent that can say hello and goodbye to the user
 
 ## P1($name:str, $age:int) -> None
@@ -631,6 +601,13 @@ Says goodbye to the user
 - 02:YLD for call # must YLD for the artifact to load
 - 02:QUE Say(user, Here is your greeting - Artifact[greeting.txt])
 - 03:RET # RET implicitly does `YLD for call`
+
+## SummarizeReport($report_artifact_name)
+metadata:
+  execution_mode: raw
+---
+Produce a 1 paragraph summary of the following report:
+{{Artifact[$report_artifact_name]}}
 
 ```public.json
 [

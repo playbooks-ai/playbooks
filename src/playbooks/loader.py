@@ -1,6 +1,6 @@
 from glob import glob
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 from .exceptions import ProgramLoadError
 from .utils.file_utils import is_compiled_playbook_file
@@ -72,3 +72,77 @@ class Loader:
             raise FileNotFoundError("Files found but content is empty")
 
         return program_contents, do_not_compile
+
+    @staticmethod
+    def read_program_files(program_paths: List[str]) -> List[Tuple[str, str, bool]]:
+        """
+        Load program files individually.
+
+        Args:
+            program_paths: List of file paths or glob patterns
+
+        Returns:
+            List of (file_path, content, is_compiled) tuples
+
+        Raises:
+            ProgramLoadError: If files cannot be read
+        """
+        try:
+            return Loader._read_program_files(program_paths)
+        except FileNotFoundError as e:
+            raise ProgramLoadError(str(e)) from e
+        except (OSError, IOError) as e:
+            raise ProgramLoadError(str(e)) from e
+
+    @staticmethod
+    def _read_program_files(paths: List[str]) -> List[Tuple[str, str, bool]]:
+        """
+        Load program files individually with their metadata.
+
+        Args:
+            paths: List of file paths or glob patterns
+
+        Returns:
+            List of (file_path, content, is_compiled) tuples
+
+        Raises:
+            FileNotFoundError: If no files are found or cannot be read
+        """
+        all_files = []
+
+        for path in paths:
+            # Simplified glob pattern check
+            if "*" in str(path) or "?" in str(path) or "[" in str(path):
+                # Handle glob pattern
+                all_files.extend(glob(path, recursive=True))
+            else:
+                # Handle single file
+                all_files.append(path)
+
+        if not all_files:
+            raise FileNotFoundError("No files found")
+
+        # Read files individually
+        files_data = []
+        not_found = []
+
+        for file in all_files:
+            file_path = Path(file)
+            if file_path.is_file() and file_path.exists():
+                content = file_path.read_text()
+                is_compiled = is_compiled_playbook_file(file_path)
+                files_data.append((str(file_path), content, is_compiled))
+            else:
+                not_found.append(str(file_path))
+
+        if not_found:
+            raise FileNotFoundError(f"{', '.join(not_found)} not found")
+
+        if not files_data:
+            raise FileNotFoundError("No valid files found")
+
+        # Check for empty content
+        if all(not content.strip() for _, content, _ in files_data):
+            raise FileNotFoundError("Files found but all content is empty")
+
+        return files_data
