@@ -8,7 +8,6 @@ import argparse
 import asyncio
 import importlib
 import sys
-from pathlib import Path
 from typing import List
 
 import frontmatter
@@ -80,19 +79,7 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
                     f"[green]Compiled Playbooks program saved to:[/green] {output_file}"
                 )
             else:
-                # Generate output filename by replacing .pb with .pbasm
-                input_path = Path(file_path)
-                if input_path.suffix == ".pb":
-                    output_path = input_path.with_suffix(".pbasm")
-                else:
-                    output_path = input_path.with_suffix(input_path.suffix + ".pbasm")
-
-                # Save to generated filename
-                with open(output_path, "w") as f:
-                    f.write(content)
-                console.print(
-                    f"[green]Compiled Playbooks program saved to:[/green] {output_path}"
-                )
+                print(content)
 
     except Exception as e:
         console.print(f"[bold red]Error compiling Playbooks program:[/bold red] {e}")
