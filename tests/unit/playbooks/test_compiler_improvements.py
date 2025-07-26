@@ -199,7 +199,7 @@ class TestCompilationCaching:
         test_file = temp_dir / "test.pb"
         cache_path = compiler._get_cache_path(str(test_file))
 
-        expected_cache_dir = temp_dir / ".playbooks"
+        expected_cache_dir = temp_dir / ".pbasm_cache"
         assert cache_path.parent == expected_cache_dir
         assert cache_path.name.startswith("test.playbooks-")
         assert cache_path.name.endswith(".pbasm")

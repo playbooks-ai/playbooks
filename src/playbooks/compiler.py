@@ -239,7 +239,7 @@ class Compiler:
     def _get_cache_path(self, file_path: str) -> Path:
         """Get cache file path following Python's model."""
         source_path = Path(file_path)
-        cache_dir = source_path.parent / ".playbooks"
+        cache_dir = source_path.parent / ".pbasm_cache"
         cache_name = f"{source_path.stem}.playbooks-{self.playbooks_version}.pbasm"
         return cache_dir / cache_name
 
