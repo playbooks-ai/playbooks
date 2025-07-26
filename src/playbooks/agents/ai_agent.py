@@ -610,20 +610,31 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             playbook_name, args, kwargs
         )
 
-        # Replace variable names with actual values
-        for arg in args:
+        # Replace variable names with actual values using improved resolution
+        from playbooks.utils.variable_resolution import resolve_variable_ast
+        
+        # Convert variables to the format expected by resolve_variable_ast
+        variables_dict = {}
+        for var_name, var_obj in self.state.variables.variables.items():
+            variables_dict[var_name] = var_obj.value
+        
+        # Resolve args
+        for i, arg in enumerate(args):
             if isinstance(arg, str) and arg.startswith("$"):
-                var_name = arg
-                if var_name in self.state.variables.variables:
-                    args[args.index(arg)] = self.state.variables.variables[
-                        var_name
-                    ].value
+                try:
+                    args[i] = resolve_variable_ast(arg, variables_dict)
+                except (KeyError, AttributeError, IndexError):
+                    # If resolution fails, keep the original value
+                    pass
 
+        # Resolve kwargs
         for key, value in kwargs.items():
             if isinstance(value, str) and value.startswith("$"):
-                var_name = value
-                if var_name in self.state.variables.variables:
-                    kwargs[key] = self.state.variables.variables[var_name].value
+                try:
+                    kwargs[key] = resolve_variable_ast(value, variables_dict)
+                except (KeyError, AttributeError, IndexError):
+                    # If resolution fails, keep the original value
+                    pass
 
         try:
             # Handle meeting playbook initialization (only for new meetings, not when joining existing ones)

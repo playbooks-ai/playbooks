@@ -8,6 +8,7 @@ from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
 from playbooks.utils.spec_utils import SpecUtils
+from playbooks.utils.variable_resolution import resolve_variable_ast
 from playbooks.variables import Variables
 
 
@@ -115,7 +116,6 @@ class LLMResponseLine:
             SyntaxError: If the playbook call string is not valid Python syntax.
         """
         # Create a valid Python expression by properly handling $variables
-        # First, find all $variables and replace them with __substituted__ prefix
         expr = playbook_call
         # Handle keyword argument names by removing $ prefix
         expr = re.sub(r"\$([a-zA-Z_][a-zA-Z0-9_]*)\s*=", r"\1=", expr)
@@ -132,38 +132,63 @@ class LLMResponseLine:
         # Extract playbook name
         playbook_name = self._parse_playbook_name(tree.body)
 
+        # Helper function to convert AST nodes to variable expressions
+        def node_to_variable_expr(node):
+            if isinstance(node, ast.Name):
+                if "__substituted__" in node.id:
+                    return node.id.replace("__substituted__", "$")
+                else:
+                    # This is a regular variable reference
+                    return f"${node.id}"
+            elif isinstance(node, ast.Attribute):
+                # Handle attribute access like $user_state.product_sku
+                # Build the full expression string
+                def build_attr_string(n):
+                    if isinstance(n, ast.Name):
+                        if "__substituted__" in n.id:
+                            return n.id.replace("__substituted__", "$")
+                        else:
+                            return f"${n.id}"
+                    elif isinstance(n, ast.Attribute):
+                        return f"{build_attr_string(n.value)}.{n.attr}"
+                    else:
+                        return ast.unparse(n)
+                return build_attr_string(node)
+            elif isinstance(node, ast.Subscript):
+                # Handle subscript access like $user["name"] or $items[0]
+                value_str = node_to_variable_expr(node.value)
+                if isinstance(node.slice, ast.Constant):
+                    # For constant indices/keys
+                    if isinstance(node.slice.value, str):
+                        return f'{value_str}["{node.slice.value}"]'
+                    else:
+                        return f'{value_str}[{node.slice.value}]'
+                else:
+                    # For more complex slices
+                    slice_str = ast.unparse(node.slice)
+                    return f'{value_str}[{slice_str}]'
+            elif isinstance(node, ast.Constant):
+                if isinstance(node.value, str) and "__substituted__" in node.value:
+                    return node.value.replace("__substituted__", "$")
+                else:
+                    return node.value
+            else:
+                # For other literal types (lists, dicts, etc.)
+                try:
+                    return ast.literal_eval(ast.unparse(node))
+                except ValueError:
+                    # If it can't be evaluated as a literal, return the unparsed string
+                    return ast.unparse(node)
+
         # Extract positional arguments
         args = []
         for arg in tree.body.args:
-            if isinstance(arg, ast.Name) and "__substituted__" in arg.id:
-                # Convert back to $variable format
-                args.append(arg.id.replace("__substituted__", "$"))
-            elif isinstance(arg, ast.Constant):
-                if isinstance(arg.value, str) and "__substituted__" in arg.value:
-                    args.append(arg.value.replace("__substituted__", "$"))
-                else:
-                    args.append(arg.value)
-            else:
-                args.append(ast.literal_eval(ast.unparse(arg)))
+            args.append(node_to_variable_expr(arg))
 
         # Extract keyword arguments
         kwargs = {}
         for keyword in tree.body.keywords:
-            if (
-                isinstance(keyword.value, ast.Name)
-                and "__substituted__" in keyword.value.id
-            ):
-                # Convert back to $variable format
-                kwargs[keyword.arg] = keyword.value.id.replace("__substituted__", "$")
-            elif isinstance(keyword.value, ast.Constant):
-                if "__substituted__" in str(keyword.value.value):
-                    kwargs[keyword.arg] = keyword.value.value.replace(
-                        "__substituted__", "$"
-                    )
-                else:
-                    kwargs[keyword.arg] = keyword.value.value
-            else:
-                kwargs[keyword.arg] = ast.literal_eval(ast.unparse(keyword.value))
+            kwargs[keyword.arg] = node_to_variable_expr(keyword.value)
 
         return PlaybookCall(playbook_name, args, kwargs)
 
@@ -217,6 +242,10 @@ class LLMResponseLine:
     def _parse_yld_patterns(self):
         """Parse YLD patterns and set appropriate wait flags."""
         text = self.text.lower()
+
+        # On this line, agent was thinking whether to yield. Actual call to yld would be on the next line.
+        if text.startswith("yld?"):
+            return
 
         # YLD for user
         if re.search(r"\byld\s+for\s+user\b", text):
