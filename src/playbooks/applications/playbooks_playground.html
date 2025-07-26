@@ -172,7 +172,8 @@
                     
                     return (
                         <div className={`flex items-start gap-2 ${levelColors[logData.level] || 'text-gray-600'}`}>
-                            <span className="flex-1 font-mono text-xs">{message.sender}: {logData.content}</span>
+                            <span className="flex-1 font-mono text-xs">{message.sender}: {message["metadata"]["log_full"]
+                            }</span>
                         </div>
                     );
                 }
@@ -614,7 +615,7 @@
                     });
                     
                     if (!response.ok) {
-                        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                        throw new Error(`HTTP ${response.status}: ${response.statusText}: ${JSON.stringify(await response.json())}`);
                     }
                     
                     const data = await response.json();
@@ -622,7 +623,7 @@
                     connectWebSocket(data.run_id);
                     
                 } catch (error) {
-                    addMessage('system', 'Error', `Failed to start chat: ${error.message}`);
+                    addMessage('system', 'Error', `Failed to start chat: ${error}`);
                     updateStatus('disconnected', 'Error');
                 }
             };
