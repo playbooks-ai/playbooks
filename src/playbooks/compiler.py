@@ -11,8 +11,6 @@ from .utils.llm_config import LLMConfig
 from .utils.llm_helper import get_completion, get_messages_for_prompt
 from .utils.markdown_to_ast import (
     markdown_to_ast,
-    parse_markdown_to_dict,
-    refresh_markdown_attributes,
 )
 
 console = Console()
@@ -45,126 +43,6 @@ class Compiler:
         self.prompt_path = os.path.join(
             os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"
         )
-
-    def preprocess_program(self, program_content: str) -> str:
-        """
-        Preprocess the program content by adding missing steps sections where needed.
-
-        This method analyzes the markdown structure and automatically adds a "Steps"
-        section to any H2 sections that don't already have one, using a template
-        from react_steps.pb.
-
-        Args:
-            program_content: Raw program content without frontmatter
-
-        Returns:
-            str: Preprocessed program content
-        """
-        ast = parse_markdown_to_dict(program_content)
-        h2s = filter(
-            lambda child: child["type"] == "h2",
-            ast.get("children", []),
-        )
-        for h2 in h2s:
-            h3s = list(
-                filter(
-                    lambda child: child["type"] == "h3"
-                    and child.get("text", "").strip().lower() == "steps",
-                    h2.get("children", []),
-                )
-            )
-            if not h3s:
-                with open(
-                    os.path.join(
-                        os.path.dirname(__file__), "prompts", "react_steps.pb"
-                    ),
-                    "r",
-                ) as f:
-                    react_steps = f.read()
-                    steps_h3 = parse_markdown_to_dict(react_steps)
-                    h2["children"].append(steps_h3)
-
-        refresh_markdown_attributes(ast)
-        return ast["markdown"]
-
-    def process(self, program_content: str) -> str:
-        """
-        Compile a string of Markdown playbooks by preprocessing and adding line type codes and line numbers.
-
-        Args:
-            program_content: Content of the playbooks (may include frontmatter)
-
-        Returns:
-            str: Compiled content of the playbooks with frontmatter preserved
-
-        Raises:
-            ProgramLoadError: If the playbook format is invalid
-        """
-        # Extract and preserve frontmatter
-        fm_data = frontmatter.loads(program_content)
-        content_without_frontmatter = fm_data.content
-
-        # First, preprocess the program content
-        preprocessed_content = self.preprocess_program(content_without_frontmatter)
-
-        # Basic validation of playbook format
-        if not preprocessed_content.strip():
-            raise ProgramLoadError("Empty playbook content")
-
-        # Check for required H1 and H2 headers
-        lines = preprocessed_content.split("\n")
-        found_h1 = False
-        found_h2 = False
-
-        for line in lines:
-            if line.startswith("# "):
-                found_h1 = True
-            elif line.startswith("## ") or "@playbook" in line:
-                found_h2 = True
-
-        if not found_h1:
-            raise ProgramLoadError("Failed to parse playbooks program: No Agent found")
-        if not found_h2:
-            raise ProgramLoadError(
-                "Failed to parse playbooks program: No playbook found"
-            )
-
-        # Load and prepare the prompt template
-        prompt_path = os.path.join(
-            os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"
-        )
-        try:
-            with open(prompt_path, "r") as f:
-                prompt = f.read()
-        except (IOError, OSError) as e:
-            raise ProgramLoadError(f"Error reading prompt template: {str(e)}") from e
-
-        prompt = prompt.replace("{{PLAYBOOKS}}", preprocessed_content)
-        messages = get_messages_for_prompt(prompt)
-        langfuse_span = LangfuseHelper.instance().trace(
-            name="compile_playbooks", input=preprocessed_content
-        )
-
-        # Get the compiled content from the LLM
-        response: Iterator[str] = get_completion(
-            llm_config=self.llm_config,
-            messages=messages,
-            stream=False,
-            langfuse_span=langfuse_span,
-        )
-
-        processed_content = next(response)
-        langfuse_span.update(output=processed_content)
-        console.print("[dim pink]Compiled playbooks program[/dim pink]")
-
-        # Add frontmatter back to compiled output if present
-        if fm_data.metadata:
-            compiled_with_frontmatter = frontmatter.Post(
-                processed_content, **fm_data.metadata
-            )
-            processed_content = frontmatter.dumps(compiled_with_frontmatter)
-
-        return processed_content
 
     def process_files(
         self, files: List[Tuple[str, str, bool]]
@@ -215,9 +93,6 @@ class Compiler:
         if self.use_cache:
             cache_path = self._get_cache_path(file_path)
             if self._is_cache_valid(source_path, cache_path):
-                console.print(
-                    f"[dim green]Using cached compilation for {file_path}[/dim green]"
-                )
                 cached_content = cache_path.read_text()
                 fm_data = frontmatter.loads(cached_content)
                 return fm_data.metadata, fm_data.content
