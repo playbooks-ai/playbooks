@@ -679,18 +679,26 @@ class RunManager:
         self.clients: Dict[str, WebSocketClient] = {}
 
     async def create_run(
-        self, playbook_path: str = None, program_content: str = None
+        self, playbooks_path: str = None, program_content: str = None
     ) -> str:
         """Create a new playbook run."""
         run_id = str(uuid.uuid4())
+        print(f"Creating run with id: {run_id}")
+        print(f"playbooks_path: {playbooks_path}")
 
         try:
-            if playbook_path:
-                playbooks = Playbooks([playbook_path], session_id=run_id)
+            if playbooks_path:
+                if "," in playbooks_path:
+                    playbooks_paths = playbooks_path.split(",")
+                else:
+                    playbooks_paths = [playbooks_path]
+
+                print(f"playbooks_paths: {playbooks_paths}")
+                playbooks = Playbooks(playbooks_paths, session_id=run_id)
             elif program_content:
                 playbooks = Playbooks.from_string(program_content, session_id=run_id)
             else:
-                raise ValueError("Must provide either playbook_path or program_content")
+                raise ValueError("Must provide either playbooks_path or program_content")
 
             await playbooks.initialize()
 
@@ -859,7 +867,7 @@ class HTTPHandler(BaseHTTPRequestHandler):
 
             if path:
                 run_id = asyncio.run_coroutine_threadsafe(
-                    run_manager.create_run(playbook_path=path), self.server.loop
+                    run_manager.create_run(playbooks_path=path), self.server.loop
                 ).result()
             else:
                 run_id = asyncio.run_coroutine_threadsafe(
