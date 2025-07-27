@@ -1,6 +1,7 @@
 """Tests for the variable resolution functionality."""
 
 import pytest
+
 from playbooks.utils.variable_resolution import resolve_variable_ast
 
 
@@ -26,7 +27,7 @@ class TestVariableResolution:
         variables = {"$user": {"name": "Bob", "age": 25}}
         assert resolve_variable_ast('$user["name"]', variables) == "Bob"
         assert resolve_variable_ast("$user['name']", variables) == "Bob"
-        
+
         # Test with spaces in key
         variables = {"$user": {"full name": "Bob Smith"}}
         assert resolve_variable_ast('$user["full name"]', variables) == "Bob Smith"
@@ -45,7 +46,7 @@ class TestVariableResolution:
         assert resolve_variable_ast("$items[0]", variables) == 1
         assert resolve_variable_ast("$items[2]", variables) == 3
         assert resolve_variable_ast("$items[-1]", variables) == 5
-        
+
         variables = {"$items": ["a", "b", "c"]}
         assert resolve_variable_ast("$items[1]", variables) == "b"
 
@@ -55,7 +56,7 @@ class TestVariableResolution:
         assert resolve_variable_ast("$users[0].name", variables) == "Alice"
         assert resolve_variable_ast("$users[1].name", variables) == "Bob"
         assert resolve_variable_ast('$users[0]["name"]', variables) == "Alice"
-        
+
         variables = {"$data": {"users": [{"id": 1}, {"id": 2}]}}
         assert resolve_variable_ast("$data.users[0].id", variables) == 1
         assert resolve_variable_ast('$data["users"][1]["id"]', variables) == 2
@@ -65,18 +66,23 @@ class TestVariableResolution:
         variables = {
             "$company": {
                 "departments": {
-                    "engineering": {
-                        "employees": [{"name": "Alice", "role": "dev"}]
-                    }
+                    "engineering": {"employees": [{"name": "Alice", "role": "dev"}]}
                 }
             }
         }
-        assert resolve_variable_ast(
-            "$company.departments.engineering.employees[0].name", variables
-        ) == "Alice"
-        assert resolve_variable_ast(
-            '$company["departments"]["engineering"]["employees"][0]["role"]', variables
-        ) == "dev"
+        assert (
+            resolve_variable_ast(
+                "$company.departments.engineering.employees[0].name", variables
+            )
+            == "Alice"
+        )
+        assert (
+            resolve_variable_ast(
+                '$company["departments"]["engineering"]["employees"][0]["role"]',
+                variables,
+            )
+            == "dev"
+        )
 
     def test_special_cases(self):
         """Test special cases."""
@@ -116,7 +122,7 @@ class TestVariableResolution:
         """Test unicode and special characters."""
         variables = {"$data": {"😀": "emoji_key"}}
         assert resolve_variable_ast('$data["😀"]', variables) == "emoji_key"
-        
+
         variables = {"$user": {"name": "José"}}
         assert resolve_variable_ast("$user.name", variables) == "José"
 
@@ -132,24 +138,24 @@ class TestVariableResolution:
         """Test KeyError when variable is not found."""
         with pytest.raises(KeyError, match="Variable \\$nonexistent not found"):
             resolve_variable_ast("$nonexistent", {})
-        
+
         with pytest.raises(KeyError, match="Variable \\$unknown_var not found"):
             resolve_variable_ast("$unknown_var", {"$user": {"name": "Alice"}})
 
     def test_attribute_not_found_error(self):
         """Test AttributeError when attribute is not found."""
         variables = {"$user": {"name": "Alice"}}
-        
+
         with pytest.raises(AttributeError):
             resolve_variable_ast("$user.nonexistent", variables)
-        
+
         with pytest.raises(AttributeError):
             resolve_variable_ast("$user.age", variables)
-        
+
         variables = {"$config": {"db": {"host": "localhost"}}}
         with pytest.raises(AttributeError):
             resolve_variable_ast("$config.db.port", variables)
-        
+
         variables = {"$obj": {"x": 1}}
         with pytest.raises(AttributeError):
             resolve_variable_ast("$obj.y.z", variables)
@@ -157,16 +163,16 @@ class TestVariableResolution:
     def test_index_out_of_bounds_error(self):
         """Test IndexError when list index is out of bounds."""
         variables = {"$items": [1, 2, 3]}
-        
+
         with pytest.raises(IndexError):
             resolve_variable_ast("$items[10]", variables)
-        
+
         with pytest.raises(IndexError):
             resolve_variable_ast("$items[5]", variables)
-        
+
         with pytest.raises(IndexError):
             resolve_variable_ast("$items[-10]", variables)
-        
+
         variables = {"$items": []}
         with pytest.raises(IndexError):
             resolve_variable_ast("$items[0]", variables)
@@ -174,13 +180,13 @@ class TestVariableResolution:
     def test_mixed_errors(self):
         """Test mixed error conditions."""
         variables = {"$data": {"users": [{"name": "Alice"}]}}
-        
+
         with pytest.raises(IndexError):
             resolve_variable_ast("$data.users[5].name", variables)
-        
+
         with pytest.raises(AttributeError):
             resolve_variable_ast("$data.users[0].age", variables)
-        
+
         variables = {"$data": {"users": []}}
         with pytest.raises(IndexError):
             resolve_variable_ast("$data.users[0].name", variables)

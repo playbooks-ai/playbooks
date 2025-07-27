@@ -698,7 +698,9 @@ class RunManager:
             elif program_content:
                 playbooks = Playbooks.from_string(program_content, session_id=run_id)
             else:
-                raise ValueError("Must provide either playbooks_path or program_content")
+                raise ValueError(
+                    "Must provide either playbooks_path or program_content"
+                )
 
             await playbooks.initialize()
 
