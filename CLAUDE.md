@@ -1,4 +1,6 @@
-# CLAUDE.md - Playbooks AI Framework
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
 
@@ -22,6 +24,38 @@
 - **Program Class**: Core execution orchestrator managing playbook lifecycle
 - **Event-Driven Architecture**: Reactive programming with triggers and event bus
 - **Call Stack Management**: Unified call stack for both natural language and Python execution
+
+### Key Architectural Insights
+
+#### Compilation Pipeline
+The compilation flow from `.pb` → `.pbasm` involves:
+1. **Loader** (`loader.py`) reads and validates playbook files
+2. **Compiler** (`compiler.py`) uses LLM to preprocess content, adding line type codes (QUE, CND, etc.)
+3. **AST Generation** (`markdown_to_ast.py`) converts compiled content to executable structure
+4. **Program** (`program.py`) orchestrates execution using the compiled AST
+
+#### Agent Threading Model
+- Migrated from threading to pure async/await architecture (`AsyncAgentRuntime` in `program.py`)
+- Each agent runs as an independent asyncio task
+- Message passing between agents is handled through the event bus
+- Agent lifecycle managed through `start_agent()` and `stop_agent()` methods
+
+#### Message Flow Architecture
+1. **Messages** created with specific types (MessageType enum)
+2. **Event Bus** (`event_bus.py`) handles message routing between agents
+3. **Agents** subscribe to specific message patterns
+4. **Execution State** (`execution_state.py`) maintains context across message handling
+
+#### Playbook Execution Modes
+- **Local Playbooks**: Direct execution within the same process
+- **Remote Playbooks**: Network-based execution via MCP transport
+- **Python Playbooks**: Direct Python function execution with decorator support
+- **LLM Playbooks**: Dynamic playbook generation and execution
+
+#### MCP Integration
+- **Transport Layer** (`transport/mcp_transport.py`): Handles WebSocket/SSE connections
+- **MCP Agents** (`mcp_agent.py`): Bridge between MCP servers and playbook system
+- **Protocol** (`transport/protocol.py`): Defines message format and handshake
 
 ## Key Features
 
@@ -87,38 +121,69 @@ playbooks/
 - `playbook/python_playbook.py`: Python-based playbook execution
 - `markdown_playbook_execution.py`: Markdown execution engine
 
-## Development Workflow
+## Common Development Commands
 
-### 1. Installation & Setup
+### Setup & Installation
 ```bash
-# Install dependencies
-pip install playbooks
+# Install dependencies using Poetry
+poetry install
 
 # Set up environment
 cp .env.example .env
 # Edit .env to specify ANTHROPIC_API_KEY
 ```
 
-### 2. Creating Playbooks
-```markdown
-# example.pb
-# My First Playbook
-This is a simple greeting playbook
+### Running Tests
+```bash
+# Run all tests
+pytest
 
-## Greet User
-### Triggers
-- At the beginning of the program
-### Steps
-- Ask the user for their name
-- Greet them warmly
+# Run specific test file
+pytest tests/unit/playbooks/test_compiler.py
+
+# Run tests with coverage
+pytest --cov=src/playbooks --cov-report=html
+
+# Run tests matching a pattern
+pytest -k "test_compilation"
+
+# Run tests in verbose mode
+pytest -v
 ```
 
-### 3. Running Playbooks
+### Code Quality
+```bash
+# Format code with black
+black .
+
+# Run linting checks
+ruff check .
+
+# Fix linting issues automatically
+ruff check . --fix
+```
+
+### Building & Distribution
+```bash
+# Build the package
+poetry build
+
+# Install in development mode
+poetry install
+```
+
+### Running Playbooks
 ```bash
 # CLI execution
 playbooks run example.pb
 
-# Programmatic execution
+# Compile a playbook to .pbasm
+playbooks compile example.pb
+
+# Run with debugging enabled
+playbooks run --debug example.pb
+
+# Programmatic execution (async context required)
 from playbooks import Playbooks
 pb = Playbooks(["example.pb"])
 await pb.initialize()
@@ -141,6 +206,7 @@ await pb.program.run_till_exit()
 - **Linting**: ruff for code quality
 - **Formatting**: black for code formatting
 - **Package Management**: Poetry for dependency management
+- **Environment Variables**: .env file for API keys and configuration
 
 ## Current Development Status
 
@@ -241,12 +307,16 @@ cd playbooks
 # Install dependencies
 poetry install
 
-# Run tests
+# Set up environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# Run tests to verify setup
 pytest
 
-# Format code
+# Format and lint code before committing
 black .
-ruff check .
+ruff check . --fix
 ```
 
 ### Code Standards
@@ -254,6 +324,8 @@ ruff check .
 - Write comprehensive tests for new features
 - Document public APIs and complex logic
 - Ensure backwards compatibility
+- All async functions should properly handle cancellation
+- Use type hints for public APIs
 
 ## Resources
 
@@ -262,6 +334,28 @@ ruff check .
 - **License**: MIT
 - **Python Version**: 3.12+
 - **Package Manager**: Poetry
+
+## Debugging & Development Tips
+
+### Debugging Playbooks
+```bash
+# Enable debug mode for verbose output
+playbooks run --debug example.pb
+
+# Use the VSCode extension for step-by-step debugging
+# Set breakpoints in .pb files after installing the extension
+```
+
+### Common Issues & Solutions
+1. **Async Context Errors**: Ensure all playbook execution happens within async context
+2. **Agent Communication**: Check event bus subscriptions if agents aren't receiving messages
+3. **Compilation Errors**: Validate playbook structure - requires agent name header and proper sections
+4. **MCP Connection Issues**: Verify MCP server is running and transport URLs are correct
+
+### Performance Considerations
+- Use caching for compiled playbooks (enabled by default)
+- Agent tasks run concurrently - design message handlers to be thread-safe
+- LLM calls can be expensive - use appropriate models for the task
 
 ## Keywords for Claude Code
 
@@ -274,3 +368,5 @@ When working with this codebase, focus on:
 - **LLM integration** and response handling
 - **Async/await patterns** throughout the codebase
 - **Test-driven development** with pytest
+- **MCP protocol** for inter-agent communication
+- **Playbook compilation** and AST generation

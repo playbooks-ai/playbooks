@@ -184,17 +184,17 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
 #     assert "apologize" in log
 
 
-# @pytest.mark.asyncio
-# async def test_example_two_player_game(test_data_dir):
-#     playbooks = Playbooks([test_data_dir / "two-player-game.pb"])
-#     await playbooks.initialize()
-#     agent = playbooks.program.agents_by_klass["Host"][0]
-#     human = playbooks.program.agents_by_id["human"]
+@pytest.mark.asyncio
+async def test_example_two_player_game(test_data_dir):
+    playbooks = Playbooks([test_data_dir / "two-player-game.pb"])
+    await playbooks.initialize()
+    agent = playbooks.program.agents_by_klass["Host"][0]
+    human = playbooks.program.agents_by_id["human"]
 
-#     await human.SendMessage(agent.id, "tic-tac-toe")
-#     await human.SendMessage(agent.id, EOM)
+    await human.SendMessage(agent.id, "tic-tac-toe")
+    await human.SendMessage(agent.id, EOM)
 
-#     await playbooks.program.run_till_exit()
-#     log = agent.state.session_log.to_log_full()
-#     print(log)
-#     assert "GameRoom(" in log
+    await playbooks.program.run_till_exit()
+    log = agent.state.session_log.to_log_full()
+    print(log)
+    assert "GameRoom(" in log
