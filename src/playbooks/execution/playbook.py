@@ -1,30 +1,46 @@
-from typing import List
+"""Traditional playbook execution with defined steps."""
 
-from playbooks.agents import LocalAIAgent
-from playbooks.config import LLMConfig
-from playbooks.constants import EXECUTION_FINISHED
-from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
-from playbooks.enums import LLMMessageRole
-from playbooks.events import (
+from typing import Any, List, TYPE_CHECKING
+
+from ..constants import EXECUTION_FINISHED
+from ..debug.debug_handler import DebugHandler, NoOpDebugHandler
+from ..enums import LLMMessageRole
+from ..events import (
     LineExecutedEvent,
     PlaybookEndEvent,
     PlaybookStartEvent,
 )
-from playbooks.exceptions import ExecutionFinished
-from playbooks.interpreter_prompt import InterpreterPrompt
-from playbooks.llm_response import LLMResponse
-from playbooks.playbook import MarkdownPlaybook
-from playbooks.playbook_call import PlaybookCall
-from playbooks.session_log import SessionLogItemLevel, SessionLogItemMessage
-from playbooks.utils.llm_helper import get_completion
-from playbooks.utils.spec_utils import SpecUtils
+from ..exceptions import ExecutionFinished
+from ..interpreter_prompt import InterpreterPrompt
+from ..llm_response import LLMResponse
+from ..playbook_call import PlaybookCall
+from ..session_log import SessionLogItemLevel, SessionLogItemMessage
+from ..utils.llm_helper import get_completion
+from ..utils.spec_utils import SpecUtils
+from .base import LLMExecution
+
+if TYPE_CHECKING:
+    from ..agents.base_agent import Agent
+    from ..playbook.llm_playbook import LLMPlaybook
 
 
-class MarkdownPlaybookExecution:
-    def __init__(self, agent: LocalAIAgent, playbook_name: str, llm_config: LLMConfig):
-        self.agent: LocalAIAgent = agent
-        self.playbook: MarkdownPlaybook = agent.playbooks[playbook_name]
-        self.llm_config: LLMConfig = llm_config
+class PlaybookLLMExecution(LLMExecution):
+    """Traditional playbook execution with defined steps.
+
+    This is the core playbook mode - structured natural language functions
+    with explicit steps that execute on LLMs. Aligns with ### Steps sections.
+
+    This implements the unified execution strategy that replaced MarkdownPlaybookExecution.
+    """
+
+    def __init__(self, agent: "Agent", playbook: "LLMPlaybook"):
+        """Initialize playbook execution.
+
+        Args:
+            agent: The agent executing the playbook
+            playbook: The LLM playbook to execute
+        """
+        super().__init__(agent, playbook)
 
         # Initialize debug handler
         self.debug_handler = (
@@ -33,27 +49,25 @@ class MarkdownPlaybookExecution:
             else NoOpDebugHandler()
         )
 
-    async def execute(self, *args, **kwargs):
+    async def execute(self, *args, **kwargs) -> Any:
+        """Execute the playbook with traditional step-by-step logic."""
         done = False
         return_value = None
 
-        # print(f"[EXECUTE] {args} {kwargs}")
         # Reset debug handler for each execution
         self.debug_handler.reset_for_execution()
 
         # Publish playbook start event
-        self.agent.state.event_bus.publish(
-            PlaybookStartEvent(playbook=self.playbook.name)
-        )
+        self.state.event_bus.publish(PlaybookStartEvent(playbook=self.playbook.name))
 
         call = PlaybookCall(self.playbook.name, args, kwargs)
 
         instruction = f"Execute {str(call)} from step 01"
         artifacts_to_load = []
         await self.debug_handler.handle_execution_start(
-            self.agent.state.call_stack.peek(),
-            self.agent.state.call_stack.peek(),
-            self.agent.state.event_bus,
+            self.state.call_stack.peek(),
+            self.state.call_stack.peek(),
+            self.state.event_bus,
         )
 
         while not done:
@@ -66,14 +80,13 @@ class MarkdownPlaybookExecution:
                     agent_instructions=f"Remember: You are {str(self.agent)}. {self.agent.description}",
                     artifacts_to_load=artifacts_to_load,
                 ),
-                event_bus=self.agent.state.event_bus,
+                event_bus=self.state.event_bus,
                 agent=self.agent,
             )
 
-            self.agent.state.call_stack.peek().add_cached_llm_message(
+            self.state.call_stack.peek().add_cached_llm_message(
                 llm_response.response, role=LLMMessageRole.ASSISTANT
             )
-            # print(f"[EXECUTE] llm_response: {llm_response.response}")
 
             artifacts_to_load = []
 
@@ -92,17 +105,16 @@ class MarkdownPlaybookExecution:
                 if self.agent.program.execution_finished:
                     break
 
-                # print(f"[EXECUTE] line: {line.text}")
                 if "`SaveArtifact(" not in line.text:
                     for step in line.steps:
                         if step.step:
-                            self.agent.state.session_log.append(
+                            self.state.session_log.append(
                                 SessionLogItemMessage(
                                     f"{self.playbook.name}:{step.step.raw_text}"
                                 ),
                                 level=SessionLogItemLevel.HIGH,
                             )
-                    self.agent.state.session_log.append(
+                    self.state.session_log.append(
                         SessionLogItemMessage(line.text),
                         level=SessionLogItemLevel.LOW,
                     )
@@ -110,41 +122,29 @@ class MarkdownPlaybookExecution:
                 for i in range(len(line.steps)):
                     step = line.steps[i]
                     if i == len(line.steps) - 1:
-                        # next_step = next_steps[step]
                         next_step = step
-                        # print(f"[EXECUTE] advance_instruction_pointer to: {next_step}")
-                        self.agent.state.call_stack.advance_instruction_pointer(
-                            next_step
-                        )
-                        # Handle debug operations at start of loop
+                        self.state.call_stack.advance_instruction_pointer(next_step)
                         await self.debug_handler.handle_execution_start(
-                            step, step, self.agent.state.event_bus
+                            step, step, self.state.event_bus
                         )
                     else:
-                        # next_step = next_steps[step]
                         next_step = step
-                        # print(f"[EXECUTE] advance_instruction_pointer to: {next_step}")
-                        self.agent.state.call_stack.advance_instruction_pointer(
-                            next_step
-                        )
+                        self.state.call_stack.advance_instruction_pointer(next_step)
                         await self.debug_handler.handle_execution_start(
-                            step, next_step, self.agent.state.event_bus
+                            step, next_step, self.state.event_bus
                         )
 
                 # Replace the current call stack frame with the last executed step
                 if line.steps:
-                    # print(f"[EXECUTE] line.steps: {line.steps}")
-                    # Remove the redundant loop - we only care about the last step
                     last_step = line.steps[-1]
 
                     # Check for breakpoints
-                    # print(f"[EXECUTE] last_step: {last_step}")
                     await self.debug_handler.handle_breakpoint(
-                        last_step.source_line_number, self.agent.state.event_bus
+                        last_step.source_line_number, self.state.event_bus
                     )
 
                     # Publish line executed event
-                    self.agent.state.event_bus.publish(
+                    self.state.event_bus.publish(
                         LineExecutedEvent(
                             step=str(last_step),
                             source_line_number=last_step.source_line_number,
@@ -154,7 +154,7 @@ class MarkdownPlaybookExecution:
 
                 # Update variables
                 if len(line.vars) > 0:
-                    self.agent.state.variables.update(line.vars)
+                    self.state.variables.update(line.vars)
 
                 # Execute playbook calls
                 if line.playbook_calls:
@@ -163,16 +163,11 @@ class MarkdownPlaybookExecution:
                             break
 
                         if playbook_call.playbook_klass == "Return":
-                            # print(f"[EXECUTE] Return: {playbook_call.args}")
                             if playbook_call.args:
                                 return_value = playbook_call.args[0]
                         elif playbook_call.playbook_klass == "LoadArtifact":
-                            # print(f"[EXECUTE] LoadArtifact: {playbook_call.args}")
                             artifacts_to_load.append(playbook_call.args[0])
                         else:
-                            # print(
-                            #     f"[EXECUTE] execute_playbook: {playbook_call.playbook_klass}"
-                            # )
                             await self.agent.execute_playbook(
                                 playbook_call.playbook_klass,
                                 playbook_call.args,
@@ -185,17 +180,13 @@ class MarkdownPlaybookExecution:
                     str_return_value = str(return_value)
                     if (
                         str_return_value.startswith("$")
-                        and str_return_value in self.agent.state.variables
+                        and str_return_value in self.state.variables
                     ):
-                        return_value = self.agent.state.variables[
-                            str_return_value
-                        ].value
+                        return_value = self.state.variables[str_return_value].value
 
                 # Wait for external event
                 if line.wait_for_user_input:
-                    # print(f"\n{str(self.agent)}: [EXECUTE] waiting for user input")
                     await self.agent.WaitForMessage("human")
-                    # print(f"\n{str(self.agent)}: [EXECUTE] user input: {user_input}")
                 elif line.wait_for_agent_input:
                     target_agent_id = self._resolve_yld_target(
                         line.wait_for_agent_target
@@ -205,31 +196,15 @@ class MarkdownPlaybookExecution:
                         if SpecUtils.is_meeting_spec(target_agent_id):
                             meeting_id = SpecUtils.extract_meeting_id(target_agent_id)
                             if meeting_id == "current":
-                                meeting_id = (
-                                    self.agent.state.call_stack.peek().meeting_id
-                                )
-                            # print(
-                            #     f"\n{str(self.agent)}: [EXECUTE] waiting for meeting messages from {meeting_id}"
-                            # )
+                                meeting_id = self.state.call_stack.peek().meeting_id
                             await self.agent.WaitForMessage(f"meeting {meeting_id}")
-                            # print(
-                            #     f"\n{str(self.agent)}: [EXECUTE] agent input: {agent_input}"
-                            # )
                         else:
-                            # print(
-                            #     f"\n{str(self.agent)}: [EXECUTE] waiting for agent input from {target_agent_id}"
-                            # )
                             await self.agent.WaitForMessage(target_agent_id)
-                            # print(
-                            #     f"\n{str(self.agent)}: [EXECUTE] agent input: {agent_input}"
-                            # )
                 elif line.playbook_finished:
-                    # print("[EXECUTE] playbook_finished")
                     done = True
 
                 # Raise an exception if line.finished is true
                 if line.exit_program:
-                    # print("[EXECUTE] exit_program")
                     raise ExecutionFinished(EXECUTION_FINISHED)
 
             # Update instruction
@@ -237,7 +212,7 @@ class MarkdownPlaybookExecution:
             for loaded_artifact in artifacts_to_load:
                 instruction.append(f"Loaded Artifact[{loaded_artifact}]")
             instruction.append(
-                f"{str(self.agent.state.call_stack.peek())} was executed - "
+                f"{str(self.state.call_stack.peek())} was executed - "
                 "continue execution."
             )
 
@@ -246,13 +221,13 @@ class MarkdownPlaybookExecution:
         if self.agent.program.execution_finished:
             return EXECUTION_FINISHED
 
-        if self.agent.state.call_stack.is_empty():
+        if self.state.call_stack.is_empty():
             raise ExecutionFinished(f"Call stack is empty. {EXECUTION_FINISHED}.")
 
         # Publish playbook end event
-        call_stack_depth = len(self.agent.state.call_stack.frames)
+        call_stack_depth = len(self.state.call_stack.frames)
 
-        self.agent.state.event_bus.publish(
+        self.state.event_bus.publish(
             PlaybookEndEvent(
                 playbook=self.playbook.name,
                 return_value=return_value,
@@ -271,8 +246,10 @@ class MarkdownPlaybookExecution:
         agent_instructions: str,
         artifacts_to_load: List[str] = [],
     ):
+        """Make an LLM call for playbook execution."""
+
         prompt = InterpreterPrompt(
-            self.agent.state,
+            self.state,
             self.agent.playbooks,
             self.playbook,
             instruction=instruction,
@@ -288,6 +265,8 @@ class MarkdownPlaybookExecution:
 
     async def _stream_llm_response(self, prompt):
         """Stream LLM response and handle Say() calls progressively."""
+        from ..config import LLMConfig
+
         buffer = ""
         in_say_call = False
         current_say_content = ""
@@ -297,10 +276,10 @@ class MarkdownPlaybookExecution:
 
         for chunk in get_completion(
             messages=prompt.messages,
-            llm_config=self.llm_config,
+            llm_config=LLMConfig(),
             stream=True,
             json_mode=False,
-            langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
+            langfuse_span=self.state.call_stack.peek().langfuse_span,
         ):
             buffer += chunk
 

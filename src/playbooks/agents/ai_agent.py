@@ -12,7 +12,7 @@ from ..exceptions import ExecutionFinished
 from ..execution_state import ExecutionState
 from ..meetings import MeetingManager
 from ..message import Message, MessageType
-from ..playbook import MarkdownPlaybook, Playbook, PythonPlaybook, RemotePlaybook
+from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.spec_utils import SpecUtils
@@ -121,7 +121,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             # Create instance-specific wrapper functions that bind the correct agent
             for playbook_name, playbook in self.playbooks.items():
                 if hasattr(playbook, "func") and playbook.func:
-                    # For MarkdownPlaybook, create agent-specific function
+                    # For LLMPlaybook, create agent-specific function
                     if hasattr(playbook, "create_agent_specific_function"):
                         agent_specific_func = playbook.create_agent_specific_function(
                             self
@@ -519,7 +519,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         log_parts.append(str(self.state.variables))
         log_parts.append("Session log: \n" + str(self.state.session_log))
 
-        if isinstance(playbook, MarkdownPlaybook):
+        if isinstance(playbook, LLMPlaybook):
             log_parts.append(playbook.markdown)
         elif isinstance(playbook, PythonPlaybook):
             log_parts.append(playbook.code or f"Python function: {playbook.name}")
@@ -540,7 +540,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
 
         if playbook:
             # Set up tracing
-            if isinstance(playbook, MarkdownPlaybook):
+            if isinstance(playbook, LLMPlaybook):
                 trace_str = f"Markdown: {trace_str}"
             elif isinstance(playbook, PythonPlaybook):
                 trace_str = f"Python: {trace_str}"
@@ -562,7 +562,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
 
         # Add the call to the call stack
         if playbook:
-            # Get first step line number if available (for MarkdownPlaybook)
+            # Get first step line number if available (for LLMPlaybook)
             first_step_line_number = (
                 getattr(playbook, "first_step_line_number", None) or 0
             )
@@ -585,7 +585,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             meeting_id=meeting_id,
         )
         llm_message = []
-        if playbook and isinstance(playbook, MarkdownPlaybook):
+        if playbook and isinstance(playbook, LLMPlaybook):
             llm_message.append("```md\n" + playbook.markdown + "\n```")
 
         # Add a cached message whenever we add a stack frame

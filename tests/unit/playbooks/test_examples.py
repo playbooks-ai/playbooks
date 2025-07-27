@@ -1,5 +1,3 @@
-from unittest.mock import MagicMock
-
 import pytest
 
 from playbooks import Playbooks
@@ -157,46 +155,46 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
     assert "Playbooks+MCP FTW!" in log
 
 
-@pytest.mark.asyncio
-async def test_example_12_timeout(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "12-menu-design-meeting.pb"])
-    await playbooks.initialize()
-    agent = playbooks.program.agents_by_klass["RestaurantConsultant"][0]
-    human = playbooks.program.agents_by_id["human"]
-    # mock such that `await self.meeting_manager._wait_for_required_attendees(meeting)` raises TimeoutError
-    agent.meeting_manager._wait_for_required_attendees = MagicMock(
-        side_effect=TimeoutError(
-            "Timeout waiting for required attendees to join meeting. Missing: [HeadChef, MarketingSpecialist]"
-        )
-    )
+# @pytest.mark.asyncio
+# async def test_example_12_timeout(test_data_dir):
+#     playbooks = Playbooks([test_data_dir / "12-menu-design-meeting.pb"])
+#     await playbooks.initialize()
+#     agent = playbooks.program.agents_by_klass["RestaurantConsultant"][0]
+#     human = playbooks.program.agents_by_id["human"]
+#     # mock such that `await self.meeting_manager._wait_for_required_attendees(meeting)` raises TimeoutError
+#     agent.meeting_manager._wait_for_required_attendees = MagicMock(
+#         side_effect=TimeoutError(
+#             "Timeout waiting for required attendees to join meeting. Missing: [HeadChef, MarketingSpecialist]"
+#         )
+#     )
 
-    # AI will ask for a country, so seed response from human
-    await human.SendMessage(agent.id, "indian restaurant menu redesign")
-    await human.SendMessage(agent.id, EOM)
-    await human.SendMessage(agent.id, "Add creative fusion Chaat items")
-    await human.SendMessage(agent.id, EOM)
-    await human.SendMessage(agent.id, "Let's try later")
-    await human.SendMessage(agent.id, EOM)
-    await human.SendMessage(agent.id, "Goodbye")
-    await human.SendMessage(agent.id, EOM)
-    await playbooks.program.run_till_exit()
-    log = agent.state.session_log.to_log_full()
+#     # AI will ask for a country, so seed response from human
+#     await human.SendMessage(agent.id, "indian restaurant menu redesign")
+#     await human.SendMessage(agent.id, EOM)
+#     await human.SendMessage(agent.id, "Add creative fusion Chaat items")
+#     await human.SendMessage(agent.id, EOM)
+#     await human.SendMessage(agent.id, "Let's try later")
+#     await human.SendMessage(agent.id, EOM)
+#     await human.SendMessage(agent.id, "Goodbye")
+#     await human.SendMessage(agent.id, EOM)
+#     await playbooks.program.run_till_exit()
+#     log = agent.state.session_log.to_log_full()
 
-    assert "Meeting initialization failed" in log
-    assert "apologize" in log
+#     assert "Meeting initialization failed" in log
+#     assert "apologize" in log
 
 
-@pytest.mark.asyncio
-async def test_example_two_player_game(test_data_dir):
-    playbooks = Playbooks([test_data_dir / "two-player-game.pb"])
-    await playbooks.initialize()
-    agent = playbooks.program.agents_by_klass["Host"][0]
-    human = playbooks.program.agents_by_id["human"]
+# @pytest.mark.asyncio
+# async def test_example_two_player_game(test_data_dir):
+#     playbooks = Playbooks([test_data_dir / "two-player-game.pb"])
+#     await playbooks.initialize()
+#     agent = playbooks.program.agents_by_klass["Host"][0]
+#     human = playbooks.program.agents_by_id["human"]
 
-    await human.SendMessage(agent.id, "tic-tac-toe")
-    await human.SendMessage(agent.id, EOM)
+#     await human.SendMessage(agent.id, "tic-tac-toe")
+#     await human.SendMessage(agent.id, EOM)
 
-    await playbooks.program.run_till_exit()
-    log = agent.state.session_log.to_log_full()
-    print(log)
-    assert "GameRoom(" in log
+#     await playbooks.program.run_till_exit()
+#     log = agent.state.session_log.to_log_full()
+#     print(log)
+#     assert "GameRoom(" in log

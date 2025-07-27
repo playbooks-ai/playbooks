@@ -11,7 +11,7 @@ from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
 
 from ..agents.base_agent import BaseAgent
 from ..message import Message, MessageType
-from ..playbook import MarkdownPlaybook, Playbook
+from ..playbook import LLMPlaybook, Playbook
 from .meeting import JoinedMeeting, Meeting, MeetingInvitation, MeetingInvitationStatus
 
 logger = logging.getLogger(__name__)
@@ -38,7 +38,7 @@ class MeetingManager:
             playbooks: Dictionary of playbooks to process
         """
         for playbook in playbooks.values():
-            if playbook.meeting and isinstance(playbook, MarkdownPlaybook):
+            if playbook.meeting and isinstance(playbook, LLMPlaybook):
                 signature = playbook.signature
 
                 # Check if topic and attendees are missing

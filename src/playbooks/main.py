@@ -1,4 +1,5 @@
 import uuid
+from functools import reduce
 from typing import List
 
 from .compiler import Compiler
@@ -21,6 +22,9 @@ class Playbooks:
 
         # Load files
         self.program_files = Loader.read_program_files(program_paths)
+        self.program_content = "\n\n".join(
+            reduce(lambda content, item: content + [item[1]], self.program_files, [])
+        )
         compiler = Compiler(self.llm_config)
         self.compiled_program_files = compiler.process_files(self.program_files)
 
@@ -50,7 +54,10 @@ class Playbooks:
 
         self.event_bus = EventBus(self.session_id)
         self.program = Program(
-            self.compiled_program_content, self.event_bus, program_paths
+            self.compiled_program_content,
+            self.event_bus,
+            program_paths,
+            self.program_metadata,
         )
 
     async def initialize(self):
@@ -64,8 +71,3 @@ class Playbooks:
         for key, value in self.program_metadata.items():
             if hasattr(self, key):
                 setattr(self, key, value)
-
-    def compile_program(self, program_content: str) -> str:
-        """Legacy method for backward compatibility."""
-        compiler = Compiler(self.llm_config)
-        return compiler.process(program_content)

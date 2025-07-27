@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, Type
 from playbooks.agents.namespace_manager import AgentNamespaceManager
 from playbooks.event_bus import EventBus
 from playbooks.exceptions import AgentConfigurationError
-from playbooks.playbook import MarkdownPlaybook, PythonPlaybook
+from playbooks.playbook import LLMPlaybook, PythonPlaybook
 from playbooks.utils.markdown_to_ast import refresh_markdown_attributes
 
 from .ai_agent import AIAgent
@@ -68,9 +68,7 @@ class LocalAIAgent(AIAgent):
         python_playbooks = PythonPlaybook.create_playbooks_from_h1(
             h1, namespace_manager
         )
-        markdown_playbooks = MarkdownPlaybook.create_playbooks_from_h1(
-            h1, namespace_manager
-        )
+        markdown_playbooks = LLMPlaybook.create_playbooks_from_h1(h1, namespace_manager)
 
         playbooks.update(python_playbooks)
         playbooks.update(markdown_playbooks)

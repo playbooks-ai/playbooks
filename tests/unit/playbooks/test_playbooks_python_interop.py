@@ -1,7 +1,7 @@
 import pytest
 
 from playbooks import Playbooks
-from playbooks.playbook import MarkdownPlaybook, PythonPlaybook
+from playbooks.playbook import LLMPlaybook, PythonPlaybook
 
 
 @pytest.fixture
@@ -44,7 +44,7 @@ async def test_load_agents(playbooks):
     await agent.initialize()
     assert len(agent.playbooks) >= 10
     assert "X" in agent.playbooks
-    assert isinstance(agent.playbooks["X"], MarkdownPlaybook)
+    assert isinstance(agent.playbooks["X"], LLMPlaybook)
     assert "A" in agent.playbooks
     assert isinstance(agent.playbooks["A"], PythonPlaybook)
 

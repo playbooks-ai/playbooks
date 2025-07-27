@@ -3,7 +3,6 @@ import os
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from playbooks.enums import LLMMessageRole
-from playbooks.execution_state import ExecutionState
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import (
     get_messages_for_prompt,
@@ -12,7 +11,7 @@ from playbooks.utils.llm_helper import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from playbooks.execution_state import ExecutionState
 
 
 class InterpreterPrompt:
@@ -20,7 +19,7 @@ class InterpreterPrompt:
 
     def __init__(
         self,
-        execution_state: ExecutionState,
+        execution_state: "ExecutionState",
         playbooks: Dict[str, Playbook],
         current_playbook: Optional[Playbook],
         instruction: str,

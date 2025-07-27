@@ -1,19 +1,20 @@
 import ast
 import json
 import re
-from typing import Any, List
+from typing import TYPE_CHECKING, Any, List
 
-from playbooks.agents import LocalAIAgent
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
 from playbooks.utils.spec_utils import SpecUtils
-from playbooks.utils.variable_resolution import resolve_variable_ast
 from playbooks.variables import Variables
+
+if TYPE_CHECKING:
+    from playbooks.agents import LocalAIAgent
 
 
 class LLMResponseLine:
-    def __init__(self, text: str, event_bus: EventBus, agent: LocalAIAgent):
+    def __init__(self, text: str, event_bus: EventBus, agent: "LocalAIAgent"):
         self.text = text
         self.event_bus = event_bus
         self.agent = agent
@@ -153,6 +154,7 @@ class LLMResponseLine:
                         return f"{build_attr_string(n.value)}.{n.attr}"
                     else:
                         return ast.unparse(n)
+
                 return build_attr_string(node)
             elif isinstance(node, ast.Subscript):
                 # Handle subscript access like $user["name"] or $items[0]
@@ -162,11 +164,11 @@ class LLMResponseLine:
                     if isinstance(node.slice.value, str):
                         return f'{value_str}["{node.slice.value}"]'
                     else:
-                        return f'{value_str}[{node.slice.value}]'
+                        return f"{value_str}[{node.slice.value}]"
                 else:
                     # For more complex slices
                     slice_str = ast.unparse(node.slice)
-                    return f'{value_str}[{slice_str}]'
+                    return f"{value_str}[{slice_str}]"
             elif isinstance(node, ast.Constant):
                 if isinstance(node.value, str) and "__substituted__" in node.value:
                     return node.value.replace("__substituted__", "$")

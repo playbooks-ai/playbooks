@@ -86,9 +86,14 @@ class TestCLICompilation:
         # Check that compiler was called correctly
         mock_compiler.process_files.assert_called_once()
 
-        # Check that output file was created (not stdout since we generate filename)
+        # Check that content was printed to stdout, not saved to file
+        captured = capsys.readouterr()
+        assert "CompiledAgent" in captured.out
+        assert "Compiled content" in captured.out
+
+        # Check that no output file was created
         output_file = temp_dir / "test.pbasm"
-        assert output_file.exists()
+        assert not output_file.exists()
 
     @patch("playbooks.cli.Compiler")
     def test_single_file_compilation_with_output(
@@ -117,9 +122,9 @@ class TestCLICompilation:
 
     @patch("playbooks.cli.Compiler")
     def test_multiple_files_compilation(
-        self, mock_compiler_class, temp_dir, simple_playbook
+        self, mock_compiler_class, temp_dir, simple_playbook, capsys
     ):
-        """Test compiling multiple files."""
+        """Test compiling multiple files to stdout."""
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
@@ -147,16 +152,18 @@ class TestCLICompilation:
         # Test compilation
         cli_compile([str(test_file1), str(test_file2)])
 
-        # Check that both output files were created
+        # Check that both files' content was printed to stdout
+        captured = capsys.readouterr()
+        assert "CompiledAgent1" in captured.out
+        assert "Compiled content 1" in captured.out
+        assert "CompiledAgent2" in captured.out
+        assert "Compiled content 2" in captured.out
+
+        # Check that no output files were created
         output_file1 = temp_dir / "test1.pbasm"
         output_file2 = temp_dir / "test2.pbasm"
-        assert output_file1.exists()
-        assert output_file2.exists()
-
-        content1 = output_file1.read_text()
-        content2 = output_file2.read_text()
-        assert "CompiledAgent1" in content1
-        assert "CompiledAgent2" in content2
+        assert not output_file1.exists()
+        assert not output_file2.exists()
 
     @patch("playbooks.cli.Compiler")
     def test_multiple_files_with_output_error(
@@ -195,9 +202,9 @@ class TestCLICompilation:
 
     @patch("playbooks.cli.Compiler")
     def test_frontmatter_preservation_in_cli(
-        self, mock_compiler_class, temp_dir, playbook_with_frontmatter
+        self, mock_compiler_class, temp_dir, playbook_with_frontmatter, capsys
     ):
-        """Test that CLI preserves frontmatter in output."""
+        """Test that CLI preserves frontmatter in stdout output."""
         # Setup mock with frontmatter
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
@@ -217,21 +224,23 @@ class TestCLICompilation:
         # Test compilation
         cli_compile([str(test_file)])
 
-        # Check output file contains frontmatter
-        output_file = temp_dir / "test.pbasm"
-        assert output_file.exists()
-        content = output_file.read_text()
+        # Check stdout contains frontmatter
+        captured = capsys.readouterr()
 
         # Should contain both frontmatter and compiled content
-        assert "title: CLI Test Playbook" in content
-        assert "author: Test Author" in content
-        assert "CompiledCLIAgent" in content
+        assert "title: CLI Test Playbook" in captured.out
+        assert "author: Test Author" in captured.out
+        assert "CompiledCLIAgent" in captured.out
+
+        # Check that no output file was created
+        output_file = temp_dir / "test.pbasm"
+        assert not output_file.exists()
 
     @patch("playbooks.cli.Compiler")
     def test_mixed_file_types_compilation(
-        self, mock_compiler_class, temp_dir, simple_playbook
+        self, mock_compiler_class, temp_dir, simple_playbook, capsys
     ):
-        """Test CLI compilation with mixed .pb and .pbasm files."""
+        """Test CLI compilation with mixed .pb and .pbasm files to stdout."""
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
@@ -259,12 +268,18 @@ class TestCLICompilation:
         # Test compilation
         cli_compile([str(pb_file), str(pbasm_file)])
 
-        # Check outputs
-        pb_output = temp_dir / "source.pbasm"
-        pbasm_output = temp_dir / "precompiled.pbasm.pbasm"  # Note the double extension
+        # Check stdout contains both files' content
+        captured = capsys.readouterr()
+        assert "CompiledFromPB" in captured.out
+        assert "Compiled from .pb" in captured.out
+        assert "AlreadyCompiled" in captured.out
+        assert "Already compiled" in captured.out
 
-        assert pb_output.exists()
-        assert pbasm_output.exists()
+        # Check that no output files were created
+        pb_output = temp_dir / "source.pbasm"
+        pbasm_output = temp_dir / "precompiled.pbasm.pbasm"
+        assert not pb_output.exists()
+        assert not pbasm_output.exists()
 
     @patch("playbooks.cli.Compiler")
     def test_compilation_error_handling(
@@ -290,9 +305,9 @@ class TestCLICompilation:
 
     @patch("playbooks.cli.Compiler")
     def test_file_extension_handling(
-        self, mock_compiler_class, temp_dir, simple_playbook
+        self, mock_compiler_class, temp_dir, simple_playbook, capsys
     ):
-        """Test proper file extension handling in CLI."""
+        """Test proper file extension handling in CLI with stdout output."""
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
@@ -312,14 +327,19 @@ class TestCLICompilation:
         # Test compilation
         cli_compile([str(test_file)])
 
-        # Should create .pbasm file
+        # Check that content was printed to stdout
+        captured = capsys.readouterr()
+        assert "CompiledAgent" in captured.out
+        assert "Compiled content" in captured.out
+
+        # Check that no output file was created
         output_file = temp_dir / "no_extension.pbasm"
-        assert output_file.exists()
+        assert not output_file.exists()
 
     @patch("playbooks.cli.Loader")
     @patch("playbooks.cli.Compiler")
     def test_loader_integration(
-        self, mock_compiler_class, mock_loader_class, temp_dir, simple_playbook
+        self, mock_compiler_class, mock_loader_class, temp_dir, simple_playbook, capsys
     ):
         """Test CLI integration with Loader."""
         # Setup mocks
@@ -346,11 +366,16 @@ class TestCLICompilation:
         # Verify Compiler was called with Loader results
         mock_compiler.process_files.assert_called_once()
 
+        # Verify content was printed to stdout
+        captured = capsys.readouterr()
+        assert "CompiledAgent" in captured.out
+        assert "Compiled content" in captured.out
+
     @patch("playbooks.cli.Compiler")
     def test_no_frontmatter_handling(
-        self, mock_compiler_class, temp_dir, simple_playbook
+        self, mock_compiler_class, temp_dir, simple_playbook, capsys
     ):
-        """Test CLI handling of files without frontmatter."""
+        """Test CLI handling of files without frontmatter to stdout."""
         # Setup mock with empty frontmatter
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
@@ -365,14 +390,17 @@ class TestCLICompilation:
         # Test compilation
         cli_compile([str(test_file)])
 
-        # Check output file
-        output_file = temp_dir / "test.pbasm"
-        assert output_file.exists()
-        content = output_file.read_text()
+        # Check stdout output
+        captured = capsys.readouterr()
 
         # Should contain only compiled content (no frontmatter)
-        assert "CompiledAgent" in content
-        assert "---" not in content
+        assert "CompiledAgent" in captured.out
+        assert "Compiled content" in captured.out
+        assert "---" not in captured.out
+
+        # Check that no output file was created
+        output_file = temp_dir / "test.pbasm"
+        assert not output_file.exists()
 
 
 class TestCLIIntegration:
@@ -380,7 +408,7 @@ class TestCLIIntegration:
 
     @patch("playbooks.cli.Compiler")
     def test_string_program_paths_conversion(
-        self, mock_compiler_class, temp_dir, simple_playbook
+        self, mock_compiler_class, temp_dir, simple_playbook, capsys
     ):
         """Test that string program paths are converted to list."""
         # Setup mock
@@ -397,15 +425,20 @@ class TestCLIIntegration:
         # Test with string input (should be converted to list internally)
         cli_compile(str(test_file))  # Single string instead of list
 
-        # Should still work
+        # Should still work and output to stdout
+        captured = capsys.readouterr()
+        assert "CompiledAgent" in captured.out
+        assert "Compiled content" in captured.out
+
+        # Check that no output file was created
         output_file = temp_dir / "test.pbasm"
-        assert output_file.exists()
+        assert not output_file.exists()
 
     @patch("playbooks.cli.Compiler")
     def test_relative_path_handling(
-        self, mock_compiler_class, temp_dir, simple_playbook
+        self, mock_compiler_class, temp_dir, simple_playbook, capsys
     ):
-        """Test CLI handling of relative paths."""
+        """Test CLI handling of relative paths with stdout output."""
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
@@ -425,7 +458,12 @@ class TestCLIIntegration:
             os.chdir(temp_dir)
             cli_compile(["./test.pb"])
 
-            # Should create output file
-            assert Path("test.pbasm").exists()
+            # Should output to stdout
+            captured = capsys.readouterr()
+            assert "CompiledAgent" in captured.out
+            assert "Compiled content" in captured.out
+
+            # Should not create output file
+            assert not Path("test.pbasm").exists()
         finally:
             os.chdir(original_cwd)

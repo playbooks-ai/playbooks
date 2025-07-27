@@ -39,7 +39,7 @@ def parse_metadata_and_description(input: str) -> tuple[dict, str]:
         else:
             metadata_text = parts[0]
             description_text = parts[1]
-        metadata = yaml.safe_load(metadata_text)["metadata"]
+        metadata = yaml.safe_load(metadata_text)["metadata"] or {}
         description = description_text.strip()
     else:
         metadata = {}

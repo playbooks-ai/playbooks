@@ -28,6 +28,18 @@ async def Validation1(pin: str) -> bool:
 - Return {"balance": 8999}
 
 ## Validation2
+Validates provided email. Email address must conform to addr-spec in Section 3.4 of RFC 5322:
+  addr-spec       =   local-part "@" domain
+
+  local-part      =   dot-atom / quoted-string / obs-local-part
+
+  domain          =   dot-atom / domain-literal / obs-domain
+
+  domain-literal  =   [CFWS] "[" *([FWS] dtext) [FWS] "]" [CFWS]
+
+  dtext           =   %d33-90 /          ; Printable US-ASCII
+                      %d94-126 /         ;  characters not including
+                      obs-dtext          ;  "[", "]", or "\"
 ### Triggers
 - When user provides an email
 ### Steps

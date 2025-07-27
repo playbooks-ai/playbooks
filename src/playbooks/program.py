@@ -6,9 +6,6 @@ import re
 from pathlib import Path
 from typing import Dict, List, Type, Union
 
-import frontmatter
-from yaml.scanner import ScannerError
-
 from playbooks.agents.base_agent import BaseAgent
 from playbooks.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 
@@ -156,9 +153,14 @@ class AgentIdRegistry:
 
 class Program(ProgramAgentsCommunicationMixin):
     def __init__(
-        self, full_program: str, event_bus: EventBus, program_paths: List[str] = None
+        self,
+        full_program: str,
+        event_bus: EventBus,
+        program_paths: List[str] = None,
+        metadata: dict = {},
     ):
         self.full_program = full_program
+        self.metadata = metadata
         self.event_bus = event_bus
         self.program_paths = program_paths or []
         self._debug_server = None
@@ -170,7 +172,7 @@ class Program(ProgramAgentsCommunicationMixin):
 
         self.extract_public_json()
         self.parse_metadata()
-        self.ast = markdown_to_ast(self.program_content)
+        self.ast = markdown_to_ast(self.full_program)
         self.agent_klasses = AgentBuilder.create_agent_classes_from_ast(self.ast)
 
         self.agents = []
@@ -191,8 +193,6 @@ class Program(ProgramAgentsCommunicationMixin):
                 "Number of agents and public jsons must be the same. "
                 f"Got {len(self.agent_klasses)} agents and {len(self.public_jsons)} public jsons"
             )
-        if self.agents:
-            self.update_metadata_from_agent(self.agents[0])
 
         agent_klass_list = list(self.agent_klasses.values())
         for i in range(len(agent_klass_list)):
@@ -297,27 +297,8 @@ class Program(ProgramAgentsCommunicationMixin):
         self.event_bus.publish(event)
 
     def parse_metadata(self):
-        try:
-            frontmatter_data = frontmatter.loads(self.full_program)
-        except ScannerError:
-            self.metadata = {}
-            self.title = None
-            self.description = None
-            self.application = "MultiAgentChat"
-            self.program_content = self.full_program
-            return
-
-        self.metadata = frontmatter_data.metadata
-        self.title = frontmatter_data.get("title", None)
-        self.description = frontmatter_data.get("description", None)
-        self.application = frontmatter_data.get("application", "MultiAgentChat")
-        self.program_content = frontmatter_data.content
-
-    def update_metadata_from_agent(self, agent):
-        if not self.title:
-            self.title = agent.klass
-        if not self.description:
-            self.description = agent.description
+        self.title = self.metadata.get("title", None)
+        self.description = self.metadata.get("description", None)
 
     def extract_public_json(self):
         # Extract publics.json from full_program

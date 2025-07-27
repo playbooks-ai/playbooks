@@ -1,42 +1,50 @@
+"""LLM playbooks that execute natural language programs on LLMs."""
+
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from playbooks.utils.parse_utils import parse_metadata_and_description
-
+from ..enums import LLMExecutionMode
+from ..execution import (
+    PlaybookLLMExecution,
+    RawLLMExecution,
+    ReActLLMExecution,
+)
 from ..playbook_step import PlaybookStep, PlaybookStepCollection
 from ..triggers import PlaybookTriggers
+from ..utils.parse_utils import parse_metadata_and_description
 from .local import LocalPlaybook
 
 
-class MarkdownPlaybook(LocalPlaybook):
-    """Represents a markdown playbook that can be executed by an agent.
+class LLMPlaybook(LocalPlaybook):
+    """Natural language playbooks that execute on LLMs.
 
-    Markdown playbooks are written in the step format and parsed from markdown files.
+    LLM playbooks are written in natural language and parsed from markdown files.
+    They can execute in three modes:
+    - playbook: Traditional step-by-step execution with explicit steps
+    - react: Looping execution until exit conditions are met
+    - raw: Direct LLM call without structure
     """
 
     @classmethod
     def create_playbooks_from_h1(
         cls, h1: Dict, namespace_manager
-    ) -> Dict[str, "MarkdownPlaybook"]:
-        """Create MarkdownPlaybook instances from H1 AST node.
+    ) -> Dict[str, "LLMPlaybook"]:
+        """Create LLMPlaybook instances from H1 AST node.
 
         Args:
             h1: H1 AST node containing agent definition
             namespace_manager: Namespace manager for setting up execution context
 
         Returns:
-            Dict[str, MarkdownPlaybook]: Dictionary of created playbooks
+            Dict[str, LLMPlaybook]: Dictionary of created playbooks
         """
-        from playbooks.config import LLMConfig
-        from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
-
         playbooks = {}
 
         for child in h1["children"]:
             if child.get("type") == "h2":
                 playbook = cls.from_h2(child)
 
-                # Create Python wrapper for the markdown playbook
+                # Create Python wrapper for the LLM playbook
                 def create_wrapper(pb):
                     async def wrapper(*args, **kwargs):
                         # This wrapper will be replaced with agent-specific version during agent initialization
@@ -46,10 +54,7 @@ class MarkdownPlaybook(LocalPlaybook):
                             raise RuntimeError(
                                 f"No agent available for playbook {pb.name}"
                             )
-                        execution = MarkdownPlaybookExecution(
-                            agent, pb.name, LLMConfig()
-                        )
-                        return await execution.execute(*args, **kwargs)
+                        return await pb.execute_with_agent(agent, *args, **kwargs)
 
                     return wrapper
 
@@ -68,18 +73,15 @@ class MarkdownPlaybook(LocalPlaybook):
 
     def create_agent_specific_function(self, agent):
         """Create an agent-specific function that bypasses globals lookup."""
-        from playbooks.config import LLMConfig
-        from playbooks.markdown_playbook_execution import MarkdownPlaybookExecution
 
         async def agent_specific_wrapper(*args, **kwargs):
-            execution = MarkdownPlaybookExecution(agent, self.name, LLMConfig())
-            return await execution.execute(*args, **kwargs)
+            return await self.execute_with_agent(agent, *args, **kwargs)
 
         return agent_specific_wrapper
 
     @classmethod
-    def from_h2(cls, h2: Dict[str, Any]) -> "MarkdownPlaybook":
-        """Create a MarkdownPlaybook from an H2 AST node.
+    def from_h2(cls, h2: Dict[str, Any]) -> "LLMPlaybook":
+        """Create an LLMPlaybook from an H2 AST node.
 
         Args:
             h2: Dictionary representing an H2 AST node
@@ -95,9 +97,8 @@ class MarkdownPlaybook(LocalPlaybook):
 
         description, h3s = cls._extract_description_and_h3s(h2)
 
-        # Determine playbook type based on presence of a Code h3 section
-        # Markdown playbook (MD)
-        return cls._create_md_playbook(h2, klass, signature, description, h3s)
+        # Create LLM playbook
+        return cls._create_llm_playbook(h2, klass, signature, description, h3s)
 
     @staticmethod
     def _validate_h2_structure(h2: Dict[str, Any]) -> None:
@@ -144,15 +145,15 @@ class MarkdownPlaybook(LocalPlaybook):
         return description, h3s
 
     @classmethod
-    def _create_md_playbook(
+    def _create_llm_playbook(
         cls,
         h2: Dict[str, Any],
         klass: str,
         signature: str,
         description: Optional[str],
         h3s: List[Dict[str, Any]],
-    ) -> "MarkdownPlaybook":
-        """Create a markdown (MD) type playbook.
+    ) -> "LLMPlaybook":
+        """Create an LLM playbook.
 
         Args:
             h2: The H2 AST node.
@@ -162,7 +163,7 @@ class MarkdownPlaybook(LocalPlaybook):
             h3s: The list of H3 sections.
 
         Returns:
-            A new MD playbook instance.
+            A new LLM playbook instance.
 
         Raises:
             ValueError: If an unknown H3 section is encountered.
@@ -316,7 +317,7 @@ class MarkdownPlaybook(LocalPlaybook):
         metadata: Optional[Dict[str, Any]] = None,
         source_line_number: Optional[int] = None,
     ):
-        """Initialize a MarkdownPlaybook.
+        """Initialize an LLMPlaybook.
 
         Args:
             klass: The class name of the playbook.
@@ -328,7 +329,7 @@ class MarkdownPlaybook(LocalPlaybook):
             code: The Python code for PYTHON playbooks.
             func: The compiled function for PYTHON playbooks.
             markdown: The markdown representation of the playbook.
-            step_collection: The collection of steps for MD playbooks.
+            step_collection: The collection of steps for LLM playbooks.
             metadata: Metadata dict.
             source_line_number: The line number in the source markdown where this
                 playbook is defined.
@@ -360,8 +361,34 @@ class MarkdownPlaybook(LocalPlaybook):
         self.step_collection = step_collection
         self.source_line_number = source_line_number
 
+        # Set execution mode from metadata
+        self.execution_mode = LLMExecutionMode(
+            merged_metadata.get("execution_mode", LLMExecutionMode.PLAYBOOK)
+        )
+
+    async def execute_with_agent(self, agent, *args, **kwargs) -> Any:
+        """Execute the LLM playbook using the specified agent.
+
+        Args:
+            agent: The agent to execute with
+            *args: Positional arguments for the playbook
+            **kwargs: Keyword arguments for the playbook
+
+        Returns:
+            The result of executing the playbook
+        """
+        # Create appropriate execution strategy
+        if self.execution_mode == LLMExecutionMode.PLAYBOOK:
+            execution = PlaybookLLMExecution(agent, self)
+        elif self.execution_mode == LLMExecutionMode.REACT:
+            execution = ReActLLMExecution(agent, self)
+        else:  # RAW
+            execution = RawLLMExecution(agent, self)
+
+        return await execution.execute(*args, **kwargs)
+
     async def _execute_impl(self, *args, **kwargs) -> Any:
-        """Execute the markdown playbook using the compiled function.
+        """Execute the LLM playbook using the compiled function.
 
         Args:
             *args: Positional arguments for the playbook
@@ -426,22 +453,9 @@ class MarkdownPlaybook(LocalPlaybook):
             return self.step_collection.get_step(line_number)
         return None
 
-    def get_next_step(self, line_number: str) -> Optional[PlaybookStep]:
-        """Get the next step after the given line number.
-
-        Args:
-            line_number: The line number to start from.
-
-        Returns:
-            The next step or None if there is no next step.
-        """
-        if self.step_collection:
-            return self.step_collection.get_next_step(line_number)
-        return None
-
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""
-        return f"MarkdownPlaybook({self.klass})"
+        return f"LLMPlaybook({self.klass})"
 
     def __str__(self) -> str:
         """Return the markdown representation of the playbook."""

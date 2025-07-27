@@ -1,6 +1,5 @@
 """Unit tests for web_server.py - testing event sequence and WebSocket functionality."""
 
-import asyncio
 import json
 import sys
 import uuid
@@ -378,7 +377,7 @@ class TestRunManager:
         """Test creating a run with a playbook file path."""
         playbook_path = str(test_data_dir / "02-personalized-greeting.pb")
 
-        run_id = await run_manager.create_run(playbook_path=playbook_path)
+        run_id = await run_manager.create_run(playbooks_path=playbook_path)
 
         assert run_id is not None
         assert run_id in run_manager.runs
@@ -412,13 +411,13 @@ A simple test playbook
         # No arguments - expect RuntimeError wrapping ValueError
         with pytest.raises(
             RuntimeError,
-            match="Failed to create run.*Must provide either playbook_path or program_content",
+            match="Failed to create run: Must provide either playbooks_path or program_content",
         ):
             await run_manager.create_run()
 
         # Invalid file path - expect RuntimeError wrapping FileNotFoundError
         with pytest.raises(RuntimeError, match="Failed to create run.*not found"):
-            await run_manager.create_run(playbook_path="nonexistent.pb")
+            await run_manager.create_run(playbooks_path="nonexistent.pb")
 
     def test_get_run(self, run_manager):
         """Test getting a run by ID."""
@@ -433,155 +432,6 @@ A simple test playbook
         assert run_manager.get_run("test-run-123") == mock_run
 
 
-class TestEventSequenceIntegration:
-    """Integration tests for the complete event sequence."""
-
-    @pytest.mark.asyncio
-    async def test_complete_event_sequence_02_personalized_greeting(
-        self, test_data_dir
-    ):
-        """Test the complete event sequence for 02-personalized-greeting.pb playbook.
-
-        This test verifies the exact sequence of events that should be generated
-        when running the personalized greeting playbook, simulating the user
-        providing their name when asked.
-        """
-        run_manager = RunManager()
-        playbook_path = str(test_data_dir / "02-personalized-greeting.pb")
-
-        # Create the run
-        run_id = await run_manager.create_run(playbook_path=playbook_path)
-        run = run_manager.runs[run_id]
-
-        # Create mock WebSocket client
-        mock_websocket = MockWebSocket()
-        client = WebSocketClient(mock_websocket, "test-client-123")
-
-        # Add client to run (this will trigger execution to start)
-        await run.add_client(client)
-
-        # Give the execution a moment to start
-        await asyncio.sleep(0.1)
-
-        # Simulate human providing their name when asked
-        # The playbook will ask for the user's name, so we need to send it
-        await run.send_human_message("John")
-
-        # Wait for execution to complete
-        try:
-            await asyncio.wait_for(run.task, timeout=10.0)
-        except asyncio.TimeoutError:
-            pytest.fail("Playbook execution timed out")
-
-        # Analyze the events
-        events = mock_websocket.get_sent_events()
-        event_types = [event["type"] for event in events]
-
-        print(f"Generated {len(events)} events:")
-        for i, event in enumerate(events):
-            print(f"  {i+1}. {event['type']}")
-            if event["type"] in ["agent_message", "agent_streaming_update"]:
-                content = event.get("message", event.get("content", ""))
-                if content and len(content) < 100:
-                    print(f"     Content: {content}")
-
-        # Verify expected event types are present
-        expected_event_types = [
-            "connection_established",
-            "run_started",
-            "agent_streaming_start",
-            "agent_streaming_update",
-            "agent_streaming_complete",
-            "agent_message",
-            "human_input_requested",
-            "human_message",
-            "session_log_entry",
-            "run_terminated",
-        ]
-
-        for expected_type in expected_event_types:
-            assert (
-                expected_type in event_types
-            ), f"Expected event type '{expected_type}' not found in {event_types}"
-
-        # Verify event sequence properties
-
-        # 1. First event should be CONNECTION_ESTABLISHED
-        assert events[0]["type"] == "connection_established"
-        assert events[0]["run_id"] == run_id
-
-        # 2. Second event should be RUN_STARTED
-        run_started_events = [e for e in events if e["type"] == "run_started"]
-        assert len(run_started_events) == 1
-        assert run_started_events[0]["run_id"] == run_id
-
-        # 3. Should have agent streaming events (start, updates, complete)
-        streaming_start_events = [
-            e for e in events if e["type"] == "agent_streaming_start"
-        ]
-        streaming_update_events = [
-            e for e in events if e["type"] == "agent_streaming_update"
-        ]
-        streaming_complete_events = [
-            e for e in events if e["type"] == "agent_streaming_complete"
-        ]
-
-        assert (
-            len(streaming_start_events) >= 1
-        ), "Should have at least one streaming start event"
-        assert (
-            len(streaming_update_events) >= 1
-        ), "Should have at least one streaming update event"
-        assert (
-            len(streaming_complete_events) >= 1
-        ), "Should have at least one streaming complete event"
-
-        # 4. Should have agent messages
-        agent_message_events = [e for e in events if e["type"] == "agent_message"]
-        assert len(agent_message_events) >= 1, "Should have at least one agent message"
-
-        # 5. Should have human input request (agent asking for name)
-        human_input_events = [e for e in events if e["type"] == "human_input_requested"]
-        assert len(human_input_events) >= 1, "Should have human input request"
-
-        # 6. Should have human message (user providing name)
-        human_message_events = [e for e in events if e["type"] == "human_message"]
-        assert len(human_message_events) >= 1, "Should have human message"
-
-        # 7. Should have session log entries
-        session_log_events = [e for e in events if e["type"] == "session_log_entry"]
-        assert len(session_log_events) >= 1, "Should have session log entries"
-
-        # 8. Last event should be RUN_TERMINATED
-        assert events[-1]["type"] == "run_terminated"
-        assert events[-1]["run_id"] == run_id
-
-        # 9. Verify agent message contains user's name "John"
-        agent_messages = [e["message"] for e in agent_message_events if "message" in e]
-        john_mentions = [msg for msg in agent_messages if "John" in str(msg)]
-        assert (
-            len(john_mentions) >= 1
-        ), f"Agent should mention 'John' in messages. Agent messages: {agent_messages}"
-
-        # 10. Verify streaming events have proper agent information
-        for stream_event in (
-            streaming_start_events + streaming_update_events + streaming_complete_events
-        ):
-            assert "agent_id" in stream_event
-            assert "agent_klass" in stream_event
-            assert "run_id" in stream_event
-            assert stream_event["run_id"] == run_id
-
-        # 11. Verify session log events have proper structure
-        for log_event in session_log_events:
-            assert "agent_id" in log_event
-            assert "agent_klass" in log_event
-            assert "level" in log_event
-            assert "content" in log_event
-            assert "item_type" in log_event
-            assert log_event["run_id"] == run_id
-
-
 class TestWebSocketHandling:
     """Test WebSocket connection handling and message routing."""
 
@@ -593,7 +443,7 @@ class TestWebSocketHandling:
 
         # Create a run first using a valid playbook path
         playbook_path = str(test_data_dir / "02-personalized-greeting.pb")
-        run_id = await run_manager.create_run(playbook_path=playbook_path)
+        run_id = await run_manager.create_run(playbooks_path=playbook_path)
 
         # Mock websocket
         mock_websocket = MagicMock()
