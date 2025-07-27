@@ -14,12 +14,13 @@ from ..meetings import MeetingManager
 from ..message import Message, MessageType
 from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
-from ..utils.langfuse_helper import LangfuseHelper
-from ..utils.spec_utils import SpecUtils
-from ..utils.description_resolver import (
-    resolve_description,
+from ..utils.expression_engine import (
+    ExpressionContext,
+    resolve_description_placeholders,
     update_description_in_markdown,
 )
+from ..utils.langfuse_helper import LangfuseHelper
+from ..utils.spec_utils import SpecUtils
 from .base_agent import BaseAgent, BaseAgentMeta
 
 if TYPE_CHECKING:
@@ -594,8 +595,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             markdown_for_llm = playbook.markdown
             if playbook.description and "{" in playbook.description:
                 try:
-                    resolved_description = await resolve_description(
-                        playbook.description, self, self.state, call
+                    context = ExpressionContext(self, self.state, call)
+                    resolved_description = resolve_description_placeholders(
+                        playbook.description, context
                     )
                     markdown_for_llm = update_description_in_markdown(
                         playbook.markdown, resolved_description
@@ -632,20 +634,15 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             playbook_name, args, kwargs
         )
 
-        # Replace variable names with actual values using improved resolution
-        from playbooks.utils.variable_resolution import resolve_variable_ast
-
-        # Convert variables to the format expected by resolve_variable_ast
-        variables_dict = {}
-        for var_name, var_obj in self.state.variables.variables.items():
-            variables_dict[var_name] = var_obj.value
+        # Replace variable names with actual values
+        context = ExpressionContext(self, self.state, call)
 
         # Resolve args
         for i, arg in enumerate(args):
             if isinstance(arg, str) and arg.startswith("$"):
                 try:
-                    args[i] = resolve_variable_ast(arg, variables_dict)
-                except (KeyError, AttributeError, IndexError):
+                    args[i] = context.evaluate_expression(arg)
+                except Exception:
                     # If resolution fails, keep the original value
                     pass
 
@@ -653,8 +650,8 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         for key, value in kwargs.items():
             if isinstance(value, str) and value.startswith("$"):
                 try:
-                    kwargs[key] = resolve_variable_ast(value, variables_dict)
-                except (KeyError, AttributeError, IndexError):
+                    kwargs[key] = context.evaluate_expression(value)
+                except Exception:
                     # If resolution fails, keep the original value
                     pass
 

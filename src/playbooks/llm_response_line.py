@@ -9,6 +9,8 @@ from playbooks.playbook_call import PlaybookCall
 from playbooks.utils.spec_utils import SpecUtils
 from playbooks.variables import Variables
 
+from .utils.expression_engine import parse_playbook_call
+
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
 
@@ -94,129 +96,7 @@ class LLMResponseLine:
         )
 
         for playbook_call in playbook_call_matches:
-            self.playbook_calls.append(self._parse_playbook_call(playbook_call))
-
-    def _parse_playbook_call(self, playbook_call: str) -> PlaybookCall:
-        """Parse a playbook call using Python's AST parser.
-
-        This method parses a playbook call string into a dictionary containing the playbook name,
-        positional arguments, and keyword arguments, handling both literal values and variable
-        references (starting with $).
-
-        Args:
-            playbook_call: The complete playbook call string (e.g., "MyTool(arg1, kwarg='val')").
-
-        Returns:
-            A dictionary containing:
-                - playbook_name: The name of the playbook
-                - args: List of positional arguments
-                - kwargs: Dictionary of keyword arguments
-
-        Raises:
-            ValueError: If the parsed expression is not a playbook call.
-            SyntaxError: If the playbook call string is not valid Python syntax.
-        """
-        # Create a valid Python expression by properly handling $variables
-        expr = playbook_call
-        # Handle keyword argument names by removing $ prefix
-        expr = re.sub(r"\$([a-zA-Z_][a-zA-Z0-9_]*)\s*=", r"\1=", expr)
-        # Handle remaining $variables by replacing with __substituted__ prefix
-        for match in re.finditer(r"\$[a-zA-Z_][a-zA-Z0-9_]*", expr):
-            var = match.group(0)
-            expr = expr.replace(var, f"__substituted__{var[1:]}")
-
-        # Parse the expression
-        tree = ast.parse(expr, mode="eval")
-        if not isinstance(tree.body, ast.Call):
-            raise ValueError("Expected a playbook call")
-
-        # Extract playbook name
-        playbook_name = self._parse_playbook_name(tree.body)
-
-        # Helper function to convert AST nodes to variable expressions
-        def node_to_variable_expr(node):
-            if isinstance(node, ast.Name):
-                if "__substituted__" in node.id:
-                    return node.id.replace("__substituted__", "$")
-                else:
-                    # This is a regular variable reference
-                    return f"${node.id}"
-            elif isinstance(node, ast.Attribute):
-                # Handle attribute access like $user_state.product_sku
-                # Build the full expression string
-                def build_attr_string(n):
-                    if isinstance(n, ast.Name):
-                        if "__substituted__" in n.id:
-                            return n.id.replace("__substituted__", "$")
-                        else:
-                            return f"${n.id}"
-                    elif isinstance(n, ast.Attribute):
-                        return f"{build_attr_string(n.value)}.{n.attr}"
-                    else:
-                        return ast.unparse(n)
-
-                return build_attr_string(node)
-            elif isinstance(node, ast.Subscript):
-                # Handle subscript access like $user["name"] or $items[0]
-                value_str = node_to_variable_expr(node.value)
-                if isinstance(node.slice, ast.Constant):
-                    # For constant indices/keys
-                    if isinstance(node.slice.value, str):
-                        return f'{value_str}["{node.slice.value}"]'
-                    else:
-                        return f"{value_str}[{node.slice.value}]"
-                else:
-                    # For more complex slices
-                    slice_str = ast.unparse(node.slice)
-                    return f"{value_str}[{slice_str}]"
-            elif isinstance(node, ast.Constant):
-                if isinstance(node.value, str) and "__substituted__" in node.value:
-                    return node.value.replace("__substituted__", "$")
-                else:
-                    return node.value
-            else:
-                # For other literal types (lists, dicts, etc.)
-                try:
-                    return ast.literal_eval(ast.unparse(node))
-                except ValueError:
-                    # If it can't be evaluated as a literal, return the unparsed string
-                    return ast.unparse(node)
-
-        # Extract positional arguments
-        args = []
-        for arg in tree.body.args:
-            args.append(node_to_variable_expr(arg))
-
-        # Extract keyword arguments
-        kwargs = {}
-        for keyword in tree.body.keywords:
-            kwargs[keyword.arg] = node_to_variable_expr(keyword.value)
-
-        return PlaybookCall(playbook_name, args, kwargs)
-
-    def _parse_playbook_name(self, call_node: ast.Call) -> str:
-        """Parse a playbook name.
-
-        This method parses a playbook name string into a dictionary containing the playbook name,
-        positional arguments, and keyword arguments, handling both literal values and variable
-        references (starting with $).
-        """
-        func = call_node.func
-
-        # Reconstruct the full function name from attribute chain
-        parts = []
-        current = func
-
-        while isinstance(current, ast.Attribute):
-            parts.append(current.attr)
-            current = current.value
-
-        if isinstance(current, ast.Name):
-            parts.append(current.id)
-
-        # Reverse to get correct order
-        parts.reverse()
-        return ".".join(parts)
+            self.playbook_calls.append(parse_playbook_call(playbook_call))
 
     def _parse_arg_value(self, arg_value: str) -> Any:
         """Parse an argument value to the appropriate type.

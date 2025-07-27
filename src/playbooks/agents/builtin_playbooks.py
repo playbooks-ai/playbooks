@@ -65,37 +65,36 @@ async def InviteToMeeting(meeting_id: str, attendees: list):
 
         return markdown_to_ast(code_block)["children"]
 
+    @staticmethod
+    def get_llm_playbooks_ast_nodes():
+        markdown = """
+    # BuiltinPlaybooks
+    ## ResolveDescriptionPlaceholders($playbook_call: str, $description: str) -> str
+    Resolves natural language placeholders as Python expressions in provided playbook description in the context of the provided playbook call
+    hidden: true
 
-@staticmethod
-def get_llm_playbooks_ast_nodes():
-    markdown = """
-# BuiltinPlaybooks
-## ResolveDescriptionPlaceholders($playbook_call: str, $description: str) -> str
-Resolves natural language placeholders as Python expressions in provided playbook description in the context of the provided playbook call
-hidden: true
+    ### Steps
+    - Provided $description contains contains some placeholders in {} in Python f-string syntax
+    - Go through each placeholder $expression
+    - If $expression is not valid Python syntax and is a natural language instruction
+        - Attempt to convert it to valid Python syntax. If ambiguous or not known how to convert, leave it as is.
+    - Return description with any converted placeholders. No other changes to description allowed.
+    """
 
-### Steps
-- Provided $description contains contains some placeholders in {} in Python f-string syntax
-- Go through each placeholder $expression
-  - If $expression is not valid Python syntax and is a natural language instruction
-    - Attempt to convert it to valid Python syntax. If ambiguous or not known how to convert, leave it as is.
-- Return description with any converted placeholders. No other changes to description allowed.
-"""
+        llm_config = LLMConfig()
+        compiler = Compiler(llm_config, use_cache=False)
 
-    llm_config = LLMConfig()
-    compiler = Compiler(llm_config, use_cache=False)
+        # Compile the playbooks content
+        _, compiled_content = compiler.process_single_file(
+            "__builtin_playbooks.pb", markdown
+        )
 
-    # Compile the playbooks content
-    _, compiled_content = compiler.process_single_file(
-        "__builtin_playbooks.pb", markdown
-    )
+        # Parse the compiled content to extract steps
+        ast = markdown_to_ast(compiled_content)
+        h1 = ast.get("children")[0]
+        if not h1.get("type") == "h1":
+            raise Exception("Expected a single h1 child")
 
-    # Parse the compiled content to extract steps
-    ast = markdown_to_ast(compiled_content)
-    h1 = ast.children[0]
-    if not h1.get("type") == "h1":
-        raise Exception("Expected a single h1 child")
-
-    # filter h1 children for h2 nodes
-    h2s = filter(lambda node: node.get("type") == "h2", h1.children)
-    return h2s
+        # filter h1 children for h2 nodes
+        h2s = list(filter(lambda node: node.get("type") == "h2", h1.get("children")))
+        return h2s

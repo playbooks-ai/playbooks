@@ -445,7 +445,9 @@ class TestIntegration:
         self, mock_completion, temp_dir, playbook_with_frontmatter
     ):
         """Test integration with main Playbooks class."""
-        mock_completion.return_value = iter(["# CompiledAgent\nCompiled content"])
+        mock_completion.return_value = iter(
+            ["# CompiledAgent\nCompiled content", "# BuiltinPlaybooks\n"]
+        )
 
         test_file = temp_dir / "integration_test.pb"
         test_file.write_text(playbook_with_frontmatter)
@@ -510,7 +512,13 @@ Content 2"""
         self, mock_completion, temp_dir, simple_playbook_content
     ):
         """Test integration with mixed .pb and .pbasm files."""
-        mock_completion.return_value = iter(["# CompiledAgent\nCompiled content"])
+        mock_completion.return_value = iter(
+            [
+                "# CompiledAgent\nCompiled content",
+                "# BuiltinPlaybooks\n",
+                "# BuiltinPlaybooks\n",
+            ]
+        )
 
         # Create mixed files
         pb_file = temp_dir / "source.pb"
