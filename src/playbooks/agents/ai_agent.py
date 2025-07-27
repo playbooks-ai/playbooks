@@ -16,6 +16,10 @@ from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.spec_utils import SpecUtils
+from ..utils.description_resolver import (
+    resolve_description,
+    update_description_in_markdown,
+)
 from .base_agent import BaseAgent, BaseAgentMeta
 
 if TYPE_CHECKING:
@@ -586,7 +590,23 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         )
         llm_message = []
         if playbook and isinstance(playbook, LLMPlaybook):
-            llm_message.append("```md\n" + playbook.markdown + "\n```")
+            # Resolve description placeholders if present
+            markdown_for_llm = playbook.markdown
+            if playbook.description and "{" in playbook.description:
+                try:
+                    resolved_description = await resolve_description(
+                        playbook.description, self, self.state, call
+                    )
+                    markdown_for_llm = update_description_in_markdown(
+                        playbook.markdown, resolved_description
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Failed to resolve description placeholders for {call.playbook_klass}: {e}"
+                    )
+                    # Continue with original markdown if resolution fails
+
+            llm_message.append("```md\n" + markdown_for_llm + "\n```")
 
         # Add a cached message whenever we add a stack frame
         llm_message.append("Executing " + str(call))
