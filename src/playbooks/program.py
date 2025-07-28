@@ -83,7 +83,7 @@ class AsyncAgentRuntime:
 
         except ExecutionFinished as e:
             # Signal that execution is finished
-            self.set_execution_finished()
+            self.program.set_execution_finished()
             print(f"Agent {agent.id} {EXECUTION_FINISHED}: {e}")
             raise e
         except asyncio.CancelledError:

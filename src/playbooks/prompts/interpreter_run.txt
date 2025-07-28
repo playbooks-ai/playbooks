@@ -190,14 +190,17 @@ yld? no, nothing queued
 
 **Ex 6 - Creating agents**
 Assuming MyWorker agent is defined
-- PB:01:QUE Create 3 agents with CreateAgent(worker agent, name=sequential names like "MW001", "MW002", age=random age)
-- PB:02:QUE Tell users ids, names and ages of the three agents
+- PB:01:QUE Create 3 $agents with CreateAgent(worker agent, name=sequential names like "MW001", "MW002", age=random age)
+- PB:02:QUE MeetingPlaybook($topic=meeting topic, $attendees=[$agents and user])
 ```
 `Step[PB:01:QUE]` `CreateAgent("MyWorker", name="MW001", age=38)` `CreateAgent("MyWorker", name="MW002", age=22)` `CreateAgent("MyWorker", name="MW003", age=61)`
 trig? no
 yld? yes, PB:02:QUE requires agent ids that I will get after executing CreateAgent calls
 `Step[PB:02:QUE]` yld for call
 ```
+
+```
+`Step[PB:02:QUE]` `MeetingPlaybook($topic="Work meeting", $attendees=["agent 1000", "agent 1001", "agent 1002", "user"])
 
 #### 8  Quick Mapping Cheatsheet
 | Playbook step                          | Condition     |Output (example)                                   |
@@ -207,7 +210,7 @@ yld? yes, PB:02:QUE requires agent ids that I will get after executing CreateAge
 |                                          | if age is known but $age is not set | `Step[PB:01:QUE]` `$result:bool = PB2(age=23)`|
 | - PB:05:EXE Generate full report and store in artifact |  | `Step[PB:05:EXE]` `SaveArtifact("result_1.md", "Result for 'How to swim'", "#How to swim: A comprehensive report\nThis report...full report here...")`|
 | - PB:06:QUE Show result to user | Referring to artifact shows it in UI | `Say("user", "Artifact[result_1.md]")`|
-| - PB:01:EXE Start a Q3 planning meeting with Manager | Planning is a playbooks with meeting:true | `Planning("Q3 planning meeting", ["agent 2345"])|
+| - PB:01:EXE Start a Q3 planning meeting with Manager and Programmer | Planning is a playbooks with meeting:true | `Planning("Q3 planning meeting", ["agent 2345", "agent 1001"])|
 | - Planning:05:QUE Add Banker to the meeting | BankerAgent is the banker but no running instance | `CreateAgent("BankerAgent")`<br>trigger? no<br>yld? yes, need agent ID to invite<br>yld for call<br>`InviteToMeeting("meeting 2334", ["agent 8765"])`|
 |                                             | BankerAgent is the banker with an instance with agent id 1002 | `InviteToMeeting("meeting", ["agent 1002"])`|
 | - Planning:06:QUE Create a new tax accountant agent | AccountantForTax is defined | `CreateAgent("AccountantForTax")`|
