@@ -66,21 +66,24 @@ async def InviteToMeeting(meeting_id: str, attendees: list):
         return markdown_to_ast(code_block)["children"]
 
     @staticmethod
+    def get_llm_playbooks_markdown():
+        return """
+# BuiltinPlaybooks
+## ResolveDescriptionPlaceholders($playbook_call: str, $description: str) -> str
+Resolves natural language placeholders as Python expressions in provided playbook description in the context of the provided playbook call
+hidden: true
+
+### Steps
+- Provided $description contains contains some placeholders in {} in Python f-string syntax
+- Go through each placeholder $expression
+- If $expression is not valid Python syntax and is a natural language instruction
+    - Attempt to convert it to valid Python syntax. If ambiguous or not known how to convert, leave it as is.
+- Return description with any converted placeholders. No other changes to description allowed.
+"""
+
+    @staticmethod
     def get_llm_playbooks_ast_nodes():
-        markdown = """
-    # BuiltinPlaybooks
-    ## ResolveDescriptionPlaceholders($playbook_call: str, $description: str) -> str
-    Resolves natural language placeholders as Python expressions in provided playbook description in the context of the provided playbook call
-    hidden: true
-
-    ### Steps
-    - Provided $description contains contains some placeholders in {} in Python f-string syntax
-    - Go through each placeholder $expression
-    - If $expression is not valid Python syntax and is a natural language instruction
-        - Attempt to convert it to valid Python syntax. If ambiguous or not known how to convert, leave it as is.
-    - Return description with any converted placeholders. No other changes to description allowed.
-    """
-
+        markdown = BuiltinPlaybooks.get_llm_playbooks_markdown()
         llm_config = LLMConfig()
         compiler = Compiler(llm_config, use_cache=False)
 

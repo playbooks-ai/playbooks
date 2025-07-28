@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any
 
 from ..enums import LLMMessageRole
 from ..events import PlaybookEndEvent, PlaybookStartEvent
+from ..utils.llm_config import LLMConfig
 from ..utils.llm_helper import get_completion, get_messages_for_prompt
 from .base import LLMExecution
 
@@ -56,8 +57,6 @@ class RawLLMExecution(LLMExecution):
 
     async def _get_llm_response(self, prompt: str) -> str:
         """Get response from LLM."""
-        from ..config import LLMConfig
-
         messages = get_messages_for_prompt(prompt)
 
         # Cache the message in call stack

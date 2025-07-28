@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from playbooks.agents.builtin_playbooks import BuiltinPlaybooks
 from playbooks.compiler import Compiler
 from playbooks.loader import Loader
 from playbooks.main import Playbooks
@@ -446,7 +447,10 @@ class TestIntegration:
     ):
         """Test integration with main Playbooks class."""
         mock_completion.return_value = iter(
-            ["# CompiledAgent\nCompiled content", "# BuiltinPlaybooks\n"]
+            [
+                "# CompiledAgent\nCompiled content",
+                BuiltinPlaybooks.get_llm_playbooks_markdown(),
+            ]
         )
 
         test_file = temp_dir / "integration_test.pb"
@@ -515,8 +519,8 @@ Content 2"""
         mock_completion.return_value = iter(
             [
                 "# CompiledAgent\nCompiled content",
-                "# BuiltinPlaybooks\n",
-                "# BuiltinPlaybooks\n",
+                BuiltinPlaybooks.get_llm_playbooks_markdown(),
+                BuiltinPlaybooks.get_llm_playbooks_markdown(),
             ]
         )
 

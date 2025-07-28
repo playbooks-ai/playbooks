@@ -39,6 +39,8 @@ class LLMConfig:
                 self.api_key = os.environ.get("GEMINI_API_KEY")
             elif "groq" in self.model:
                 self.api_key = os.environ.get("GROQ_API_KEY")
+            elif "openrouter" in self.model:
+                self.api_key = os.environ.get("OPENROUTER_API_KEY")
             else:
                 # Default to OpenAI for other models
                 self.api_key = os.environ.get("OPENAI_API_KEY")

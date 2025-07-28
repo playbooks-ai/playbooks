@@ -1,6 +1,6 @@
 """Traditional playbook execution with defined steps."""
 
-from typing import Any, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, List
 
 from ..constants import EXECUTION_FINISHED
 from ..debug.debug_handler import DebugHandler, NoOpDebugHandler
@@ -15,6 +15,7 @@ from ..interpreter_prompt import InterpreterPrompt
 from ..llm_response import LLMResponse
 from ..playbook_call import PlaybookCall
 from ..session_log import SessionLogItemLevel, SessionLogItemMessage
+from ..utils.llm_config import LLMConfig
 from ..utils.llm_helper import get_completion
 from ..utils.spec_utils import SpecUtils
 from .base import LLMExecution
@@ -265,8 +266,6 @@ class PlaybookLLMExecution(LLMExecution):
 
     async def _stream_llm_response(self, prompt):
         """Stream LLM response and handle Say() calls progressively."""
-        from ..config import LLMConfig
-
         buffer = ""
         in_say_call = False
         current_say_content = ""
