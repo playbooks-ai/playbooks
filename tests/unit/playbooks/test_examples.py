@@ -200,3 +200,15 @@ async def test_example_two_player_game(test_data_dir):
     log = agent.state.session_log.to_log_full()
     print(log)
     assert "GameRoom(" in log
+
+
+@pytest.mark.asyncio
+async def test_description_injection(test_data_dir):
+    playbooks = Playbooks([test_data_dir / "13-description-injection.pb"])
+    await playbooks.initialize()
+    agent = playbooks.program.agents_by_klass["TestAgent"][0]
+
+    await playbooks.program.run_till_exit()
+    log = agent.state.session_log.to_log_full()
+    print(log)
+    assert "Greed" in log

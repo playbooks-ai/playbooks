@@ -60,6 +60,13 @@ async def LoadArtifact(artifact_name: str):
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
     return await agent.invite_to_meeting(meeting_id, attendees)
+
+@playbook
+async def Loadfile(file_path: str):
+    with open(file_path, "r") as file:
+        content = file.read()
+
+    return content
 ```        
 '''
 
