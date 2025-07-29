@@ -4,11 +4,12 @@ Zero dependencies on other expression modules.
 """
 
 import ast
+import inspect
 import json
 import re
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Dict, List, Optional, Set, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 if TYPE_CHECKING:
     from ..agents.base_agent import Agent
@@ -137,7 +138,6 @@ def validate_expression(expr: str) -> Tuple[bool, Optional[str]]:
         "exec",
         "__import__",
         "open",
-        "file",
         "__builtins__",
         "__globals__",
         "__locals__",
@@ -336,6 +336,12 @@ class ExpressionContext:
                 namespace,
             )
 
+            # Handle coroutines by awaiting them if possible, otherwise return the coroutine
+            if inspect.iscoroutine(result):
+                # For now, just return the coroutine - caller needs to handle it
+                # This is safer than trying to run it synchronously
+                return result
+
             return result
 
         except ExpressionError:
@@ -355,6 +361,14 @@ class ExpressionContext:
             except (KeyError, RecursionError):
                 # Skip variables that can't be resolved
                 continue
+
+        # Add playbook functions from agent namespace
+        if hasattr(self.agent, "namespace_manager") and hasattr(
+            self.agent.namespace_manager, "namespace"
+        ):
+            for name, value in self.agent.namespace_manager.namespace.items():
+                if callable(value) and name not in namespace:
+                    namespace[name] = value
 
         return namespace
 
@@ -452,7 +466,7 @@ def extract_playbook_calls(text: str) -> List[str]:
     return matches
 
 
-def resolve_description_placeholders(
+async def resolve_description_placeholders(
     description: str, context: ExpressionContext
 ) -> str:
     """Resolve {expression} patterns in descriptions.
@@ -474,12 +488,26 @@ def resolve_description_placeholders(
     # Pattern to handle nested braces
     pattern = r"\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}"
 
-    def replace_placeholder(match):
+    # Find all matches and replace them manually since re.sub doesn't work with async
+    matches = list(re.finditer(pattern, description))
+    if not matches:
+        return description
+
+    # Process matches in reverse order to avoid index shifting
+    result_desc = description
+    for match in reversed(matches):
         expr = match.group(1)
         try:
             # Evaluate expression
             result = context.evaluate_expression(expr)
-            return format_value(result)
+            # If result is a coroutine, await it
+            if inspect.iscoroutine(result):
+                result = await result
+            replacement = format_value(result)
+            # Replace the match in the string
+            result_desc = (
+                result_desc[: match.start()] + replacement + result_desc[match.end() :]
+            )
         except Exception as e:
             # Calculate position for error context
             pos = match.start()
@@ -490,7 +518,7 @@ def resolve_description_placeholders(
                 f"Error in placeholder at line {line_num}, column {col_num}: {type(e).__name__}: {e}",
             )
 
-    return re.sub(pattern, replace_placeholder, description)
+    return result_desc
 
 
 def update_description_in_markdown(markdown: str, resolved_description: str) -> str:

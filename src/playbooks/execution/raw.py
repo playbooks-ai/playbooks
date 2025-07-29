@@ -31,7 +31,7 @@ class RawLLMExecution(LLMExecution):
         self.state.event_bus.publish(PlaybookStartEvent(playbook=self.playbook.name))
 
         # Build the prompt
-        prompt = self._build_prompt(*args, **kwargs)
+        prompt = await self._build_prompt(*args, **kwargs)
 
         # Make single LLM call
         response = await self._get_llm_response(prompt)
@@ -51,9 +51,11 @@ class RawLLMExecution(LLMExecution):
 
         return result
 
-    def _build_prompt(self, *args, **kwargs) -> str:
-        """Playbook description is the entire prompt"""
-        return self.playbook.description
+    async def _build_prompt(self, *args, **kwargs) -> str:
+        """Playbook description is the entire prompt, with placeholders resolved"""
+        return await self.resolve_description_placeholders(
+            self.playbook.description, *args, **kwargs
+        )
 
     async def _get_llm_response(self, prompt: str) -> str:
         """Get response from LLM."""

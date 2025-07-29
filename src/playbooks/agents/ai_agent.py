@@ -596,7 +596,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             if playbook.description and "{" in playbook.description:
                 try:
                     context = ExpressionContext(self, self.state, call)
-                    resolved_description = resolve_description_placeholders(
+                    resolved_description = await resolve_description_placeholders(
                         playbook.description, context
                     )
                     markdown_for_llm = update_description_in_markdown(
