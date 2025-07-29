@@ -4,6 +4,10 @@ from typing import TYPE_CHECKING, Any, List
 
 from ..enums import LLMMessageRole, LLMMessageType
 from ..events import PlaybookEndEvent, PlaybookStartEvent
+from ..playbook_call import PlaybookCall
+from ..utils.expression_engine import (
+    ExpressionContext,
+)
 from ..utils.llm_config import LLMConfig
 from ..utils.llm_helper import get_completion, make_uncached_llm_message
 from .base import LLMExecution
@@ -52,6 +56,13 @@ class RawLLMExecution(LLMExecution):
         return result
 
     async def _build_prompt(self, *args, **kwargs) -> str:
+        call = PlaybookCall(self.playbook.name, args, kwargs)
+
+        context = ExpressionContext(self, self.state, call)
+        resolved_description = await context.resolve_description_placeholders(
+            self.description, context
+        )
+
         stack_frame = self.agent.state.call_stack.peek()
         messages = list(
             filter(
@@ -61,7 +72,7 @@ class RawLLMExecution(LLMExecution):
         )
         messages.append(
             make_uncached_llm_message(
-                self.playbook.resolved_description,
+                resolved_description,
                 role=LLMMessageRole.ASSISTANT,
                 type=LLMMessageType.DEFAULT,
             )

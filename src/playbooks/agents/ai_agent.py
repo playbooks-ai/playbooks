@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
-from ..enums import LLMMessageRole, LLMMessageType, StartupMode
+from ..enums import LLMMessageType, StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
 from ..execution_state import ExecutionState
@@ -16,7 +16,6 @@ from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.expression_engine import (
     ExpressionContext,
-    resolve_description_placeholders,
 )
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.spec_utils import SpecUtils
@@ -589,29 +588,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             meeting_id=meeting_id,
         )
         self.state.call_stack.push(call_stack_frame)
-
-        llm_message = []
-        if playbook and isinstance(playbook, LLMPlaybook):
-            # Resolve description placeholders if present
-            if playbook.description and "{" in playbook.description:
-                try:
-                    context = ExpressionContext(self, self.state, call)
-                    resolved_description = await resolve_description_placeholders(
-                        playbook.description, context
-                    )
-                    playbook.resolved_description = resolved_description
-                except Exception as e:
-                    logger.error(
-                        f"Failed to resolve description placeholders for {call.playbook_klass}: {e}"
-                    )
-                    playbook.resolved_description = playbook.description
-
-        # Add a cached message whenever we add a stack frame
-        llm_message.append("Executing " + str(call))
-        call_stack_frame.add_cached_llm_message(
-            "\n\n".join(llm_message), role=LLMMessageRole.ASSISTANT
-        )
-
         self.state.session_log.append(call)
 
         self.state.variables.update({"$__": None})

@@ -1,5 +1,6 @@
 """Traditional playbook execution with defined steps."""
 
+import logging
 from typing import TYPE_CHECKING, Any, List
 
 from ..constants import EXECUTION_FINISHED
@@ -15,6 +16,9 @@ from ..interpreter_prompt import InterpreterPrompt
 from ..llm_response import LLMResponse
 from ..playbook_call import PlaybookCall
 from ..session_log import SessionLogItemLevel, SessionLogItemMessage
+from ..utils.expression_engine import (
+    ExpressionContext,
+)
 from ..utils.llm_config import LLMConfig
 from ..utils.llm_helper import get_completion
 from ..utils.spec_utils import SpecUtils
@@ -23,6 +27,8 @@ from .base import LLMExecution
 if TYPE_CHECKING:
     from ..agents.base_agent import Agent
     from ..playbook.llm_playbook import LLMPlaybook
+
+logger = logging.getLogger(__name__)
 
 
 class PlaybookLLMExecution(LLMExecution):
@@ -50,6 +56,31 @@ class PlaybookLLMExecution(LLMExecution):
             else NoOpDebugHandler()
         )
 
+    async def pre_execute(self, call: PlaybookCall) -> None:
+        llm_message = []
+        # Resolve description placeholders if present
+        if self.description and "{" in self.description:
+            try:
+                context = ExpressionContext(self, self.state, call)
+                resolved_description = await context.resolve_description_placeholders(
+                    self.description, context
+                )
+
+                markdown_for_llm = context.update_description_in_markdown(
+                    self.markdown, resolved_description
+                )
+                llm_message.append("```md\n" + markdown_for_llm + "\n```")
+            except Exception as e:
+                logger.error(
+                    f"Failed to resolve description placeholders for {call.playbook_klass}: {e}"
+                )
+
+        # Add a cached message whenever we add a stack frame
+        llm_message.append("Executing " + str(call))
+        self.state.call_stack.peek().add_cached_llm_message(
+            "\n\n".join(llm_message), role=LLMMessageRole.ASSISTANT
+        )
+
     async def execute(self, *args, **kwargs) -> Any:
         """Execute the playbook with traditional step-by-step logic."""
         done = False
@@ -62,6 +93,7 @@ class PlaybookLLMExecution(LLMExecution):
         self.state.event_bus.publish(PlaybookStartEvent(playbook=self.playbook.name))
 
         call = PlaybookCall(self.playbook.name, args, kwargs)
+        self.pre_execute(call)
 
         instruction = f"Execute {str(call)} from step 01"
         artifacts_to_load = []
@@ -222,9 +254,6 @@ class PlaybookLLMExecution(LLMExecution):
         if self.agent.program.execution_finished:
             return EXECUTION_FINISHED
 
-        if self.state.call_stack.is_empty():
-            raise ExecutionFinished(f"Call stack is empty. {EXECUTION_FINISHED}.")
-
         # Publish playbook end event
         call_stack_depth = len(self.state.call_stack.frames)
 
@@ -238,6 +267,9 @@ class PlaybookLLMExecution(LLMExecution):
 
         # Handle any debug cleanup
         await self.debug_handler.handle_execution_end()
+
+        if len(self.state.call_stack.frames) <= 1:
+            raise ExecutionFinished(f"Call stack is empty. {EXECUTION_FINISHED}.")
 
         return return_value
 
