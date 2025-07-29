@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from playbooks.enums import LLMMessageRole
+from playbooks.enums import LLMMessageRole, LLMMessageType
 from playbooks.utils.llm_helper import (
     make_cached_llm_message,
     make_uncached_llm_message,
@@ -99,16 +99,22 @@ class CallStackFrame:
         return result
 
     def add_uncached_llm_message(
-        self, message: str, role: str = LLMMessageRole.ASSISTANT
+        self,
+        message: str,
+        role: LLMMessageRole = LLMMessageRole.ASSISTANT,
+        type: LLMMessageType = LLMMessageType.DEFAULT,
     ) -> None:
         """Add a message to the call stack frame for the LLM."""
-        self.llm_messages.append(make_uncached_llm_message(message, role))
+        self.llm_messages.append(make_uncached_llm_message(message, role, type))
 
     def add_cached_llm_message(
-        self, message: str, role: str = LLMMessageRole.ASSISTANT
+        self,
+        message: str,
+        role: LLMMessageRole = LLMMessageRole.ASSISTANT,
+        type: LLMMessageType = LLMMessageType.DEFAULT,
     ) -> None:
         """Add a message to the call stack frame for the LLM."""
-        self.llm_messages.append(make_cached_llm_message(message, role))
+        self.llm_messages.append(make_cached_llm_message(message, role, type))
 
     def __repr__(self) -> str:
         base_repr = str(self.instruction_pointer)

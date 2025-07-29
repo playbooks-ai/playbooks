@@ -2,9 +2,8 @@
 
 ## Test playbook
 execution_mode: raw
-{Loadfile("tests/data/13-description-injection-story.txt")}
-Question: What fundamental flaw disrupted the planetary equilibrium?
-
+{Loadfile("tests/data/13-description-injection-story.txt", silent=True)}
+{Loadfile("tests/data/13-description-injection-instructions.txt", inline=True, silent=True)}
 Give the one word answer only, nothing else.
 Answer: 
 

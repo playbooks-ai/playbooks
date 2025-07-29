@@ -8,7 +8,7 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
-from playbooks.enums import LLMMessageRole
+from playbooks.enums import LLMMessageRole, LLMMessageType
 
 from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
@@ -413,7 +413,9 @@ def ensure_upto_N_cached_messages(messages: List[dict]) -> List[dict]:
 
 
 def make_cached_llm_message(
-    content: str, role: LLMMessageRole = LLMMessageRole.USER
+    content: str,
+    role: LLMMessageRole = LLMMessageRole.USER,
+    type: LLMMessageType = LLMMessageType.DEFAULT,
 ) -> dict:
     """Make a message with cache control.
 
@@ -426,13 +428,16 @@ def make_cached_llm_message(
     """
     return {
         "role": role,
+        "type": type,
         "content": content,
         "cache_control": {"type": "ephemeral"},
     }
 
 
 def make_uncached_llm_message(
-    content: str, role: LLMMessageRole = LLMMessageRole.USER
+    content: str,
+    role: LLMMessageRole = LLMMessageRole.USER,
+    type: LLMMessageType = LLMMessageType.DEFAULT,
 ) -> dict:
     """Make a message without cache control.
 
@@ -440,4 +445,8 @@ def make_uncached_llm_message(
         content: The content of the message
         role: The role of the message
     """
-    return {"role": role, "content": content}
+    return {
+        "role": role,
+        "type": type,
+        "content": content,
+    }

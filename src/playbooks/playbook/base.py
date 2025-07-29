@@ -28,6 +28,7 @@ class Playbook(ABC):
         """
         self.name = name
         self.description = description
+        self.resolved_description = description
         self.agent_name = agent_name
         self.metadata = metadata or {}
         self.triggers: Optional[PlaybookTriggers] = None

@@ -17,6 +17,11 @@ class LLMMessageRole(str, Enum):
     ASSISTANT = "assistant"
 
 
+class LLMMessageType(str, Enum):
+    DEFAULT = "DEFAULT"
+    LOAD_FILE = "LoadFile"
+
+
 class StartupMode(str, Enum):
     DEFAULT = "default"
     STANDBY = "standby"

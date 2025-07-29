@@ -1,11 +1,11 @@
 """Raw LLM call execution without loops or structure."""
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, List
 
-from ..enums import LLMMessageRole
+from ..enums import LLMMessageRole, LLMMessageType
 from ..events import PlaybookEndEvent, PlaybookStartEvent
 from ..utils.llm_config import LLMConfig
-from ..utils.llm_helper import get_completion, get_messages_for_prompt
+from ..utils.llm_helper import get_completion, make_uncached_llm_message
 from .base import LLMExecution
 
 if TYPE_CHECKING:
@@ -31,10 +31,10 @@ class RawLLMExecution(LLMExecution):
         self.state.event_bus.publish(PlaybookStartEvent(playbook=self.playbook.name))
 
         # Build the prompt
-        prompt = await self._build_prompt(*args, **kwargs)
+        messages = await self._build_prompt(*args, **kwargs)
 
         # Make single LLM call
-        response = await self._get_llm_response(prompt)
+        response = await self._get_llm_response(messages)
 
         # Parse and return the response
         result = self._parse_response(response)
@@ -52,20 +52,24 @@ class RawLLMExecution(LLMExecution):
         return result
 
     async def _build_prompt(self, *args, **kwargs) -> str:
-        """Playbook description is the entire prompt, with placeholders resolved"""
-        return await self.resolve_description_placeholders(
-            self.playbook.description, *args, **kwargs
+        stack_frame = self.agent.state.call_stack.peek()
+        messages = list(
+            filter(
+                lambda message: message["type"] == LLMMessageType.LOAD_FILE,
+                stack_frame.llm_messages,
+            )
         )
+        messages.append(
+            make_uncached_llm_message(
+                self.playbook.resolved_description,
+                role=LLMMessageRole.ASSISTANT,
+                type=LLMMessageType.DEFAULT,
+            )
+        )
+        return messages
 
-    async def _get_llm_response(self, prompt: str) -> str:
+    async def _get_llm_response(self, messages: List[dict]) -> str:
         """Get response from LLM."""
-        messages = get_messages_for_prompt(prompt)
-
-        # Cache the message in call stack
-        self.state.call_stack.peek().add_cached_llm_message(
-            prompt, role=LLMMessageRole.USER
-        )
-
         # Get completion
         response_generator = get_completion(
             messages=messages,

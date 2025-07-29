@@ -203,7 +203,7 @@ async def test_example_two_player_game(test_data_dir):
 
 
 @pytest.mark.asyncio
-async def test_description_injection(test_data_dir):
+async def test_example_13_description_injection(test_data_dir):
     playbooks = Playbooks([test_data_dir / "13-description-injection.pb"])
     await playbooks.initialize()
     agent = playbooks.program.agents_by_klass["TestAgent"][0]

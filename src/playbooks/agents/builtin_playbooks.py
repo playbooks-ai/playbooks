@@ -62,11 +62,8 @@ async def InviteToMeeting(meeting_id: str, attendees: list):
     return await agent.invite_to_meeting(meeting_id, attendees)
 
 @playbook
-async def Loadfile(file_path: str):
-    with open(file_path, "r") as file:
-        content = file.read()
-
-    return content
+async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
+    return await agent.load_file(file_path, inline, silent)
 ```        
 '''
 
