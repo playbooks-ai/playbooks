@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Iterator, List, Tuple
 
@@ -76,6 +77,7 @@ class Compiler:
 
         return compiled_files
 
+    @lru_cache(maxsize=128)
     def process_single_file(self, file_path: str, content: str) -> Tuple[dict, str]:
         """
         Compile a single .pb file with caching support and agent-level compilation.
