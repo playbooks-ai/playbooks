@@ -171,15 +171,21 @@ class TestExpressionContext:
         # Mock state variables
         mock_var = Mock()
         mock_var.value = "test_value"
-        self.state.variables = Mock()
-        self.state.variables.variables = {"$test_var": mock_var}
+        # Create a simple object to hold variables
+        variables_dict = {"$test_var": mock_var}
+
+        class VariablesHolder:
+            def __init__(self, variables):
+                self.variables = variables
+
+        self.state.variables = VariablesHolder(variables_dict)
 
         # Mock namespace manager
-        self.agent.namespace_manager = Mock()
-        self.agent.namespace_manager.namespace = {"namespace_var": "namespace_value"}
+        namespace_dict = {"namespace_var": "namespace_value"}
+        self.agent.namespace_manager = Mock(namespace=namespace_dict)
 
         self.context = ExpressionContext(
-            agent=self.agent, state=self.agent.state, call=self.call
+            agent=self.agent, state=self.state, call=self.call
         )
 
     def test_built_in_variables(self):
@@ -350,23 +356,32 @@ class TestResolveDescriptionPlaceholders:
         # Mock state variables
         mock_var = Mock()
         mock_var.value = "12345"
-        self.state.variables = Mock()
-        self.state.variables.variables = {"$order_id": mock_var}
+        # Create a simple object to hold variables
+        variables_dict = {"$order_id": mock_var}
 
-        self.agent.namespace_manager = Mock()
-        self.agent.namespace_manager.namespace = {}
+        class VariablesHolder:
+            def __init__(self, variables):
+                self.variables = variables
+
+        self.state.variables = VariablesHolder(variables_dict)
+
+        # Mock namespace manager
+        namespace_dict = {}
+        self.agent.namespace_manager = Mock(namespace=namespace_dict)
 
         self.context = ExpressionContext(
-            agent=self.agent, state=self.agent.state, call=self.call
+            agent=self.agent, state=self.state, call=self.call
         )
 
-    def test_simple_placeholder(self):
+    @pytest.mark.asyncio
+    async def test_simple_placeholder(self):
         """Test resolving simple placeholders."""
         description = "Order ID: {$order_id}"
-        result = resolve_description_placeholders(description, self.context)
+        result = await resolve_description_placeholders(description, self.context)
         assert result == "Order ID: 12345"
 
-    def test_multiple_placeholders(self):
+    @pytest.mark.asyncio
+    async def test_multiple_placeholders(self):
         """Test resolving multiple placeholders."""
         # Add another variable
         mock_var2 = Mock()
@@ -374,39 +389,43 @@ class TestResolveDescriptionPlaceholders:
         self.state.variables.variables["$status"] = mock_var2
 
         description = "Order {$order_id} has status {$status}"
-        result = resolve_description_placeholders(description, self.context)
+        result = await resolve_description_placeholders(description, self.context)
         assert result == "Order 12345 has status pending"
 
-    def test_no_placeholders(self):
+    @pytest.mark.asyncio
+    async def test_no_placeholders(self):
         """Test description with no placeholders."""
         description = "Simple description without placeholders"
-        result = resolve_description_placeholders(description, self.context)
+        result = await resolve_description_placeholders(description, self.context)
         assert result == description
 
-    def test_complex_expressions(self):
+    @pytest.mark.asyncio
+    async def test_complex_expressions(self):
         """Test placeholders with complex expressions."""
         description = "Order: {'order' + '_id'}"  # This would eval to 'order_id'
         # Since this isn't a variable reference, it should work as a literal expression
-        result = resolve_description_placeholders(description, self.context)
+        result = await resolve_description_placeholders(description, self.context)
         assert result == "Order: order_id"
 
-    def test_nested_braces(self):
+    @pytest.mark.asyncio
+    async def test_nested_braces(self):
         """Test handling of nested braces."""
         # This is a complex case - for now just test that it doesn't crash
         description = "Data: {{'key': 'value'}}"
         try:
-            result = resolve_description_placeholders(description, self.context)
+            result = await resolve_description_placeholders(description, self.context)
             # Should resolve to the dict representation
             assert "key" in result and "value" in result
         except ExpressionError:
             # This is acceptable for malformed expressions
             pass
 
-    def test_invalid_expression_error(self):
+    @pytest.mark.asyncio
+    async def test_invalid_expression_error(self):
         """Test error handling for invalid expressions."""
         description = "Invalid: {$nonexistent}"
         with pytest.raises(ExpressionError) as exc_info:
-            resolve_description_placeholders(description, self.context)
+            await resolve_description_placeholders(description, self.context)
 
         assert "Error in placeholder" in str(exc_info.value)
         assert "line 1" in str(exc_info.value)  # Error position
@@ -494,19 +513,25 @@ class TestIntegration:
         user_var = Mock()
         user_var.value = {"name": "John Doe", "email": "john@example.com"}
 
-        self.state.variables = Mock()
-        self.state.variables.variables = {"$order": order_var, "$user": user_var}
+        # Create a simple object to hold variables
+        variables_dict = {"$order": order_var, "$user": user_var}
 
-        self.agent.namespace_manager = Mock()
-        self.agent.namespace_manager.namespace = {
-            "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+        class VariablesHolder:
+            def __init__(self, variables):
+                self.variables = variables
+
+        self.state.variables = VariablesHolder(variables_dict)
+
+        # Mock namespace manager
+        namespace_dict = {"current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+        self.agent.namespace_manager = Mock(namespace=namespace_dict)
 
         self.context = ExpressionContext(
-            agent=self.agent, state=self.agent.state, call=self.call
+            agent=self.agent, state=self.state, call=self.call
         )
 
-    def test_complex_description_resolution(self):
+    @pytest.mark.asyncio
+    async def test_complex_description_resolution(self):
         """Test resolving complex description with multiple variable types."""
         description = """
         Order Details:
@@ -518,7 +543,7 @@ class TestIntegration:
         - Current Time: {current_time}
         """
 
-        result = resolve_description_placeholders(description, self.context)
+        result = await resolve_description_placeholders(description, self.context)
 
         # Verify all placeholders were resolved
         assert "12345" in result  # order id
@@ -545,7 +570,8 @@ class TestIntegration:
         assert call.kwargs["total"].startswith("len($order")
         assert "items" in call.kwargs["total"]
 
-    def test_end_to_end_workflow(self):
+    @pytest.mark.asyncio
+    async def test_end_to_end_workflow(self):
         """Test a complete end-to-end workflow."""
         # 1. Extract calls from text
         text = "Process the order: `ProcessOrder($order, status='confirmed')` and notify user: `NotifyUser($user['email'])`"
@@ -561,16 +587,19 @@ class TestIntegration:
 
         # 3. Resolve description with context
         description = "Processing order {$order['id']} for {$user['name']}"
-        resolved = resolve_description_placeholders(description, self.context)
+        resolved = await resolve_description_placeholders(description, self.context)
 
         assert "12345" in resolved
         assert "John Doe" in resolved
 
-    def test_error_handling_integration(self):
+    @pytest.mark.asyncio
+    async def test_error_handling_integration(self):
         """Test integrated error handling across components."""
         # Test invalid variable in description
         with pytest.raises(ExpressionError) as exc_info:
-            resolve_description_placeholders("Invalid: {$nonexistent}", self.context)
+            await resolve_description_placeholders(
+                "Invalid: {$nonexistent}", self.context
+            )
 
         assert "name 'nonexistent' is not defined" in str(exc_info.value)
         assert "Error in placeholder" in str(exc_info.value)
