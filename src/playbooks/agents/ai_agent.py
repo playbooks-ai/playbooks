@@ -321,7 +321,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         playbook = self.playbooks.get(playbook_name)
 
         # Ignore trigger and note step, e.g. `PB:T1`, `PB:N1`
-        if playbook and step_number[0] not in ["T", "N"]:
+        if playbook and step_number[0] not in ["T", "N"] and playbook.steps:
             line = playbook.steps.get_step(step_number)
             if line:
                 return InstructionPointer(
