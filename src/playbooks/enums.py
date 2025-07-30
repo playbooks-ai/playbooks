@@ -27,11 +27,6 @@ class StartupMode(str, Enum):
     STANDBY = "standby"
 
 
-class ExitMode(str, Enum):
-    DEFAULT = "default"  # Exit when call stack empty
-    STANDBY = "standby"  # Exit only when asked to exit program (`yld for exit``)
-
-
 class LLMExecutionMode(str, Enum):
     """Execution modes for LLM playbooks."""
 
