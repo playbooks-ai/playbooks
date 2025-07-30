@@ -20,6 +20,36 @@ class BaseAgentMeta(ABCMeta):
         """
         return False
 
+    def __call__(cls, *args, **kwargs):
+        # Create instance normally
+        instance = super().__call__(*args, **kwargs)
+
+        # Inject custom __getattr__
+        original_getattr = getattr(instance, "__getattr__", None)
+
+        def __getattr__(name):
+            # Try original __getattr__ if it exists
+            if original_getattr:
+                try:
+                    return original_getattr(name)
+                except AttributeError:
+                    pass
+
+            # Try metaclass
+            metaclass = type(cls)
+            if hasattr(metaclass, name):
+                attr = getattr(metaclass, name)
+                if isinstance(attr, property):
+                    return attr.fget(cls)
+                elif callable(attr):
+                    return lambda *args, **kwargs: attr(cls, *args, **kwargs)
+                return attr
+
+            raise AttributeError(f"'{cls.__name__}' object has no attribute '{name}'")
+
+        instance.__getattr__ = __getattr__
+        return instance
+
 
 class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
     """
