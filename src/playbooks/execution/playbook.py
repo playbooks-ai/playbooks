@@ -18,6 +18,7 @@ from ..playbook_call import PlaybookCall
 from ..session_log import SessionLogItemLevel, SessionLogItemMessage
 from ..utils.expression_engine import (
     ExpressionContext,
+    resolve_description_placeholders,
 )
 from ..utils.llm_config import LLMConfig
 from ..utils.llm_helper import get_completion
@@ -59,25 +60,30 @@ class PlaybookLLMExecution(LLMExecution):
     async def pre_execute(self, call: PlaybookCall) -> None:
         llm_message = []
         # Resolve description placeholders if present
-        if self.description and "{" in self.description:
+        if self.playbook.description and "{" in self.playbook.description:
             try:
-                context = ExpressionContext(self, self.state, call)
-                resolved_description = await context.resolve_description_placeholders(
-                    self.description, context
+                context = ExpressionContext(
+                    agent=self.agent, state=self.agent.state, call=call
+                )
+                resolved_description = await resolve_description_placeholders(
+                    self.playbook.description, context
                 )
 
                 markdown_for_llm = context.update_description_in_markdown(
-                    self.markdown, resolved_description
+                    self.playbook.markdown, resolved_description
                 )
-                llm_message.append("```md\n" + markdown_for_llm + "\n```")
             except Exception as e:
                 logger.error(
                     f"Failed to resolve description placeholders for {call.playbook_klass}: {e}"
                 )
+        else:
+            markdown_for_llm = self.playbook.markdown
+
+        llm_message.append("```md\n" + markdown_for_llm + "\n```")
 
         # Add a cached message whenever we add a stack frame
         llm_message.append("Executing " + str(call))
-        self.state.call_stack.peek().add_cached_llm_message(
+        self.agent.state.call_stack.peek().add_cached_llm_message(
             "\n\n".join(llm_message), role=LLMMessageRole.ASSISTANT
         )
 
@@ -90,17 +96,19 @@ class PlaybookLLMExecution(LLMExecution):
         self.debug_handler.reset_for_execution()
 
         # Publish playbook start event
-        self.state.event_bus.publish(PlaybookStartEvent(playbook=self.playbook.name))
+        self.agent.state.event_bus.publish(
+            PlaybookStartEvent(playbook=self.playbook.name)
+        )
 
         call = PlaybookCall(self.playbook.name, args, kwargs)
-        self.pre_execute(call)
+        await self.pre_execute(call)
 
         instruction = f"Execute {str(call)} from step 01"
         artifacts_to_load = []
         await self.debug_handler.handle_execution_start(
-            self.state.call_stack.peek(),
-            self.state.call_stack.peek(),
-            self.state.event_bus,
+            self.agent.state.call_stack.peek(),
+            self.agent.state.call_stack.peek(),
+            self.agent.state.event_bus,
         )
 
         while not done:
@@ -113,11 +121,11 @@ class PlaybookLLMExecution(LLMExecution):
                     agent_instructions=f"Remember: You are {str(self.agent)}. {self.agent.description}",
                     artifacts_to_load=artifacts_to_load,
                 ),
-                event_bus=self.state.event_bus,
+                event_bus=self.agent.state.event_bus,
                 agent=self.agent,
             )
 
-            self.state.call_stack.peek().add_cached_llm_message(
+            self.agent.state.call_stack.peek().add_cached_llm_message(
                 llm_response.response, role=LLMMessageRole.ASSISTANT
             )
 
@@ -141,13 +149,13 @@ class PlaybookLLMExecution(LLMExecution):
                 if "`SaveArtifact(" not in line.text:
                     for step in line.steps:
                         if step.step:
-                            self.state.session_log.append(
+                            self.agent.state.session_log.append(
                                 SessionLogItemMessage(
                                     f"{self.playbook.name}:{step.step.raw_text}"
                                 ),
                                 level=SessionLogItemLevel.HIGH,
                             )
-                    self.state.session_log.append(
+                    self.agent.state.session_log.append(
                         SessionLogItemMessage(line.text),
                         level=SessionLogItemLevel.LOW,
                     )
@@ -156,15 +164,19 @@ class PlaybookLLMExecution(LLMExecution):
                     step = line.steps[i]
                     if i == len(line.steps) - 1:
                         next_step = step
-                        self.state.call_stack.advance_instruction_pointer(next_step)
+                        self.agent.state.call_stack.advance_instruction_pointer(
+                            next_step
+                        )
                         await self.debug_handler.handle_execution_start(
-                            step, step, self.state.event_bus
+                            step, step, self.agent.state.event_bus
                         )
                     else:
                         next_step = step
-                        self.state.call_stack.advance_instruction_pointer(next_step)
+                        self.agent.state.call_stack.advance_instruction_pointer(
+                            next_step
+                        )
                         await self.debug_handler.handle_execution_start(
-                            step, next_step, self.state.event_bus
+                            step, next_step, self.agent.state.event_bus
                         )
 
                 # Replace the current call stack frame with the last executed step
@@ -173,11 +185,11 @@ class PlaybookLLMExecution(LLMExecution):
 
                     # Check for breakpoints
                     await self.debug_handler.handle_breakpoint(
-                        last_step.source_line_number, self.state.event_bus
+                        last_step.source_line_number, self.agent.state.event_bus
                     )
 
                     # Publish line executed event
-                    self.state.event_bus.publish(
+                    self.agent.state.event_bus.publish(
                         LineExecutedEvent(
                             step=str(last_step),
                             source_line_number=last_step.source_line_number,
@@ -187,7 +199,7 @@ class PlaybookLLMExecution(LLMExecution):
 
                 # Update variables
                 if len(line.vars) > 0:
-                    self.state.variables.update(line.vars)
+                    self.agent.state.variables.update(line.vars)
 
                 # Execute playbook calls
                 if line.playbook_calls:
@@ -213,9 +225,11 @@ class PlaybookLLMExecution(LLMExecution):
                     str_return_value = str(return_value)
                     if (
                         str_return_value.startswith("$")
-                        and str_return_value in self.state.variables
+                        and str_return_value in self.agent.state.variables
                     ):
-                        return_value = self.state.variables[str_return_value].value
+                        return_value = self.agent.state.variables[
+                            str_return_value
+                        ].value
 
                 # Wait for external event
                 if line.wait_for_user_input:
@@ -229,7 +243,9 @@ class PlaybookLLMExecution(LLMExecution):
                         if SpecUtils.is_meeting_spec(target_agent_id):
                             meeting_id = SpecUtils.extract_meeting_id(target_agent_id)
                             if meeting_id == "current":
-                                meeting_id = self.state.call_stack.peek().meeting_id
+                                meeting_id = (
+                                    self.agent.state.call_stack.peek().meeting_id
+                                )
                             await self.agent.WaitForMessage(f"meeting {meeting_id}")
                         else:
                             await self.agent.WaitForMessage(target_agent_id)
@@ -245,7 +261,7 @@ class PlaybookLLMExecution(LLMExecution):
             for loaded_artifact in artifacts_to_load:
                 instruction.append(f"Loaded Artifact[{loaded_artifact}]")
             instruction.append(
-                f"{str(self.state.call_stack.peek())} was executed - "
+                f"{str(self.agent.state.call_stack.peek())} was executed - "
                 "continue execution."
             )
 
@@ -255,9 +271,9 @@ class PlaybookLLMExecution(LLMExecution):
             return EXECUTION_FINISHED
 
         # Publish playbook end event
-        call_stack_depth = len(self.state.call_stack.frames)
+        call_stack_depth = len(self.agent.state.call_stack.frames)
 
-        self.state.event_bus.publish(
+        self.agent.state.event_bus.publish(
             PlaybookEndEvent(
                 playbook=self.playbook.name,
                 return_value=return_value,
@@ -279,7 +295,7 @@ class PlaybookLLMExecution(LLMExecution):
         """Make an LLM call for playbook execution."""
 
         prompt = InterpreterPrompt(
-            self.state,
+            self.agent.state,
             self.agent.playbooks,
             self.playbook,
             instruction=instruction,
@@ -307,7 +323,7 @@ class PlaybookLLMExecution(LLMExecution):
             llm_config=LLMConfig(),
             stream=True,
             json_mode=False,
-            langfuse_span=self.state.call_stack.peek().langfuse_span,
+            langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
         ):
             buffer += chunk
 

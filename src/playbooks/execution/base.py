@@ -4,6 +4,12 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+from ..playbook_call import PlaybookCall
+from ..utils.expression_engine import (
+    ExpressionContext,
+    resolve_description_placeholders,
+)
+
 if TYPE_CHECKING:
     from ..agents.base_agent import Agent
     from ..playbook.llm_playbook import LLMPlaybook
@@ -21,7 +27,6 @@ class LLMExecution(ABC):
         """
         self.agent = agent
         self.playbook = playbook
-        self.state = agent.state  # Direct access to ExecutionState
 
     async def resolve_description_placeholders(
         self, description: str, *args, **kwargs
@@ -40,15 +45,9 @@ class LLMExecution(ABC):
             return description
 
         try:
-            from ..playbook_call import PlaybookCall
-            from ..utils.expression_engine import (
-                ExpressionContext,
-                resolve_description_placeholders,
-            )
-
             # Create a PlaybookCall for context
             call = PlaybookCall(self.playbook.name, list(args), kwargs)
-            context = ExpressionContext(self.agent, self.state, call)
+            context = ExpressionContext(self.agent, self.agent.state, call)
             return await resolve_description_placeholders(description, context)
         except Exception as e:
             logger = logging.getLogger(__name__)

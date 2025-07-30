@@ -178,7 +178,9 @@ class TestExpressionContext:
         self.agent.namespace_manager = Mock()
         self.agent.namespace_manager.namespace = {"namespace_var": "namespace_value"}
 
-        self.context = ExpressionContext(self.agent, self.state, self.call)
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.agent.state, call=self.call
+        )
 
     def test_built_in_variables(self):
         """Test access to built-in variables."""
@@ -354,7 +356,9 @@ class TestResolveDescriptionPlaceholders:
         self.agent.namespace_manager = Mock()
         self.agent.namespace_manager.namespace = {}
 
-        self.context = ExpressionContext(self.agent, self.state, self.call)
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.agent.state, call=self.call
+        )
 
     def test_simple_placeholder(self):
         """Test resolving simple placeholders."""
@@ -498,7 +502,9 @@ class TestIntegration:
             "current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
 
-        self.context = ExpressionContext(self.agent, self.state, self.call)
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.agent.state, call=self.call
+        )
 
     def test_complex_description_resolution(self):
         """Test resolving complex description with multiple variable types."""

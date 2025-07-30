@@ -7,6 +7,7 @@ from ..events import PlaybookEndEvent, PlaybookStartEvent
 from ..playbook_call import PlaybookCall
 from ..utils.expression_engine import (
     ExpressionContext,
+    resolve_description_placeholders,
 )
 from ..utils.llm_config import LLMConfig
 from ..utils.llm_helper import get_completion, make_uncached_llm_message
@@ -32,7 +33,9 @@ class RawLLMExecution(LLMExecution):
         # No need to push/pop here as it would create double management
 
         # Publish playbook start event
-        self.state.event_bus.publish(PlaybookStartEvent(playbook=self.playbook.name))
+        self.agent.state.event_bus.publish(
+            PlaybookStartEvent(playbook=self.playbook.name)
+        )
 
         # Build the prompt
         messages = await self._build_prompt(*args, **kwargs)
@@ -44,8 +47,8 @@ class RawLLMExecution(LLMExecution):
         result = self._parse_response(response)
 
         # Publish playbook end event
-        call_stack_depth = len(self.state.call_stack.frames)
-        self.state.event_bus.publish(
+        call_stack_depth = len(self.agent.state.call_stack.frames)
+        self.agent.state.event_bus.publish(
             PlaybookEndEvent(
                 playbook=self.playbook.name,
                 return_value=result,
@@ -58,9 +61,9 @@ class RawLLMExecution(LLMExecution):
     async def _build_prompt(self, *args, **kwargs) -> str:
         call = PlaybookCall(self.playbook.name, args, kwargs)
 
-        context = ExpressionContext(self, self.state, call)
-        resolved_description = await context.resolve_description_placeholders(
-            self.description, context
+        context = ExpressionContext(agent=self.agent, state=self.agent.state, call=call)
+        resolved_description = await resolve_description_placeholders(
+            self.playbook.description, context
         )
 
         stack_frame = self.agent.state.call_stack.peek()
@@ -87,13 +90,13 @@ class RawLLMExecution(LLMExecution):
             llm_config=LLMConfig(),
             stream=False,
             json_mode=False,
-            langfuse_span=self.state.call_stack.peek().langfuse_span,
+            langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
         )
 
         response = next(response_generator)
 
         # Cache the response
-        self.state.call_stack.peek().add_cached_llm_message(
+        self.agent.state.call_stack.peek().add_cached_llm_message(
             response, role=LLMMessageRole.ASSISTANT
         )
 

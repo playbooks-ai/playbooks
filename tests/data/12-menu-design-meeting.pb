@@ -12,7 +12,7 @@
 - When user asks to redesign restaurant menu
 
 ### Steps
-- Tell the user that you will coordinate the menu redesign process
+- Tell user that you will coordinate the menu redesign process
 - Ask user for reasons for the menu redesign and specific constraints like budget, timeline, any must-keep dishes, etc.
 - Have a menu redesign meeting to develop new menu options
 - If the meeting was successful
