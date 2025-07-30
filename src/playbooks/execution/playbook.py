@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from ..constants import EXECUTION_FINISHED
 from ..debug.debug_handler import DebugHandler, NoOpDebugHandler
-from ..enums import LLMMessageRole
+from ..enums import ExitMode, LLMMessageRole
 from ..events import (
     LineExecutedEvent,
     PlaybookEndEvent,
@@ -268,7 +268,10 @@ class PlaybookLLMExecution(LLMExecution):
         # Handle any debug cleanup
         await self.debug_handler.handle_execution_end()
 
-        if len(self.state.call_stack.frames) <= 1:
+        if (
+            len(self.agent.state.call_stack.frames) <= 1
+            and self.agent.exit_mode != ExitMode.STANDBY
+        ):
             raise ExecutionFinished(f"Call stack is empty. {EXECUTION_FINISHED}.")
 
         return return_value

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
-from ..enums import LLMMessageType, StartupMode
+from ..enums import ExitMode, LLMMessageType, StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
 from ..execution_state import ExecutionState
@@ -44,6 +44,16 @@ class AIAgentMeta(BaseAgentMeta):
         """Validate the metadata for this agent."""
         if self.startup_mode not in [StartupMode.DEFAULT, StartupMode.STANDBY]:
             raise ValueError(f"Invalid startup mode: {self.startup_mode}")
+
+    @property
+    def exit_mode(self) -> ExitMode:
+        """Get the exit mode for this agent."""
+        return getattr(self, "metadata", {}).get("exit_mode", ExitMode.EXPLICIT)
+
+    def validate_exit_mode(self):
+        """Validate the exit mode for this agent."""
+        if self.exit_mode not in [ExitMode.DEFAULT, ExitMode.STANDBY]:
+            raise ValueError(f"Invalid exit mode: {self.exit_mode}")
 
     def should_create_instance_at_start(self) -> bool:
         """Whether to create an instance of the agent at start.
