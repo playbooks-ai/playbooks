@@ -2,7 +2,9 @@ import re
 from typing import TYPE_CHECKING, Dict, Optional, Type, Union
 
 from playbooks.exceptions import AgentConfigurationError
+from playbooks.utils.markdown_to_ast import refresh_markdown_attributes
 from playbooks.utils.parse_utils import parse_metadata_and_description
+from playbooks.utils.text_utils import is_camel_case, to_camel_case
 
 from . import LocalAIAgent, MCPAgent
 from .builtin_playbooks import BuiltinPlaybooks
@@ -42,6 +44,12 @@ class AgentBuilder:
         for h1 in ast.get("children", []):
             if h1.get("type") == "h1":
                 agent_name = h1["text"].strip()
+
+                if not is_camel_case(agent_name):
+                    agent_name = to_camel_case(agent_name)
+                    h1["text"] = agent_name
+                    refresh_markdown_attributes(h1)
+
                 builder = cls()
                 h1["children"].extend(builder.builtin_playbooks.get_ast_nodes())
                 agents[agent_name] = builder.create_agent_class_from_h1(h1)
