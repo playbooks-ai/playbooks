@@ -27,7 +27,23 @@ jobs:
         pip install poetry
         poetry install
 
+    - name: Check cache directory
+      run: |
+        echo "Checking .llm_cache_test directory:"
+        ls -la .llm_cache_test/ || echo "Cache directory not found"
+        echo "Current directory:"
+        pwd
+        echo "Directory contents:"
+        ls -la
+        
     - name: (Playbooks package) Run tests
+      env:
+        ENVIRONMENT: test
+        LLM_CACHE_ENABLED: "true"
+        LLM_CACHE_TYPE: "disk"
+        LLM_CACHE_PATH: ".llm_cache_test"
+        ANTHROPIC_API_KEY: "test-key"  # Tests should use cache, not make actual API calls
+        MODEL: "claude-sonnet-4-20250514"  # Match the model in .env.test
       run: |
         poetry run pytest tests/ -vv --cov=src/playbooks --cov-report=xml
         

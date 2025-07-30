@@ -474,7 +474,8 @@ class TestErrorHandling:
     @pytest.mark.asyncio
     async def test_broadcast_event_with_disconnected_client(self, playbooks_instance):
         """Test broadcasting events when a client is disconnected."""
-        run = PlaybookRun("test-run-123", playbooks_instance)
+        playbooks = await playbooks_instance()
+        run = PlaybookRun("test-run-123", playbooks)
 
         # Create a client that will fail when sending
         failing_websocket = MockWebSocket()
