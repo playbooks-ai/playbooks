@@ -469,11 +469,19 @@ class TestCustomGetCacheKey:
 
     def test_cache_key_deterministic_hash(self):
         """Test that cache key uses deterministic hashing."""
+        import json
+
         kwargs = {"model": "test", "messages": "test", "temperature": 1.0}
 
-        # Calculate expected hash manually
-        key_str = "test" + "test" + "1.0"
-        expected_hash = hashlib.sha256(key_str.encode()).hexdigest()[:32]
+        # Calculate expected hash manually using the new JSON-based approach
+        cache_components = {
+            "model": "test",
+            "messages": "test",
+            "temperature": 1.0,
+            "logit_bias": {},
+        }
+        key_str = json.dumps(cache_components, sort_keys=True, separators=(",", ":"))
+        expected_hash = hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:32]
 
         actual_key = custom_get_cache_key(**kwargs)
         assert actual_key == expected_hash

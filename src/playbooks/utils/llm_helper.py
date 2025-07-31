@@ -55,13 +55,19 @@ def custom_get_cache_key(**kwargs) -> str:
     Returns:
         A unique hash string to use as cache key
     """
-    key_str = (
-        kwargs.get("model", "")
-        + str(kwargs.get("messages", ""))
-        + str(kwargs.get("temperature", ""))
-        + str(kwargs.get("logit_bias", ""))
-    )
-    return hashlib.sha256(key_str.encode()).hexdigest()[:32]
+    import json
+
+    # Create a deterministic representation of the cache key components
+    cache_components = {
+        "model": kwargs.get("model", ""),
+        "messages": kwargs.get("messages", []),
+        "temperature": kwargs.get("temperature", 0.0),
+        "logit_bias": kwargs.get("logit_bias", {}),
+    }
+
+    # Use json.dumps with sort_keys=True for deterministic serialization
+    key_str = json.dumps(cache_components, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:32]
 
 
 T = TypeVar("T")
