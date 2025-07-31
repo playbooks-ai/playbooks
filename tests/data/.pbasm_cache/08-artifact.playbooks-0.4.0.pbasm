@@ -1,0 +1,51 @@
+# ArtifactsTest
+This agent demonstrates artifact creation, loading, and display functionality through various playbooks.
+
+```python
+@playbook
+async def Playbook3() -> str:
+    await SaveArtifact("another_artifact", "Another artifact", "Secret message 54345.")
+    return "Artifact[another_artifact]"
+
+@playbook
+async def Playbook4() -> None:
+    artifact = await LoadArtifact("artifact1.txt")
+    await Say("Artifact[artifact1.txt]")
+    await Say(artifact.content)
+```
+
+## Playbook1() -> str
+Creates a test artifact and returns it for further processing.
+### Steps
+- 01:QUE SaveArtifact("my_artifact", "Test artifact", "This is a test artifact.")
+- 02:YLD for call
+- 03:RET "Artifact[my_artifact]"
+
+## Playbook2() -> None
+Loads and displays multiple artifacts to the user with their content.
+### Steps
+- 01:QUE LoadArtifact("my_artifact")
+- 02:QUE LoadArtifact("another_artifact")
+- 03:YLD for call
+- 04:QUE Say(user, Here is my_artifact - Artifact[my_artifact])
+- 05:QUE Say(user, Say the content of my_artifact)
+- 06:QUE Say(user, Here is another_artifact - Artifact[another_artifact])
+- 07:QUE Say(user, Say the content of another_artifact)
+- 08:RET
+
+## Main() -> None
+Main execution flow that orchestrates artifact creation and display operations.
+### Triggers
+- T1:BGN At the start
+### Steps
+- 01:QUE Playbook1()
+- 02:QUE SaveArtifact("artifact1.txt", "Artifact1", "This is artifact1.")
+- 03:QUE Playbook3()
+- 04:YLD for call
+- 05:QUE Playbook2()
+- 06:QUE Playbook4()
+- 07:RET
+
+```public.json
+[]
+```

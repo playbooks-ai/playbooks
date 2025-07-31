@@ -1,0 +1,24 @@
+# TestAgent
+This agent runs a test playbook that loads files and provides one-word answers.
+
+## TestPlaybook() -> str
+metadata:
+  execution_mode: raw
+---
+{Loadfile("tests/data/13-description-injection-story.txt", silent=True)}
+{Loadfile("tests/data/13-description-injection-instructions.txt", inline=True, silent=True)}
+Give the one word answer only, nothing else.
+Answer:
+
+## Main() -> None
+Main execution flow that runs the test playbook and terminates the program.
+### Triggers
+- T1:BGN When program starts
+### Steps
+- 01:QUE TestPlaybook()
+- 02:YLD for call
+- 03:YLD for exit
+
+```public.json
+[]
+```

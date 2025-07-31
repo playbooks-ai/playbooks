@@ -1,0 +1,53 @@
+# MathSolver
+A mathematical problem-solving agent that can perform factorial, exponential, logarithmic, and trigonometric calculations while entertaining users with math jokes.
+
+```python
+import math
+
+@playbook
+async def Factorial(a: float) -> float:
+    return math.factorial(a)
+
+@playbook
+async def Exp(a: float) -> float:
+    return math.exp(a)
+
+@playbook
+async def Log(a: float) -> float:
+    return math.log(a)
+
+@playbook
+async def Sin(a: float) -> float:
+    return math.sin(a)
+```
+
+## Main() -> None
+Main interaction loop that guides users through mathematical problem solving with entertainment.
+### Triggers
+- T1:BGN At the beginning
+### Steps
+- 01:QUE Say(user, Ask the user for a simple math problem that uses Factorial, Exp, Log, and Sin, e.g. "exp(5!)")
+- 02:YLD for user
+- 03:QUE $answer:float = Solver(problem=$problem:str)
+- 04:YLD for call
+- 05:QUE Say(user, Give the answer to the user)
+- 06:QUE $joke:str = Joke()
+- 07:YLD for call
+- 08:QUE Say(user, Tell $joke to the user)
+- 09:YLD for exit
+
+## Solver($problem:str) -> float
+metadata:
+  execution_mode: react
+---
+You are a math solver. You will be given a math problem and you will solve it. Use available playbooks to solve the problem. Go step by step. Return the final answer at the end.
+
+## Joke() -> str
+metadata:
+  execution_mode: raw
+---
+Tell me a one-liner joke about math.
+
+```public.json
+[]
+```
