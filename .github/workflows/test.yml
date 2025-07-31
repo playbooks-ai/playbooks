@@ -97,6 +97,12 @@ jobs:
         EOF
         poetry run python validate_cache.py
         
+
+    - name: Setup tmate session on failure
+      uses: mxschmitt/action-tmate@v3
+      with:
+        limit-access-to-actor: true
+
     - name: (Playbooks package) Run tests
       env:
         ENVIRONMENT: test
@@ -108,10 +114,6 @@ jobs:
       run: |
         poetry run pytest tests/ -vv --cov=src/playbooks --cov-report=xml
         
-    - name: Setup tmate session on failure
-      uses: mxschmitt/action-tmate@v3
-      with:
-        limit-access-to-actor: true
         
     - name: Upload Playbooks package coverage
       uses: codecov/codecov-action@v5
