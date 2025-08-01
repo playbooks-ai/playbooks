@@ -5,13 +5,20 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Run with tmate debugging enabled'
+        required: false
+        default: false
 
 jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
+        python-version: ["3.12", "3.13"]
 
     steps:
     - uses: actions/checkout@v4
@@ -26,10 +33,17 @@ jobs:
         python -m pip install --upgrade pip
         pip install poetry
         poetry install
-
     - name: (Playbooks package) Run tests
+      env:
+        ENVIRONMENT: test
+        LLM_CACHE_ENABLED: "true"
+        LLM_CACHE_TYPE: "disk"
+        LLM_CACHE_PATH: ".llm_cache_test"
+        ANTHROPIC_API_KEY: "test-key"  # Tests should use cache, not make actual API calls
+        MODEL: "claude-sonnet-4-20250514"  # Match the model in .env.test
       run: |
-        poetry run pytest tests/ --cov=src/playbooks --cov-report=xml
+        poetry run pytest tests/ -vv --cov=src/playbooks --cov-report=xml
+        
         
     - name: Upload Playbooks package coverage
       uses: codecov/codecov-action@v5

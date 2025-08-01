@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from .call_stack import InstructionPointer
 from .event_bus import EventBus
@@ -36,10 +36,14 @@ class Variables:
         self.variables: Dict[str, Variable] = {}
         self.event_bus = event_bus
 
-    def update(self, vars: Dict[str, Any]) -> None:
+    def update(self, vars: Union["Variables", Dict[str, Any]]) -> None:
         """Update multiple variables at once."""
-        for name, value in vars.items():
-            self[name] = value
+        if isinstance(vars, Variables):
+            for name, value in vars.variables.items():
+                self[name] = value.value
+        else:
+            for name, value in vars.items():
+                self[name] = value
 
     def __getitem__(self, name: str) -> Variable:
         return self.variables[name]

@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from ..triggers import PlaybookTriggers
 
@@ -28,6 +28,7 @@ class Playbook(ABC):
         """
         self.name = name
         self.description = description
+        self.resolved_description = description
         self.agent_name = agent_name
         self.metadata = metadata or {}
         self.triggers: Optional[PlaybookTriggers] = None
@@ -53,6 +54,43 @@ class Playbook(ABC):
             True if the playbook is exported, False otherwise
         """
         return self.metadata.get("export", False)
+
+    @property
+    def hidden(self) -> bool:
+        """Return whether this playbook is hidden.
+
+        Hidden playbooks are not shown in the agent's public information.
+        """
+        return self.metadata.get("hidden", False)
+
+    @property
+    def meeting(self) -> bool:
+        """Return whether this playbook is a meeting playbook.
+
+        Meeting playbooks are designed to orchestrate meetings with multiple participants.
+
+        Returns:
+            True if the playbook is a meeting playbook, False otherwise
+        """
+        return self.metadata.get("meeting", False)
+
+    @property
+    def required_attendees(self) -> List[str]:
+        """Return the list of required attendees for meeting playbooks.
+
+        Returns:
+            List of required attendee identifiers, empty list if none specified
+        """
+        return self.metadata.get("required_attendees", [])
+
+    @property
+    def optional_attendees(self) -> List[str]:
+        """Return the list of optional attendees for meeting playbooks.
+
+        Returns:
+            List of optional attendee identifiers, empty list if none specified
+        """
+        return self.metadata.get("optional_attendees", [])
 
     @abstractmethod
     async def execute(self, *args, **kwargs) -> Any:
@@ -114,3 +152,18 @@ class Playbook(ABC):
                     continue
                 instructions.append(trigger.trigger_instruction(namespace))
         return instructions
+
+    def create_namespace_function(self, agent) -> "Callable":
+        """Create a call-through function for cross-playbook calls.
+
+        Args:
+            agent: The agent that owns this playbook
+
+        Returns:
+            Callable: A function that routes calls to agent.execute_playbook()
+        """
+
+        def call_through_agent(*args, **kwargs):
+            return agent.execute_playbook(self.name, args, kwargs)
+
+        return call_through_agent

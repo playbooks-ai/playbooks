@@ -3,7 +3,6 @@ import os
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from playbooks.enums import LLMMessageRole
-from playbooks.execution_state import ExecutionState
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import (
     get_messages_for_prompt,
@@ -12,7 +11,7 @@ from playbooks.utils.llm_helper import (
 )
 
 if TYPE_CHECKING:
-    pass
+    from playbooks.execution_state import ExecutionState
 
 
 class InterpreterPrompt:
@@ -20,14 +19,15 @@ class InterpreterPrompt:
 
     def __init__(
         self,
-        execution_state: ExecutionState,
+        execution_state: "ExecutionState",
         playbooks: Dict[str, Playbook],
         current_playbook: Optional[Playbook],
         instruction: str,
         agent_instructions: str,
         artifacts_to_load: List[str],
         trigger_instructions: List[str],
-        other_agents_information: List[str],
+        agent_information: str,
+        other_agent_klasses_information: List[str],
     ):
         """
         Initializes the InterpreterPrompt.
@@ -47,7 +47,8 @@ class InterpreterPrompt:
         self.agent_instructions = agent_instructions
         self.artifacts_to_load = artifacts_to_load
         self.trigger_instructions = trigger_instructions
-        self.other_agents_information = other_agents_information
+        self.agent_information = agent_information
+        self.other_agent_klasses_information = other_agent_klasses_information
 
     def _get_trigger_instructions_message(self) -> str:
         if len(self.trigger_instructions) > 0:
@@ -62,18 +63,26 @@ class InterpreterPrompt:
             )
         return None
 
-    def _get_other_agents_information_message(self) -> str:
-        if len(self.other_agents_information) > 0:
-            other_agents_information = [
+    def _get_other_agent_klasses_information_message(self) -> str:
+        if len(self.other_agent_klasses_information) > 0:
+            other_agent_klasses_information = [
                 "*Other agents*",
                 "```md",
-                "\n\n".join(self.other_agents_information),
+                "\n\n".join(self.other_agent_klasses_information),
                 "```",
             ]
             return make_cached_llm_message(
-                "\n".join(other_agents_information), LLMMessageRole.ASSISTANT
+                "\n".join(other_agent_klasses_information), LLMMessageRole.ASSISTANT
             )
         return None
+
+    def _get_compact_agent_information_message(self) -> str:
+        parts = []
+        parts.append("*My agent*")
+        parts.append("```md")
+        parts.append(self.agent_information)
+        parts.append("```")
+        return make_cached_llm_message("\n".join(parts), LLMMessageRole.ASSISTANT)
 
     @property
     def prompt(self) -> str:
@@ -127,9 +136,13 @@ class InterpreterPrompt:
         messages = []
         messages.append(prompt_messages[0])
 
-        other_agents_information_message = self._get_other_agents_information_message()
-        if other_agents_information_message:
-            messages.append(other_agents_information_message)
+        other_agent_klasses_information_message = (
+            self._get_other_agent_klasses_information_message()
+        )
+        if other_agent_klasses_information_message:
+            messages.append(other_agent_klasses_information_message)
+
+        messages.append(self._get_compact_agent_information_message())
 
         trigger_instructions_message = self._get_trigger_instructions_message()
         if trigger_instructions_message:

@@ -10,7 +10,7 @@ async def process_countries(countries: List[str]):
   for country in countries:
     # Python calls the NL playbook 'GetCountryFact' for each country
     fact = await GetCountryFact(country)
-    await Say(f"{country}: {fact}")
+    await Say("user", f"{country}: {fact}")
 ```
 
 ## GetCountryFact($country)

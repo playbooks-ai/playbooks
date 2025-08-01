@@ -2,10 +2,10 @@
 
 import pytest
 
-from src.playbooks.agent_builder import AgentBuilder
+from playbooks.exceptions import AgentConfigurationError
 from src.playbooks.agents import LocalAIAgent, MCPAgent
+from src.playbooks.agents.agent_builder import AgentBuilder
 from src.playbooks.event_bus import EventBus
-from src.playbooks.exceptions import AgentConfigurationError
 from src.playbooks.utils.markdown_to_ast import markdown_to_ast
 
 
@@ -25,7 +25,7 @@ This is a test playbook.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agents_from_ast(ast)
+        agents = AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "TestAgent" in agents
@@ -49,7 +49,7 @@ This is an MCP test agent.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agents_from_ast(ast)
+        agents = AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "MCPTestAgent" in agents
@@ -79,7 +79,7 @@ MCP agent without URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' requires 'url' in remote configuration",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mixed_agent_types_from_ast(self):
         """Test creating both local and MCP agents from the same AST."""
@@ -102,7 +102,7 @@ This is a remote MCP agent.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agents_from_ast(ast)
+        agents = AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 2
         assert "LocalAgent" in agents
@@ -121,22 +121,21 @@ This is a remote MCP agent.
 
     def test_agent_builder_create_mcp_agent_class_directly(self):
         """Test creating MCP agent class directly."""
-        builder = AgentBuilder()
 
-        h1 = {"text": "DirectMCPAgent", "line_number": 1}
-
-        remote_config = {
-            "type": "mcp",
-            "url": "http://localhost:8000/mcp",
-            "transport": "sse",
+        metadata = {
+            "remote": {
+                "type": "mcp",
+                "url": "http://localhost:8000/mcp",
+                "transport": "sse",
+            }
         }
 
-        agent_class = builder._create_mcp_agent_class(
-            "DirectMCPAgent", "Direct MCP agent test", h1, remote_config
+        agent_class = MCPAgent.create_class(
+            "DirectMCPAgent", "Direct MCP agent test", metadata, {}, 1
         )
 
         # Verify class properties - the actual naming convention is AgentDirectmcpagent
-        assert agent_class.__name__ == "AgentDirectmcpagent"
+        assert agent_class.__name__ == "DirectMCPAgent"
         assert issubclass(agent_class, MCPAgent)
 
         # Create instance
@@ -144,20 +143,7 @@ This is a remote MCP agent.
         agent_instance = agent_class(event_bus)
         assert isinstance(agent_instance, MCPAgent)
         assert agent_instance.klass == "DirectMCPAgent"
-        assert agent_instance.remote_config == remote_config
-
-    def test_agent_class_name_generation(self):
-        """Test agent class name generation."""
-        builder = AgentBuilder()
-
-        # Test normal name - the actual naming convention is AgentTestagent
-        assert builder.make_agent_class_name("TestAgent") == "AgentTestagent"
-
-        # Test name with spaces
-        assert builder.make_agent_class_name("Test Agent") == "AgentTestAgent"
-
-        # Test name with special characters
-        assert builder.make_agent_class_name("Test-Agent_123") == "AgentTestAgent123"
+        assert agent_instance.remote_config == metadata["remote"]
 
     def test_mcp_configuration_validation_invalid_url_type(self):
         """Test MCP configuration validation with invalid URL type."""
@@ -176,7 +162,7 @@ MCP agent with invalid URL type.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' requires a valid URL string, got: int",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_empty_url(self):
         """Test MCP configuration validation with empty URL."""
@@ -195,7 +181,7 @@ MCP agent with empty URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' requires a valid URL string, got empty string",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_invalid_transport(self):
         """Test MCP configuration validation with invalid transport."""
@@ -215,7 +201,7 @@ MCP agent with invalid transport.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' has invalid transport 'invalid_transport'",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_invalid_timeout(self):
         """Test MCP configuration validation with invalid timeout."""
@@ -235,7 +221,7 @@ MCP agent with invalid timeout.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' timeout must be a positive number, got: -5",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_invalid_auth_type(self):
         """Test MCP configuration validation with invalid auth type."""
@@ -256,7 +242,7 @@ MCP agent with invalid auth type.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' has invalid auth type 'invalid_auth'",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_missing_api_key(self):
         """Test MCP configuration validation with missing API key."""
@@ -278,7 +264,7 @@ MCP agent with missing API key.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with api_key auth requires 'key' field",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_missing_bearer_token(self):
         """Test MCP configuration validation with missing bearer token."""
@@ -300,7 +286,7 @@ MCP agent with missing bearer token.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with bearer auth requires 'token' field",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_missing_basic_auth_fields(self):
         """Test MCP configuration validation with missing basic auth fields."""
@@ -323,7 +309,7 @@ MCP agent with incomplete basic auth.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with basic auth requires 'username' and 'password' fields",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_missing_mtls_fields(self):
         """Test MCP configuration validation with missing mTLS fields."""
@@ -346,7 +332,7 @@ MCP agent with incomplete mTLS auth.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with mtls auth requires 'cert' and 'key' fields",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_stdio_with_http_url(self):
         """Test MCP configuration validation with stdio transport and HTTP URL."""
@@ -366,7 +352,7 @@ MCP agent with stdio transport and HTTP URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with stdio transport should not use HTTP/WebSocket URL",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_sse_with_non_http_url(self):
         """Test MCP configuration validation with SSE transport and non-HTTP URL."""
@@ -386,7 +372,7 @@ MCP agent with SSE transport and file path URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with sse transport requires HTTP\\(S\\) URL",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_websocket_with_invalid_url(self):
         """Test MCP configuration validation with WebSocket transport and invalid URL."""
@@ -406,7 +392,7 @@ MCP agent with WebSocket transport and file path URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with websocket transport requires WebSocket or HTTP URL",
         ):
-            AgentBuilder.create_agents_from_ast(ast)
+            AgentBuilder.create_agent_classes_from_ast(ast)
 
     def test_mcp_configuration_validation_valid_configurations(self):
         """Test that valid MCP configurations pass validation."""
@@ -461,5 +447,5 @@ Valid MCP agent with WebSocket.
         for config_text in valid_configs:
             ast = markdown_to_ast(config_text)
             # Should not raise any exceptions
-            agents = AgentBuilder.create_agents_from_ast(ast)
+            agents = AgentBuilder.create_agent_classes_from_ast(ast)
             assert len(agents) == 1

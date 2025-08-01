@@ -11,6 +11,160 @@ class PythonPlaybook(LocalPlaybook):
     executable Python code.
     """
 
+    @classmethod
+    def create_playbooks_from_h1(
+        cls, h1: Dict, namespace_manager
+    ) -> Dict[str, "PythonPlaybook"]:
+        """Create PythonPlaybook instances from H1 AST node.
+
+        Args:
+            h1: H1 AST node containing agent definition
+            namespace_manager: Namespace manager for executing code blocks
+
+        Returns:
+            Dict[str, PythonPlaybook]: Dictionary of created playbooks
+        """
+        playbooks = {}
+
+        for child in h1.get("children", []):
+            if child.get("type") == "code-block":
+                new_playbooks = cls.create_playbooks_from_code_block(
+                    child["text"], namespace_manager
+                )
+                playbooks.update(new_playbooks)
+
+        return playbooks
+
+    @classmethod
+    def create_playbooks_from_code_block(
+        cls, code_block: str, namespace_manager
+    ) -> Dict[str, "PythonPlaybook"]:
+        """Create PythonPlaybook instances from a code block.
+
+        Args:
+            code_block: Python code containing @playbook decorated functions
+            namespace_manager: Namespace manager for execution environment
+
+        Returns:
+            Dict[str, PythonPlaybook]: Dictionary of discovered playbooks
+        """
+        import ast
+
+        # Set up the execution environment
+        existing_keys = list(namespace_manager.namespace.keys())
+        environment = namespace_manager.prepare_execution_environment()
+        namespace_manager.namespace.update(environment)
+
+        # Execute the code block in the isolated namespace
+        python_local_namespace = {}
+        exec(code_block, namespace_manager.namespace, python_local_namespace)
+        namespace_manager.namespace.update(python_local_namespace)
+
+        # Get code for each function
+        function_code = {}
+        parsed_code = ast.parse(code_block)
+        for item in parsed_code.body:
+            if isinstance(item, ast.AsyncFunctionDef) or isinstance(
+                item, ast.FunctionDef
+            ):
+                function_code[item.name] = ast.unparse(item)
+
+        # Discover all @playbook-decorated functions
+        playbooks = cls._discover_playbook_functions(namespace_manager, existing_keys)
+
+        # Add function code to playbooks
+        for playbook in playbooks.values():
+            playbook.code = function_code[playbook.name]
+
+        return playbooks
+
+    @classmethod
+    def _discover_playbook_functions(
+        cls, namespace_manager, existing_keys
+    ) -> Dict[str, "PythonPlaybook"]:
+        """Discover playbook-decorated functions in the namespace.
+
+        Args:
+            namespace_manager: Namespace manager containing executed code
+            existing_keys: Keys that existed before code execution
+
+        Returns:
+            Dict[str, PythonPlaybook]: Discovered playbooks
+        """
+        import types
+
+        playbooks = {}
+        wrappers = {}
+
+        for obj_name, obj in namespace_manager.namespace.items():
+            if (
+                isinstance(obj, types.FunctionType)
+                and obj_name not in existing_keys
+                and getattr(obj, "__is_playbook__", False)
+            ):
+                # Create playbook from decorated function
+                playbooks[obj.__name__] = cls.from_function(obj)
+
+                # Only create namespace functions if agent is available
+                agent = namespace_manager.namespace.get("agent")
+                if agent is not None:
+                    wrappers[obj.__name__] = playbooks[
+                        obj.__name__
+                    ].create_namespace_function(agent)
+
+        namespace_manager.namespace.update(wrappers)
+        return playbooks
+
+    @classmethod
+    def from_function(cls, func: "Callable") -> "PythonPlaybook":
+        """Create a PythonPlaybook object from a decorated function.
+
+        Args:
+            func: Decorated function
+
+        Returns:
+            PythonPlaybook: Created playbook object
+        """
+        import inspect
+        import re
+        from ..triggers import PlaybookTriggers
+
+        sig = inspect.signature(func)
+        signature = func.__name__ + str(sig)
+        doc = inspect.getdoc(func)
+        description = doc.split("\n")[0] if doc is not None else None
+        triggers = getattr(func, "__triggers__", [])
+        metadata = getattr(func, "__metadata__", {})
+
+        # If triggers are not prefixed with T1:BGN, T1:CND, etc., add T{i}:CND
+        # Use regex to find if prefix is missing
+        triggers = [
+            (
+                f"T{i+1}:CND {trigger}"
+                if not re.match(r"^T\d+:[A-Z]{3} ", trigger)
+                else trigger
+            )
+            for i, trigger in enumerate(triggers)
+        ]
+
+        if triggers:
+            triggers = PlaybookTriggers(
+                playbook_klass=func.__name__,
+                playbook_signature=signature,
+                triggers=triggers,
+            )
+        else:
+            triggers = None
+
+        return cls(
+            name=func.__name__,
+            func=func,
+            signature=signature,
+            description=description,
+            triggers=triggers,
+            metadata=metadata,
+        )
+
     def __init__(
         self,
         name: str,

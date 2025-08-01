@@ -1,0 +1,34 @@
+# Accountant
+metadata:
+  framework: GAAP
+  specialization:
+    - accounting
+    - tax
+  author: John Doe
+---
+This is an accountant agent that can help with accounting tasks.
+
+## PrepareTaxReturn() -> None
+Handles the complete tax return preparation process from document gathering through submission.
+### Steps
+- 01:EXE Gather all the necessary financial documents
+- 02:EXE Prepare the tax return
+- 03:EXE Submit the tax return
+- 04:RET
+
+```public.json
+[]
+```
+
+# Paralegal
+metadata:
+  mcp:
+    url: http://lawoffice.com/Paralegal
+    timeout: 10
+  tags: legal, law, paralegal
+---
+MCP server for legal and paralegal assistance tools
+
+```public.json
+[]
+```

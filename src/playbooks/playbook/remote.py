@@ -39,6 +39,15 @@ class RemotePlaybook(Playbook):
         self.parameters = parameters or {}
         self.timeout = timeout
 
+    @property
+    def signature(self) -> str:
+        """Get the signature of the remote playbook.
+
+        Returns:
+            The signature of the remote playbook
+        """
+        return f"{self.name}({', '.join([f'{param}: {type(param).__name__}' for param in self.parameters])})"
+
     async def execute(self, *args, **kwargs) -> Any:
         """Execute the remote playbook.
 
@@ -89,6 +98,14 @@ class RemotePlaybook(Playbook):
             The description if available, otherwise the name
         """
         return self.description or self.name
+
+    def create_namespace_function(self, agent) -> "Callable":
+        """RemotePlaybooks should not be added to namespace.
+
+        Raises:
+            NotImplementedError: RemotePlaybooks don't support namespace functions
+        """
+        raise NotImplementedError("RemotePlaybooks should not be added to namespace")
 
     def __repr__(self) -> str:
         """Return a string representation of the playbook."""

@@ -10,6 +10,7 @@ import importlib
 import sys
 from typing import List
 
+import frontmatter
 import openai
 from rich.console import Console
 
@@ -50,28 +51,35 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
     if isinstance(program_paths, str):
         program_paths = [program_paths]
 
-    program_content, do_not_compile = Loader.read_program(program_paths)
+    # Load files individually
+    program_files = Loader.read_program_files(program_paths)
 
-    # Skip compilation if any of the files are already compiled (.pbasm)
-    if do_not_compile:
-        # For compiled files, use the content as-is without compilation
-        compiled_content = program_content
-    else:
-        llm_config = LLMConfig()
-        compiler = Compiler(llm_config)
-        compiled_content = compiler.process(program_content)
+    # Let compiler handle all compilation logic
+    llm_config = LLMConfig()
+    compiler = Compiler(llm_config)
+    compiled_results = compiler.process_files(program_files)
 
     try:
-        if output_file:
-            # Save to file
-            with open(output_file, "w") as f:
-                f.write(compiled_content)
-            console.print(
-                f"[green]Compiled Playbooks program saved to:[/green] {output_file}"
-            )
-        else:
-            # Print to stdout
-            print(compiled_content)
+        for file_path, frontmatter_dict, content, is_compiled in compiled_results:
+            # Add frontmatter back to content if present
+            if frontmatter_dict:
+                fm_post = frontmatter.Post(content, **frontmatter_dict)
+                content = frontmatter.dumps(fm_post)
+
+            if output_file:
+                # Save to specified output file
+                if len(compiled_results) > 1:
+                    raise Exception(
+                        "Do not specify output file name when compiling multiple files"
+                    )
+
+                with open(output_file, "w") as f:
+                    f.write(content)
+                console.print(
+                    f"[green]Compiled Playbooks program saved to:[/green] {output_file}"
+                )
+            else:
+                print(content)
 
     except Exception as e:
         console.print(f"[bold red]Error compiling Playbooks program:[/bold red] {e}")

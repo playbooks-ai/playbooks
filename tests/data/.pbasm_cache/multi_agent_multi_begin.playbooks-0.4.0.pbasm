@@ -1,0 +1,91 @@
+# Agent1
+Agent1 handles various user interactions and system events with both Python and markdown playbook implementations.
+
+```python
+@playbook
+async def python_a1p1() -> None:
+    print("Python A1P1")
+
+@playbook(triggers=["T1:BGN When program starts"])
+async def python_a1p2() -> None:
+    print("Python A1P2")
+
+@playbook(triggers=["T1:CND When AGI arrives"])
+async def python_a1p3() -> None:
+    print("Python A1P3")
+
+@playbook(triggers=["T1:CND When user asks for refund"])
+async def python_a1p4() -> None:
+    print("Python A1P4")
+```
+
+## A1P1() -> None
+Basic playbook that displays A1P1 message.
+### Steps
+- 01:QUE Say(user, A1P1)
+- 02:RET
+
+## A1P2() -> None
+Playbook that executes at program start and displays A1P2 message.
+### Triggers
+- T1:BGN At the beginning
+### Steps
+- 01:QUE Say(user, A1P2)
+- 02:RET
+
+## A1P3() -> None
+Playbook that executes at program start and displays A1P3 message.
+### Triggers
+- T1:BGN At the beginning
+### Steps
+- 01:QUE Say(user, A1P3)
+- 02:RET
+
+## A1P4() -> None
+Playbook that handles user refund requests and terminates the program.
+### Triggers
+- T1:CND When user asks for refund
+### Steps
+- 01:QUE Say(user, A1P4)
+- 02:YLD for exit
+
+```public.json
+[]
+```
+
+# Agent2
+Agent2 handles initial greetings and program flow with multiple trigger-based playbooks for different scenarios.
+
+## A2P1() -> None
+Displays A2P1 message at program start.
+### Triggers
+- T1:BGN At the beginning
+### Steps
+- 01:QUE Say(user, Say "A2P1")
+- 02:RET
+
+## A2P2() -> None
+Displays A2P2 message and terminates the program.
+### Triggers
+- T1:BGN At the beginning
+### Steps
+- 01:QUE Say(user, Say "A2P2")
+- 02:YLD for exit
+
+## A2P3() -> None
+Displays A2P3 message when triggered by impossible condition.
+### Triggers
+- T1:CND When pigs fly
+### Steps
+- 01:QUE Say(user, Say "A2P3")
+- 02:RET
+
+## A2P4() -> None
+Welcomes the user to the system.
+### Steps
+- 01:QUE Say(user, Welcome the user)
+- 02:RET
+
+```public.json
+[]
+```

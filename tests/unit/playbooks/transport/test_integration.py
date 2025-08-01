@@ -58,10 +58,10 @@ class TestMCPTransportIntegration:
 
             # Test calling tools - FastMCP returns list of TextContent objects
             result = await client.call_tool("add_numbers", {"a": 5, "b": 3})
-            assert result[0].text == "8"
+            assert result.content[0].text == "8"
 
             result = await client.call_tool("greet", {"name": "World"})
-            assert result[0].text == "Hello, World!"
+            assert result.content[0].text == "Hello, World!"
 
             # Test listing resources
             resources = await client.list_resources()
@@ -124,7 +124,7 @@ class TestMCPTransportIntegration:
 
             # Test tool calling - FastMCP returns list of TextContent objects
             result = await transport.call_tool("add_numbers", {"a": 10, "b": 20})
-            assert result[0].text == "30"
+            assert result.content[0].text == "30"
 
             # Test resource listing
             resources = await transport.list_resources()
@@ -168,7 +168,7 @@ class TestMCPTransportIntegration:
             assert len(tools) > 0
 
             result = await transport.call_tool("greet", {"name": "Integration Test"})
-            assert "Hello, Integration Test!" in result[0].text
+            assert "Hello, Integration Test!" in result.content[0].text
 
         # Should be disconnected after context
         assert not transport.is_connected

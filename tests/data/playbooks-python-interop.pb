@@ -8,6 +8,7 @@ application: MultiAgentChat
 ---
 
 # Interop
+startup_mode: standby
 This is a simple chat program that demonstrates two-way interop between natural language and python playbooks
 
 ```python

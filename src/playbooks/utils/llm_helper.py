@@ -8,7 +8,7 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
-from playbooks.enums import LLMMessageRole
+from playbooks.enums import LLMMessageRole, LLMMessageType
 
 from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
@@ -55,13 +55,19 @@ def custom_get_cache_key(**kwargs) -> str:
     Returns:
         A unique hash string to use as cache key
     """
-    key_str = (
-        kwargs.get("model", "")
-        + str(kwargs.get("messages", ""))
-        + str(kwargs.get("temperature", ""))
-        + str(kwargs.get("logit_bias", ""))
-    )
-    return hashlib.sha256(key_str.encode()).hexdigest()[:32]
+    import json
+
+    # Create a deterministic representation of the cache key components
+    cache_components = {
+        "model": kwargs.get("model", ""),
+        "messages": kwargs.get("messages", []),
+        "temperature": kwargs.get("temperature", 0.0),
+        "logit_bias": kwargs.get("logit_bias", {}),
+    }
+
+    # Use json.dumps with sort_keys=True for deterministic serialization
+    key_str = json.dumps(cache_components, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(key_str.encode("utf-8")).hexdigest()[:32]
 
 
 T = TypeVar("T")
@@ -89,20 +95,20 @@ def retry_on_overload(
                 except (
                     VendorAPIOverloadedError,
                     VendorAPIRateLimitError,
-                    litellm.exceptions.InternalServerError,
                     litellm.RateLimitError,
-                ) as e:
-                    # Check if it's an overload error from litellm
-                    if (
-                        isinstance(e, litellm.exceptions.InternalServerError)
-                        and "overloaded" not in str(e).lower()
-                    ):
-                        raise  # Re-raise if not an overload error
+                    litellm.InternalServerError,
+                    litellm.ServiceUnavailableError,
+                    litellm.APIConnectionError,
+                    litellm.Timeout,
+                ):
+                    if attempt == max_retries - 1:
+                        # Last attempt, re-raise the exception
+                        raise
 
                     delay = base_delay * (2**attempt)
                     time.sleep(delay)
                     continue
-            return func(*args, **kwargs)  # Final attempt
+            return func(*args, **kwargs)  # This line should never be reached
 
         return wrapper
 
@@ -111,36 +117,64 @@ def retry_on_overload(
 
 @retry_on_overload()
 def _make_completion_request(completion_kwargs: dict) -> str:
-    """Make a non-streaming completion request to the LLM with automatic retries on overload.
-
-    Args:
-        completion_kwargs: Arguments to pass to the completion function
-
-    Returns:
-        The completion text response
-    """
+    """Make a non-streaming completion request to the LLM with automatic retries on overload."""
     response = completion(**completion_kwargs)
     return response["choices"][0]["message"]["content"]
 
 
-@retry_on_overload()
 def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
     """Make a streaming completion request to the LLM with automatic retries on overload.
 
-    Args:
-        completion_kwargs: Arguments to pass to the completion function
-
-    Returns:
-        An iterator of response chunks
+    Since exceptions occur on the first token (during initial call), we can retry
+    the entire stream creation and maintain true streaming.
     """
-    response = completion(**completion_kwargs)
-    for chunk in response:
-        content = chunk.choices[0].delta.content
-        if content is not None:
-            yield content
+    max_retries = 5
+    base_delay = 1.0
+
+    for attempt in range(max_retries):
+        try:
+            response = completion(**completion_kwargs)
+
+            # Try to get the first chunk to trigger any immediate exceptions
+            first_chunk = None
+            response_iter = iter(response)
+            try:
+                first_chunk = next(response_iter)
+            except StopIteration:
+                # Empty response
+                return
+
+            # Yield the first chunk
+            content = first_chunk.choices[0].delta.content
+            if content is not None:
+                yield content
+
+            # Now stream the rest normally
+            for chunk in response_iter:
+                content = chunk.choices[0].delta.content
+                if content is not None:
+                    yield content
+
+            return  # Success, exit retry loop
+
+        except (
+            VendorAPIOverloadedError,
+            VendorAPIRateLimitError,
+            litellm.RateLimitError,
+            litellm.InternalServerError,
+            litellm.ServiceUnavailableError,
+            litellm.APIConnectionError,
+            litellm.Timeout,
+        ):
+            if attempt == max_retries - 1:
+                # Last attempt, re-raise the exception
+                raise
+
+            delay = base_delay * (2**attempt)
+            time.sleep(delay)
+            continue
 
 
-@retry_on_overload()
 def get_completion(
     llm_config: LLMConfig,
     messages: List[dict],
@@ -251,7 +285,7 @@ def get_completion(
         if langfuse_generation:
             langfuse_generation.end(error=str(e))
             LangfuseHelper.flush()
-        raise  # Re-raise the exception to be caught by the decorator if applicable
+        raise e  # Re-raise the exception to be caught by the decorator if applicable
     finally:
         # Update cache and Langfuse
         if (
@@ -385,7 +419,9 @@ def ensure_upto_N_cached_messages(messages: List[dict]) -> List[dict]:
 
 
 def make_cached_llm_message(
-    content: str, role: LLMMessageRole = LLMMessageRole.USER
+    content: str,
+    role: LLMMessageRole = LLMMessageRole.USER,
+    type: LLMMessageType = LLMMessageType.DEFAULT,
 ) -> dict:
     """Make a message with cache control.
 
@@ -398,13 +434,16 @@ def make_cached_llm_message(
     """
     return {
         "role": role,
+        "type": type,
         "content": content,
         "cache_control": {"type": "ephemeral"},
     }
 
 
 def make_uncached_llm_message(
-    content: str, role: LLMMessageRole = LLMMessageRole.USER
+    content: str,
+    role: LLMMessageRole = LLMMessageRole.USER,
+    type: LLMMessageType = LLMMessageType.DEFAULT,
 ) -> dict:
     """Make a message without cache control.
 
@@ -412,4 +451,8 @@ def make_uncached_llm_message(
         content: The content of the message
         role: The role of the message
     """
-    return {"role": role, "content": content}
+    return {
+        "role": role,
+        "type": type,
+        "content": content,
+    }

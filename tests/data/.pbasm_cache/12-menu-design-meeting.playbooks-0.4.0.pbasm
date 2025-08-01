@@ -1,0 +1,122 @@
+# RestaurantConsultant
+A restaurant consultant that helps redesign menus through collaborative meetings with culinary and marketing experts.
+
+## Main() -> None
+Main consultation workflow that welcomes users and guides them through the menu redesign process.
+### Triggers
+- T1:BGN When program starts
+### Steps
+- 01:QUE Say(user, Welcome the user, explain your role as a restaurant consultant and ask how you can help)
+- 02:YLD for user
+
+## RedesignMenu() -> None
+Coordinates the complete menu redesign process from requirements gathering through final recommendations.
+### Triggers
+- T1:CND When user asks to redesign restaurant menu
+### Steps
+- 01:QUE Say(user, Tell user that you will coordinate the menu redesign process)
+- 02:QUE Say(user, Ask user for reasons for the menu redesign and specific constraints like budget, timeline, any must-keep dishes, etc.)
+- 03:YLD for user
+- 04:QUE $meeting_result:str = MenuRedesignMeeting($topic="menu redesign", $attendees=["HeadChef", "MarketingSpecialist"])
+- 05:YLD for call
+- 06:CND If the meeting was successful
+  - 06.01:QUE Say(user, present final menu recommendations to user with rationale)
+- 07:CND Otherwise
+  - 07.01:QUE Say(user, apologize and suggest trying again later)
+- 08:YLD for exit
+
+## MenuRedesignMeeting($topic, $attendees) -> str
+metadata:
+  meeting: true
+  required_attendees: [HeadChef, MarketingSpecialist]
+---
+Facilitates a collaborative meeting between culinary and marketing experts to develop new menu options through structured discussion and consensus building.
+### Steps
+- 01:QUE Say(meeting, Introduce yourself, explain the reasons for the menu redesign and share user's constraints and requirements, and what outcome is expected)
+- 02:QUE Say(meeting, Explain the process you will follow. MarketingSpecialist will start by presenting customer trends and competitor analysis. Then HeadChef will propose initial dish ideas based on market insights. I will facilitate discussion to refine menu options that balance market appeal with kitchen capabilities. Finally, we will drive consensus on final menu selections.)
+- 03:QUE Say(meeting, facilitate ongoing discussion, and don't let the discussion get off track); YLD for meeting; done after 30 turns of discussion or consensus is reached
+- 04:CND If consensus is reached
+  - 04.01:QUE Say(meeting, Summarize agreed-upon dishes with pricing strategy)
+  - 04.02:QUE Say(meeting, Thank the team for their contributions)
+  - 04.03:QUE Say(meeting, End meeting)
+  - 04.04:RET the new menu proposal with justifications
+- 05:CND Otherwise
+  - 05.01:RET the reason for the failure to reach consensus so that user can decide what to do next
+
+```public.json
+[]
+```
+
+# HeadChef
+Expert culinary professional specializing in menu development, cost analysis, and kitchen operations optimization for restaurant menu redesign meetings.
+
+## MenuRedesignMeeting($topic:str, $attendees:list) -> None
+metadata:
+  meeting: true
+---
+Lead culinary expert in menu redesign meetings, providing dish proposals, feasibility assessments, and cost analysis.
+### Steps
+- 01:QUE Say(meeting, Introduce yourself and your expertise in culinary operations)
+- 02:CND While the meeting is active
+  - 02.01:CND When asked about dish proposals
+    - 02.01.01:EXE Consider the market trends shared
+    - 02.01.02:QUE Say(meeting, Propose 3-5 signature dishes that align with trends)
+    - 02.01.03:QUE Say(meeting, For each dish, specify key ingredients and estimated food cost, prep time and kitchen complexity, required equipment or skills)
+  - 02.02:CND When MarketingSpecialist suggests a trending cuisine or dish
+    - 02.02.01:EXE Evaluate feasibility with current kitchen setup
+    - 02.02.02:CND If feasible
+      - 02.02.02.01:QUE Say(meeting, Propose chef's interpretation of the dish)
+      - 02.02.02.02:QUE Say(meeting, Estimate ingredient costs and prep requirements)
+    - 02.02.03:CND Otherwise
+      - 02.02.03.01:QUE Say(meeting, Explain specific constraints - equipment, skills, suppliers)
+      - 02.02.03.02:QUE Say(meeting, Suggest alternative that captures similar appeal)
+  - 02.03:CND When discussing pricing
+    - 02.03.01:EXE Calculate food cost percentage for each dish
+    - 02.03.02:QUE Say(meeting, Recommend portion sizes for target price points)
+    - 02.03.03:QUE Say(meeting, Flag any dishes with concerning profit margins)
+  - 02.04:CND When you identify ingredient overlap opportunities
+    - 02.04.01:QUE Say(meeting, Suggest dishes that share ingredients to reduce waste)
+    - 02.04.02:QUE Say(meeting, Propose prep efficiencies across multiple dishes)
+  - 02.05:YLD for meeting
+  - 02.06:JMP 02
+- 03:RET
+
+```public.json
+[]
+```
+
+# MarketingSpecialist
+Marketing specialist focused on customer preferences, market analysis, and menu positioning strategies for restaurant operations.
+
+## MenuRedesignMeeting($topic:str, $attendees:list) -> None
+metadata:
+  meeting: true
+---
+Facilitates menu redesign discussions by providing market insights, evaluating dish proposals, and ensuring customer-focused decision making.
+### Steps
+- 01:QUE Say(meeting, Introduce yourself and your role in understanding customer preferences)
+- 02:QUE Say(meeting, Present market analysis including top 3 trending cuisines, competitor gaps, demographic shifts, and price sensitivity)
+- 03:CND While the meeting is active
+  - 03.01:CND When HeadChef proposes dishes
+    - 03.01.01:QUE Say(meeting, Evaluate market appeal and positioning of proposed dishes)
+    - 03.01.02:QUE Say(meeting, Suggest naming and descriptions that resonate with target customers)
+    - 03.01.03:QUE Say(meeting, Recommend pricing based on perceived value and competition)
+    - 03.01.04:QUE Say(meeting, Flag any dishes that may not align with customer expectations)
+  - 03.02:CND When discussing menu structure
+    - 03.02.01:QUE Say(meeting, Propose optimal menu categories and flow)
+    - 03.02.02:QUE Say(meeting, Suggest portion size options like small plates and sharing options)
+    - 03.02.03:QUE Say(meeting, Recommend dietary accommodation options needed)
+  - 03.03:CND When consensus seems difficult
+    - 03.03.01:QUE Say(meeting, Share relevant customer feedback or sales data)
+    - 03.03.02:QUE Say(meeting, Propose A/B testing options for uncertain items)
+    - 03.03.03:QUE Say(meeting, Suggest seasonal rotation strategies)
+  - 03.04:CND When pricing strategies are discussed
+    - 03.04.01:QUE Say(meeting, Provide competitive pricing analysis)
+    - 03.04.02:QUE Say(meeting, Recommend bundle or combo opportunities)
+    - 03.04.03:QUE Say(meeting, Suggest promotional strategies for menu launch)
+  - 03.05:JMP 03
+- 04:RET
+
+```public.json
+[]
+```

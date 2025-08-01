@@ -1,17 +1,15 @@
 repos:
-  - repo: https://github.com/psf/black
-    rev: 23.12.1
-    hooks:
-      - id: black
-        name: Run Formatter (Black)
-        files: ^.*\.py$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.1.7
     hooks:
       - id: ruff
         name: Run Linter Check (Ruff)
-        args: [ --fix ]
+        args:
+          - --fix
         files: ^.*\.py$
-      - id: ruff-format
-        name: Run Formatter (Ruff)
+  - repo: https://github.com/psf/black
+    rev: 25.1.0
+    hooks:
+      - id: black
+        name: Run Formatter (Black)
         files: ^.*\.py$

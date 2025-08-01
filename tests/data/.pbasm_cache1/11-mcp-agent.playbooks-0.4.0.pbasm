@@ -1,0 +1,29 @@
+# ExampleMCPServer
+metadata:
+  remote:
+    type: mcp
+    url: memory://test
+    transport: memory
+---
+MCP server for external tool integration
+
+```public.json
+[]
+```
+
+# ExampleMCPClientAgent
+This agent connects to an MCP server to retrieve and share secrets with users.
+
+## Main() -> None
+Main interaction that retrieves a secret from the MCP server and shares it with the user.
+### Triggers
+- T1:BGN When program starts
+### Steps
+- 01:QUE Get $secret:str from ExampleMCPServer
+- 02:YLD for call
+- 03:QUE Say(user, Reveal $secret to user)
+- 04:YLD for exit
+
+```public.json
+[]
+```

@@ -41,7 +41,9 @@ class SessionLogItemMessage(SessionLogItem):
 
 
 class SessionLog:
-    def __init__(self):
+    def __init__(self, klass: str, agent_id: str):
+        self.klass = klass
+        self.agent_id = agent_id
         self.log: List[dict[SessionLogItemLevel, SessionLogItem]] = []
 
     def add(
@@ -72,6 +74,7 @@ class SessionLog:
             if not item.strip():
                 return
             item = SessionLogItemMessage(item)
+        # print(f"\n{self.klass} {self.agent_id}: {item}")
         self.log.append({"item": item, "level": level})
 
     def __str__(self) -> str:

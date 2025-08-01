@@ -21,7 +21,7 @@ async def A(num: float) -> float:
 - Get Canada's secret
 - Tell user about Canada's secret
 - get $population of India from the country info agent
-- return "{$num} {$population}"
+- return f"{$num} {$population}"
 
 
 # Country info

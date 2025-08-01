@@ -57,29 +57,33 @@ def test_file_utils():
 
 
 @pytest.mark.asyncio
-async def test_playbooks_compilation_skip(test_data_dir):
+async def test_playbooks_compilation_skip(test_data_dir, tmp_path):
     """Test that Playbooks class skips compilation for .pbasm files."""
     print("\nTesting Playbooks compilation skip...")
 
+    # Use an existing .pb file from test data
     pb_file_path = test_data_dir / "02-personalized-greeting.pb"
-    pbasm_file_path = test_data_dir / "02-personalized-greeting.pbasm"
-
     source_content = pb_file_path.read_text()
-    compiled_content = pbasm_file_path.read_text()
 
-    # Test with .pbasm file - should skip compilation
-    print(f"Testing with .pbasm file: {pbasm_file_path}")
-    playbooks_pbasm = Playbooks([pbasm_file_path])
-
-    # The compiled content should be the same as the original content
-    assert playbooks_pbasm.compiled_program_content == compiled_content
-    print("✓ .pbasm file compilation skipped correctly")
-
-    # Test with .pb file - should compile (but we'll just check it's different)
-    print(f"Testing with .pb file: {pb_file_path}")
-    playbooks_pb = Playbooks([pb_file_path])
+    # First, compile the .pb file to get the compiled content
+    print(f"Compiling .pb file: {pb_file_path}")
+    playbooks_pb = Playbooks([str(pb_file_path)])
+    compiled_content_from_pb = playbooks_pb.compiled_program_content
 
     # The compiled content should be different from the original content
     # (because compilation adds processing steps)
-    assert playbooks_pb.compiled_program_content != source_content
+    assert compiled_content_from_pb != source_content
     print("✓ .pb file compilation executed correctly")
+
+    # Now create a .pbasm file with the compiled content
+    pbasm_file_path = tmp_path / "02-personalized-greeting.pbasm"
+    pbasm_file_path.write_text(compiled_content_from_pb)
+
+    # Test with .pbasm file - should skip compilation
+    print(f"Testing with .pbasm file: {pbasm_file_path}")
+    playbooks_pbasm = Playbooks([str(pbasm_file_path)])
+
+    # The compiled content should be the same as what we wrote to the .pbasm file
+    # (no additional compilation should occur)
+    assert playbooks_pbasm.compiled_program_content == compiled_content_from_pb
+    print("✓ .pbasm file compilation skipped correctly")

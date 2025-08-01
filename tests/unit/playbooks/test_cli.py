@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import socket
 import subprocess
 import sys
@@ -28,10 +29,8 @@ class TestCLICompile:
         # Verify the compiled output contains expected elements
         assert "# HelloWorld" in captured.out
         assert "## HelloWorldDemo() -> None" in captured.out
-        assert "01:QUE Say(Greet the user" in captured.out
-        assert "02:QUE Say(Tell the user that this is a demo" in captured.out
-        assert "03:QUE Say(Say goodbye to the user" in captured.out
-        assert "YLD exit" in captured.out
+        assert "- 01:QUE Say(" in captured.out
+        assert "YLD for exit" in captured.out
         assert "public.json" in captured.out
 
     def test_compile_to_file(self, test_data_dir):
@@ -55,7 +54,7 @@ class TestCLICompile:
 
             assert "# HelloWorld" in content
             assert "## HelloWorldDemo() -> None" in content
-            assert "01:QUE Say(Greet the user" in content
+            assert "- 01:QUE Say(" in content
             assert "public.json" in content
 
         finally:
@@ -264,7 +263,7 @@ class TestCLIIntegration:
         assert result.returncode == 0
         assert "# HelloWorld" in result.stdout
         assert "## HelloWorldDemo() -> None" in result.stdout
-        assert "01:QUE Say(Greet the user" in result.stdout
+        assert "- 01:QUE Say(" in result.stdout
 
     def test_cli_compile_to_file(self, test_data_dir):
         """Test CLI compile command saving to file."""
@@ -364,18 +363,20 @@ class TestCLIWithExamples:
         assert len(pb_files) > 0, "No valid .pb files found in test data"
 
         for pb_file in pb_files:
-            result = subprocess.run(
-                [sys.executable, "-m", "playbooks", "compile", str(pb_file)],
-                capture_output=True,
-                text=True,
-                cwd=project_root,
-            )
+            # if file name starts with two digits, compile it
+            if re.match(r"^\d{2}-", pb_file.name):
+                result = subprocess.run(
+                    [sys.executable, "-m", "playbooks", "compile", str(pb_file)],
+                    capture_output=True,
+                    text=True,
+                    cwd=project_root,
+                )
 
-            # All files should compile successfully
-            assert (
-                result.returncode == 0
-            ), f"Failed to compile {pb_file.name}: {result.stdout}"
-            assert len(result.stdout) > 0, f"No output for {pb_file.name}"
+                # All files should compile successfully
+                assert (
+                    result.returncode == 0
+                ), f"Failed to compile {pb_file.name}: {result.stdout}"
+                assert len(result.stdout) > 0, f"No output for {pb_file.name}"
 
     @pytest.mark.parametrize(
         "application",

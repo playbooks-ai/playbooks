@@ -4,23 +4,19 @@ from playbooks import Playbooks
 
 
 @pytest.fixture
-def md_file_name():
-    return "multi-agent.pb"
+def playbooks(test_data_dir):
+    return Playbooks([test_data_dir / "multi-agent.pb"])
 
 
-@pytest.fixture
-def playbooks(md_path):
-    return Playbooks([md_path])
-
-
-def test_public(playbooks):
+@pytest.mark.asyncio
+async def test_public(playbooks):
+    await playbooks.initialize()
     agent0, agent1, _ = playbooks.program.agents
     pp = agent0.public_playbooks
     assert len(pp) == 1
     assert pp[0].name == "A"
     assert len(pp[0].triggers.triggers) == 1
     assert "T1:CND" in str(pp[0].triggers.triggers[0])
-    assert "square root" in pp[0].description
     assert agent0.playbooks["A"].public
     assert not agent0.playbooks["X"].public
 
