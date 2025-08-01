@@ -51,28 +51,29 @@ async def BAXY1(num: float) -> float:
 
 ## XY($num:float) -> float
 ### Steps
-- 01:QUE $temp1:float = Y($num)
+- 01:QUE $temp1:float = Y(num=$num)
 - 02:YLD for call
-- 03:QUE $result:float = X($temp1)
+- 03:QUE $result:float = X(num=$temp1)
 - 04:YLD for call
 - 05:RET $result
 
 ## CallA($num:float) -> float
 ### Steps
-- 01:QUE $result:float = A($num)
+- 01:QUE $result:float = A(num=$num)
 - 02:YLD for call
 - 03:RET $result
 
 ## BAXY2($num:float) -> float
 ### Steps
-- 01:QUE $temp1:float = X($num)
-- 02:QUE $temp2:float = Y($num)
-- 03:YLD for call
-- 04:QUE $temp3:float = A($temp1)
+- 01:QUE $temp1:float = X(num=$num)
+- 02:YLD for call
+- 03:QUE $temp2:float = A(num=$temp1)
+- 04:QUE $temp3:float = Y(num=$num)
 - 05:YLD for call
-- 06:QUE $temp4:float = B($temp3)
+- 06:QUE $temp4:float = B(num=$temp2)
 - 07:YLD for call
-- 08:RET $temp4 * $temp2
+- 08:EXE $result:float = $temp4 * $temp3
+- 09:RET $result
 
 ```public.json
 []

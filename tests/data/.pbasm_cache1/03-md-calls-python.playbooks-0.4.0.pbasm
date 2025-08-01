@@ -1,0 +1,26 @@
+# SimpleNLCalculator
+This program demonstrates playbooks framework capabilities - NL-to-Python function calls and implicit state for parameters and results.
+
+```python
+import math
+
+@playbook(triggers=["T1:CND When you want to apply magic operator to a number"])
+async def magic_operator(input: str) -> float:
+    input_num = float(input)
+    return input_num * math.sin(input_num)
+```
+
+## DoMagic() -> None
+Demonstrates natural language to Python function calls with implicit state management for parameters and results.
+### Triggers
+- T1:BGN When the program starts
+### Steps
+- 01:QUE Say(user, Ask user for a number between 1 and 10); YLD for user; done when user provides a valid number or gives up
+- 02:QUE $result:float = magic_operator(input=$input)
+- 03:YLD for call
+- 04:QUE Say(user, Tell user the result)
+- 05:YLD for exit
+
+```public.json
+[]
+```

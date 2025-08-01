@@ -62,7 +62,7 @@ dtext           =   %d33-90 /          ; Printable US-ASCII
 - 07:RET $email
 
 ## TooBig() -> None
-Handles cases when the value of x exceeds the threshold.
+Handles cases when the x variable exceeds the threshold limit.
 ### Triggers
 - T1:CND When $x > 15
 ### Steps

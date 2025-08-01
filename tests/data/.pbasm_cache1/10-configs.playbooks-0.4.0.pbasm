@@ -9,7 +9,7 @@ metadata:
 This is an accountant agent that can help with accounting tasks.
 
 ## PrepareTaxReturn() -> None
-Prepares and submits tax returns by gathering financial documents and completing the filing process.
+Handles the complete tax return preparation process from document gathering through submission.
 ### Steps
 - 01:EXE Gather all the necessary financial documents
 - 02:EXE Prepare the tax return
@@ -27,7 +27,7 @@ metadata:
     timeout: 10
   tags: legal, law, paralegal
 ---
-MCP server for legal and paralegal services
+MCP server for legal and paralegal assistance tools
 
 ```public.json
 []

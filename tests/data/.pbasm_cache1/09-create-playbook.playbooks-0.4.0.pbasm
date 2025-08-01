@@ -10,7 +10,7 @@ Initiates the playbook creation process by gathering user requirements and gener
 - 02:YLD for user
 - 03:QUE $playbook:str = CreatePlaybook(task=$task)
 - 04:YLD for call
-- 05:QUE Say(user, Show $playbook to user)
+- 05:QUE Say(user, Show playbook to user)
 - 06:RET
 
 ## CreatePlaybook($task:str) -> str
