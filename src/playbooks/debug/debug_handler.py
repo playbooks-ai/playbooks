@@ -40,9 +40,9 @@ class DebugHandler:
             )
 
             # Handle stop-on-entry
-            # print(
-            #     f"[DEBUG_HANDLER] should_stop_on_entry: {self.debug_server.should_stop_on_entry()}"
-            # )
+            print(
+                f"[DEBUG_HANDLER] should_stop_on_entry: {self.debug_server.should_stop_on_entry()}"
+            )
             if self.debug_server.should_stop_on_entry():
                 self.debug_server._stop_on_entry = False
                 # print("[DEBUG_HANDLER] waiting for continue")
@@ -53,14 +53,13 @@ class DebugHandler:
         # Always check for stepping (not just when not first iteration)
         # This ensures we pause BEFORE the LLM call that will execute the next line
         debug_frame = self.debug_server._get_current_frame()
-        # print(f"[DEBUG_HANDLER] debug_frame: {debug_frame}")
-        # print(
-        #     f"[DEBUG_HANDLER] should_pause_for_step: {self.debug_server.should_pause_for_step(debug_frame)}"
-        # )
-        if self.debug_server.should_pause_for_step(debug_frame):
+        should_pause = self.debug_server.should_pause_for_step(debug_frame)
+        print(f"[DEBUG_HANDLER] debug_frame: {debug_frame}")
+        print(f"[DEBUG_HANDLER] should_pause_for_step: {should_pause}")
+        if should_pause:
             source_line_number = instruction_pointer.source_line_number
             event_bus.publish(StepCompleteEvent(source_line_number=source_line_number))
-            # print("[DEBUG_HANDLER] waiting for step")
+            print("[DEBUG_HANDLER] waiting for step")
 
             event_bus.publish(
                 ExecutionPausedEvent(
@@ -71,24 +70,63 @@ class DebugHandler:
             )
 
             await self.debug_server.wait_for_continue()
-            # print("[DEBUG_HANDLER] DONE waiting for step")
+            print("[DEBUG_HANDLER] DONE waiting for step")
 
     async def handle_breakpoint(self, source_line_number, event_bus):
-        # print(f"[DEBUG_HANDLER] handle_breakpoint: {source_line_number}")
-        # print(
-        #     f"[DEBUG_HANDLER] has_breakpoint: {self.debug_server.has_breakpoint(source_line_number=source_line_number)}"
-        # )
+        print(f"[DEBUG_HANDLER] handle_breakpoint: {source_line_number}")
+
+        # Get both original and compiled file paths from the debug server's program
+        original_file_path = None
+        compiled_file_path = None
+
+        if self.debug_server._program:
+            # Original file path
+            if (
+                hasattr(self.debug_server._program, "program_paths")
+                and self.debug_server._program.program_paths
+            ):
+                original_file_path = self.debug_server._program.program_paths[0]
+
+            # Compiled file path (get the full path that matches what VSCode sends)
+            if hasattr(self.debug_server._program, "_get_compiled_file_name"):
+                compiled_file_name = (
+                    self.debug_server._program._get_compiled_file_name()
+                )
+                if original_file_path and compiled_file_name:
+                    from pathlib import Path
+
+                    original_path = Path(original_file_path)
+                    compiled_file_path = str(
+                        original_path.parent / ".pbasm_cache" / compiled_file_name
+                    )
+
+        print(
+            f"[DEBUG_HANDLER] checking breakpoints for original: {original_file_path}"
+        )
+        print(
+            f"[DEBUG_HANDLER] checking breakpoints for compiled: {compiled_file_path}"
+        )
+
+        # Check breakpoints for both file paths
+        has_breakpoint = self.debug_server.has_breakpoint(
+            source_line_number=source_line_number, file_path=original_file_path
+        ) or self.debug_server.has_breakpoint(
+            source_line_number=source_line_number, file_path=compiled_file_path
+        )
+
+        print(f"[DEBUG_HANDLER] has_breakpoint: {has_breakpoint}")
+
         """Check and handle breakpoint at the given line."""
-        if self.debug_server.has_breakpoint(source_line_number=source_line_number):
+        if has_breakpoint:
             event_bus.publish(BreakpointHitEvent(source_line_number=source_line_number))
-            # print("[DEBUG_HANDLER] waiting for continue")
+            print("[DEBUG_HANDLER] waiting for continue")
             await self.debug_server.wait_for_continue()
 
     async def handle_execution_end(self):
         """Handle any cleanup needed at execution end."""
         if self.debug_server:
             # Give a moment for events to be processed
-            # print("[DEBUG_HANDLER] waiting for execution end")
+            print("[DEBUG_HANDLER] waiting for execution end")
             await asyncio.sleep(0.01)
 
 

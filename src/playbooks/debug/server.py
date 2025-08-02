@@ -62,6 +62,18 @@ class DebugServer:
 
     def register_bus(self, bus: EventBus) -> None:
         """Register the event bus to receive playbook events."""
+        # Prevent duplicate registration of the same bus
+        if self._event_bus is bus:
+            self.logger.debug(
+                "Event bus already registered, skipping duplicate registration"
+            )
+            return
+
+        # Unsubscribe from previous bus if one was registered
+        if self._event_bus:
+            self._event_bus.unsubscribe("*", self._on_event)
+            self.logger.debug("Unsubscribed from previous event bus")
+
         self._event_bus = bus
         if bus:
             # Register for all events that might be relevant for debugging
@@ -71,7 +83,7 @@ class DebugServer:
     def set_stop_on_entry(self, stop_on_entry: bool) -> None:
         """Set whether to stop on entry."""
         self._stop_on_entry = stop_on_entry
-        # print(f"[DEBUG] DebugServer.set_stop_on_entry called with: {stop_on_entry}")
+        print(f"[DEBUG] DebugServer.set_stop_on_entry called with: {stop_on_entry}")
         self.logger.info(f"Stop on entry set to: {stop_on_entry}")
 
     async def start(self) -> None:
@@ -82,6 +94,7 @@ class DebugServer:
             )
             msg = f"Debug server started on {self.host}:{self.port}"
             self.logger.info(msg)
+            print(msg)
         except Exception as e:
             self.logger.error(f"Failed to start debug server: {e}")
             raise
@@ -116,13 +129,13 @@ class DebugServer:
             if not self._step_mode or not current_frame:
                 return False
 
-            # print(f"Step mode: {self._step_mode}")
-            # print(f"Current frame: {current_frame}")
-            # print(f"Initial frame: {self._step_initial_frame}")
+            print(f"Step mode: {self._step_mode}")
+            print(f"Current frame: {current_frame}")
+            print(f"Initial frame: {self._step_initial_frame}")
 
             if self._step_mode == "step_in":
                 # Always pause on next instruction
-                # print("Step in: pausing on next instruction")
+                print("Step in: pausing on next instruction")
                 return True
 
             elif self._step_mode == "next":
@@ -136,22 +149,22 @@ class DebugServer:
                     initial_line = self._step_initial_frame.get("line_number", 0)
 
                     if current_line != initial_line:
-                        # print(
-                        #     f"Step over: same frame, different line ({initial_line} -> {current_line}), pausing"
-                        # )
+                        print(
+                            f"Step over: same frame, different line ({initial_line} -> {current_line}), pausing"
+                        )
                         return True
                     else:
-                        # print(
-                        #     f"Step over: same frame, same line ({current_line}), continuing"
-                        # )
+                        print(
+                            f"Step over: same frame, same line ({current_line}), continuing"
+                        )
                         return False
 
                 # Also pause if we've returned to a shallower frame
                 if self._is_caller_frame(current_frame, self._step_initial_frame):
-                    # print("Step over: returned to caller, pausing")
+                    print("Step over: returned to caller, pausing")
                     return True
 
-                # print("Step over: different frame, continuing")
+                print("Step over: different frame, continuing")
                 return False
 
             elif self._step_mode == "step_out":
@@ -159,7 +172,7 @@ class DebugServer:
                 should_pause = self._is_caller_frame(
                     current_frame, self._step_initial_frame
                 )
-                # print(f"Step out: should pause = {should_pause}")
+                print(f"Step out: should pause = {should_pause}")
                 return should_pause
 
             return False
@@ -235,9 +248,13 @@ class DebugServer:
         self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter
     ) -> None:
         """Handle a new client connection."""
+        print("[DEBUG] DebugServer._handle_client - new client connection")
         self.clients.append(writer)
         client_addr = writer.get_extra_info("peername")
         self.logger.info(f"Debug client connected from {client_addr}")
+        print(
+            f"[DEBUG] DebugServer._handle_client - client connected from {client_addr}"
+        )
 
         try:
             while True:
@@ -249,8 +266,7 @@ class DebugServer:
                 if command_str:
                     await self._handle_command(command_str, writer)
 
-        except (ConnectionResetError, BrokenPipeError, OSError) as e:
-            print(e)
+        except (ConnectionResetError, BrokenPipeError, OSError):
             pass
         except Exception as e:
             self.logger.error(f"Error handling client: {e}")
@@ -261,7 +277,7 @@ class DebugServer:
                 writer.close()
                 await writer.wait_closed()
             except Exception:
-                # print(f"Error closing client connection: {e}")
+                # print(f"Error closing client connection: {cleanup_error}")
                 pass
             self.logger.info(f"Debug client {client_addr} disconnected")
 
@@ -269,11 +285,10 @@ class DebugServer:
         self, command_str: str, writer: asyncio.StreamWriter
     ) -> None:
         """Handle incoming commands from debug clients."""
+        print(f"[DEBUG] DebugServer._handle_command - received command: {command_str}")
         try:
             command = json.loads(command_str)
             command_type = command.get("command")
-
-            # print(f"Processing command: {command_type}")
 
             if command_type == "set_breakpoints":
                 await self._handle_set_breakpoints(command, writer)
@@ -293,11 +308,13 @@ class DebugServer:
                 await self._handle_get_call_stack(command, writer)
             else:
                 msg = f"Unknown command: {command_type}"
+                print(msg)
                 await self._send_error(writer, msg)
 
         except (json.JSONDecodeError, KeyError) as e:
             error_msg = f"Invalid command format: {e}"
             self.logger.error(error_msg)
+            print(error_msg)
             await self._send_error(writer, error_msg)
         except Exception as e:
             error_msg = f"Error processing command '{command_str}': {e}"
@@ -308,9 +325,13 @@ class DebugServer:
         self, command: Dict[str, Any], writer: asyncio.StreamWriter
     ) -> None:
         """Handle set_breakpoints command."""
+        print("[DEBUG] DebugServer._handle_set_breakpoints - entering handler")
         file_path = command.get("file", "")
         lines = set(command.get("lines", []))
         self._breakpoints[file_path] = lines
+        print(
+            f"[DEBUG] DebugServer._handle_set_breakpoints - set breakpoints for {file_path} at lines {lines}"
+        )
 
         response = {
             "type": "response",
@@ -325,8 +346,12 @@ class DebugServer:
         self, command: Dict[str, Any], writer: asyncio.StreamWriter
     ) -> None:
         """Handle continue command."""
+        print("[DEBUG] DebugServer._handle_continue - entering handler")
         self.clear_step_mode()  # Only clear on continue
         self._continue_event.set()
+        print(
+            "[DEBUG] DebugServer._handle_continue - cleared step mode and set continue event"
+        )
 
         response = {"type": "response", "command": "continue", "success": True}
         await self._send_response(writer, response)
@@ -337,7 +362,7 @@ class DebugServer:
         """Handle next (step over) command."""
         try:
             self.logger.info("Handling 'next' command")
-            # print("[DEBUG] DebugServer._handle_next - entering next command handler")
+            print("[DEBUG] DebugServer._handle_next - entering next command handler")
 
             # Diagnose frame structure
             diagnosis = self.diagnose_frame_structure()
@@ -347,22 +372,22 @@ class DebugServer:
             self._step_initial_frame = self._get_current_frame()
 
             self.logger.info(f"Initial frame captured: {self._step_initial_frame}")
-            # print(
-            #     f"[DEBUG] DebugServer._handle_next - set step_mode=next, initial_frame={self._step_initial_frame}"
-            # )
+            print(
+                f"[DEBUG] DebugServer._handle_next - set step_mode=next, initial_frame={self._step_initial_frame}"
+            )
 
             # Trigger the continue event to release any wait_for_continue()
             self._continue_event.set()
-            # print("[DEBUG] DebugServer._handle_next - triggered continue event")
+            print("[DEBUG] DebugServer._handle_next - triggered continue event")
 
             response = {"type": "response", "command": "next", "success": True}
             await self._send_response(writer, response)
             self.logger.info("Successfully sent 'next' response")
-            # print("[DEBUG] DebugServer._handle_next - sent response")
+            print("[DEBUG] DebugServer._handle_next - sent response")
 
         except Exception as e:
             self.logger.error(f"Error in _handle_next: {e}")
-            # print(f"[DEBUG] DebugServer._handle_next - error: {e}")
+            print(f"[DEBUG] DebugServer._handle_next - error: {e}")
             error_response = {
                 "type": "response",
                 "command": "next",
@@ -375,13 +400,13 @@ class DebugServer:
         self, command: Dict[str, Any], writer: asyncio.StreamWriter
     ) -> None:
         """Handle step_in command."""
-        # print("[DEBUG] DebugServer._handle_step_in - entering step_in command handler")
+        print("[DEBUG] DebugServer._handle_step_in - entering step_in command handler")
         self._step_mode = "step_in"
         self._step_initial_frame = self._get_current_frame()
 
         # Trigger the continue event to release any wait_for_continue()
         self._continue_event.set()
-        # print("[DEBUG] DebugServer._handle_step_in - triggered continue event")
+        print("[DEBUG] DebugServer._handle_step_in - triggered continue event")
 
         response = {"type": "response", "command": "step_in", "success": True}
         await self._send_response(writer, response)
@@ -390,15 +415,15 @@ class DebugServer:
         self, command: Dict[str, Any], writer: asyncio.StreamWriter
     ) -> None:
         """Handle step_out command."""
-        # print(
-        #     "[DEBUG] DebugServer._handle_step_out - entering step_out command handler"
-        # )
+        print(
+            "[DEBUG] DebugServer._handle_step_out - entering step_out command handler"
+        )
         self._step_mode = "step_out"
         self._step_initial_frame = self._get_current_frame()
 
         # Trigger the continue event to release any wait_for_continue()
         self._continue_event.set()
-        # print("[DEBUG] DebugServer._handle_step_out - triggered continue event")
+        print("[DEBUG] DebugServer._handle_step_out - triggered continue event")
 
         response = {"type": "response", "command": "step_out", "success": True}
         await self._send_response(writer, response)
@@ -407,6 +432,7 @@ class DebugServer:
         self, command: Dict[str, Any], writer: asyncio.StreamWriter
     ) -> None:
         """Handle get_compiled_program command."""
+        print("[DEBUG] DebugServer._handle_get_compiled_program - entering handler")
         if self._program:
             compiled_file_path = getattr(
                 self._program, "_get_compiled_file_name", lambda: None
@@ -431,7 +457,11 @@ class DebugServer:
         self, command: Dict[str, Any], writer: asyncio.StreamWriter
     ) -> None:
         """Handle get_variables command."""
+        print("[DEBUG] DebugServer._handle_get_variables - entering handler")
         variables = self._get_current_variables()
+        print(
+            f"[DEBUG] DebugServer._handle_get_variables - retrieved {len(variables)} variables"
+        )
         response = {
             "type": "variables_response",
             "success": True,
@@ -444,7 +474,11 @@ class DebugServer:
         self, command: Dict[str, Any], writer: asyncio.StreamWriter
     ) -> None:
         """Handle get_call_stack command."""
+        print("[DEBUG] DebugServer._handle_get_call_stack - entering handler")
         call_stack = self._get_current_call_stack()
+        print(
+            f"[DEBUG] DebugServer._handle_get_call_stack - retrieved call stack with {len(call_stack)} frames"
+        )
         response = {
             "type": "call_stack_response",
             "success": True,
@@ -502,13 +536,22 @@ class DebugServer:
             return agent.state.call_stack.to_dict()
         return []
 
-    def should_pause_at_line(self, source_line_number: int) -> bool:
+    def should_pause_at_line(
+        self, source_line_number: int, file_path: str = None
+    ) -> bool:
         """Check if execution should pause at the given file and line."""
-        return source_line_number in self._breakpoints
+        if file_path:
+            return source_line_number in self._breakpoints.get(file_path, set())
 
-    def has_breakpoint(self, source_line_number: int) -> bool:
+        # Check all files if no specific file provided
+        for file_breakpoints in self._breakpoints.values():
+            if source_line_number in file_breakpoints:
+                return True
+        return False
+
+    def has_breakpoint(self, source_line_number: int, file_path: str = None) -> bool:
         """Check if there's a breakpoint for the given step or location."""
-        return self.should_pause_at_line(source_line_number)
+        return self.should_pause_at_line(source_line_number, file_path)
 
     def get_breakpoints(self, file_path: str = None) -> Dict[str, Set[int]]:
         """Get all breakpoints or breakpoints for a specific file."""
@@ -522,10 +565,16 @@ class DebugServer:
 
     def _on_event(self, event: Any) -> None:
         """Handle an event by sending it to all connected clients."""
+        print(
+            f"[DEBUG] DebugServer._on_event - handling event of type {type(event).__name__}"
+        )
         # Convert event to JSON and broadcast to all clients
         try:
             event_data = self._event_to_dict(event)
             if event_data:
+                print(
+                    f"[DEBUG] DebugServer._on_event - broadcasting event type: {event_data.get('type')}"
+                )
                 asyncio.create_task(self._broadcast_event(event_data))
         except Exception as e:
             self.logger.error(f"Error handling event: {e}")
