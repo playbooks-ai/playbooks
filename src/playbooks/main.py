@@ -17,7 +17,10 @@ class Playbooks:
         session_id: str = None,
     ):
         self.program_paths = program_paths
-        self.llm_config = llm_config or LLMConfig()
+        if llm_config is None:
+            self.llm_config = LLMConfig()
+        else:
+            self.llm_config = llm_config.copy()
         self.session_id = session_id or str(uuid.uuid4())
 
         # Load files

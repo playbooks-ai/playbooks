@@ -13,6 +13,7 @@ from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
 from .debug.server import DebugServer
 from .event_bus import EventBus
+from .events import ProgramTerminatedEvent
 from .exceptions import ExecutionFinished, KlassNotFoundError
 from .meetings import MeetingRegistry
 from .message import Message, MessageType
@@ -39,6 +40,27 @@ class AsyncAgentRuntime:
 
         self.running_agents[agent.id] = True
 
+        # Register agent with debug server if available
+        if self.program._debug_server:
+            agent_name = str(agent)
+            thread_id = self.program._debug_server.register_agent(
+                agent_id=agent.id, agent_name=agent_name, agent_type=agent.klass
+            )
+            # Store thread_id in agent for later reference
+            agent._debug_thread_id = thread_id
+
+            # Emit agent started event
+            from .events import AgentStartedEvent
+
+            event = AgentStartedEvent(
+                agent_id=agent.id,
+                agent_name=agent_name,
+                thread_id=thread_id,
+                agent_type=agent.klass,
+            )
+            self.program.event_bus.publish(event)
+            self.program._debug_server.update_agent_status(agent.id, "running")
+
         # Create and start asyncio task
         task = asyncio.create_task(self._agent_main(agent))
         self.agent_tasks[agent.id] = task
@@ -52,6 +74,25 @@ class AsyncAgentRuntime:
 
         # Signal shutdown
         self.running_agents[agent_id] = False
+
+        # Emit agent stopped event if debug server is available
+        if self.program._debug_server:
+            agent = self.program.agents_by_id.get(agent_id)
+            if agent:
+                agent_name = str(agent)
+                thread_id = getattr(agent, "_debug_thread_id", 1)
+
+                from .events import AgentStoppedEvent
+
+                event = AgentStoppedEvent(
+                    agent_id=agent_id,
+                    agent_name=agent_name,
+                    thread_id=thread_id,
+                    reason="normal",
+                )
+                self.program.event_bus.publish(event)
+                self.program._debug_server.update_agent_status(agent_id, "stopped")
+                self.program._debug_server.unregister_agent(agent_id)
 
         # Cancel the task
         if agent_id in self.agent_tasks:
@@ -83,14 +124,49 @@ class AsyncAgentRuntime:
 
         except ExecutionFinished as e:
             # Signal that execution is finished
-            self.program.set_execution_finished()
-            print(f"Agent {agent.id} {EXECUTION_FINISHED}: {e}")
-            raise e
+            self.program.set_execution_finished(reason="normal", exit_code=0)
+            print(f"Agent {str(agent)} {EXECUTION_FINISHED}: {e}")
+            # Don't re-raise ExecutionFinished to allow proper cleanup
+            return
         except asyncio.CancelledError:
-            print(f"Agent {agent.id} was cancelled")
+            print(f"Agent {str(agent)} stopped")
+
+            # Emit agent stopped event for cancelled agents
+            if self.program._debug_server:
+                agent_name = str(agent)
+                thread_id = getattr(agent, "_debug_thread_id", 1)
+
+                from .events import AgentStoppedEvent
+
+                event = AgentStoppedEvent(
+                    agent_id=agent.id,
+                    agent_name=agent_name,
+                    thread_id=thread_id,
+                    reason="cancelled",
+                )
+                self.program.event_bus.publish(event)
+                self.program._debug_server.update_agent_status(agent.id, "stopped")
+
             raise
         except Exception as e:
             print(f"Fatal error in agent {agent.id}: {e}")
+
+            # Emit agent stopped event for error cases
+            if self.program._debug_server:
+                agent_name = str(agent)
+                thread_id = getattr(agent, "_debug_thread_id", 1)
+
+                from .events import AgentStoppedEvent
+
+                event = AgentStoppedEvent(
+                    agent_id=agent.id,
+                    agent_name=agent_name,
+                    thread_id=thread_id,
+                    reason="error",
+                )
+                self.program.event_bus.publish(event)
+                self.program._debug_server.update_agent_status(agent.id, "error")
+
             raise
         finally:
             # Cleanup agent resources
@@ -109,6 +185,9 @@ class ProgramAgentsCommunicationMixin:
         meeting_id: str = None,
     ):
         """Routes a message to receiver agent(s) via the runtime."""
+        print(
+            f"[DEBUG] Program.route_message: {sender_id} -> {receiver_spec} -> {message}"
+        )
         recipient_id = SpecUtils.extract_agent_id(receiver_spec)
         recipient = self.agents_by_id.get(recipient_id)
         recipient_klass = recipient.klass if recipient else None
@@ -333,18 +412,27 @@ class Program(ProgramAgentsCommunicationMixin):
             # Agent threads are designed to run indefinitely until this exception
             await self.execution_finished_event.wait()
         except ExecutionFinished:
-            self.set_execution_finished()
+            self.set_execution_finished(reason="normal", exit_code=0)
+        except Exception as e:
+            print(f"Unexpected error in run_till_exit: {e}")
+            self.set_execution_finished(reason="error", exit_code=1)
+            raise
         finally:
             await self.shutdown()
 
-    def set_execution_finished(self):
+    def set_execution_finished(self, reason: str = "normal", exit_code: int = 0):
         self.execution_finished = True
         if hasattr(self, "execution_finished_event"):
             self.execution_finished_event.set()
+        if self.event_bus:
+            termination_event = ProgramTerminatedEvent(
+                reason=reason, exit_code=exit_code
+            )
+            self.event_bus.publish(termination_event)
 
     async def shutdown(self):
         """Shutdown all agents and clean up resources."""
-        self.set_execution_finished()
+        self.set_execution_finished(reason="normal", exit_code=0)
 
         # Stop all agent tasks via runtime
         await self.runtime.stop_all_agents()
@@ -370,10 +458,8 @@ class Program(ProgramAgentsCommunicationMixin):
             # Store reference to this program in the debug server
             self._debug_server.set_program(self)
 
-            # Register all agents' buses with the debug server
-            for agent in self.agents:
-                if hasattr(agent, "state") and hasattr(agent.state, "event_bus"):
-                    self._debug_server.register_bus(agent.state.event_bus)
+            # Register the program's event bus with the debug server
+            self._debug_server.register_bus(self.event_bus)
 
             # Emit compiled program content for debugging
             self._emit_compiled_program_event()
@@ -381,8 +467,12 @@ class Program(ProgramAgentsCommunicationMixin):
     async def shutdown_debug_server(self) -> None:
         """Shutdown the debug server if it's running."""
         if self._debug_server:
-            await self._debug_server.shutdown()
-            self._debug_server = None
+            try:
+                await self._debug_server.shutdown()
+            except Exception as e:
+                print(f"Error shutting down debug server: {e}")
+            finally:
+                self._debug_server = None
 
     # Meeting Management Methods
 

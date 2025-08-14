@@ -18,6 +18,10 @@ from .llm_config import LLMConfig
 # Configure litellm based on environment variable
 litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
 litellm.drop_params = True
+api_base = os.getenv("LLM_API_BASE")
+if api_base:
+    litellm.api_base = api_base
+# litellm._turn_on_debug()
 
 # Initialize cache if enabled
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"

@@ -32,6 +32,19 @@ class InstructionPointer:
         self.source_line_number = source_line_number
         self.step = step
 
+    def copy(self) -> "InstructionPointer":
+        return InstructionPointer(
+            self.playbook,
+            self.line_number,
+            self.source_line_number,
+            self.step,
+        )
+
+    def increment_instruction_pointer(self) -> None:
+        # TODO: this is a hack to advance the instruction pointer
+        self.line_number = str(int(self.line_number) + 1)
+        self.source_line_number = self.source_line_number + 1
+
     def to_compact_str(self) -> str:
         compact_str = (
             self.playbook

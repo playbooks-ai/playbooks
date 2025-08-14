@@ -7,10 +7,23 @@ Provides a simple terminal interface for communicating with AI agents.
 import argparse
 import asyncio
 import functools
+import os
+import select
 import sys
 import uuid
 from pathlib import Path
 from typing import Callable, List
+
+# Platform-specific imports for stdin clearing
+try:
+    import termios
+except ImportError:
+    termios = None
+
+try:
+    import msvcrt
+except ImportError:
+    msvcrt = None
 
 import litellm
 from rich.console import Console
@@ -32,6 +45,42 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 console = Console()
 
 
+def clear_stdin():
+    """Clear any pending input from stdin buffer.
+
+    This prevents pre-filled input when prompting the user.
+    Uses platform-specific methods for optimal clearing.
+    """
+    try:
+        if os.name == "nt" and msvcrt is not None:  # Windows
+            # Clear Windows console input buffer
+            while msvcrt.kbhit():
+                msvcrt.getch()
+        else:  # Unix/Linux/macOS
+            # Use termios for aggressive clearing if available
+            if termios is not None:
+                try:
+                    termios.tcflush(sys.stdin, termios.TCIFLUSH)
+                    return  # Success, no need for fallback
+                except (OSError, AttributeError):
+                    pass  # Fall through to select-based approach
+
+            # Fallback: use select to check and clear available input
+            if hasattr(select, "select"):
+                # Check if there's input available without blocking
+                if select.select([sys.stdin], [], [], 0.0)[0]:
+                    # Read and discard available input
+                    try:
+                        while select.select([sys.stdin], [], [], 0.0)[0]:
+                            sys.stdin.read(1)
+                    except (OSError, IOError):
+                        pass
+
+    except Exception:
+        # Ignore all errors - stdin clearing is a best-effort operation
+        pass
+
+
 class PubSub:
     """Simple publish-subscribe mechanism for event handling."""
 
@@ -51,11 +100,12 @@ class PubSub:
 class SessionLogWrapper:
     """Wrapper around session_log that publishes updates."""
 
-    def __init__(self, session_log, pubsub, verbose=False, agent=None):
+    def __init__(self, session_log, pubsub, verbose=False, agent=None, stream=True):
         self._session_log = session_log
         self._pubsub = pubsub
         self.verbose = verbose
         self.agent = agent
+        self.stream_enabled = stream
         self.current_streaming_panel = None
         self.streaming_content = ""
         self.is_streaming = False
@@ -81,20 +131,29 @@ class SessionLogWrapper:
         self.streaming_content = ""
         self.is_streaming = True
 
-        # Print agent name to show streaming is starting
-        console.print(f"\n[green]{agent_name}:[/green] ", end="")
+        if self.stream_enabled:
+            # Print agent name to show streaming is starting
+            console.print(f"\n[green]{agent_name}:[/green] ", end="")
 
     async def stream_say_update(self, content: str):
         """Add content to the current streaming Say() message."""
         self.streaming_content += content
-        # Simple streaming display - just print the new content
-        print(content, end="", flush=True)
+        if self.stream_enabled:
+            # Simple streaming display - just print the new content
+            print(content, end="", flush=True)
 
     async def complete_streaming_say(self):
         """Complete the current streaming Say() message."""
         if self.is_streaming:
-            # Print a new line to finish the streaming output
-            console.print()
+            if self.stream_enabled:
+                # Print a new line to finish the streaming output
+                console.print()
+            else:
+                # Non-streaming mode: display the complete message now
+                agent_name = self.agent.klass if self.agent else "Agent"
+                console.print(
+                    f"\n[green]{agent_name}:[/green] {self.streaming_content}"
+                )
 
             # Reset streaming state
             self.is_streaming = False
@@ -119,6 +178,8 @@ async def patched_wait_for_message(self, source_agent_id: str):
         if not human_messages:
             # No human messages waiting, show prompt
             console.print()  # Add a newline for spacing
+            # Clear stdin buffer to prevent pre-filled input
+            await asyncio.to_thread(clear_stdin)
             user_input = await asyncio.to_thread(
                 console.input, "[bold yellow]User:[/bold yellow] "
             )
@@ -174,26 +235,17 @@ async def patched_route_message(
     # Extract receiver info
     from playbooks.utils.spec_utils import SpecUtils
 
+    print(f"[DEBUG] patched_route_message: {sender_id} -> {receiver_spec} -> {message}")
+
     recipient_id = SpecUtils.extract_agent_id(receiver_spec)
 
-    # Skip display for:
-    # 1. Messages from human (already handled)
-    # 2. EOM markers
-    # 3. Messages TO human (Say() messages are already streamed)
-    # 4. Non-direct messages
-    if (
-        sender_id != "human"
-        and message != EOM
-        and recipient_id != "human"
-        and message_type == MessageType.DIRECT
-    ):
-        recipient = self.agents_by_id.get(recipient_id)
-        recipient_klass = recipient.klass if recipient else "Unknown"
+    recipient = self.agents_by_id.get(recipient_id)
+    recipient_klass = recipient.klass if recipient else "Unknown"
 
-        # Display agent-to-agent message with formatting
-        console.print(
-            f"\n[bold magenta]💬 Message[/bold magenta]: [purple]{sender_klass}({sender_id})[/purple] → [purple]{recipient_klass}({recipient_id})[/purple]: {message}"
-        )
+    # Display agent-to-agent message with formatting
+    console.print(
+        f"\n[bold magenta]💬 Message[/bold magenta]: [purple]{sender_klass}({sender_id})[/purple] → [purple]{recipient_klass}({recipient_id})[/purple]: {message}"
+    )
 
     # Call the original method
     if original_route_message:
@@ -216,6 +268,7 @@ async def main(
     debug_port: int = 7529,
     wait_for_client: bool = False,
     stop_on_entry: bool = False,
+    stream: bool = True,
 ):
     """
     Playbooks application host for agent chat. You can execute a playbooks program within this application container.
@@ -233,6 +286,7 @@ async def main(
         debug_port: Port for the debug server
         wait_for_client: Whether to wait for a client to connect before starting
         stop_on_entry: Whether to stop at the beginning of playbook execution
+        stream: Whether to stream the output
 
     """
     # print(
@@ -268,11 +322,13 @@ async def main(
     # Wrap the session_log with the custom wrapper for all agents
     for agent in playbooks.program.agents:
         if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-            wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose, agent)
+            wrapper = SessionLogWrapper(
+                agent.state.session_log, pubsub, verbose, agent, stream
+            )
             agent.state.session_log = wrapper
 
             # Add streaming methods to the agent if it's not a human agent
-            if hasattr(agent, "klass") and agent.klass != "human":
+            if stream and hasattr(agent, "klass") and agent.klass != "human":
                 agent.start_streaming_say = wrapper.start_streaming_say
                 agent.stream_say_update = wrapper.stream_say_update
                 agent.complete_streaming_say = wrapper.complete_streaming_say
@@ -287,6 +343,18 @@ async def main(
         )
         await playbooks.program.start_debug_server(host=debug_host, port=debug_port)
 
+        # Set stop_on_entry flag in debug server BEFORE waiting for client
+        if stop_on_entry:
+            # print(
+            #     "[DEBUG] agent_chat.main - stop_on_entry=True, setting up debug server"
+            # )
+            # print("[DEBUG] agent_chat.main - calling set_stop_on_entry(True)")
+            playbooks.program._debug_server.set_stop_on_entry(True)
+            # print("[DEBUG] agent_chat.main - stop_on_entry setup complete")
+        else:
+            # print("[DEBUG] agent_chat.main - stop_on_entry=False, setting to False explicitly")
+            playbooks.program._debug_server.set_stop_on_entry(False)
+
         # If wait_for_client is True, pause until a client connects
         if wait_for_client:
             console.print(
@@ -295,20 +363,6 @@ async def main(
             # Wait for a client to connect using the debug server's wait_for_client method
             await playbooks.program._debug_server.wait_for_client()
             console.print("[green]Debug client connected.[/green]")
-
-        # Set stop_on_entry flag in debug server
-        if stop_on_entry:
-            # print(
-            #     "[DEBUG] agent_chat.main - stop_on_entry=True, setting up debug server"
-            # )
-            # print("[DEBUG] agent_chat.main - clearing _continue_event")
-            playbooks.program._debug_server._continue_event.clear()
-            # print("[DEBUG] agent_chat.main - calling set_stop_on_entry(True)")
-            playbooks.program._debug_server.set_stop_on_entry(True)
-            # print("[DEBUG] agent_chat.main - stop_on_entry setup complete")
-        else:
-            # print("[DEBUG] agent_chat.main - stop_on_entry=False, no special setup")
-            pass
 
     # Start the program
     try:
@@ -370,6 +424,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Stop at the beginning of playbook execution",
     )
+    parser.add_argument(
+        "--stream",
+        type=lambda x: x.lower() in ["true", "1", "yes"],
+        default=True,
+        help="Enable/disable streaming output (default: True). Use --stream=False for buffered output",
+    )
     args = parser.parse_args()
 
     try:
@@ -382,6 +442,7 @@ if __name__ == "__main__":
                 args.debug_port,
                 args.wait_for_client,
                 args.stop_on_entry,
+                args.stream,
             )
         )
     except KeyboardInterrupt:

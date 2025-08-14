@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "playbooks"
-version = "0.4.0"
+version = "0.5.0"
 description = "A framework for creating AI applications and agents using natural language programming"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 license = "MIT"
@@ -12,7 +12,6 @@ playbooks = "playbooks.cli:main"
 
 [tool.poetry.dependencies]
 python = "^3.12"
-rich = "^14.0.0"
 dotenv = "^0.9.9"
 litellm = "^1.65.0"
 diskcache = "^5.6.3"
@@ -22,6 +21,12 @@ markdown-it-py = "^3.0.0"
 python-frontmatter = "^1.1.0"
 pytest-asyncio = "^0.26.0"
 fastmcp = "^2.0.0"
+rich = "^14.1.0"
+fastapi = "^0.116.1"
+orjson = "^3.11.1"
+apscheduler = "^3.11.0"
+fastapi-sso = "^0.18.0"
+websockets = "^15.0.1"
 
 
 [tool.poetry.group.dev.dependencies]

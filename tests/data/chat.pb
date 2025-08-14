@@ -14,3 +14,4 @@ When the agent starts
   - Say something to the user in 1-5 sentences taking into account what user said and the conversation history. Don't deviate from your personality. Ensure a natural conversation flow without becoming repetitive.
   - Wait for the user to say something
 - Say goodbye to the user
+- End program

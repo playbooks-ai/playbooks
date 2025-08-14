@@ -38,7 +38,8 @@ class Compiler:
             llm_config: Configuration for the language model
             use_cache: Whether to use compilation caching
         """
-        self.llm_config = llm_config
+        self.llm_config = llm_config.copy()
+        self.llm_config.model = os.getenv("COMPILER_MODEL", self.llm_config.model)
         self.use_cache = use_cache
         self.playbooks_version = self._get_playbooks_version()
         self.prompt_path = os.path.join(
@@ -111,7 +112,8 @@ class Compiler:
 
         if len(agents) == 1:
             # Single agent - compile just the agent
-            console.print(f"[dim pink]Compiling {file_path}[/dim pink]")
+            if not file_path.startswith("__"):  # internal like __builtin_playbooks.pb
+                console.print(f"[dim pink]Compiling {file_path}[/dim pink]")
             compiled = self._compile_agent(agents[0]["content"])
         else:
             # Multiple agents - compile each independently

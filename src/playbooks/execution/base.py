@@ -11,22 +11,22 @@ from ..utils.expression_engine import (
 )
 
 if TYPE_CHECKING:
-    from ..agents.base_agent import Agent
-    from ..playbook.llm_playbook import LLMPlaybook
+    from ..agents.local_ai_agent import LocalAIAgent
+    from ..playbook import LLMPlaybook
 
 
 class LLMExecution(ABC):
     """Base class for LLM execution strategies."""
 
-    def __init__(self, agent: "Agent", playbook: "LLMPlaybook"):
+    def __init__(self, agent: "LocalAIAgent", playbook: "LLMPlaybook"):
         """Initialize the execution strategy.
 
         Args:
             agent: The agent executing the playbook
             playbook: The LLM playbook to execute
         """
-        self.agent = agent
-        self.playbook = playbook
+        self.agent: "LocalAIAgent" = agent
+        self.playbook: "LLMPlaybook" = playbook
 
     async def resolve_description_placeholders(
         self, description: str, *args, **kwargs

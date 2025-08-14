@@ -8,6 +8,7 @@ import argparse
 import asyncio
 import importlib
 import sys
+import warnings
 from typing import List
 
 import frontmatter
@@ -18,6 +19,15 @@ from .compiler import Compiler
 from .exceptions import ProgramLoadError
 from .loader import Loader
 from .utils.llm_config import LLMConfig
+
+# Suppress deprecation warnings from external libraries
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="httpx")
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="litellm")
+warnings.filterwarnings("ignore", message="Accessing the 'model_fields' attribute")
+warnings.filterwarnings("ignore", message="The `dict` method is deprecated")
+warnings.filterwarnings(
+    "ignore", message="Use 'content=<...>' to upload raw bytes/text content"
+)
 
 console = Console()
 
@@ -60,7 +70,7 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
     compiled_results = compiler.process_files(program_files)
 
     try:
-        for file_path, frontmatter_dict, content, is_compiled in compiled_results:
+        for _, frontmatter_dict, content, _ in compiled_results:
             # Add frontmatter back to content if present
             if frontmatter_dict:
                 fm_post = frontmatter.Post(content, **frontmatter_dict)
@@ -90,6 +100,7 @@ async def run_application(
     application_module: str,
     program_paths: List[str],
     verbose: bool = False,
+    stream: bool = True,
     debug: bool = False,
     debug_host: str = "127.0.0.1",
     debug_port: int = 7529,
@@ -123,6 +134,7 @@ async def run_application(
         await module.main(
             program_paths=program_paths,
             verbose=verbose,
+            stream=stream,
             debug=debug,
             debug_host=debug_host,
             debug_port=debug_port,
@@ -173,6 +185,12 @@ def main():
     )
     run_parser.add_argument(
         "-v", "--verbose", action="store_true", help="Print the session log"
+    )
+    run_parser.add_argument(
+        "--stream",
+        type=lambda x: x.lower() in ["true", "1", "yes"],
+        default=True,
+        help="Enable/disable streaming output (default: True). Use --stream=False for buffered output",
     )
     run_parser.add_argument(
         "--debug", action="store_true", help="Start the debug server"
@@ -226,6 +244,7 @@ def main():
                     args.application,
                     args.program_paths,
                     verbose=args.verbose,
+                    stream=args.stream,
                     debug=args.debug,
                     debug_host=args.debug_host,
                     debug_port=args.debug_port,

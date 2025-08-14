@@ -48,3 +48,7 @@ class LLMConfig:
     def to_dict(self) -> dict:
         """Convert configuration to a dictionary."""
         return {"model": self.model, "api_key": self.api_key}
+
+    def copy(self) -> "LLMConfig":
+        """Create a copy of the configuration."""
+        return LLMConfig(model=self.model, api_key=self.api_key)

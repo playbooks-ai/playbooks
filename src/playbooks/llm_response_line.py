@@ -21,7 +21,7 @@ class LLMResponseLine:
         self.event_bus = event_bus
         self.agent = agent
 
-        self.steps = []
+        self.steps: List[InstructionPointer] = []
         self.playbook_calls: List[PlaybookCall] = []
         self.playbook_finished = False
         self.wait_for_user_input = False
@@ -42,8 +42,7 @@ class LLMResponseLine:
 
         self.steps: List[InstructionPointer] = []
         for step in steps:
-            ip = self.agent.parse_instruction_pointer(step)
-            self.steps.append(ip)
+            self.steps.append(self.agent.parse_instruction_pointer(step))
 
         # Extract Var metadata, e.g., `Var[$user_email, "test@example.com"]` or `Var[$pin, 1234]`
         # Captures the variable name (with $) and its value, parsing the value as a Python expression

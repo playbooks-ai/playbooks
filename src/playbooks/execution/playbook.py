@@ -109,6 +109,7 @@ class PlaybookLLMExecution(LLMExecution):
             self.agent.state.call_stack.peek(),
             self.agent.state.call_stack.peek(),
             self.agent.state.event_bus,
+            self.agent.id,
         )
 
         while not done:
@@ -161,31 +162,46 @@ class PlaybookLLMExecution(LLMExecution):
                     )
 
                 for i in range(len(line.steps)):
+                    print(f"[DEBUG] step {i}: {line.steps[i]}")
                     step = line.steps[i]
                     if i == len(line.steps) - 1:
-                        next_step = step
+                        next_step = step.copy()
+                        print(f"[DEBUG] next_step: {next_step}")
                         self.agent.state.call_stack.advance_instruction_pointer(
                             next_step
                         )
+                        print(
+                            f"[DEBUG] Call handle_execution_start with step {step}, next_step {next_step}"
+                        )
                         await self.debug_handler.handle_execution_start(
-                            step, step, self.agent.state.event_bus
+                            step, next_step, self.agent.state.event_bus, self.agent.id
                         )
                     else:
                         next_step = step
                         self.agent.state.call_stack.advance_instruction_pointer(
                             next_step
                         )
+                        print(
+                            f"[DEBUG] Call handle_execution_start with step {step}, next_step {next_step}"
+                        )
                         await self.debug_handler.handle_execution_start(
-                            step, next_step, self.agent.state.event_bus
+                            step, next_step, self.agent.state.event_bus, self.agent.id
                         )
 
                 # Replace the current call stack frame with the last executed step
                 if line.steps:
-                    last_step = line.steps[-1]
+                    last_step = line.steps[-1].copy()
 
+                    print(
+                        f"[DEBUG] Call handle_breakpoint with last_step {last_step}, next_step {next_step}"
+                    )
                     # Check for breakpoints
                     await self.debug_handler.handle_breakpoint(
-                        last_step.source_line_number, self.agent.state.event_bus
+                        source_line_number=last_step.source_line_number,
+                        instruction_pointer=self.agent.state.call_stack.peek(),
+                        next_instruction_pointer=next_step,
+                        event_bus=self.agent.state.event_bus,
+                        agent_id=self.agent.id,
                     )
 
                     # Publish line executed event
@@ -207,6 +223,7 @@ class PlaybookLLMExecution(LLMExecution):
                         if self.agent.program.execution_finished:
                             break
 
+                        print(f"[DEBUG] playbook_call: {playbook_call}")
                         if playbook_call.playbook_klass == "Return":
                             if playbook_call.args:
                                 return_value = playbook_call.args[0]

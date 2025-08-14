@@ -12,11 +12,17 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
 from ..event_bus import EventBus
 from ..events import (
+    AgentPausedEvent,
+    AgentResumedEvent,
+    AgentStartedEvent,
+    AgentStoppedEvent,
+    AgentVariableUpdateEvent,
     BreakpointHitEvent,
     ExecutionPausedEvent,
     LineExecutedEvent,
     PlaybookEndEvent,
     PlaybookStartEvent,
+    ProgramTerminatedEvent,
     StepCompleteEvent,
     VariableUpdateEvent,
 )
@@ -48,6 +54,19 @@ class DebugServer:
         self._step_mode: Optional[str] = None  # "next", "step_in", "step_out"
         self._step_initial_frame: Optional[Dict[str, Any]] = None
         self._stop_on_entry: bool = False
+
+        # Agent and thread management
+        self._agents: Dict[str, Dict[str, Any]] = {}  # agent_id -> agent info
+        self._thread_counter: int = 1  # Start thread IDs at 1
+        self._thread_to_agent: Dict[int, str] = {}  # thread_id -> agent_id
+        self._agent_to_thread: Dict[str, int] = {}  # agent_id -> thread_id
+        self._agent_step_modes: Dict[str, Optional[str]] = {}  # per-agent step modes
+        self._agent_continue_events: Dict[str, asyncio.Event] = (
+            {}
+        )  # per-agent continue events
+        self._agent_step_initial_frames: Dict[str, Optional[Dict[str, Any]]] = (
+            {}
+        )  # per-agent initial frames
 
         # Synchronization
         self._continue_event = asyncio.Event()
@@ -86,6 +105,130 @@ class DebugServer:
         print(f"[DEBUG] DebugServer.set_stop_on_entry called with: {stop_on_entry}")
         self.logger.info(f"Stop on entry set to: {stop_on_entry}")
 
+    def register_agent(self, agent_id: str, agent_name: str, agent_type: str) -> int:
+        """Register an agent and assign it a thread ID."""
+        if agent_id in self._agent_to_thread:
+            # Agent already registered, return existing thread ID
+            return self._agent_to_thread[agent_id]
+
+        thread_id = self._thread_counter
+        self._thread_counter += 1
+
+        self._agents[agent_id] = {
+            "agent_id": agent_id,
+            "agent_name": agent_name,
+            "agent_type": agent_type,
+            "thread_id": thread_id,
+            "status": "starting",
+            "variables": {},
+            "call_stack": [],
+        }
+
+        self._thread_to_agent[thread_id] = agent_id
+        self._agent_to_thread[agent_id] = thread_id
+        self._agent_step_modes[agent_id] = None
+        self._agent_continue_events[agent_id] = asyncio.Event()
+
+        self.logger.info(
+            f"Registered agent {agent_id} ({agent_name}) as thread {thread_id}"
+        )
+        return thread_id
+
+    def unregister_agent(self, agent_id: str) -> None:
+        """Unregister an agent and clean up its resources."""
+        if agent_id not in self._agent_to_thread:
+            return
+
+        thread_id = self._agent_to_thread[agent_id]
+
+        # Clean up mappings
+        del self._agents[agent_id]
+        del self._thread_to_agent[thread_id]
+        del self._agent_to_thread[agent_id]
+        del self._agent_step_modes[agent_id]
+        del self._agent_continue_events[agent_id]
+        if agent_id in self._agent_step_initial_frames:
+            del self._agent_step_initial_frames[agent_id]
+
+        self.logger.info(f"Unregistered agent {agent_id} (thread {thread_id})")
+
+    def get_agent_threads(self) -> List[Dict[str, Any]]:
+        """Get all registered agent threads."""
+        threads = []
+        for agent_id, agent_info in self._agents.items():
+            status_suffix = (
+                f" ({agent_info['status']})"
+                if agent_info["status"] != "running"
+                else ""
+            )
+            thread_name = f"{agent_info['agent_name']}{status_suffix}"
+            threads.append(
+                {
+                    "id": agent_info["thread_id"],
+                    "name": thread_name,
+                    "agent_id": agent_id,
+                    "status": agent_info["status"],
+                }
+            )
+        return threads
+
+    def update_agent_status(self, agent_id: str, status: str) -> None:
+        """Update an agent's status."""
+        if agent_id in self._agents:
+            self._agents[agent_id]["status"] = status
+            self.logger.debug(f"Updated agent {agent_id} status to {status}")
+
+    def get_agent_by_thread(self, thread_id: int) -> Optional[str]:
+        """Get agent ID by thread ID."""
+        return self._thread_to_agent.get(thread_id)
+
+    def get_thread_by_agent(self, agent_id: str) -> Optional[int]:
+        """Get thread ID by agent ID."""
+        return self._agent_to_thread.get(agent_id)
+
+    def update_agent_execution_state(
+        self,
+        agent_id: str,
+        call_stack: List[Dict[str, Any]] = None,
+        variables: Dict[str, Any] = None,
+    ) -> None:
+        """Update an agent's execution state (call stack and variables)."""
+        if agent_id not in self._agents:
+            return
+
+        if call_stack is not None:
+            self._agents[agent_id]["call_stack"] = call_stack
+
+        if variables is not None:
+            self._agents[agent_id]["variables"] = variables
+
+        self.logger.debug(f"Updated execution state for agent {agent_id}")
+
+    def update_agent_from_program_state(self, agent_id: str) -> None:
+        """Update agent execution state from the program's current state."""
+        if not self._program or agent_id not in self._agents:
+            return
+
+        # Find the agent in the program
+        agent = self._program.agents_by_id.get(agent_id)
+        if not agent:
+            return
+
+        # Update call stack if available
+        if hasattr(agent, "state") and hasattr(agent.state, "call_stack"):
+            call_stack = agent.state.call_stack.to_dict()
+            self._agents[agent_id]["call_stack"] = call_stack
+
+        # Update variables if available
+        if hasattr(agent, "state") and hasattr(agent.state, "variables"):
+            variables = agent.state.variables.to_dict()
+            # Also add last_llm_response if available
+            if hasattr(agent.state, "last_llm_response"):
+                variables["last_llm_response"] = agent.state.last_llm_response
+            self._agents[agent_id]["variables"] = variables
+
+        self.logger.debug(f"Updated agent {agent_id} from program state")
+
     async def start(self) -> None:
         """Start the debug server."""
         try:
@@ -99,18 +242,77 @@ class DebugServer:
             self.logger.error(f"Failed to start debug server: {e}")
             raise
 
+    async def signal_program_termination(
+        self, reason: str = "normal", exit_code: int = 0
+    ) -> None:
+        """Signal that the program has terminated to all connected clients."""
+        print(
+            f"[DEBUG] Signaling program termination: {reason}, exit_code: {exit_code}"
+        )
+        termination_event = {
+            "type": "program_terminated",
+            "reason": reason,
+            "exit_code": exit_code,
+        }
+        await self._broadcast_event(termination_event)
+
+        # Give clients a moment to process the termination event
+        await asyncio.sleep(0.1)
+
+        # Force close all client connections after termination signal
+        print(f"[DEBUG] Closing {len(self.clients)} client connections")
+        disconnected_clients = []
+        for client in self.clients:
+            try:
+                # Send explicit disconnect notification
+                disconnect_event = {
+                    "type": "disconnect",
+                    "reason": "program_terminated",
+                }
+                message = json.dumps(disconnect_event) + "\n"
+                client.write(message.encode())
+                await client.drain()
+
+                # Close the connection
+                client.close()
+                await client.wait_closed()
+                disconnected_clients.append(client)
+                print("[DEBUG] Client connection closed successfully")
+            except Exception as e:
+                print(f"[DEBUG] Error closing client connection: {e}")
+                disconnected_clients.append(client)
+
+        # Remove all disconnected clients
+        for client in disconnected_clients:
+            if client in self.clients:
+                self.clients.remove(client)
+
     async def shutdown(self) -> None:
         """Shutdown the debug server."""
+        print("[DEBUG] DebugServer.shutdown called")
+
+        # Only signal termination if we still have clients (avoid double signaling)
+        if self.clients:
+            await self.signal_program_termination("normal", 0)
+
         if self.server:
+            print("[DEBUG] Closing debug server")
             self.server.close()
             await self.server.wait_closed()
             self.logger.info("Debug server shutdown")
 
-        # Close all client connections
-        for client in self.clients:
-            client.close()
-            await client.wait_closed()
+        # Ensure all client connections are closed
+        for client in self.clients[
+            :
+        ]:  # Copy list to avoid modification during iteration
+            try:
+                if not client.is_closing():
+                    client.close()
+                    await client.wait_closed()
+            except Exception as e:
+                print(f"[DEBUG] Error closing client during shutdown: {e}")
         self.clients.clear()
+        print("[DEBUG] DebugServer.shutdown completed")
 
     async def wait_for_client(self) -> None:
         """Wait for at least one client to connect."""
@@ -122,6 +324,14 @@ class DebugServer:
         """Wait for a continue command from the debug client."""
         self._continue_event.clear()
         await self._continue_event.wait()
+
+    async def wait_for_continue_agent(self, agent_id: str) -> None:
+        """Wait for a continue command for a specific agent."""
+        if agent_id not in self._agent_continue_events:
+            self._agent_continue_events[agent_id] = asyncio.Event()
+
+        self._agent_continue_events[agent_id].clear()
+        await self._agent_continue_events[agent_id].wait()
 
     def should_pause_for_step(self, current_frame: Dict[str, Any]) -> bool:
         """Check if execution should pause based on step mode."""
@@ -141,7 +351,7 @@ class DebugServer:
             elif self._step_mode == "next":
                 # For step over, we should pause when:
                 # 1. We're in the same frame but on a different line
-                # 2. We've returned to the caller frame
+                # 2. We've returned to the caller frame or a shallower frame
 
                 if self._is_same_frame(current_frame, self._step_initial_frame):
                     # Check if we've moved to a different line
@@ -159,12 +369,19 @@ class DebugServer:
                         )
                         return False
 
-                # Also pause if we've returned to a shallower frame
-                if self._is_caller_frame(current_frame, self._step_initial_frame):
-                    print("Step over: returned to caller, pausing")
+                # Pause if we've returned to the caller frame or any shallower frame
+                current_depth = current_frame.get("depth", 0)
+                initial_depth = self._step_initial_frame.get("depth", 0)
+
+                if current_depth <= initial_depth:
+                    # We're at the same level or shallower than when we started stepping
+                    # This handles both direct returns and cases where we step through multiple frames
+                    print(
+                        f"Step over: returned to same or shallower level ({initial_depth} -> {current_depth}), pausing"
+                    )
                     return True
 
-                print("Step over: different frame, continuing")
+                print("Step over: deeper frame, continuing")
                 return False
 
             elif self._step_mode == "step_out":
@@ -178,6 +395,83 @@ class DebugServer:
             return False
         except Exception as e:
             self.logger.error(f"Error in should_pause_for_step: {e}")
+            # Default to not pausing if there's an error
+            return False
+
+    def should_pause_for_step_agent(
+        self, agent_id: str, current_frame: Dict[str, Any]
+    ) -> bool:
+        """Check if execution should pause based on agent-specific step mode."""
+        try:
+            print(f"[DebugServer] Agent {agent_id} current frame: {current_frame}")
+            step_mode = self._agent_step_modes.get(agent_id)
+            print(f"[DebugServer] Agent {agent_id} step mode: {step_mode}")
+            if not step_mode or not current_frame:
+                return False
+
+            initial_frame = self._agent_step_initial_frames.get(agent_id)
+            print(f"[DebugServer] Agent {agent_id} initial frame: {initial_frame}")
+
+            if step_mode == "step_in":
+                # Always pause on next instruction
+                print(
+                    f"[DebugServer] Agent {agent_id} step in: pausing on next instruction"
+                )
+                return True
+
+            elif step_mode == "next":
+                # For step over, we should pause when:
+                # 1. We're in the same frame but on a different line
+                # 2. We've returned to the caller frame or a shallower frame
+
+                if self._is_same_frame(current_frame, initial_frame):
+                    # Check if we've moved to a different line
+                    current_line = current_frame.get("line_number", 0)
+                    initial_line = (
+                        initial_frame.get("line_number", 0) if initial_frame else 0
+                    )
+
+                    if current_line != initial_line:
+                        print(
+                            f"[DebugServer] Agent {agent_id} step over: same frame, different line ({initial_line} -> {current_line}), pausing"
+                        )
+                        return True
+                    else:
+                        print(
+                            f"[DebugServer] Agent {agent_id} step over: same frame, same line ({current_line}), continuing"
+                        )
+                        return False
+
+                # Pause if we've returned to the caller frame or any shallower frame
+                current_depth = current_frame.get("depth", 0)
+                initial_depth = initial_frame.get("depth", 0) if initial_frame else 0
+
+                if current_depth <= initial_depth:
+                    # We're at the same level or shallower than when we started stepping
+                    # This handles both direct returns and cases where we step through multiple frames
+                    print(
+                        f"[DebugServer] Agent {agent_id} step over: returned to same or shallower level ({initial_depth} -> {current_depth}), pausing"
+                    )
+                    return True
+
+                print(
+                    f"[DebugServer] Agent {agent_id} step over: deeper frame, continuing"
+                )
+                return False
+
+            elif step_mode == "step_out":
+                # Only pause when we've returned to the caller frame
+                should_pause = self._is_caller_frame(current_frame, initial_frame)
+                print(
+                    f"[DebugServer] Agent {agent_id} step out: should pause = {should_pause}"
+                )
+                return should_pause
+
+            return False
+        except Exception as e:
+            self.logger.error(
+                f"Error in should_pause_for_step_agent for {agent_id}: {e}"
+            )
             # Default to not pausing if there's an error
             return False
 
@@ -306,6 +600,8 @@ class DebugServer:
                 await self._handle_get_variables(command, writer)
             elif command_type == "get_call_stack":
                 await self._handle_get_call_stack(command, writer)
+            elif command_type == "get_threads":
+                await self._handle_get_threads(command, writer)
             else:
                 msg = f"Unknown command: {command_type}"
                 print(msg)
@@ -347,11 +643,25 @@ class DebugServer:
     ) -> None:
         """Handle continue command."""
         print("[DEBUG] DebugServer._handle_continue - entering handler")
-        self.clear_step_mode()  # Only clear on continue
-        self._continue_event.set()
-        print(
-            "[DEBUG] DebugServer._handle_continue - cleared step mode and set continue event"
-        )
+        thread_id = command.get("threadId", 1)
+        agent_id = self.get_agent_by_thread(thread_id)
+
+        if agent_id:
+            # Clear step mode for specific agent
+            self._agent_step_modes[agent_id] = None
+            self._agent_step_initial_frames[agent_id] = None
+            if agent_id in self._agent_continue_events:
+                self._agent_continue_events[agent_id].set()
+            print(
+                f"[DEBUG] DebugServer._handle_continue - cleared step mode for agent {agent_id} (thread {thread_id})"
+            )
+        else:
+            # Fallback to global continue
+            self.clear_step_mode()
+            self._continue_event.set()
+            print(
+                "[DEBUG] DebugServer._handle_continue - cleared global step mode and set continue event"
+            )
 
         response = {"type": "response", "command": "continue", "success": True}
         await self._send_response(writer, response)
@@ -364,21 +674,31 @@ class DebugServer:
             self.logger.info("Handling 'next' command")
             print("[DEBUG] DebugServer._handle_next - entering next command handler")
 
+            thread_id = command.get("threadId", 1)
+            agent_id = self.get_agent_by_thread(thread_id)
+
             # Diagnose frame structure
             diagnosis = self.diagnose_frame_structure()
             self.logger.info(f"Frame diagnosis: {diagnosis}")
 
-            self._step_mode = "next"
-            self._step_initial_frame = self._get_current_frame()
-
-            self.logger.info(f"Initial frame captured: {self._step_initial_frame}")
-            print(
-                f"[DEBUG] DebugServer._handle_next - set step_mode=next, initial_frame={self._step_initial_frame}"
-            )
-
-            # Trigger the continue event to release any wait_for_continue()
-            self._continue_event.set()
-            print("[DEBUG] DebugServer._handle_next - triggered continue event")
+            if agent_id:
+                # Set step mode for specific agent
+                self._agent_step_modes[agent_id] = "next"
+                self._agent_step_initial_frames[agent_id] = self._get_current_frame()
+                if agent_id in self._agent_continue_events:
+                    self._agent_continue_events[agent_id].set()
+                print(
+                    f"[DEBUG] DebugServer._handle_next - set step_mode=next for agent {agent_id} (thread {thread_id})"
+                )
+                print(
+                    f"[DEBUG] DebugServer._handle_next - set initial frame for agent {agent_id}: {self._agent_step_initial_frames[agent_id]}"
+                )
+            else:
+                # Fallback to global step mode
+                self._step_mode = "next"
+                self._step_initial_frame = self._get_current_frame()
+                self._continue_event.set()
+                print("[DEBUG] DebugServer._handle_next - set global step_mode=next")
 
             response = {"type": "response", "command": "next", "success": True}
             await self._send_response(writer, response)
@@ -401,12 +721,24 @@ class DebugServer:
     ) -> None:
         """Handle step_in command."""
         print("[DEBUG] DebugServer._handle_step_in - entering step_in command handler")
-        self._step_mode = "step_in"
-        self._step_initial_frame = self._get_current_frame()
+        thread_id = command.get("threadId", 1)
+        agent_id = self.get_agent_by_thread(thread_id)
 
-        # Trigger the continue event to release any wait_for_continue()
-        self._continue_event.set()
-        print("[DEBUG] DebugServer._handle_step_in - triggered continue event")
+        if agent_id:
+            # Set step mode for specific agent
+            self._agent_step_modes[agent_id] = "step_in"
+            self._agent_step_initial_frames[agent_id] = self._get_current_frame()
+            if agent_id in self._agent_continue_events:
+                self._agent_continue_events[agent_id].set()
+            print(
+                f"[DEBUG] DebugServer._handle_step_in - set step_mode=step_in for agent {agent_id} (thread {thread_id})"
+            )
+        else:
+            # Fallback to global step mode
+            self._step_mode = "step_in"
+            self._step_initial_frame = self._get_current_frame()
+            self._continue_event.set()
+            print("[DEBUG] DebugServer._handle_step_in - set global step_mode=step_in")
 
         response = {"type": "response", "command": "step_in", "success": True}
         await self._send_response(writer, response)
@@ -418,12 +750,26 @@ class DebugServer:
         print(
             "[DEBUG] DebugServer._handle_step_out - entering step_out command handler"
         )
-        self._step_mode = "step_out"
-        self._step_initial_frame = self._get_current_frame()
+        thread_id = command.get("threadId", 1)
+        agent_id = self.get_agent_by_thread(thread_id)
 
-        # Trigger the continue event to release any wait_for_continue()
-        self._continue_event.set()
-        print("[DEBUG] DebugServer._handle_step_out - triggered continue event")
+        if agent_id:
+            # Set step mode for specific agent
+            self._agent_step_modes[agent_id] = "step_out"
+            self._agent_step_initial_frames[agent_id] = self._get_current_frame()
+            if agent_id in self._agent_continue_events:
+                self._agent_continue_events[agent_id].set()
+            print(
+                f"[DEBUG] DebugServer._handle_step_out - set step_mode=step_out for agent {agent_id} (thread {thread_id})"
+            )
+        else:
+            # Fallback to global step mode
+            self._step_mode = "step_out"
+            self._step_initial_frame = self._get_current_frame()
+            self._continue_event.set()
+            print(
+                "[DEBUG] DebugServer._handle_step_out - set global step_mode=step_out"
+            )
 
         response = {"type": "response", "command": "step_out", "success": True}
         await self._send_response(writer, response)
@@ -458,9 +804,16 @@ class DebugServer:
     ) -> None:
         """Handle get_variables command."""
         print("[DEBUG] DebugServer._handle_get_variables - entering handler")
-        variables = self._get_current_variables()
+        thread_id = command.get("threadId", 1)
+        agent_id = self.get_agent_by_thread(thread_id)
+
+        if agent_id and agent_id in self._agents:
+            variables = self._agents[agent_id]["variables"]
+        else:
+            variables = self._get_current_variables()  # Fallback to original logic
+
         print(
-            f"[DEBUG] DebugServer._handle_get_variables - retrieved {len(variables)} variables"
+            f"[DEBUG] DebugServer._handle_get_variables - retrieved {len(variables)} variables for thread {thread_id}"
         )
         response = {
             "type": "variables_response",
@@ -475,14 +828,45 @@ class DebugServer:
     ) -> None:
         """Handle get_call_stack command."""
         print("[DEBUG] DebugServer._handle_get_call_stack - entering handler")
-        call_stack = self._get_current_call_stack()
+        thread_id = command.get("threadId", 1)
+        agent_id = self.get_agent_by_thread(thread_id)
+
+        if agent_id and agent_id in self._agents:
+            call_stack = self._agents[agent_id]["call_stack"]
+        else:
+            call_stack = self._get_current_call_stack()  # Fallback to original logic
+
         print(
-            f"[DEBUG] DebugServer._handle_get_call_stack - retrieved call stack with {len(call_stack)} frames"
+            f"[DEBUG] DebugServer._handle_get_call_stack - retrieved call stack with {len(call_stack)} frames for thread {thread_id}"
         )
         response = {
             "type": "call_stack_response",
             "success": True,
             "call_stack": list(reversed(call_stack)),
+            "requestId": command.get("requestId"),
+        }
+        await self._send_response(writer, response)
+
+    async def _handle_get_threads(
+        self, command: Dict[str, Any], writer: asyncio.StreamWriter
+    ) -> None:
+        """Handle get_threads command."""
+        print("[DEBUG] DebugServer._handle_get_threads - entering handler")
+        threads = self.get_agent_threads()
+
+        # If no agents registered, provide a default "Main" thread for compatibility
+        if not threads:
+            threads = [
+                {"id": 1, "name": "Main", "agent_id": "main", "status": "running"}
+            ]
+
+        print(
+            f"[DEBUG] DebugServer._handle_get_threads - returning {len(threads)} threads"
+        )
+        response = {
+            "type": "threads_response",
+            "success": True,
+            "threads": threads,
             "requestId": command.get("requestId"),
         }
         await self._send_response(writer, response)
@@ -584,16 +968,81 @@ class DebugServer:
         if hasattr(event, "__class__"):
             # Map specific event types to debug protocol events
             if isinstance(event, BreakpointHitEvent):
+                # Update agent execution state when breakpoint is hit
+                if (
+                    self._program
+                    and hasattr(self._program, "agents")
+                    and self._program.agents
+                ):
+                    main_agent = self._program.agents[0]
+                    if main_agent and main_agent.id in self._agents:
+                        self.update_agent_from_program_state(main_agent.id)
+                        thread_id = self.get_thread_by_agent(main_agent.id) or 1
+
+                        return {
+                            "type": "breakpoint_hit",
+                            "thread_id": thread_id,
+                            "threadId": thread_id,
+                            "file_path": getattr(event, "file_path", ""),
+                            "line_number": getattr(event, "line_number", 0),
+                            "source_line_number": getattr(
+                                event, "source_line_number", 0
+                            ),
+                            "reason": "breakpoint",
+                        }
+
                 return {
                     "type": "breakpoint_hit",
+                    "thread_id": 1,
+                    "threadId": 1,
                     "file_path": getattr(event, "file_path", ""),
                     "line_number": getattr(event, "line_number", 0),
+                    "source_line_number": getattr(event, "source_line_number", 0),
+                    "reason": "breakpoint",
                 }
             elif isinstance(event, StepCompleteEvent):
+                # Update agent execution state when step completes
+                if (
+                    self._program
+                    and hasattr(self._program, "agents")
+                    and self._program.agents
+                ):
+                    main_agent = self._program.agents[0]
+                    if main_agent and main_agent.id in self._agents:
+                        self.update_agent_from_program_state(main_agent.id)
+                        # Get the thread ID for this agent
+                        thread_id = self.get_thread_by_agent(main_agent.id) or 1
+
+                        return {
+                            "type": "step_complete",
+                            "thread_id": thread_id,
+                            "threadId": thread_id,  # For backwards compatibility
+                            "source_line_number": getattr(
+                                event, "source_line_number", 0
+                            ),
+                            "reason": "step",
+                        }
+
                 return {
                     "type": "step_complete",
+                    "thread_id": 1,
+                    "threadId": 1,
+                    "source_line_number": getattr(event, "source_line_number", 0),
+                    "reason": "step",
                 }
             elif isinstance(event, ExecutionPausedEvent):
+                # Update agent execution state when pausing
+                if (
+                    self._program
+                    and hasattr(self._program, "agents")
+                    and self._program.agents
+                ):
+                    # For now, update the first agent's state (main agent)
+                    # In a true multi-agent system, we'd need to identify which agent paused
+                    main_agent = self._program.agents[0]
+                    if main_agent and main_agent.id in self._agents:
+                        self.update_agent_from_program_state(main_agent.id)
+
                 return {
                     "type": "execution_paused",
                     "reason": getattr(event, "reason", "pause"),
@@ -616,6 +1065,16 @@ class DebugServer:
                     "variable_value": getattr(event, "variable_value", None),
                 }
             elif isinstance(event, LineExecutedEvent):
+                # Update agent execution state when a line is executed
+                if (
+                    self._program
+                    and hasattr(self._program, "agents")
+                    and self._program.agents
+                ):
+                    main_agent = self._program.agents[0]
+                    if main_agent and main_agent.id in self._agents:
+                        self.update_agent_from_program_state(main_agent.id)
+
                 # Get the file path from the program if available
                 file_path = ""
                 if (
@@ -630,6 +1089,52 @@ class DebugServer:
                     "type": "line_executed",
                     "file_path": file_path,
                     "line_number": getattr(event, "source_line_number", 0),
+                }
+            elif isinstance(event, ProgramTerminatedEvent):
+                return {
+                    "type": "program_terminated",
+                    "reason": getattr(event, "reason", "normal"),
+                    "exit_code": getattr(event, "exit_code", 0),
+                }
+            elif isinstance(event, AgentStartedEvent):
+                return {
+                    "type": "agent_started",
+                    "agent_id": getattr(event, "agent_id", ""),
+                    "agent_name": getattr(event, "agent_name", ""),
+                    "thread_id": getattr(event, "thread_id", 1),
+                    "agent_type": getattr(event, "agent_type", ""),
+                }
+            elif isinstance(event, AgentStoppedEvent):
+                return {
+                    "type": "agent_stopped",
+                    "agent_id": getattr(event, "agent_id", ""),
+                    "agent_name": getattr(event, "agent_name", ""),
+                    "thread_id": getattr(event, "thread_id", 1),
+                    "reason": getattr(event, "reason", "normal"),
+                }
+            elif isinstance(event, AgentPausedEvent):
+                return {
+                    "type": "agent_paused",
+                    "agent_id": getattr(event, "agent_id", ""),
+                    "agent_name": getattr(event, "agent_name", ""),
+                    "thread_id": getattr(event, "thread_id", 1),
+                    "reason": getattr(event, "reason", "pause"),
+                    "source_line_number": getattr(event, "source_line_number", 0),
+                }
+            elif isinstance(event, AgentResumedEvent):
+                return {
+                    "type": "agent_resumed",
+                    "agent_id": getattr(event, "agent_id", ""),
+                    "agent_name": getattr(event, "agent_name", ""),
+                    "thread_id": getattr(event, "thread_id", 1),
+                }
+            elif isinstance(event, AgentVariableUpdateEvent):
+                return {
+                    "type": "agent_variable_update",
+                    "agent_id": getattr(event, "agent_id", ""),
+                    "thread_id": getattr(event, "thread_id", 1),
+                    "variable_name": getattr(event, "variable_name", ""),
+                    "variable_value": getattr(event, "variable_value", None),
                 }
 
         return None

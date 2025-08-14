@@ -666,7 +666,8 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                 await self._post_execute(call, result, langfuse_span)
                 return result
             except ExecutionFinished as e:
-                self.program.set_execution_finished()
+                print("\n\nExecution finished, exiting...")
+                self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
                 await self._post_execute(call, message, langfuse_span)
                 return message
