@@ -315,7 +315,8 @@ async def main(
 
     # Apply patches
     MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting_as_owner
-    Program.route_message = patched_route_message
+    if not stream:
+        Program.route_message = patched_route_message
 
     pubsub = PubSub()
 
