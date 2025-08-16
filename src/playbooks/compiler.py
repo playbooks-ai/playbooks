@@ -40,6 +40,19 @@ class Compiler:
         """
         self.llm_config = llm_config.copy()
         self.llm_config.model = os.getenv("COMPILER_MODEL", self.llm_config.model)
+
+        # Re-determine API key after model change
+        if "claude" in self.llm_config.model:
+            self.llm_config.api_key = os.environ.get("ANTHROPIC_API_KEY")
+        elif "gemini" in self.llm_config.model:
+            self.llm_config.api_key = os.environ.get("GEMINI_API_KEY")
+        elif "groq" in self.llm_config.model:
+            self.llm_config.api_key = os.environ.get("GROQ_API_KEY")
+        elif "openrouter" in self.llm_config.model:
+            self.llm_config.api_key = os.environ.get("OPENROUTER_API_KEY")
+        else:
+            # Default to OpenAI for other models
+            self.llm_config.api_key = os.environ.get("OPENAI_API_KEY")
         self.use_cache = use_cache
         self.playbooks_version = self._get_playbooks_version()
         self.prompt_path = os.path.join(

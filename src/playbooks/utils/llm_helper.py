@@ -14,14 +14,67 @@ from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
 from .langfuse_helper import LangfuseHelper
 from .llm_config import LLMConfig
+from .playbooks_lm_handler import PlaybooksLMHandler
 
 # Configure litellm based on environment variable
 litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
 litellm.drop_params = True
-api_base = os.getenv("LLM_API_BASE")
-if api_base:
-    litellm.api_base = api_base
+# Note: LLM_API_BASE is now applied per-model basis, not globally
 # litellm._turn_on_debug()
+
+# Initialize the Playbooks-LM handler
+playbooks_handler = PlaybooksLMHandler()
+
+# Store the original completion function
+_original_completion = completion
+
+
+def completion_with_preprocessing(*args, **kwargs):
+    """
+    Wrapper for litellm.completion that applies preprocessing for playbooks-lm models
+    and handles model-specific API base configuration.
+    """
+    model = kwargs.get("model", "")
+
+    # Apply model-specific API base if not already provided
+    if "api_base" not in kwargs:
+        # Check if this model matches specific environment variables
+        main_model = os.getenv("MODEL")
+        compiler_model = os.getenv("COMPILER_MODEL")
+
+        if model == main_model:
+            # This is the main model, use LLM_API_BASE
+            llm_api_base = os.getenv("LLM_API_BASE")
+            if llm_api_base:
+                kwargs["api_base"] = llm_api_base
+        elif model == compiler_model:
+            # This is the compiler model, use COMPILER_LLM_API_BASE
+            compiler_api_base = os.getenv("COMPILER_LLM_API_BASE")
+            if compiler_api_base:
+                kwargs["api_base"] = compiler_api_base
+        # For other models, no specific API base is set (use default)
+
+    # Note: Playbooks-LM preprocessing is now handled in get_completion() before Langfuse logging
+    # This wrapper only handles API base configuration
+
+    # Debug: log the call to help diagnose auth issues when verbose mode is enabled
+    if os.getenv("LLM_SET_VERBOSE", "False").lower() == "true":
+        api_key_preview = kwargs.get("api_key", "MISSING")
+        if api_key_preview and api_key_preview != "MISSING":
+            api_key_preview = (
+                api_key_preview[:8] + "..." if len(api_key_preview) > 8 else "short"
+            )
+        print(
+            f"LLM Call - Model: {model}, API Base: {kwargs.get('api_base', 'default')}, API Key: {api_key_preview}"
+        )
+
+    # Call the original completion function
+    return _original_completion(*args, **kwargs)
+
+
+# Replace litellm's completion function with our wrapper
+litellm.completion = completion_with_preprocessing
+completion = completion_with_preprocessing
 
 # Initialize cache if enabled
 llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
@@ -208,6 +261,11 @@ def get_completion(
     messages = remove_empty_messages(messages)
     messages = consolidate_messages(messages)
     messages = ensure_upto_N_cached_messages(messages)
+
+    # Apply playbooks-lm preprocessing if needed (before Langfuse logging)
+    if "playbooks-lm" in llm_config.model.lower():
+        messages = playbooks_handler.preprocess_messages(messages.copy())
+
     completion_kwargs = {
         "model": llm_config.model,
         "api_key": llm_config.api_key,
