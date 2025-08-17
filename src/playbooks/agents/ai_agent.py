@@ -6,10 +6,15 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
-from ..enums import LLMMessageRole, LLMMessageType, StartupMode
+from ..enums import StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
 from ..execution_state import ExecutionState
+from ..llm_messages import (
+    ExecutionResultLLMMessage,
+    FileLoadLLMMessage,
+    MeetingLLMMessage,
+)
 from ..meetings import MeetingManager
 from ..message import Message, MessageType
 from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
@@ -587,7 +592,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
 
         call_stack_frame = CallStackFrame(
             InstructionPointer(call.playbook_klass, "01", first_step_line_number),
-            llm_messages=[],
             langfuse_span=langfuse_span,
             is_meeting=is_meeting,
             meeting_id=meeting_id,
@@ -649,7 +653,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
 
                 message = f"Meeting {meeting.id} ready to proceed - all required attendees present"
                 self.state.session_log.append(message)
-                self.add_uncached_llm_message(message, LLMMessageRole.USER)
+
+                meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
+                self.state.call_stack.add_llm_message(meeting_msg)
 
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
@@ -719,9 +725,11 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
-        self.add_uncached_llm_message(
-            message=call_result.to_log_full(), role=LLMMessageRole.USER
+
+        result_msg = ExecutionResultLLMMessage(
+            call_result.to_log_full(), playbook_name=call.playbook_klass, success=True
         )
+        self.state.call_stack.add_llm_message(result_msg)
 
         langfuse_span.update(output=result)
 
@@ -743,20 +751,22 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         if inline:
             return content
         else:
-            caller_frame = self.state.call_stack.frames[-2]
+            # Safely get the caller frame (second from top)
+            if len(self.state.call_stack.frames) >= 2:
+                caller_frame = self.state.call_stack.frames[-2]
 
-            if silent:
-                caller_frame.add_uncached_llm_message(
-                    content,
-                    type=LLMMessageType.LOAD_FILE,
-                    role=LLMMessageRole.USER,
-                )
-                return ""
+                if silent:
+                    file_msg = FileLoadLLMMessage(content, file_path=file_path)
+                    caller_frame.add_llm_message(file_msg)
+                    return ""
+                else:
+                    file_msg = FileLoadLLMMessage(
+                        f"Contents of file {file_path}:\n\n{content}",
+                        file_path=file_path,
+                    )
+                    caller_frame.add_llm_message(file_msg)
+
+                    return f"Loaded file {file_path}"
             else:
-                caller_frame.add_uncached_llm_message(
-                    f"Contents of file {file_path}:\n\n{content}",
-                    type=LLMMessageType.LOAD_FILE,
-                    role=LLMMessageRole.USER,
-                )
-
+                # Not enough frames in call stack, just return the content
                 return f"Loaded file {file_path}"

@@ -2,15 +2,16 @@
 
 from typing import TYPE_CHECKING, Any, List
 
-from ..enums import LLMMessageRole, LLMMessageType
+from ..enums import LLMMessageType
 from ..events import PlaybookEndEvent, PlaybookStartEvent
+from ..llm_messages import AssistantResponseLLMMessage, UserInputLLMMessage
 from ..playbook_call import PlaybookCall
 from ..utils.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
 )
 from ..utils.llm_config import LLMConfig
-from ..utils.llm_helper import get_completion, make_uncached_llm_message
+from ..utils.llm_helper import get_completion
 from .base import LLMExecution
 
 if TYPE_CHECKING:
@@ -67,19 +68,13 @@ class RawLLMExecution(LLMExecution):
         )
 
         stack_frame = self.agent.state.call_stack.peek()
-        messages = list(
-            filter(
-                lambda message: message["type"] == LLMMessageType.LOAD_FILE,
-                stack_frame.llm_messages,
-            )
-        )
-        messages.append(
-            make_uncached_llm_message(
-                resolved_description,
-                role=LLMMessageRole.ASSISTANT,
-                type=LLMMessageType.DEFAULT,
-            )
-        )
+        # Get file load messages from the call stack
+        messages = [
+            msg.to_full_message()
+            for msg in stack_frame.llm_messages
+            if msg.type == LLMMessageType.FILE_LOAD
+        ]
+        messages.append(UserInputLLMMessage(resolved_description).to_full_message())
         return messages
 
     async def _get_llm_response(self, messages: List[dict]) -> str:
@@ -96,9 +91,8 @@ class RawLLMExecution(LLMExecution):
         response = next(response_generator)
 
         # Cache the response
-        self.agent.state.call_stack.peek().add_cached_llm_message(
-            response, role=LLMMessageRole.ASSISTANT
-        )
+        response_msg = AssistantResponseLLMMessage(response)  # cached=True by default
+        self.agent.state.call_stack.add_llm_message(response_msg)
 
         return response
 

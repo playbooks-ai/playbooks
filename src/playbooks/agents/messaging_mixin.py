@@ -8,6 +8,7 @@ from typing import List
 
 from ..constants import EOM, EXECUTION_FINISHED
 from ..exceptions import ExecutionFinished
+from ..llm_messages import AgentCommunicationLLMMessage
 from ..message import Message
 
 
@@ -157,7 +158,12 @@ class MessagingMixin:
                 f"Received message from {message.sender_klass}(agent {message.sender_id}): {message.content}"
             )
 
-        self.add_uncached_llm_message("\n".join(messages_str))
+        # Use the first sender agent for the semantic message type
+        sender_agent = messages[0].sender_klass if messages else None
+        agent_comm_msg = AgentCommunicationLLMMessage(
+            "\n".join(messages_str), sender_agent=sender_agent, target_agent=self.klass
+        )
+        self.state.call_stack.add_llm_message(agent_comm_msg)
 
         # Remove processed messages from buffer
         self._message_buffer = self._message_buffer[num_messages_to_process:]

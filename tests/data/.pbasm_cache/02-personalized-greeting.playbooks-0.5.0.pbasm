@@ -7,11 +7,11 @@ In this playbook, the customer support agent welcomes the user
 - T1:BGN At the beginning
 ### Steps
 - 01:QUE Say(user, Tell user about yourself)
-- 02:QUE Say(user, Ask user for their $name:str)
+- 02:QUE Say(user, Ask the user for their $name:str)
 - 03:YLD for user
-- 04:QUE Say(user, Say hello to $name)
-- 05:QUE Say(user, Welcome $name to Playbooks AI and say goodbye)
-- 06:RET
+- 04:QUE Say(user, Say hello to the user by name)
+- 05:QUE Say(user, Welcome user to Playbooks AI and say goodbye)
+- 06:YLD for exit
 
 ```public.json
 []

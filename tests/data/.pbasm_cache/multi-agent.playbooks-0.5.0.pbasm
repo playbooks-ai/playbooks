@@ -18,11 +18,12 @@ async def A(num: float) -> float:
 ### Triggers
 - T1:BGN When program starts
 ### Steps
-- 01:EXE Get Canada's $secret:str
-- 02:QUE Say(user, Tell user about Canada's $secret)
-- 03:QUE $population:int = CountryInfoAgent.GetPopulation(country="India")
-- 04:YLD for call
-- 05:RET f"{$num} {$population}"
+- 01:QUE Get $secret:str about Canada from CountryInfoAgent
+- 02:YLD for call
+- 03:QUE Say(user, Tell user about Canada's $secret)
+- 04:QUE Get $population:int of India from CountryInfoAgent
+- 05:YLD for call
+- 06:RET f"{$num} {$population}"
 
 ```public.json
 [
@@ -59,7 +60,7 @@ Simple greeting playbook that says hello to the user.
 - 01:QUE Say(user, Say hello)
 - 02:RET
 
-## GetCountryPopulation($country: str) -> float
+## GetCountryPopulation($country:str) -> float
 metadata:
   public: true
 ---
@@ -68,7 +69,7 @@ Calculates population estimate based on country name length.
 - 01:EXE $population:float = Compute the square root of the length of $country
 - 02:RET $population
 
-## GetCountrySecret($country: str) -> str
+## GetCountrySecret($country:str) -> str
 metadata:
   public: true
 ---
@@ -79,7 +80,7 @@ Returns unusual historical facts about the specified country.
 - 01:RET an unusual historical fact about $country
 
 ## Main() -> None
-Main entry point that gets information from FirstAgent and displays it to the user.
+Main program entry point that gets information from FirstAgent and displays it to the user.
 ### Triggers
 - T1:BGN At the beginning
 ### Steps

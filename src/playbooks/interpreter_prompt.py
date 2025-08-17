@@ -2,13 +2,15 @@ import json
 import os
 from typing import TYPE_CHECKING, Dict, List, Optional
 
-from playbooks.enums import LLMMessageRole
-from playbooks.playbook import Playbook
-from playbooks.utils.llm_helper import (
-    get_messages_for_prompt,
-    make_cached_llm_message,
-    make_uncached_llm_message,
+from playbooks.llm_messages import (
+    AssistantResponseLLMMessage,
+    TriggerInstructionsLLMMessage,
+    AgentInfoLLMMessage,
+    OtherAgentInfoLLMMessage,
+    UserInputLLMMessage,
 )
+from playbooks.playbook import Playbook
+from playbooks.utils.llm_helper import get_messages_for_prompt
 
 if TYPE_CHECKING:
     from playbooks.execution_state import ExecutionState
@@ -58,9 +60,9 @@ class InterpreterPrompt:
                 + ["```"]
             )
 
-            return make_cached_llm_message(
-                "\n".join(trigger_instructions), LLMMessageRole.USER
-            )
+            return TriggerInstructionsLLMMessage(
+                "\n".join(trigger_instructions)
+            ).to_full_message()
         return None
 
     def _get_other_agent_klasses_information_message(self) -> str:
@@ -71,9 +73,9 @@ class InterpreterPrompt:
                 "\n\n".join(self.other_agent_klasses_information),
                 "```",
             ]
-            return make_cached_llm_message(
-                "\n".join(other_agent_klasses_information), LLMMessageRole.USER
-            )
+            return OtherAgentInfoLLMMessage(
+                "\n".join(other_agent_klasses_information)
+            ).to_full_message()
         return None
 
     def _get_compact_agent_information_message(self) -> str:
@@ -82,7 +84,7 @@ class InterpreterPrompt:
         parts.append("```md")
         parts.append(self.agent_information)
         parts.append("```")
-        return make_cached_llm_message("\n".join(parts), LLMMessageRole.USER)
+        return AgentInfoLLMMessage("\n".join(parts)).to_full_message()
 
     @property
     def prompt(self) -> str:
@@ -148,7 +150,10 @@ class InterpreterPrompt:
         if trigger_instructions_message:
             messages.append(trigger_instructions_message)
 
-        self.execution_state.call_stack.peek().llm_messages.append(prompt_messages[1])
+        # Convert the prompt message dict back to a proper message object
+        if len(prompt_messages) > 1:
+            user_instruction_msg = UserInputLLMMessage(prompt_messages[1]["content"])
+            self.execution_state.call_stack.add_llm_message(user_instruction_msg)
 
         messages.extend(self.execution_state.call_stack.get_llm_messages())
         # messages.extend(self._get_artifact_messages())
@@ -163,6 +168,6 @@ class InterpreterPrompt:
             artifact = self.execution_state.artifacts[artifact]
             artifact_message = f"Artifact[{artifact.name}]\n\nSummary: {artifact.summary}\n\nContent: {artifact.content}"
             artifact_messages.append(
-                make_uncached_llm_message(artifact_message), LLMMessageRole.ASSISTANT
+                AssistantResponseLLMMessage(artifact_message).to_full_message()
             )
         return artifact_messages

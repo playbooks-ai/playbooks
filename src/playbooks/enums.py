@@ -18,8 +18,27 @@ class LLMMessageRole(str, Enum):
 
 
 class LLMMessageType(str, Enum):
-    DEFAULT = "DEFAULT"
-    LOAD_FILE = "LoadFile"
+    # Core execution types
+    SYSTEM_PROMPT = "system_prompt"
+    USER_INPUT = "user_input"
+    ASSISTANT_RESPONSE = "assistant_response"
+
+    # Playbook execution types
+    PLAYBOOK_IMPLEMENTATION = "playbook_implementation"
+    EXECUTION_RESULT = "execution_result"
+    TRIGGER_INSTRUCTIONS = "trigger_instructions"
+
+    # Communication types
+    AGENT_COMMUNICATION = "agent_communication"
+    MEETING_MESSAGE = "meeting_message"
+
+    # Agent information types
+    AGENT_INFO = "agent_info"
+    OTHER_AGENT_INFO = "other_agent_info"
+
+    # Data types
+    FILE_LOAD = "file_load"
+    SESSION_LOG = "session_log"
 
 
 class StartupMode(str, Enum):

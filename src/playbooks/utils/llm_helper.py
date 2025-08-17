@@ -8,7 +8,8 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
-from playbooks.enums import LLMMessageRole, LLMMessageType
+from playbooks.enums import LLMMessageRole
+from playbooks.llm_messages import SystemPromptLLMMessage, UserInputLLMMessage
 
 from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
@@ -387,10 +388,10 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
 
         return [
-            make_cached_llm_message(system.strip(), LLMMessageRole.SYSTEM),
-            make_uncached_llm_message(user.strip(), LLMMessageRole.USER),
+            SystemPromptLLMMessage(system.strip()).to_full_message(),
+            UserInputLLMMessage(user.strip()).to_full_message(),
         ]
-    return [make_uncached_llm_message(prompt.strip(), LLMMessageRole.USER)]
+    return [UserInputLLMMessage(prompt.strip()).to_full_message()]
 
 
 def consolidate_messages(messages: List[dict]) -> List[dict]:
@@ -440,11 +441,18 @@ def consolidate_messages(messages: List[dict]) -> List[dict]:
         # Join all contents into a single string
         contents = "\n\n".join(contents)
 
-        # Add the consolidatedmessage to the list
+        # Add the consolidated message to the list
+        from playbooks.llm_messages import LLMMessage
+
         if cache_control:
-            messages.append(make_cached_llm_message(contents, group[0]["role"]))
+            llm_msg = LLMMessage(
+                contents, LLMMessageRole(group[0]["role"]), cached=True
+            )
         else:
-            messages.append(make_uncached_llm_message(contents, group[0]["role"]))
+            llm_msg = LLMMessage(
+                contents, LLMMessageRole(group[0]["role"]), cached=False
+            )
+        messages.append(llm_msg.to_full_message())
 
     return messages
 
@@ -478,43 +486,3 @@ def ensure_upto_N_cached_messages(messages: List[dict]) -> List[dict]:
             count_cached_messages += 1
 
     return messages
-
-
-def make_cached_llm_message(
-    content: str,
-    role: LLMMessageRole = LLMMessageRole.USER,
-    type: LLMMessageType = LLMMessageType.DEFAULT,
-) -> dict:
-    """Make a message with cache control.
-
-    Args:
-        content: The content of the message
-        role: The role of the message
-
-    Returns:
-        A message with cache control
-    """
-    return {
-        "role": role,
-        "type": type,
-        "content": content,
-        "cache_control": {"type": "ephemeral"},
-    }
-
-
-def make_uncached_llm_message(
-    content: str,
-    role: LLMMessageRole = LLMMessageRole.USER,
-    type: LLMMessageType = LLMMessageType.DEFAULT,
-) -> dict:
-    """Make a message without cache control.
-
-    Args:
-        content: The content of the message
-        role: The role of the message
-    """
-    return {
-        "role": role,
-        "type": type,
-        "content": content,
-    }

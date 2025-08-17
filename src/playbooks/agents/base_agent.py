@@ -1,9 +1,9 @@
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict
 
-from playbooks.enums import LLMMessageRole
 from playbooks.utils.spec_utils import SpecUtils
 
+from ..llm_messages import AgentCommunicationLLMMessage
 from .messaging_mixin import MessagingMixin
 
 if TYPE_CHECKING:
@@ -104,10 +104,12 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
                 if target_agent
                 else self.unknown_agent_str(target_agent_id)
             )
-            current_frame.add_uncached_llm_message(
+            agent_comm_msg = AgentCommunicationLLMMessage(
                 f"I {str(self)} sent message to {target_name}: {message}",
-                role=LLMMessageRole.USER,
+                sender_agent=self.klass,
+                target_agent=target_name,
             )
+            current_frame.add_llm_message(agent_comm_msg)
 
         # Route through program runtime
         await self.program.route_message(
@@ -131,26 +133,6 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
 
     def to_dict(self) -> Dict[str, Any]:
         return {**self.kwargs, "type": self.klass, "agent_id": self.id}
-
-    def add_uncached_llm_message(
-        self, message: str, role: str = LLMMessageRole.USER
-    ) -> None:
-        if (
-            hasattr(self, "state")
-            and hasattr(self.state, "call_stack")
-            and self.state.call_stack.peek() is not None
-        ):
-            self.state.call_stack.peek().add_uncached_llm_message(message, role)
-
-    def add_cached_llm_message(
-        self, message: str, role: str = LLMMessageRole.USER
-    ) -> None:
-        if (
-            hasattr(self, "state")
-            and hasattr(self.state, "call_stack")
-            and self.state.call_stack.peek() is not None
-        ):
-            self.state.call_stack.peek().add_cached_llm_message(message, role)
 
     def get_debug_thread_id(self) -> int:
         """Get the debug thread ID for this agent."""

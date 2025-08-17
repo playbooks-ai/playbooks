@@ -10,6 +10,7 @@ from playbooks.exceptions import KlassNotFoundError
 from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
 
 from ..agents.base_agent import BaseAgent
+from ..llm_messages import MeetingLLMMessage, SessionLogLLMMessage
 from ..message import Message, MessageType
 from ..playbook import LLMPlaybook, Playbook
 from .meeting import JoinedMeeting, Meeting, MeetingInvitation, MeetingInvitationStatus
@@ -210,7 +211,8 @@ class MeetingManager:
             )
             response = f"Inviting {str(target_agent)} to meeting {meeting.id}: {meeting.topic or 'Meeting'}"
             self.agent.state.session_log.append(response)
-            self.agent.add_uncached_llm_message(response)
+            meeting_msg = MeetingLLMMessage(response, meeting_id=meeting.id)
+            self.agent.state.call_stack.add_llm_message(meeting_msg)
             asyncio.create_task(self._send_invitation(meeting, target_agent))
 
         return response
@@ -239,7 +241,8 @@ class MeetingManager:
             f"Invited {str(target_agent)} to meeting {meeting.id}: {invitation_content}"
         )
         self.agent.state.session_log.append(response)
-        self.agent.add_uncached_llm_message(response)
+        meeting_msg = MeetingLLMMessage(response, meeting_id=meeting.id)
+        self.agent.state.call_stack.add_llm_message(meeting_msg)
 
         return response
 
@@ -283,12 +286,14 @@ class MeetingManager:
         if not meeting.required_attendees:
             message = f"No required attendees to wait for in meeting {meeting.id} - proceeding immediately"
             self.agent.state.session_log.append(message)
-            self.agent.add_uncached_llm_message(message)
+            meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
+            self.agent.state.call_stack.add_llm_message(meeting_msg)
             return
 
         messages = f"Waiting for required attendees to join meeting {meeting.id}: {[attendee.__repr__() for attendee in meeting.required_attendees]}"
         self.agent.state.session_log.append(messages)
-        self.agent.add_uncached_llm_message(messages)
+        meeting_msg = MeetingLLMMessage(messages, meeting_id=meeting.id)
+        self.agent.state.call_stack.add_llm_message(meeting_msg)
 
         # Track which required attendees have joined
         start_time = asyncio.get_event_loop().time()
@@ -306,7 +311,8 @@ class MeetingManager:
 
         message = f"All required attendees have joined meeting {meeting.id}: {[attendee.__repr__() for attendee in meeting.joined_attendees]}"
         self.agent.state.session_log.append(message)
-        self.agent.add_uncached_llm_message(message)
+        meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
+        self.agent.state.call_stack.add_llm_message(meeting_msg)
 
         # Finally, set the meeting ID as the current meeting ID in the call stack
         self.agent.state.call_stack.peek().meeting_id = meeting.id
@@ -429,7 +435,8 @@ class MeetingManager:
         else:
             log = f"Received meeting invitation from {sender_id} without meeting_id"
             self.agent.state.session_log.append(log)
-            self.agent.add_uncached_llm_message(log)
+            session_msg = SessionLogLLMMessage(log, log_level="warning")
+            self.agent.state.call_stack.add_llm_message(session_msg)
 
     async def _handle_meeting_response_immediately(self, message) -> None:
         """Handle meeting response immediately without buffering."""
@@ -457,13 +464,15 @@ class MeetingManager:
         """
         log = f"Received meeting invitation for meeting {meeting_id} from {inviter_id} for '{topic}'"
         self.agent.state.session_log.append(log)
-        self.agent.add_uncached_llm_message(log)
+        meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
+        self.agent.state.call_stack.add_llm_message(meeting_msg)
 
         # Check if agent is busy (has active call stack)
         if len(self.agent.state.call_stack.frames) > 0:
             log = f"Rejecting meeting {meeting_id} - agent is busy"
             self.agent.state.session_log.append(log)
-            self.agent.add_uncached_llm_message(log)
+            meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
+            self.agent.state.call_stack.add_llm_message(meeting_msg)
             if self.agent.program:
                 await self.agent.program.route_message(
                     sender_id=self.agent.id,
@@ -485,7 +494,8 @@ class MeetingManager:
             # No meeting playbooks available
             log = f"Rejecting meeting {meeting_id} - no meeting playbooks available"
             self.agent.state.session_log.append(log)
-            self.agent.add_uncached_llm_message(log)
+            meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
+            self.agent.state.call_stack.add_llm_message(meeting_msg)
             available_types = self.get_meeting_playbooks()
             rejection_message = f"Meeting invitation rejected: Cannot handle this type of meeting. Available meeting types: {available_types}"
 
@@ -502,7 +512,8 @@ class MeetingManager:
         # Accept the invitation and join the meeting
         log = f"Accepting meeting invitation {meeting_id}"
         self.agent.state.session_log.append(log)
-        self.agent.add_uncached_llm_message(log)
+        meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
+        self.agent.state.call_stack.add_llm_message(meeting_msg)
 
         # Store meeting info in joined_meetings for future message routing
 
@@ -533,9 +544,13 @@ class MeetingManager:
         try:
             log = f"Starting meeting playbook '{meeting_playbook.name}' for meeting {meeting_id}"
             self.agent.state.session_log.append(log)
-            self.agent.add_uncached_llm_message(log)
+            meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
+            self.agent.state.call_stack.add_llm_message(meeting_msg)
 
             # Execute the meeting playbook with meeting context
+            print(
+                f"[DEBUG] Agent {self.agent.id} executing meeting playbook {meeting_playbook.name}"
+            )
             task = asyncio.create_task(
                 self.agent.execute_playbook(
                     meeting_playbook.name,
@@ -553,7 +568,8 @@ class MeetingManager:
         except Exception as e:
             log = f"Error executing meeting playbook for {meeting_id}: {str(e)}"
             self.agent.state.session_log.append(log)
-            self.agent.add_uncached_llm_message(log)
+            meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
+            self.agent.state.call_stack.add_llm_message(meeting_msg)
             # Send error message to meeting
             if self.agent.program:
                 await self.agent.program.route_message(

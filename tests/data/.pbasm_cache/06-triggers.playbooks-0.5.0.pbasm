@@ -13,7 +13,7 @@ async def Validation1(pin: str) -> bool:
 ```
 
 ## Main() -> None
-Main program flow that handles user authentication and account operations.
+Main program flow that handles user authentication and account access.
 ### Triggers
 - T1:BGN At the beginning
 ### Steps
@@ -62,7 +62,7 @@ dtext           =   %d33-90 /          ; Printable US-ASCII
 - 07:RET $email
 
 ## TooBig() -> None
-Handles cases when the x variable exceeds the threshold limit.
+Handles cases when x value exceeds threshold.
 ### Triggers
 - T1:CND When $x > 15
 ### Steps

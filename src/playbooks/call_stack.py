@@ -1,10 +1,6 @@
 from typing import Any, Dict, List, Optional
 
-from playbooks.enums import LLMMessageRole, LLMMessageType
-from playbooks.utils.llm_helper import (
-    make_cached_llm_message,
-    make_uncached_llm_message,
-)
+from playbooks.llm_messages import LLMMessage
 
 from .event_bus import EventBus
 from .events import CallStackPopEvent, CallStackPushEvent, InstructionPointerEvent
@@ -81,13 +77,13 @@ class CallStackFrame:
     def __init__(
         self,
         instruction_pointer: InstructionPointer,
-        llm_messages: List[Dict[str, str]],
+        llm_messages: Optional[List[LLMMessage]] = None,
         langfuse_span: Optional[Any] = None,
         is_meeting: bool = False,
         meeting_id: Optional[str] = None,
     ):
         self.instruction_pointer = instruction_pointer
-        self.llm_messages = llm_messages
+        self.llm_messages = llm_messages or []
         self.langfuse_span = langfuse_span
         self.is_meeting = is_meeting
         self.meeting_id = meeting_id
@@ -111,23 +107,9 @@ class CallStackFrame:
             result["meeting_id"] = self.meeting_id
         return result
 
-    def add_uncached_llm_message(
-        self,
-        message: str,
-        role: LLMMessageRole = LLMMessageRole.ASSISTANT,
-        type: LLMMessageType = LLMMessageType.DEFAULT,
-    ) -> None:
-        """Add a message to the call stack frame for the LLM."""
-        self.llm_messages.append(make_uncached_llm_message(message, role, type))
-
-    def add_cached_llm_message(
-        self,
-        message: str,
-        role: LLMMessageRole = LLMMessageRole.ASSISTANT,
-        type: LLMMessageType = LLMMessageType.DEFAULT,
-    ) -> None:
-        """Add a message to the call stack frame for the LLM."""
-        self.llm_messages.append(make_cached_llm_message(message, role, type))
+    def add_llm_message(self, message: LLMMessage) -> None:
+        """Add an LLMMessage object to the call stack frame."""
+        self.llm_messages.append(message)
 
     def __repr__(self) -> str:
         base_repr = str(self.instruction_pointer)
@@ -136,8 +118,8 @@ class CallStackFrame:
         return base_repr
 
     def get_llm_messages(self) -> List[Dict[str, str]]:
-        """Get the messages for the call stack frame for the LLM."""
-        return self.llm_messages
+        """Get the messages for the call stack frame as dictionaries for LLM API."""
+        return [msg.to_full_message() for msg in self.llm_messages]
 
 
 class CallStack:
@@ -220,3 +202,9 @@ class CallStack:
         for frame in self.frames:
             messages.extend(frame.get_llm_messages())
         return messages
+
+    def add_llm_message(self, message) -> None:
+        """Safely add an LLM message to the top frame if the stack is not empty."""
+        current_frame = self.peek()
+        if current_frame is not None:
+            current_frame.add_llm_message(message)

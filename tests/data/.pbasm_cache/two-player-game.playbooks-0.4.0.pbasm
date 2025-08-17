@@ -2,27 +2,25 @@
 You are a game show host who can orchestrate AI agents playing games. You make sure that the game keeps moving forward. Keep your messages short and don't repeat yourself. You are highly intelligent.
 
 ## Main() -> None
-Main game orchestration flow that sets up AI vs AI matches for user entertainment.
 ### Triggers
 - T1:BGN When program starts
 ### Steps
 - 01:QUE Say(user, Welcome the user and explain that you're a game show host who can orchestrate AI agents playing games)
 - 02:QUE Say(user, Ask the user what $game:str they would like to watch (e.g., tic-tac-toe, connect four, checkers))
 - 03:YLD for user
-- 04:QUE Say(user, Have a conversation to disambiguate the game specification if necessary); YLD for user; done when game specification is clear
+- 04:QUE Say(user, If necessary, have a conversation to disambiguate the game specification); YLD for user; done when game specification is clear
 - 05:QUE Say(user, Tell user you'll set up a match between AI players for the selected game)
-- 06:QUE Create appropriate number of player agents with twitch-ready gamer names based on the game, for example, create 2 players for tic-tac-toe like CreateAgent("Player", "FootFinger") CreateAgent("Player", "Hatter")
+- 06:QUE Create appropriate number of player agents with twitch-ready gamer names based on the $game, for example, create 2 players for tic-tac-toe like CreateAgent("Player", "FootFinger") CreateAgent("Player", "Hatter")
 - 07:YLD for call
 - 08:QUE GameRoom($topic="Game room for " + $game, $attendees=["agent 1234", "agent 2000", "human"])
 - 09:YLD for call
-- 10:QUE Say(user, Share the outcome)
+- 10:QUE Say(user, Conclude by sharing the outcome)
 - 11:YLD for exit
 
 ## GameRoom($topic, $attendees) -> None
 metadata:
   meeting: true
 ---
-Meeting playbook that manages the actual gameplay between AI agents with turn-based mechanics and win condition checking.
 ### Steps
 - 01:QUE Say(meeting, Welcome both players to the game show)
 - 02:QUE Say(meeting, Announce what game will be played: $game)
@@ -33,14 +31,13 @@ Meeting playbook that manages the actual gameplay between AI agents with turn-ba
   - 06.01:EXE Increment $turn_count
   - 06.02:QUE Say(meeting, Show current game state if not already shown)
   - 06.03:EXE Select the player whose turn it is based on the game rules or your decision as the host
-  - 06.04:QUE Say(meeting, Ask the player to make their move if you haven't asked already and if the player hasn't already conveyed their move)
+  - 06.04:QUE Say(meeting, If you haven't asked already and if the player hasn't already conveyed their move, openly ask the player to make their move)
   - 06.05:YLD for meeting
   - 06.06:EXE Validate the move is legal
   - 06.07:CND If move is valid
     - 06.07.01:EXE Update game state
   - 06.08:CND Otherwise
-    - 06.08.01:QUE Say(meeting, Ask the player to try again with a valid move)
-    - 06.08.02:YLD for meeting
+    - 06.08.01:QUE Say(meeting, Openly ask the player to try again with a valid move)
   - 06.09:EXE Check for win condition or draw
   - 06.10:CND If game is over
     - 06.10.01:QUE Say(meeting, Display final game state)
@@ -66,7 +63,7 @@ You are a player agent that participates in game matches and follows game rules 
 metadata:
   meeting: true
 ---
-Participates in game matches with intelligent gameplay and proper etiquette.
+Participates in game matches with proper etiquette and strategic thinking.
 ### Steps
 - 01:QUE Say(meeting, Introduce yourself, ready to play)
 - 02:QUE Say(meeting, Note which game is being played when announced)

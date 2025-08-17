@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from ..constants import EXECUTION_FINISHED
 from ..debug.debug_handler import DebugHandler, NoOpDebugHandler
-from ..enums import LLMMessageRole
+from ..llm_messages import PlaybookImplementationLLMMessage, AssistantResponseLLMMessage
 from ..events import (
     LineExecutedEvent,
     PlaybookEndEvent,
@@ -85,9 +85,14 @@ class PlaybookLLMExecution(LLMExecution):
 
         # Add a cached message whenever we add a stack frame
         llm_message.append("Executing " + str(call))
-        self.agent.state.call_stack.peek().add_cached_llm_message(
-            "\n\n".join(llm_message), role=LLMMessageRole.USER
+
+        # Create a PlaybookImplementationLLMMessage for semantic clarity
+        playbook_impl_msg = PlaybookImplementationLLMMessage(
+            content="\n\n".join(llm_message), playbook_name=self.playbook.name
         )
+
+        # Add the message object directly to the call stack
+        self.agent.state.call_stack.add_llm_message(playbook_impl_msg)
 
     async def execute(self, *args, **kwargs) -> Any:
         """Execute the playbook with traditional step-by-step logic."""
@@ -128,9 +133,11 @@ class PlaybookLLMExecution(LLMExecution):
                 agent=self.agent,
             )
 
-            self.agent.state.call_stack.peek().add_cached_llm_message(
-                llm_response.response, role=LLMMessageRole.ASSISTANT
-            )
+            # Create an AssistantResponseLLMMessage for semantic clarity
+            llm_response_msg = AssistantResponseLLMMessage(llm_response.response)
+
+            # Add the message object directly to the call stack
+            self.agent.state.call_stack.add_llm_message(llm_response_msg)
 
             artifacts_to_load = []
 

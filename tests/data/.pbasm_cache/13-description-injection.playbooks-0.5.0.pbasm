@@ -1,5 +1,5 @@
 # TestAgent
-This agent runs a test playbook that loads files and provides one-word answers.
+This agent runs test playbooks and manages program execution flow.
 
 ## TestPlaybook() -> str
 metadata:
