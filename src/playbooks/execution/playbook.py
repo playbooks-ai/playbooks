@@ -79,12 +79,14 @@ class PlaybookLLMExecution(LLMExecution):
         else:
             markdown_for_llm = self.playbook.markdown
 
-        llm_message.append("```md\n" + markdown_for_llm + "\n```")
+        llm_message.append(
+            f"{self.playbook.name} playbook implementation:\n\n```md\n{markdown_for_llm}\n```"
+        )
 
         # Add a cached message whenever we add a stack frame
         llm_message.append("Executing " + str(call))
         self.agent.state.call_stack.peek().add_cached_llm_message(
-            "\n\n".join(llm_message), role=LLMMessageRole.ASSISTANT
+            "\n\n".join(llm_message), role=LLMMessageRole.USER
         )
 
     async def execute(self, *args, **kwargs) -> Any:
@@ -103,7 +105,7 @@ class PlaybookLLMExecution(LLMExecution):
         call = PlaybookCall(self.playbook.name, args, kwargs)
         await self.pre_execute(call)
 
-        instruction = f"Execute {str(call)} from step 01"
+        instruction = f"Execute {str(call)} from step 01. Refer to {self.playbook.name} playbook implementation above."
         artifacts_to_load = []
         await self.debug_handler.handle_execution_start(
             self.agent.state.call_stack.peek(),
@@ -277,9 +279,10 @@ class PlaybookLLMExecution(LLMExecution):
             instruction = []
             for loaded_artifact in artifacts_to_load:
                 instruction.append(f"Loaded Artifact[{loaded_artifact}]")
+            top_of_stack = self.agent.state.call_stack.peek()
             instruction.append(
-                f"{str(self.agent.state.call_stack.peek())} was executed - "
-                "continue execution."
+                f"{str(top_of_stack)} was executed - "
+                f"continue execution. Refer to {top_of_stack.instruction_pointer.playbook} playbook implementation above."
             )
 
             instruction = "\n".join(instruction)

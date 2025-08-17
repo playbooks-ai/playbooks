@@ -1,5 +1,5 @@
 # MathSolver
-A mathematical problem-solving agent that can compute factorial, exponential, logarithmic, and trigonometric functions to solve user-provided math problems.
+A mathematical problem-solving agent that can perform factorial, exponential, logarithmic, and trigonometric calculations while entertaining users with math jokes.
 
 ```python
 import math
@@ -22,7 +22,7 @@ async def Sin(a: float) -> float:
 ```
 
 ## Main() -> None
-Main interaction loop that guides users through mathematical problem solving with available functions.
+Main interaction loop that guides users through mathematical problem solving with entertainment.
 ### Triggers
 - T1:BGN At the beginning
 ### Steps

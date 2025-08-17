@@ -106,7 +106,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             )
             current_frame.add_uncached_llm_message(
                 f"I {str(self)} sent message to {target_name}: {message}",
-                role=LLMMessageRole.ASSISTANT,
+                role=LLMMessageRole.USER,
             )
 
         # Route through program runtime
@@ -133,7 +133,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         return {**self.kwargs, "type": self.klass, "agent_id": self.id}
 
     def add_uncached_llm_message(
-        self, message: str, role: str = LLMMessageRole.ASSISTANT
+        self, message: str, role: str = LLMMessageRole.USER
     ) -> None:
         if (
             hasattr(self, "state")
@@ -143,7 +143,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             self.state.call_stack.peek().add_uncached_llm_message(message, role)
 
     def add_cached_llm_message(
-        self, message: str, role: str = LLMMessageRole.ASSISTANT
+        self, message: str, role: str = LLMMessageRole.USER
     ) -> None:
         if (
             hasattr(self, "state")

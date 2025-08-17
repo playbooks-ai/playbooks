@@ -1,13 +1,14 @@
 # RestaurantConsultant
-A restaurant consultant that helps redesign menus through collaborative meetings with culinary and marketing experts.
+A specialized consultant that helps restaurants redesign their menus through collaborative meetings with culinary and marketing experts.
 
 ## Main() -> None
-Main consultation workflow that welcomes users and guides them through the menu redesign process.
+Main entry point that welcomes users and explains the restaurant consulting services available.
 ### Triggers
 - T1:BGN When program starts
 ### Steps
 - 01:QUE Say(user, Welcome the user, explain your role as a restaurant consultant and ask how you can help)
 - 02:YLD for user
+- 03:RET
 
 ## RedesignMenu() -> None
 Coordinates the complete menu redesign process from requirements gathering through final recommendations.
@@ -25,23 +26,27 @@ Coordinates the complete menu redesign process from requirements gathering throu
   - 07.01:QUE Say(user, apologize and suggest trying again later)
 - 08:YLD for exit
 
-## MenuRedesignMeeting($topic, $attendees) -> str
+## MenuRedesignMeeting($topic:str, $attendees:list) -> str
 metadata:
   meeting: true
   required_attendees: [HeadChef, MarketingSpecialist]
 ---
-Facilitates a collaborative meeting between culinary and marketing experts to develop new menu options through structured discussion and consensus building.
+Facilitates a collaborative meeting between culinary and marketing experts to develop new menu options based on market insights and kitchen capabilities.
 ### Steps
 - 01:QUE Say(meeting, Introduce yourself, explain the reasons for the menu redesign and share user's constraints and requirements, and what outcome is expected)
 - 02:QUE Say(meeting, Explain the process you will follow. MarketingSpecialist will start by presenting customer trends and competitor analysis. Then HeadChef will propose initial dish ideas based on market insights. I will facilitate discussion to refine menu options that balance market appeal with kitchen capabilities. Finally, we will drive consensus on final menu selections.)
-- 03:QUE Say(meeting, facilitate ongoing discussion, and don't let the discussion get off track); YLD for meeting; done after 30 turns of discussion or consensus is reached
-- 04:CND If consensus is reached
-  - 04.01:QUE Say(meeting, Summarize agreed-upon dishes with pricing strategy)
-  - 04.02:QUE Say(meeting, Thank the team for their contributions)
-  - 04.03:QUE Say(meeting, End meeting)
-  - 04.04:RET the new menu proposal with justifications
-- 05:CND Otherwise
-  - 05.01:RET the reason for the failure to reach consensus so that user can decide what to do next
+- 03:EXE $turn_count:int = 0
+- 04:CND While the meeting is active and $turn_count < 30
+  - 04.01:QUE Say(meeting, facilitate ongoing discussion, and don't let the discussion get off track)
+  - 04.02:YLD for meeting
+  - 04.03:EXE $turn_count = $turn_count + 1
+  - 04.04:JMP 04
+- 05:CND If consensus is reached
+  - 05.01:QUE Say(meeting, Summarize agreed-upon dishes with pricing strategy)
+  - 05.02:QUE Say(meeting, Thank the team for their contributions)
+  - 05.03:RET the new menu proposal with justifications
+- 06:CND Otherwise
+  - 06.01:RET the reason for the failure to reach consensus so that user can decide what to do next
 
 ```public.json
 []

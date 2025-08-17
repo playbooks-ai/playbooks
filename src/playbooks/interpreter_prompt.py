@@ -59,7 +59,7 @@ class InterpreterPrompt:
             )
 
             return make_cached_llm_message(
-                "\n".join(trigger_instructions), LLMMessageRole.ASSISTANT
+                "\n".join(trigger_instructions), LLMMessageRole.USER
             )
         return None
 
@@ -72,7 +72,7 @@ class InterpreterPrompt:
                 "```",
             ]
             return make_cached_llm_message(
-                "\n".join(other_agent_klasses_information), LLMMessageRole.ASSISTANT
+                "\n".join(other_agent_klasses_information), LLMMessageRole.USER
             )
         return None
 
@@ -82,7 +82,7 @@ class InterpreterPrompt:
         parts.append("```md")
         parts.append(self.agent_information)
         parts.append("```")
-        return make_cached_llm_message("\n".join(parts), LLMMessageRole.ASSISTANT)
+        return make_cached_llm_message("\n".join(parts), LLMMessageRole.USER)
 
     @property
     def prompt(self) -> str:
@@ -148,9 +148,11 @@ class InterpreterPrompt:
         if trigger_instructions_message:
             messages.append(trigger_instructions_message)
 
+        self.execution_state.call_stack.peek().llm_messages.append(prompt_messages[1])
+
         messages.extend(self.execution_state.call_stack.get_llm_messages())
         # messages.extend(self._get_artifact_messages())
-        messages.append(prompt_messages[1])
+        # messages.append(prompt_messages[1])
 
         return messages
 

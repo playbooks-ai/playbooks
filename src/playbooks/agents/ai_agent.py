@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
-from ..enums import LLMMessageType, StartupMode
+from ..enums import LLMMessageRole, LLMMessageType, StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
 from ..execution_state import ExecutionState
@@ -649,7 +649,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
 
                 message = f"Meeting {meeting.id} ready to proceed - all required attendees present"
                 self.state.session_log.append(message)
-                self.add_uncached_llm_message(message)
+                self.add_uncached_llm_message(message, LLMMessageRole.USER)
 
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
@@ -719,7 +719,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
-        self.add_uncached_llm_message(message=call_result.to_log_full())
+        self.add_uncached_llm_message(
+            message=call_result.to_log_full(), role=LLMMessageRole.USER
+        )
 
         langfuse_span.update(output=result)
 
@@ -747,12 +749,14 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                 caller_frame.add_uncached_llm_message(
                     content,
                     type=LLMMessageType.LOAD_FILE,
+                    role=LLMMessageRole.USER,
                 )
                 return ""
             else:
                 caller_frame.add_uncached_llm_message(
                     f"Contents of file {file_path}:\n\n{content}",
                     type=LLMMessageType.LOAD_FILE,
+                    role=LLMMessageRole.USER,
                 )
 
                 return f"Loaded file {file_path}"

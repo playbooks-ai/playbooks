@@ -8,6 +8,7 @@ and handles client disconnection when programs complete.
 import asyncio
 import json
 import pytest
+import pytest_asyncio
 from unittest.mock import Mock, AsyncMock
 
 from playbooks.debug.server import DebugServer
@@ -18,7 +19,7 @@ from playbooks.event_bus import EventBus
 class TestDebugServerTermination:
     """Test debug server termination behavior."""
 
-    @pytest.fixture
+    @pytest_asyncio.fixture
     async def debug_server(self):
         """Create a debug server for testing."""
         server = DebugServer("127.0.0.1", 7529)
@@ -55,7 +56,10 @@ class TestDebugServerTermination:
 
         # Verify termination event was sent
         mock_client.write.assert_called()
-        written_data = mock_client.write.call_args[0][0].decode()
+        # Get the first call (termination event) - signal_program_termination sends two messages
+        calls = mock_client.write.call_args_list
+        assert len(calls) >= 1
+        written_data = calls[0][0][0].decode()
         event_data = json.loads(written_data.strip())
 
         assert event_data["type"] == "program_terminated"
@@ -159,7 +163,7 @@ class TestDebugServerTermination:
         """Test that multiple clients all receive termination notifications."""
         # Create multiple mock clients
         clients = []
-        for i in range(3):
+        for _ in range(3):
             client = Mock()
             client.write = Mock()
             client.drain = AsyncMock()
