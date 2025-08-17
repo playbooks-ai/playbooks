@@ -22,6 +22,9 @@ def llm_config():
     """Mock LLM config for testing."""
     config = Mock(spec=LLMConfig)
     config.model = "test-model"
+    config.api_key = "test-api-key"
+    # Add copy method that returns the same mock with proper attributes
+    config.copy = Mock(return_value=config)
     return config
 
 
