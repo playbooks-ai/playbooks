@@ -125,7 +125,9 @@ class DebugHandler:
         event_bus,
         agent_id: str = None,
     ):
-        print(f"[DEBUG_HANDLER] handle_breakpoint: {source_line_number}")
+        print(
+            f"[DEBUG_HANDLER] handle_breakpoint: line {source_line_number} for agent {agent_id}"
+        )
 
         # Get both original and compiled file paths from the debug server's program
         original_file_path = None
