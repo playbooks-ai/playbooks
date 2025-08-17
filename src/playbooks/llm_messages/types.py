@@ -1,9 +1,10 @@
 """Clean semantic LLM message types with minimal, maintainable design."""
 
+from typing import Any, Dict, Optional
+
 from playbooks.enums import LLMMessageRole, LLMMessageType
 
 from .base import LLMMessage
-
 
 # Core semantic message types - minimal set covering all use cases
 
@@ -31,6 +32,10 @@ class UserInputLLMMessage(LLMMessage):
             cached=cached,
         )
 
+    def to_compact_message(self) -> Optional[Dict[str, Any]]:
+        """Remove user inputs during compaction."""
+        return None
+
 
 class AssistantResponseLLMMessage(LLMMessage):
     """LLM responses - cached by default for conversation context."""
@@ -42,6 +47,26 @@ class AssistantResponseLLMMessage(LLMMessage):
             type=LLMMessageType.ASSISTANT_RESPONSE,
             cached=cached,
         )
+
+    def to_compact_message(self) -> Dict[str, Any]:
+        """Use first line that begins with 'recap -' for compaction."""
+        lines = self.content.split("\n")
+
+        # We don't want to confuse LLM with a partial assistant response
+        # so we use the user role for the compacted message
+        compact_message_role = LLMMessageRole.USER
+
+        # Find line that begins with 'recap -'
+        recap_line = next(
+            (line.strip() for line in lines if line.strip().startswith("recap -")), None
+        )
+        if recap_line:
+            return {"role": compact_message_role, "content": recap_line}
+
+        # If no recap line found, use first line with recap prefix
+        first_line = lines[0].strip() if lines else ""
+        first_line = first_line.replace("recap - ", "")
+        return {"role": compact_message_role, "content": first_line}
 
 
 class PlaybookImplementationLLMMessage(LLMMessage):
@@ -125,8 +150,8 @@ class AgentCommunicationLLMMessage(LLMMessage):
         self.sender_agent = self._validate_string_param(sender_agent, "sender_agent")
         self.target_agent = self._validate_string_param(target_agent, "target_agent")
 
-        if self.sender_agent == self.target_agent:
-            raise ValueError("sender_agent cannot be the same as target_agent")
+        # Note: sender_agent can be the same as target_agent in meeting contexts
+        # or when an agent is processing its own messages
 
         super().__init__(
             content=content,

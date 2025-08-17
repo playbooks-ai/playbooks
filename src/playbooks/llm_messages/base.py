@@ -1,6 +1,6 @@
 """Base LLMMessage class for handling LLM messages."""
 
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from playbooks.enums import LLMMessageRole, LLMMessageType
 
@@ -203,19 +203,23 @@ class LLMMessage:
         Returns:
             A dictionary with role, type, content, and optionally cache_control fields
         """
-        message = {"role": self.role, "type": self.type, "content": self.content}
+        message = {
+            "role": self.role.value,
+            "type": self.type.value,
+            "content": self.content,
+        }
         if self.cached:
             message["cache_control"] = {"type": "ephemeral"}
         return message
 
-    def to_compact_message(self) -> Dict[str, Any]:
+    def to_compact_message(self) -> Optional[Dict[str, Any]]:
         """Convert to compact representation for token optimization.
 
         This method can be extended in the future to provide
         progressive compaction strategies for reducing token usage.
 
         Returns:
-            A dictionary representation (currently same as full message)
+            A dictionary representation or None to remove completely
         """
         # Default implementation returns full message
         # Can be overridden in subclasses for specific compaction strategies

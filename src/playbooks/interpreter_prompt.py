@@ -1,5 +1,6 @@
 import json
 import os
+import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from playbooks.llm_messages import (
@@ -9,11 +10,14 @@ from playbooks.llm_messages import (
     OtherAgentInfoLLMMessage,
     UserInputLLMMessage,
 )
+from playbooks.llm_context_compactor import LLMContextCompactor
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import get_messages_for_prompt
 
 if TYPE_CHECKING:
     from playbooks.execution_state import ExecutionState
+
+logger = logging.getLogger(__name__)
 
 
 class InterpreterPrompt:
@@ -51,6 +55,7 @@ class InterpreterPrompt:
         self.trigger_instructions = trigger_instructions
         self.agent_information = agent_information
         self.other_agent_klasses_information = other_agent_klasses_information
+        self.compactor = LLMContextCompactor()
 
     def _get_trigger_instructions_message(self) -> str:
         if len(self.trigger_instructions) > 0:
@@ -155,7 +160,29 @@ class InterpreterPrompt:
             user_instruction_msg = UserInputLLMMessage(prompt_messages[1]["content"])
             self.execution_state.call_stack.add_llm_message(user_instruction_msg)
 
-        messages.extend(self.execution_state.call_stack.get_llm_messages())
+        # Original call stack messages (as LLMMessage objects)
+        call_stack_llm_messages = []
+        for frame in self.execution_state.call_stack.frames:
+            call_stack_llm_messages.extend(frame.llm_messages)
+
+        # Apply compaction - returns Dict[str, str] format ready for LLM API
+        compacted_dict_messages = self.compactor.compact_messages(
+            call_stack_llm_messages
+        )
+
+        # Log compaction stats
+        original_dict_messages = [
+            msg.to_full_message() for msg in call_stack_llm_messages
+        ]
+        original_size = len(str(original_dict_messages))
+        compacted_size = len(str(compacted_dict_messages))
+        compression_ratio = compacted_size / original_size if original_size > 0 else 1.0
+
+        logger.info(
+            f"LLM Context: {original_size} -> {compacted_size} chars ({compression_ratio:.2%})"
+        )
+
+        messages.extend(compacted_dict_messages)
         # messages.extend(self._get_artifact_messages())
         # messages.append(prompt_messages[1])
 
