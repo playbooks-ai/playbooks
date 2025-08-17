@@ -123,10 +123,11 @@ class PlaybookLLMExecution(LLMExecution):
             if self.agent.program.execution_finished:
                 break
 
+            description_paragraph = self.agent.description.split("\n\n")[0]
             llm_response = LLMResponse(
                 await self.make_llm_call(
                     instruction=instruction,
-                    agent_instructions=f"Remember: You are {str(self.agent)}. {self.agent.description}",
+                    agent_instructions=f"Remember: You are {str(self.agent)}. {description_paragraph}",
                     artifacts_to_load=artifacts_to_load,
                 ),
                 event_bus=self.agent.state.event_bus,
