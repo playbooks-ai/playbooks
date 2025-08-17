@@ -17,15 +17,20 @@ from playbooks.main import Playbooks
 from playbooks.utils.llm_config import LLMConfig
 
 
-@pytest.fixture
-def llm_config():
-    """Mock LLM config for testing."""
+def create_mock_llm_config():
+    """Create a properly configured mock LLM config."""
     config = Mock(spec=LLMConfig)
     config.model = "test-model"
     config.api_key = "test-api-key"
     # Add copy method that returns the same mock with proper attributes
     config.copy = Mock(return_value=config)
     return config
+
+
+@pytest.fixture
+def llm_config():
+    """Mock LLM config for testing."""
+    return create_mock_llm_config()
 
 
 @pytest.fixture
@@ -241,7 +246,7 @@ class TestCompilationCaching:
         test_file = temp_dir / "test.pb"
         test_file.write_text(simple_playbook_content)
 
-        compiler = Compiler(Mock(), use_cache=True)
+        compiler = Compiler(create_mock_llm_config(), use_cache=True)
 
         # First compilation - should call LLM
         frontmatter1, content1 = compiler.process_single_file(
@@ -270,7 +275,7 @@ class TestCompilationCaching:
         test_file = temp_dir / "test.pb"
         test_file.write_text(simple_playbook_content)
 
-        compiler = Compiler(Mock(), use_cache=False)
+        compiler = Compiler(create_mock_llm_config(), use_cache=False)
 
         # First compilation
         with patch.object(compiler, "_compile_agent") as mock_compile_agent:
@@ -422,7 +427,7 @@ class TestFrontmatterPreservation:
             (str(compiled_file), compiled_file.read_text(), True),
         ]
 
-        compiler = Compiler(Mock(), use_cache=False)
+        compiler = Compiler(create_mock_llm_config(), use_cache=False)
 
         # Mock the compilation for .pb file
         with patch.object(compiler, "process_single_file") as mock_process:
@@ -568,7 +573,7 @@ This has no H1 headers"""
         test_file = temp_dir / "cache_error.pb"
         test_file.write_text(simple_playbook_content)
 
-        compiler = Compiler(Mock(), use_cache=True)
+        compiler = Compiler(create_mock_llm_config(), use_cache=True)
 
         # Mock the cache write to fail but compilation to succeed
         with patch.object(compiler, "_compile_agent") as mock_compile_agent:
