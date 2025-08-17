@@ -465,7 +465,7 @@ class TestIntegration:
         test_file.write_text(playbook_with_frontmatter)
 
         # Test Playbooks initialization
-        playbooks = Playbooks([str(test_file)], Mock())
+        playbooks = Playbooks([str(test_file)], create_mock_llm_config())
 
         # Check frontmatter extraction
         assert playbooks.program_metadata["title"] == "Test Playbook"
@@ -517,7 +517,7 @@ Content 2"""
 
             # Should raise error due to duplicate 'shared_key'
             with pytest.raises(ValueError, match="Duplicate frontmatter attribute"):
-                Playbooks([str(file1), str(file2)], Mock())
+                Playbooks([str(file1), str(file2)], create_mock_llm_config())
 
     @patch("playbooks.compiler.get_completion")
     def test_mixed_files_integration(
@@ -539,7 +539,7 @@ Content 2"""
         pb_file.write_text(simple_playbook_content)
         pbasm_file.write_text("# PrecompiledAgent\nPrecompiled content")
 
-        playbooks = Playbooks([str(pb_file), str(pbasm_file)], Mock())
+        playbooks = Playbooks([str(pb_file), str(pbasm_file)], create_mock_llm_config())
 
         # Should contain content from both files
         assert "CompiledAgent" in playbooks.compiled_program_content
