@@ -248,6 +248,20 @@ def main():
         "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
     )
 
+    # Playground command
+    playground_parser = subparsers.add_parser(
+        "playground", help="Start the Playbooks playground (webserver + browser)"
+    )
+    playground_parser.add_argument(
+        "--host", default="localhost", help="Host address (default: localhost)"
+    )
+    playground_parser.add_argument(
+        "--http-port", type=int, default=8000, help="HTTP port (default: 8000)"
+    )
+    playground_parser.add_argument(
+        "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -313,6 +327,56 @@ def main():
             console.print("\n[yellow]Web server stopped[/yellow]")
         except Exception as e:
             console.print(f"[bold red]Error starting web server:[/bold red] {e}")
+            sys.exit(1)
+
+    elif args.command == "playground":
+        try:
+            import webbrowser
+            import threading
+            import time
+            from pathlib import Path
+
+            # Import here to avoid unnecessary imports if not using webserver
+            from .applications.web_server import PlaybooksWebServer
+
+            # Get the path to the playground HTML file
+            playground_path = (
+                Path(__file__).parent / "applications" / "playbooks_playground.html"
+            )
+            playground_url = f"file://{playground_path.absolute()}"
+
+            console.print("[green]Starting Playbooks Playground...[/green]")
+            console.print(
+                f"[cyan]Server will start on:[/cyan] http://{args.host}:{args.http_port}"
+            )
+            console.print(
+                f"[cyan]WebSocket will start on:[/cyan] ws://{args.host}:{args.ws_port}"
+            )
+
+            # Function to open browser after a short delay
+            def open_browser():
+                time.sleep(2)  # Give server time to start
+                console.print(
+                    f"[green]Opening playground in browser:[/green] {playground_url}"
+                )
+                webbrowser.open(playground_url)
+
+            # Start browser opener in background thread
+            browser_thread = threading.Thread(target=open_browser, daemon=True)
+            browser_thread.start()
+
+            async def start_playground():
+                server = PlaybooksWebServer(args.host, args.http_port, args.ws_port)
+                console.print(f"[yellow]Playground URL:[/yellow] {playground_url}")
+                console.print("[dim]Press Ctrl+C to stop[/dim]")
+                await server.start()
+
+            asyncio.run(start_playground())
+
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Playground stopped[/yellow]")
+        except Exception as e:
+            console.print(f"[bold red]Error starting playground:[/bold red] {e}")
             sys.exit(1)
 
 

@@ -310,11 +310,11 @@
                     <div className="steps steps-vertical lg:steps-horizontal">
                         <div className="step step-primary">
                             <div className="text-left">
-                                <div className="font-semibold">Start web server</div>
+                                <div className="font-semibold">Start playground</div>
                                 <div className="text-sm opacity-70">
                                     Run <code className="bg-base-200 px-2 py-1 rounded">
-                                        python -m playbooks.applications.web_server
-                                    </code>
+                                        playbooks playground
+                                    </code> to start server and open browser
                                 </div>
                             </div>
                         </div>
@@ -769,8 +769,10 @@
 Playbooks Playground - Enhanced with React, Tailwind CSS, and DaisyUI
 
 Usage Instructions:
-1. Start the Playbooks web server: python -m playbooks.applications.web_server
-2. Open this HTML file in a web browser
+1. Start the playground: playbooks playground (starts server and opens browser automatically)
+2. Alternatively, manual setup:
+   a. Start web server: playbooks webserver
+   b. Open this HTML file in a web browser
 3. Enter a playbook path (default: tests/data/02-personalized-greeting.pb)
 4. Click "Run program" to create a new session
 5. Chat with your AI agents in real-time!
