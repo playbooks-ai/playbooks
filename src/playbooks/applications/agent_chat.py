@@ -37,6 +37,7 @@ from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.message import MessageType
 from playbooks.program import Program
 from playbooks.session_log import SessionLogItemLevel
+from playbooks.utils.error_utils import check_playbooks_health
 
 # Add the src directory to the Python path to import playbooks
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -378,6 +379,14 @@ async def main(
         console.print(f"[bold red]Error:[/bold red] {e}")
         raise
     finally:
+        # Check for agent errors after execution using standardized error handling
+        check_playbooks_health(
+            playbooks,
+            print_errors=True,
+            log_errors=True,
+            raise_on_errors=False,  # Don't raise in CLI context
+            context="agent_chat_execution",
+        )
         if verbose:
             playbooks.event_bus.unsubscribe("*", log_event)
         # Shutdown debug server if it was started

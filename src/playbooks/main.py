@@ -74,3 +74,49 @@ class Playbooks:
         for key, value in self.program_metadata.items():
             if hasattr(self, key):
                 setattr(self, key, value)
+
+    def get_agent_errors(self):
+        """Get a list of all agent errors that have occurred.
+
+        This method provides visibility into agent failures for framework builders
+        and playbook authors using the Playbooks class programmatically.
+
+        Returns:
+            List of error dictionaries with agent_id, error, and error_type
+        """
+        if not self.program:
+            return []
+        return self.program.get_agent_errors()
+
+    def has_agent_errors(self) -> bool:
+        """Check if any agents have had errors.
+
+        Returns:
+            True if any agent has experienced an error during execution
+        """
+        if not self.program:
+            return False
+        return self.program.has_agent_errors()
+
+    def check_execution_health(self) -> dict:
+        """Get a comprehensive health check of the playbook execution.
+
+        Returns:
+            Dictionary with execution status, error count, and error details
+        """
+        if not self.program:
+            return {
+                "status": "not_initialized",
+                "has_errors": False,
+                "error_count": 0,
+                "errors": [],
+            }
+
+        errors = self.get_agent_errors()
+        return {
+            "status": "finished" if self.program.execution_finished else "running",
+            "has_errors": len(errors) > 0,
+            "error_count": len(errors),
+            "errors": errors,
+            "execution_finished": self.program.execution_finished,
+        }

@@ -61,11 +61,13 @@ class AssistantResponseLLMMessage(LLMMessage):
             (line.strip() for line in lines if line.strip().startswith("recap -")), None
         )
         if recap_line:
-            return {"role": compact_message_role, "content": recap_line}
+            return {
+                "role": compact_message_role,
+                "content": recap_line.replace("recap -", "").strip(),
+            }
 
-        # If no recap line found, use first line with recap prefix
+        # If no recap line found, use first line
         first_line = lines[0].strip() if lines else ""
-        first_line = first_line.replace("recap - ", "")
         return {"role": compact_message_role, "content": first_line}
 
 

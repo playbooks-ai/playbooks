@@ -48,6 +48,7 @@ class EventType(Enum):
     # System events
     ERROR = "error"
     DEBUG = "debug"
+    AGENT_ERRORS = "agent_errors"
 
     # Session log events
     SESSION_LOG_ENTRY = "session_log_entry"
@@ -740,6 +741,22 @@ class RunManager:
             await run._broadcast_event(start_event)
 
             await run.playbooks.program.run_till_exit()
+
+            # Check for agent errors after successful completion
+            if run.playbooks.has_agent_errors():
+                agent_errors = run.playbooks.get_agent_errors()
+                error_event = BaseEvent(
+                    type=EventType.AGENT_ERRORS,
+                    timestamp=datetime.now().isoformat(),
+                    run_id=run.run_id,
+                    data={
+                        "error_count": len(agent_errors),
+                        "errors": agent_errors,
+                        "message": f"⚠️ {len(agent_errors)} agent error(s) detected during execution",
+                    },
+                )
+                await run._broadcast_event(error_event)
+
         except ExecutionFinished:
             pass  # Normal termination
         except Exception:
@@ -750,6 +767,21 @@ class RunManager:
                 run_id=run.run_id,
             )
             await run._broadcast_event(error_event)
+
+            # Also check for agent errors that occurred before the exception
+            if run.playbooks and run.playbooks.has_agent_errors():
+                agent_errors = run.playbooks.get_agent_errors()
+                agent_error_event = BaseEvent(
+                    type=EventType.AGENT_ERRORS,
+                    timestamp=datetime.now().isoformat(),
+                    run_id=run.run_id,
+                    data={
+                        "error_count": len(agent_errors),
+                        "errors": agent_errors,
+                        "message": f"Additional agent errors detected: {len(agent_errors)}",
+                    },
+                )
+                await run._broadcast_event(agent_error_event)
         finally:
             run.terminated = True
             # Send termination event

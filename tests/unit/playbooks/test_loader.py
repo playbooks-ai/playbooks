@@ -1,9 +1,10 @@
 """Tests for loader.py module - focusing on read_program method."""
 
-import pytest
 import tempfile
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import patch
+
+import pytest
 
 from playbooks.exceptions import ProgramLoadError
 from playbooks.loader import Loader
@@ -59,9 +60,9 @@ class TestReadProgram:
         """Test reading a single file with read_program."""
         test_file = temp_dir / "test.pb"
         test_file.write_text(sample_playbook)
-        
+
         content, do_not_compile = Loader.read_program([str(test_file)])
-        
+
         assert content == sample_playbook
         assert do_not_compile is False
 
@@ -69,9 +70,9 @@ class TestReadProgram:
         """Test reading a compiled file sets do_not_compile flag."""
         test_file = temp_dir / "test.pbasm"
         test_file.write_text(sample_compiled_playbook)
-        
+
         content, do_not_compile = Loader.read_program([str(test_file)])
-        
+
         assert content == sample_compiled_playbook
         assert do_not_compile is True
 
@@ -79,15 +80,17 @@ class TestReadProgram:
         """Test reading multiple files combines content."""
         test_file1 = temp_dir / "test1.pb"
         test_file2 = temp_dir / "test2.pb"
-        
+
         content1 = sample_playbook
         content2 = sample_playbook.replace("TestAgent", "SecondAgent")
-        
+
         test_file1.write_text(content1)
         test_file2.write_text(content2)
-        
-        combined_content, do_not_compile = Loader.read_program([str(test_file1), str(test_file2)])
-        
+
+        combined_content, do_not_compile = Loader.read_program(
+            [str(test_file1), str(test_file2)]
+        )
+
         # Content should be joined with double newlines
         # Note: Order may vary due to set() deduplication, so check both contents are present
         assert content1 in combined_content or content2 in combined_content
@@ -95,16 +98,18 @@ class TestReadProgram:
         assert "\n\n" in combined_content  # Should have double newline separator
         assert do_not_compile is False
 
-    def test_read_program_mixed_file_types(self, temp_dir, sample_playbook, sample_compiled_playbook):
+    def test_read_program_mixed_file_types(
+        self, temp_dir, sample_playbook, sample_compiled_playbook
+    ):
         """Test reading mixed file types sets do_not_compile flag."""
         pb_file = temp_dir / "test.pb"
         pbasm_file = temp_dir / "test.pbasm"
-        
+
         pb_file.write_text(sample_playbook)
         pbasm_file.write_text(sample_compiled_playbook)
-        
+
         content, do_not_compile = Loader.read_program([str(pb_file), str(pbasm_file)])
-        
+
         # Should include both contents
         assert sample_playbook in content
         assert sample_compiled_playbook in content
@@ -117,20 +122,20 @@ class TestReadProgram:
         for i in range(3):
             test_file = temp_dir / f"test{i}.pb"
             test_file.write_text(sample_playbook.replace("TestAgent", f"Agent{i}"))
-        
+
         pattern = str(temp_dir / "*.pb")
         content, do_not_compile = Loader.read_program([pattern])
-        
+
         # Should contain content from all files
         assert "Agent0" in content
-        assert "Agent1" in content 
+        assert "Agent1" in content
         assert "Agent2" in content
         assert do_not_compile is False
 
     def test_read_program_file_not_found_error(self, temp_dir):
         """Test read_program raises ProgramLoadError for FileNotFoundError."""
         nonexistent_file = temp_dir / "nonexistent.pb"
-        
+
         with pytest.raises(ProgramLoadError):
             Loader.read_program([str(nonexistent_file)])
 
@@ -138,9 +143,9 @@ class TestReadProgram:
         """Test read_program handles OSError."""
         test_file = temp_dir / "test.pb"
         test_file.write_text(sample_playbook)
-        
+
         # Mock Path.read_text to raise OSError
-        with patch('pathlib.Path.read_text', side_effect=OSError("OS Error")):
+        with patch("pathlib.Path.read_text", side_effect=OSError("OS Error")):
             with pytest.raises(ProgramLoadError, match="OS Error"):
                 Loader.read_program([str(test_file)])
 
@@ -148,9 +153,9 @@ class TestReadProgram:
         """Test read_program handles IOError."""
         test_file = temp_dir / "test.pb"
         test_file.write_text(sample_playbook)
-        
+
         # Mock Path.read_text to raise IOError
-        with patch('pathlib.Path.read_text', side_effect=IOError("IO Error")):
+        with patch("pathlib.Path.read_text", side_effect=IOError("IO Error")):
             with pytest.raises(ProgramLoadError, match="IO Error"):
                 Loader.read_program([str(test_file)])
 
@@ -166,14 +171,14 @@ class TestReadProgramInternal:
     def test_read_program_glob_no_matches(self, temp_dir):
         """Test _read_program with glob pattern that matches nothing."""
         pattern = str(temp_dir / "*.nonexistent")
-        
+
         with pytest.raises(FileNotFoundError, match="No files found"):
             Loader._read_program([pattern])
 
     def test_read_program_single_file_missing(self, temp_dir):
         """Test _read_program with missing single file."""
         missing_file = temp_dir / "missing.pb"
-        
+
         with pytest.raises(FileNotFoundError, match="missing.pb not found"):
             Loader._read_program([str(missing_file)])
 
@@ -181,9 +186,9 @@ class TestReadProgramInternal:
         """Test _read_program with some files missing."""
         existing_file = temp_dir / "existing.pb"
         missing_file = temp_dir / "missing.pb"
-        
+
         existing_file.write_text(sample_playbook)
-        
+
         with pytest.raises(FileNotFoundError, match="missing.pb not found"):
             Loader._read_program([str(existing_file), str(missing_file)])
 
@@ -191,7 +196,7 @@ class TestReadProgramInternal:
         """Test _read_program with empty files."""
         empty_file = temp_dir / "empty.pb"
         empty_file.write_text("")
-        
+
         with pytest.raises(FileNotFoundError, match="Files found but content is empty"):
             Loader._read_program([str(empty_file)])
 
@@ -199,7 +204,7 @@ class TestReadProgramInternal:
         """Test _read_program with whitespace-only files."""
         whitespace_file = temp_dir / "whitespace.pb"
         whitespace_file.write_text("   \n  \t  \n  ")
-        
+
         # This should pass as whitespace is considered content
         content, do_not_compile = Loader._read_program([str(whitespace_file)])
         assert content == "   \n  \t  \n  "
@@ -209,10 +214,10 @@ class TestReadProgramInternal:
         """Test that duplicate files are deduplicated."""
         test_file = temp_dir / "test.pb"
         test_file.write_text(sample_playbook)
-        
+
         # Pass the same file twice
         content, do_not_compile = Loader._read_program([str(test_file), str(test_file)])
-        
+
         # Should only include content once
         assert content == sample_playbook  # Not duplicated
         assert do_not_compile is False
@@ -224,14 +229,14 @@ class TestReadProgramInternal:
         test_file2 = temp_dir / "other.pb"
         test_file1.write_text(sample_playbook)
         test_file2.write_text(sample_playbook.replace("TestAgent", "OtherAgent"))
-        
+
         # Test different glob pattern characters
         patterns_to_test = [
-            str(temp_dir / "*.pb"),         # asterisk
-            str(temp_dir / "test?.pb"),     # question mark  
-            str(temp_dir / "[to]*.pb"),     # brackets
+            str(temp_dir / "*.pb"),  # asterisk
+            str(temp_dir / "test?.pb"),  # question mark
+            str(temp_dir / "[to]*.pb"),  # brackets
         ]
-        
+
         for pattern in patterns_to_test:
             content, _ = Loader._read_program([pattern])
             assert len(content) > 0
@@ -247,18 +252,18 @@ class TestReadProgramInternal:
         # Create nested directory structure
         nested_dir = temp_dir / "nested"
         nested_dir.mkdir()
-        
+
         # Create files at different levels
         root_file = temp_dir / "root.pb"
         nested_file = nested_dir / "nested.pb"
-        
+
         root_file.write_text(sample_playbook)
         nested_file.write_text(sample_playbook.replace("TestAgent", "NestedAgent"))
-        
+
         # Use recursive glob pattern
         pattern = str(temp_dir / "**/*.pb")
         content, do_not_compile = Loader._read_program([pattern])
-        
+
         # Should find both files
         assert "TestAgent" in content
         assert "NestedAgent" in content
@@ -269,17 +274,17 @@ class TestReadProgramInternal:
         file1 = temp_dir / "file1.pb"
         file2 = temp_dir / "file2.pb"
         file3 = temp_dir / "file3.pb"
-        
+
         content1 = "Content 1"
         content2 = "Content 2"
         content3 = "Content 3"
-        
+
         file1.write_text(content1)
         file2.write_text(content2)
         file3.write_text(content3)
-        
+
         combined_content, _ = Loader._read_program([str(file1), str(file2), str(file3)])
-        
+
         # Content should be joined with double newlines
         # Note: Order may vary due to set() deduplication, so check all content is present
         assert content1 in combined_content
@@ -287,18 +292,24 @@ class TestReadProgramInternal:
         assert content3 in combined_content
         assert combined_content.count("\n\n") == 2  # Two double-newline separators
 
-    def test_read_program_compiled_flag_precedence(self, temp_dir, sample_playbook, sample_compiled_playbook):
+    def test_read_program_compiled_flag_precedence(
+        self, temp_dir, sample_playbook, sample_compiled_playbook
+    ):
         """Test that compiled flag is set if any file is compiled."""
         pb_file = temp_dir / "regular.pb"
         pbasm_file = temp_dir / "compiled.pbasm"
-        
+
         pb_file.write_text(sample_playbook)
         pbasm_file.write_text(sample_compiled_playbook)
-        
+
         # Test different orders
-        content1, do_not_compile1 = Loader._read_program([str(pb_file), str(pbasm_file)])
-        content2, do_not_compile2 = Loader._read_program([str(pbasm_file), str(pb_file)])
-        
+        content1, do_not_compile1 = Loader._read_program(
+            [str(pb_file), str(pbasm_file)]
+        )
+        content2, do_not_compile2 = Loader._read_program(
+            [str(pbasm_file), str(pb_file)]
+        )
+
         # Both should set do_not_compile to True
         assert do_not_compile1 is True
         assert do_not_compile2 is True
@@ -312,11 +323,13 @@ class TestReadProgramFilesErrorCases:
         # Create files with only whitespace
         file1 = temp_dir / "empty1.pb"
         file2 = temp_dir / "empty2.pb"
-        
+
         file1.write_text("   ")
         file2.write_text("\t\n")
-        
-        with pytest.raises(ProgramLoadError, match="Files found but all content is empty"):
+
+        with pytest.raises(
+            ProgramLoadError, match="Files found but all content is empty"
+        ):
             Loader.read_program_files([str(file1), str(file2)])
 
     def test_read_program_files_no_valid_files(self, temp_dir):
@@ -324,7 +337,7 @@ class TestReadProgramFilesErrorCases:
         # Create a directory (not a file)
         subdir = temp_dir / "subdir"
         subdir.mkdir()
-        
+
         with pytest.raises(ProgramLoadError, match="not found"):
             Loader.read_program_files([str(subdir)])
 
@@ -332,9 +345,9 @@ class TestReadProgramFilesErrorCases:
         """Test read_program_files with mix of valid and invalid files."""
         valid_file = temp_dir / "valid.pb"
         invalid_file = temp_dir / "invalid.pb"
-        
+
         valid_file.write_text(sample_playbook)
         # invalid_file doesn't exist
-        
+
         with pytest.raises(ProgramLoadError, match="invalid.pb not found"):
             Loader.read_program_files([str(valid_file), str(invalid_file)])

@@ -1,10 +1,11 @@
 import asyncio
 import json
+import logging
 import re
 
 # Removed threading import - using asyncio only
 from pathlib import Path
-from typing import Dict, List, Type, Union
+from typing import Any, Dict, List, Type, Union
 
 from playbooks.agents.base_agent import BaseAgent
 from playbooks.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
@@ -125,11 +126,27 @@ class AsyncAgentRuntime:
         except ExecutionFinished as e:
             # Signal that execution is finished
             self.program.set_execution_finished(reason="normal", exit_code=0)
-            print(f"Agent {str(agent)} {EXECUTION_FINISHED}: {e}")
+            logger = logging.getLogger(__name__)
+            logger.info(
+                f"Agent {str(agent)} {EXECUTION_FINISHED}: {e}",
+                extra={
+                    "agent_id": agent.id,
+                    "agent_name": str(agent),
+                    "reason": "execution_finished",
+                },
+            )
             # Don't re-raise ExecutionFinished to allow proper cleanup
             return
         except asyncio.CancelledError:
-            print(f"Agent {str(agent)} stopped")
+            logger = logging.getLogger(__name__)
+            logger.info(
+                f"Agent {str(agent)} stopped",
+                extra={
+                    "agent_id": agent.id,
+                    "agent_name": str(agent),
+                    "reason": "cancelled",
+                },
+            )
 
             # Emit agent stopped event for cancelled agents
             if self.program._debug_server:
@@ -149,7 +166,40 @@ class AsyncAgentRuntime:
 
             raise
         except Exception as e:
-            print(f"Fatal error in agent {agent.id}: {e}")
+            # Log with structured logging and full stack trace
+            logger = logging.getLogger(__name__)
+            logger.error(f"Fatal error in agent {agent.id}: {str(e)}", exc_info=True)
+
+            # Enhanced error logging with context
+            logger.error(
+                f"[AGENT ERROR] Fatal error in agent {agent.id}: {e}",
+                extra={
+                    "agent_id": agent.id,
+                    "agent_name": str(agent),
+                    "error_type": type(e).__name__,
+                    "context": "agent_execution",
+                },
+            )
+
+            # Store the error on the agent for debugging
+            agent._execution_error = e
+
+            # Mark the program as having errors for test visibility
+            self.program._has_agent_errors = True
+
+            # Log agent error using error_utils for consistency
+            from .utils.error_utils import log_agent_errors
+
+            error_info = [
+                {
+                    "agent_id": agent.id,
+                    "agent_name": str(agent),
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "error_obj": e,
+                }
+            ]
+            log_agent_errors(error_info, "agent_runtime")
 
             # Emit agent stopped event for error cases
             if self.program._debug_server:
@@ -185,8 +235,16 @@ class ProgramAgentsCommunicationMixin:
         meeting_id: str = None,
     ):
         """Routes a message to receiver agent(s) via the runtime."""
-        print(
-            f"[DEBUG] Program.route_message: {sender_id} -> {receiver_spec} -> {message}"
+        logger = logging.getLogger(__name__)
+        logger.debug(
+            f"Routing message: {sender_id} -> {receiver_spec}",
+            extra={
+                "sender_id": sender_id,
+                "receiver_spec": receiver_spec,
+                "message_type": message_type.value if message_type else None,
+                "meeting_id": meeting_id,
+                "message_length": len(message) if message else 0,
+            },
         )
         recipient_id = SpecUtils.extract_agent_id(receiver_spec)
         recipient = self.agents_by_id.get(recipient_id)
@@ -260,6 +318,9 @@ class Program(ProgramAgentsCommunicationMixin):
 
         self.execution_finished = False
         self.initialized = False
+        self._has_agent_errors = (
+            False  # Track if any agents have had errors for test visibility
+        )
 
     async def initialize(self):
         self.agents = [
@@ -349,11 +410,19 @@ class Program(ProgramAgentsCommunicationMixin):
             # Start agent as asyncio task
             await self.runtime.start_agent(agent)
         except Exception as e:
-            # Log error but don't crash the program
+            # Log error with full stack trace and re-raise to prevent silent failures
             import logging
 
             logger = logging.getLogger(__name__)
-            logger.error(f"Error initializing new agent {agent.id}: {str(e)}")
+            logger.error(
+                f"Error initializing new agent {agent.id}: {str(e)}", exc_info=True
+            )
+            # Store the error on the agent for debugging
+            agent._initialization_error = e
+            # Re-raise to ensure the caller knows about the failure
+            raise RuntimeError(
+                f"Failed to initialize agent {agent.id}: {str(e)}"
+            ) from e
 
     def _get_compiled_file_name(self) -> str:
         """Generate the compiled file name based on the first original file."""
@@ -414,11 +483,50 @@ class Program(ProgramAgentsCommunicationMixin):
         except ExecutionFinished:
             self.set_execution_finished(reason="normal", exit_code=0)
         except Exception as e:
-            print(f"Unexpected error in run_till_exit: {e}")
+            logger = logging.getLogger(__name__)
+            logger.error(
+                f"Unexpected error in run_till_exit: {e}",
+                exc_info=True,
+                extra={"context": "program_execution", "error_type": type(e).__name__},
+            )
             self.set_execution_finished(reason="error", exit_code=1)
             raise
         finally:
             await self.shutdown()
+
+    def get_agent_errors(self) -> List[Dict[str, Any]]:
+        """Get a list of all agent errors that have occurred.
+
+        Returns:
+            List of error dictionaries with agent_id, error, and error_type
+        """
+        errors = []
+        for agent in self.agents:
+            if hasattr(agent, "_execution_error"):
+                errors.append(
+                    {
+                        "agent_id": agent.id,
+                        "agent_name": str(agent),
+                        "error": str(agent._execution_error),
+                        "error_type": type(agent._execution_error).__name__,
+                        "error_obj": agent._execution_error,
+                    }
+                )
+            if hasattr(agent, "_initialization_error"):
+                errors.append(
+                    {
+                        "agent_id": agent.id,
+                        "agent_name": str(agent),
+                        "error": str(agent._initialization_error),
+                        "error_type": type(agent._initialization_error).__name__,
+                        "error_obj": agent._initialization_error,
+                    }
+                )
+        return errors
+
+    def has_agent_errors(self) -> bool:
+        """Check if any agents have had errors."""
+        return self._has_agent_errors or len(self.get_agent_errors()) > 0
 
     def set_execution_finished(self, reason: str = "normal", exit_code: int = 0):
         self.execution_finished = True

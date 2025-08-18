@@ -49,6 +49,8 @@ class MessagingMixin:
             if self.program.execution_finished:
                 raise ExecutionFinished(EXECUTION_FINISHED)
 
+            # print(f"{str(self)}: WaitForMessage loop iteration, waiting for: {wait_for_message_from}")
+
             first_message_time = None
             buffer_timeout = 5.0  # 5s maximum buffer time
 

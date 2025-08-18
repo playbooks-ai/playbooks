@@ -39,7 +39,7 @@ class TestCompactionConfig:
 
 
 def get_assistant_contents_compacted(index):
-    return f"""recap - This is step {index}"""
+    return f"""This is step {index}"""
 
 
 def get_assistant_contents(index):
