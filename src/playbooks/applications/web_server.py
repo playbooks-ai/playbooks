@@ -854,7 +854,9 @@ class RunManager:
             # Handle incoming messages
             async for message in websocket:
                 debug(
-                    "Received message from client", client_id=client_id, message=message
+                    "Received message from client",
+                    client_id=client_id,
+                    raw_message=message,
                 )
                 await client.handle_message(message, self)
 
