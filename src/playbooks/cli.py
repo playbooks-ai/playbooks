@@ -234,6 +234,20 @@ def main():
         "--output", help="Output file path (if not specified, prints to stdout)"
     )
 
+    # Webserver command
+    webserver_parser = subparsers.add_parser(
+        "webserver", help="Start the Playbooks web server"
+    )
+    webserver_parser.add_argument(
+        "--host", default="localhost", help="Host address (default: localhost)"
+    )
+    webserver_parser.add_argument(
+        "--http-port", type=int, default=8000, help="HTTP port (default: 8000)"
+    )
+    webserver_parser.add_argument(
+        "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -283,6 +297,22 @@ def main():
             sys.exit(1)
         except Exception as e:
             console.print(f"[bold red]Error compiling playbooks:[/bold red] {e}")
+            sys.exit(1)
+
+    elif args.command == "webserver":
+        try:
+            # Import here to avoid unnecessary imports if not using webserver
+            from .applications.web_server import PlaybooksWebServer
+
+            async def start_webserver():
+                server = PlaybooksWebServer(args.host, args.http_port, args.ws_port)
+                await server.start()
+
+            asyncio.run(start_webserver())
+        except KeyboardInterrupt:
+            console.print("\n[yellow]Web server stopped[/yellow]")
+        except Exception as e:
+            console.print(f"[bold red]Error starting web server:[/bold red] {e}")
             sys.exit(1)
 
 
