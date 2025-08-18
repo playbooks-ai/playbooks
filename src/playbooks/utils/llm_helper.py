@@ -12,6 +12,7 @@ from playbooks.enums import LLMMessageRole
 from playbooks.llm_messages import SystemPromptLLMMessage, UserInputLLMMessage
 
 from ..constants import SYSTEM_PROMPT_DELIMITER
+from ..debug_logger import debug
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
 from .langfuse_helper import LangfuseHelper
 from .llm_config import LLMConfig
@@ -65,8 +66,11 @@ def completion_with_preprocessing(*args, **kwargs):
             api_key_preview = (
                 api_key_preview[:8] + "..." if len(api_key_preview) > 8 else "short"
             )
-        print(
-            f"LLM Call - Model: {model}, API Base: {kwargs.get('api_base', 'default')}, API Key: {api_key_preview}"
+        debug(
+            "LLM Call",
+            model=model,
+            api_base=kwargs.get("api_base", "default"),
+            api_key_preview=api_key_preview,
         )
 
     # Call the original completion function
@@ -98,7 +102,7 @@ if llm_cache_enabled:
 
         redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
         cache = Redis.from_url(redis_url)
-        print(f"Using LLM cache Redis URL: {redis_url}")
+        debug("Using LLM cache", redis_url=redis_url)
 
     else:
         raise ValueError(f"Invalid LLM cache type: {llm_cache_type}")

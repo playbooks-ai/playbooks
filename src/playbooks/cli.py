@@ -18,6 +18,7 @@ from rich.console import Console
 from .compiler import Compiler
 from .exceptions import ProgramLoadError
 from .loader import Loader
+from .logging_setup import configure_logging
 from .utils.llm_config import LLMConfig
 
 # Suppress deprecation warnings from external libraries
@@ -159,6 +160,9 @@ async def run_application(
 
 def main():
     """Main CLI entry point."""
+    # Configure logging early
+    configure_logging()
+
     parser = argparse.ArgumentParser(
         description="Playbooks CLI - Compile and run Playbooks programs",
         prog="playbooks",

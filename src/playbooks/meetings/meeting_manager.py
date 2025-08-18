@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from playbooks.constants import HUMAN_AGENT_KLASS
+from playbooks.debug_logger import debug
 from playbooks.exceptions import KlassNotFoundError
 from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
 
@@ -363,7 +364,6 @@ class MeetingManager:
         for participant in meeting.joined_attendees:
             if participant.id == from_agent_id:
                 continue
-            # print(f"  - Broadcasting to {participant.id}")
             await self.agent.program.route_message(
                 sender_id=from_agent_id,
                 sender_klass=from_agent_klass,
@@ -548,8 +548,10 @@ class MeetingManager:
             self.agent.state.call_stack.add_llm_message(meeting_msg)
 
             # Execute the meeting playbook with meeting context
-            print(
-                f"[DEBUG] Agent {self.agent.id} executing meeting playbook {meeting_playbook.name}"
+            debug(
+                "Agent executing meeting playbook",
+                agent_id=self.agent.id,
+                playbook_name=meeting_playbook.name,
             )
             task = asyncio.create_task(
                 self.agent.execute_playbook(
@@ -559,8 +561,10 @@ class MeetingManager:
                 )
             )
             task.add_done_callback(
-                lambda t: print(
-                    f"{str(self.agent)} : Meeting playbook task done - {meeting_playbook.name}"
+                lambda t: debug(
+                    "Meeting playbook task done",
+                    agent=str(self.agent),
+                    playbook_name=meeting_playbook.name,
                 )
             )
             await asyncio.gather(task)

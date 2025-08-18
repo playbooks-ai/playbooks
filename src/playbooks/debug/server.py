@@ -10,6 +10,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set
 
+from ..debug_logger import debug
 from ..event_bus import EventBus
 from ..events import (
     AgentPausedEvent,
@@ -102,7 +103,7 @@ class DebugServer:
     def set_stop_on_entry(self, stop_on_entry: bool) -> None:
         """Set whether to stop on entry."""
         self._stop_on_entry = stop_on_entry
-        print(f"[DEBUG] DebugServer.set_stop_on_entry called with: {stop_on_entry}")
+        self.logger.debug(f"set_stop_on_entry called with: {stop_on_entry}")
         self.logger.info(f"Stop on entry set to: {stop_on_entry}")
 
     def register_agent(self, agent_id: str, agent_name: str, agent_type: str) -> int:
@@ -237,7 +238,6 @@ class DebugServer:
             )
             msg = f"Debug server started on {self.host}:{self.port}"
             self.logger.info(msg)
-            print(msg)
         except Exception as e:
             self.logger.error(f"Failed to start debug server: {e}")
             raise
@@ -246,8 +246,8 @@ class DebugServer:
         self, reason: str = "normal", exit_code: int = 0
     ) -> None:
         """Signal that the program has terminated to all connected clients."""
-        print(
-            f"[DEBUG] Signaling program termination: {reason}, exit_code: {exit_code}"
+        self.logger.debug(
+            f"Signaling program termination: {reason}, exit_code: {exit_code}"
         )
         termination_event = {
             "type": "program_terminated",
@@ -260,7 +260,7 @@ class DebugServer:
         await asyncio.sleep(0.1)
 
         # Force close all client connections after termination signal
-        print(f"[DEBUG] Closing {len(self.clients)} client connections")
+        self.logger.debug(f"Closing {len(self.clients)} client connections")
         disconnected_clients = []
         for client in self.clients:
             try:
@@ -277,9 +277,9 @@ class DebugServer:
                 client.close()
                 await client.wait_closed()
                 disconnected_clients.append(client)
-                print("[DEBUG] Client connection closed successfully")
+                self.logger.debug("Client connection closed successfully")
             except Exception as e:
-                print(f"[DEBUG] Error closing client connection: {e}")
+                self.logger.debug(f"Error closing client connection: {e}")
                 disconnected_clients.append(client)
 
         # Remove all disconnected clients
@@ -289,14 +289,14 @@ class DebugServer:
 
     async def shutdown(self) -> None:
         """Shutdown the debug server."""
-        print("[DEBUG] DebugServer.shutdown called")
+        self.logger.debug("DebugServer.shutdown called")
 
         # Only signal termination if we still have clients (avoid double signaling)
         if self.clients:
             await self.signal_program_termination("normal", 0)
 
         if self.server:
-            print("[DEBUG] Closing debug server")
+            self.logger.debug("Closing debug server")
             self.server.close()
             await self.server.wait_closed()
             self.logger.info("Debug server shutdown")
@@ -310,9 +310,9 @@ class DebugServer:
                     client.close()
                     await client.wait_closed()
             except Exception as e:
-                print(f"[DEBUG] Error closing client during shutdown: {e}")
+                self.logger.debug(f"Error closing client during shutdown: {e}")
         self.clients.clear()
-        print("[DEBUG] DebugServer.shutdown completed")
+        self.logger.debug("DebugServer.shutdown completed")
 
     async def wait_for_client(self) -> None:
         """Wait for at least one client to connect."""
@@ -339,13 +339,13 @@ class DebugServer:
             if not self._step_mode or not current_frame:
                 return False
 
-            print(f"Step mode: {self._step_mode}")
-            print(f"Current frame: {current_frame}")
-            print(f"Initial frame: {self._step_initial_frame}")
+            debug("Step mode", step_mode=self._step_mode)
+            debug("Current frame", current_frame=current_frame)
+            debug("Initial frame", initial_frame=self._step_initial_frame)
 
             if self._step_mode == "step_in":
                 # Always pause on next instruction
-                print("Step in: pausing on next instruction")
+                debug("Step in: pausing on next instruction")
                 return True
 
             elif self._step_mode == "next":
@@ -359,8 +359,10 @@ class DebugServer:
                     initial_line = self._step_initial_frame.get("line_number", 0)
 
                     if current_line != initial_line:
-                        print(
-                            f"Step over: same frame, different line ({initial_line} -> {current_line}), pausing"
+                        debug(
+                            "Step over: same frame, different line, pausing",
+                            initial_line=initial_line,
+                            current_line=current_line,
                         )
                         return True
                     else:
@@ -571,7 +573,6 @@ class DebugServer:
                 writer.close()
                 await writer.wait_closed()
             except Exception:
-                # print(f"Error closing client connection: {cleanup_error}")
                 pass
             self.logger.info(f"Debug client {client_addr} disconnected")
 
@@ -884,7 +885,6 @@ class DebugServer:
             if writer in self.clients:
                 self.clients.remove(writer)
             # msg = f"Client disconnected while sending response: {e}"
-            # print(msg)
         except Exception as e:
             self.logger.error(f"Error sending response: {e}")
 
@@ -1142,10 +1142,8 @@ class DebugServer:
     async def _broadcast_event(self, event_data: Dict[str, Any]) -> None:
         """Broadcast an event to all connected clients."""
         if not self.clients:
-            # print(f"[DEBUG] No clients connected, not broadcasting event: {event_data}")
             return
 
-        # print(
         #     f"[DEBUG] Broadcasting event to {len(self.clients)} clients: {event_data}"
         # )
         message = json.dumps(event_data) + "\n"
@@ -1156,17 +1154,13 @@ class DebugServer:
             try:
                 client.write(message.encode())
                 await client.drain()
-                # print(
                 #     f"[DEBUG] Successfully sent event to client: {event_data['type']}"
                 # )
             except (ConnectionResetError, BrokenPipeError, OSError):
                 # msg = f"Client disconnected while sending event: {e}"
-                # print(msg)
-                # print(f"[DEBUG] Client disconnected while sending event: {e}")
                 disconnected_clients.append(client)
             except Exception as e:
                 self.logger.warning(f"Failed to send event to client: {e}")
-                # print(f"[DEBUG] Failed to send event to client: {e}")
                 disconnected_clients.append(client)
 
         # Remove disconnected clients

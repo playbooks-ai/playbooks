@@ -74,7 +74,6 @@ class SessionLog:
             if not item.strip():
                 return
             item = SessionLogItemMessage(item)
-        # print(f"\n{self.klass} {self.agent_id}: {item}")
         self.log.append({"item": item, "level": level})
 
     def __str__(self) -> str:

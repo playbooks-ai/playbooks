@@ -29,6 +29,8 @@ import litellm
 from rich.console import Console
 
 from playbooks import Playbooks
+from playbooks.debug_logger import debug
+from playbooks.user_output import user_output
 from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.constants import EOM, EXECUTION_FINISHED
 from playbooks.events import Event
@@ -236,7 +238,12 @@ async def patched_route_message(
     # Extract receiver info
     from playbooks.utils.spec_utils import SpecUtils
 
-    print(f"[DEBUG] patched_route_message: {sender_id} -> {receiver_spec} -> {message}")
+    debug(
+        "Patched route message",
+        sender_id=sender_id,
+        receiver_spec=receiver_spec,
+        message=message[:50],
+    )
 
     recipient_id = SpecUtils.extract_agent_id(receiver_spec)
 
@@ -290,14 +297,13 @@ async def main(
         stream: Whether to stream the output
 
     """
-    # print(
     #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
     # )
 
     # Patch the WaitForMessage method before loading agents
     MessagingMixin.WaitForMessage = patched_wait_for_message
 
-    console.print(f"[green]Loading playbooks from:[/green] {program_paths}")
+    user_output.info(f"Loading playbooks from: {program_paths}")
 
     session_id = str(uuid.uuid4())
     if isinstance(program_paths, str):
@@ -306,7 +312,7 @@ async def main(
         playbooks = Playbooks(program_paths, session_id=session_id)
         await playbooks.initialize()
     except litellm.exceptions.AuthenticationError as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        user_output.error("Authentication error", details=str(e))
         raise
 
     # Store original methods and apply patches after playbooks are loaded
@@ -347,14 +353,10 @@ async def main(
 
         # Set stop_on_entry flag in debug server BEFORE waiting for client
         if stop_on_entry:
-            # print(
             #     "[DEBUG] agent_chat.main - stop_on_entry=True, setting up debug server"
             # )
-            # print("[DEBUG] agent_chat.main - calling set_stop_on_entry(True)")
             playbooks.program._debug_server.set_stop_on_entry(True)
-            # print("[DEBUG] agent_chat.main - stop_on_entry setup complete")
         else:
-            # print("[DEBUG] agent_chat.main - stop_on_entry=False, setting to False explicitly")
             playbooks.program._debug_server.set_stop_on_entry(False)
 
         # If wait_for_client is True, pause until a client connects
@@ -372,11 +374,11 @@ async def main(
             playbooks.event_bus.subscribe("*", log_event)
         await playbooks.program.run_till_exit()
     except ExecutionFinished:
-        console.print(f"[green]{EXECUTION_FINISHED}. Exiting...[/green]")
+        user_output.success(f"{EXECUTION_FINISHED}. Exiting...")
     except KeyboardInterrupt:
-        console.print("\n[yellow]Exiting...[/yellow]")
+        user_output.info("Exiting...")
     except Exception as e:
-        console.print(f"[bold red]Error:[/bold red] {e}")
+        user_output.error("Execution error", details=str(e))
         raise
     finally:
         # Check for agent errors after execution using standardized error handling

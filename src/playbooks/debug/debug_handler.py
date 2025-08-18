@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from playbooks.call_stack import InstructionPointer
 from playbooks.events import BreakpointHitEvent, ExecutionPausedEvent, StepCompleteEvent
+from playbooks.debug_logger import debug
 
 if TYPE_CHECKING:
     from playbooks.debug.server import DebugServer
@@ -26,14 +27,14 @@ class DebugHandler:
         event_bus,
         agent_id: str = None,
     ):
-        # print(f"[DEBUG_HANDLER] handle_execution_start: {instruction_pointer}")
-
-        # print(f"[DEBUG_HANDLER] is_first_iteration: {self._is_first_iteration}")
+        debug("Handle execution start", instruction_pointer=str(instruction_pointer))
+        debug("First iteration check", is_first=self._is_first_iteration)
         """Handle debug operations at the start of execution loop iteration."""
         if self._is_first_iteration:
             # Handle stop-on-entry
-            print(
-                f"[DEBUG_HANDLER] should_stop_on_entry: {self.debug_server.should_stop_on_entry()}"
+            debug(
+                "Should stop on entry",
+                stop_on_entry=self.debug_server.should_stop_on_entry(),
             )
             if self.debug_server.should_stop_on_entry():
                 # Get thread_id for the agent if available
@@ -52,7 +53,7 @@ class DebugHandler:
                 )
 
                 self.debug_server._stop_on_entry = False
-                # print("[DEBUG_HANDLER] waiting for continue")
+                debug("Waiting for continue")
                 if agent_id:
                     await self.debug_server.wait_for_continue_agent(agent_id)
                 else:
@@ -82,9 +83,12 @@ class DebugHandler:
         else:
             should_pause = self.debug_server.should_pause_for_step(debug_frame)
 
-        print(f"[DEBUG_HANDLER] agent_id: {agent_id}")
-        print(f"[DEBUG_HANDLER] debug_frame: {debug_frame}")
-        print(f"[DEBUG_HANDLER] should_pause_for_step: {should_pause}")
+        debug(
+            "Handle execution step",
+            agent_id=agent_id,
+            debug_frame=str(debug_frame),
+            should_pause=should_pause,
+        )
 
         if should_pause:
             source_line_number = instruction_pointer.source_line_number
@@ -99,7 +103,7 @@ class DebugHandler:
                     source_line_number=source_line_number, thread_id=thread_id
                 )
             )
-            print("[DEBUG_HANDLER] waiting for step")
+            debug("Waiting for step")
 
             event_bus.publish(
                 ExecutionPausedEvent(
@@ -115,7 +119,7 @@ class DebugHandler:
                 await self.debug_server.wait_for_continue_agent(agent_id)
             else:
                 await self.debug_server.wait_for_continue()
-            print("[DEBUG_HANDLER] DONE waiting for step")
+            debug("Done waiting for step")
 
     async def handle_breakpoint(
         self,
@@ -125,9 +129,7 @@ class DebugHandler:
         event_bus,
         agent_id: str = None,
     ):
-        print(
-            f"[DEBUG_HANDLER] handle_breakpoint: line {source_line_number} for agent {agent_id}"
-        )
+        debug("Handle breakpoint", line=source_line_number, agent_id=agent_id)
 
         # Get both original and compiled file paths from the debug server's program
         original_file_path = None
@@ -154,11 +156,10 @@ class DebugHandler:
                         original_path.parent / ".pbasm_cache" / compiled_file_name
                     )
 
-        print(
-            f"[DEBUG_HANDLER] checking breakpoints for original: {original_file_path}"
-        )
-        print(
-            f"[DEBUG_HANDLER] checking breakpoints for compiled: {compiled_file_path}"
+        debug(
+            "Checking breakpoints",
+            original_file=original_file_path,
+            compiled_file=compiled_file_path,
         )
 
         # Check breakpoints for both file paths
@@ -168,7 +169,9 @@ class DebugHandler:
             source_line_number=source_line_number, file_path=compiled_file_path
         )
 
-        print(f"[DEBUG_HANDLER] has_breakpoint: {has_breakpoint}")
+        debug(
+            "Check breakpoint", has_breakpoint=has_breakpoint, line=source_line_number
+        )
 
         """Check and handle breakpoint at the given line."""
         if has_breakpoint:
@@ -182,7 +185,7 @@ class DebugHandler:
                     source_line_number=source_line_number, thread_id=thread_id
                 )
             )
-            print("[DEBUG_HANDLER] waiting for continue")
+            debug("Waiting for continue at breakpoint")
 
             # Use agent-aware continue if agent_id is provided
             if agent_id:
@@ -190,7 +193,7 @@ class DebugHandler:
             else:
                 await self.debug_server.wait_for_continue()
         else:
-            print(f"[DEBUG_HANDLER] no breakpoint at {source_line_number}")
+            debug("No breakpoint", line=source_line_number)
             await self.handle_step(
                 instruction_pointer, next_instruction_pointer, event_bus, agent_id
             )

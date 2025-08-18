@@ -1,7 +1,10 @@
+import logging
 import threading
 from typing import Callable, Dict, Type, Union
 
 from playbooks.events import Event
+
+logger = logging.getLogger(__name__)
 
 
 class EventBus:
@@ -76,7 +79,14 @@ class EventBus:
             try:
                 callback(event)
             except Exception as e:
-                print(f"Error in subscriber for {type(event).__name__}: {e}")
+                logger.error(
+                    f"Error in subscriber for {type(event).__name__}: {e}",
+                    exc_info=True,
+                    extra={
+                        "event_type": type(event).__name__,
+                        "error_type": type(e).__name__,
+                    },
+                )
 
     def clear_subscribers(self, event_type: Type[Event] = None) -> None:
         """Clear all subscribers or subscribers of a specific event type.

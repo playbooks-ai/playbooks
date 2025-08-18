@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Type, Union
 
 from playbooks.agents.base_agent import BaseAgent
-from playbooks.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
+from playbooks.constants import HUMAN_AGENT_KLASS
+from playbooks.debug_logger import debug
 
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
@@ -20,6 +21,8 @@ from .meetings import MeetingRegistry
 from .message import Message, MessageType
 from .utils.markdown_to_ast import markdown_to_ast
 from .utils.spec_utils import SpecUtils
+
+logger = logging.getLogger(__name__)
 
 
 class AsyncAgentRuntime:
@@ -40,6 +43,8 @@ class AsyncAgentRuntime:
             return
 
         self.running_agents[agent.id] = True
+
+        debug("Starting agent", agent_id=agent.id, agent_type=agent.klass)
 
         # Register agent with debug server if available
         if self.program._debug_server:
@@ -72,6 +77,8 @@ class AsyncAgentRuntime:
         """Stop an agent gracefully."""
         if agent_id not in self.running_agents:
             return
+
+        debug("Stopping agent", agent_id=agent_id)
 
         # Signal shutdown
         self.running_agents[agent_id] = False
@@ -126,26 +133,20 @@ class AsyncAgentRuntime:
         except ExecutionFinished as e:
             # Signal that execution is finished
             self.program.set_execution_finished(reason="normal", exit_code=0)
-            logger = logging.getLogger(__name__)
-            logger.info(
-                f"Agent {str(agent)} {EXECUTION_FINISHED}: {e}",
-                extra={
-                    "agent_id": agent.id,
-                    "agent_name": str(agent),
-                    "reason": "execution_finished",
-                },
+            debug(
+                "Agent execution finished",
+                agent_id=agent.id,
+                agent_name=str(agent),
+                reason=str(e),
             )
             # Don't re-raise ExecutionFinished to allow proper cleanup
             return
         except asyncio.CancelledError:
-            logger = logging.getLogger(__name__)
-            logger.info(
-                f"Agent {str(agent)} stopped",
-                extra={
-                    "agent_id": agent.id,
-                    "agent_name": str(agent),
-                    "reason": "cancelled",
-                },
+            debug(
+                "Agent stopped",
+                agent_id=agent.id,
+                agent_name=str(agent),
+                reason="cancelled",
             )
 
             # Emit agent stopped event for cancelled agents
@@ -166,19 +167,25 @@ class AsyncAgentRuntime:
 
             raise
         except Exception as e:
-            # Log with structured logging and full stack trace
-            logger = logging.getLogger(__name__)
-            logger.error(f"Fatal error in agent {agent.id}: {str(e)}", exc_info=True)
-
-            # Enhanced error logging with context
+            # Use structured logging for production errors (important for monitoring)
             logger.error(
-                f"[AGENT ERROR] Fatal error in agent {agent.id}: {e}",
+                f"Fatal error in agent {agent.id}: {e}",
                 extra={
                     "agent_id": agent.id,
                     "agent_name": str(agent),
                     "error_type": type(e).__name__,
                     "context": "agent_execution",
                 },
+                exc_info=True,
+            )
+
+            # Also use debug for developer troubleshooting
+            debug(
+                "Fatal agent error",
+                agent_id=agent.id,
+                agent_name=str(agent),
+                error_type=type(e).__name__,
+                error=str(e),
             )
 
             # Store the error on the agent for debugging
@@ -235,16 +242,12 @@ class ProgramAgentsCommunicationMixin:
         meeting_id: str = None,
     ):
         """Routes a message to receiver agent(s) via the runtime."""
-        logger = logging.getLogger(__name__)
-        logger.debug(
-            f"Routing message: {sender_id} -> {receiver_spec}",
-            extra={
-                "sender_id": sender_id,
-                "receiver_spec": receiver_spec,
-                "message_type": message_type.value if message_type else None,
-                "meeting_id": meeting_id,
-                "message_length": len(message) if message else 0,
-            },
+        debug(
+            "Routing message",
+            sender_id=sender_id,
+            receiver_spec=receiver_spec,
+            message_type=message_type.value if message_type else None,
+            message_length=len(message) if message else 0,
         )
         recipient_id = SpecUtils.extract_agent_id(receiver_spec)
         recipient = self.agents_by_id.get(recipient_id)
@@ -411,12 +414,10 @@ class Program(ProgramAgentsCommunicationMixin):
             await self.runtime.start_agent(agent)
         except Exception as e:
             # Log error with full stack trace and re-raise to prevent silent failures
-            import logging
-
-            logger = logging.getLogger(__name__)
             logger.error(
                 f"Error initializing new agent {agent.id}: {str(e)}", exc_info=True
             )
+            debug("Agent initialization error", agent_id=agent.id, error=str(e))
             # Store the error on the agent for debugging
             agent._initialization_error = e
             # Re-raise to ensure the caller knows about the failure
@@ -483,11 +484,15 @@ class Program(ProgramAgentsCommunicationMixin):
         except ExecutionFinished:
             self.set_execution_finished(reason="normal", exit_code=0)
         except Exception as e:
-            logger = logging.getLogger(__name__)
             logger.error(
                 f"Unexpected error in run_till_exit: {e}",
                 exc_info=True,
                 extra={"context": "program_execution", "error_type": type(e).__name__},
+            )
+            debug(
+                "Unexpected run_till_exit error",
+                error=str(e),
+                error_type=type(e).__name__,
             )
             self.set_execution_finished(reason="error", exit_code=1)
             raise
@@ -578,7 +583,7 @@ class Program(ProgramAgentsCommunicationMixin):
             try:
                 await self._debug_server.shutdown()
             except Exception as e:
-                print(f"Error shutting down debug server: {e}")
+                debug("Error shutting down debug server", error=str(e))
             finally:
                 self._debug_server = None
 

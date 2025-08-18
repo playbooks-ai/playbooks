@@ -25,7 +25,6 @@ class MessagingMixin:
 
         This is the single entry point for all incoming messages.
         """
-        # print(f"{str(self)}: Adding message to buffer: {message}")
         if hasattr(self, "meeting_manager") and self.meeting_manager:
             message_handled = await self.meeting_manager._add_message_to_buffer(message)
             if message_handled:
@@ -49,8 +48,6 @@ class MessagingMixin:
             if self.program.execution_finished:
                 raise ExecutionFinished(EXECUTION_FINISHED)
 
-            # print(f"{str(self)}: WaitForMessage loop iteration, waiting for: {wait_for_message_from}")
-
             first_message_time = None
             buffer_timeout = 5.0  # 5s maximum buffer time
 
@@ -72,10 +69,6 @@ class MessagingMixin:
                 if message.content == EOM:
                     release_buffer = True
                     break
-
-            # print(
-            #     f"\n{str(self)} waiting for {wait_for_message_from} - {self._message_buffer} - Releasing buffer: {release_buffer}"
-            # )
             if release_buffer:
                 return self._process_collected_messages(num_messages_to_process)
 
@@ -105,9 +98,6 @@ class MessagingMixin:
 
         if source.startswith("meeting "):
             # Meeting: always wait full 5s to accumulate chatter
-            # print(
-            #     f"\n{str(self)}: _should_release_buffer: meeting: {time_elapsed}, {buffer_timeout}, {time_elapsed >= buffer_timeout}"
-            # )
             return time_elapsed >= buffer_timeout
         else:
             # Human/Agent: release immediately on target source OR 5s timeout
@@ -116,9 +106,6 @@ class MessagingMixin:
                 or message.sender_id == "human"
                 or source == "*"
             )
-            # print(
-            #     f"\n{str(self)}: _should_release_buffer: target_source_message: {target_source_message}, {message.content == EOM}, {time_elapsed >= buffer_timeout}"
-            # )
             if (
                 target_source_message
                 or message.content == EOM
@@ -137,10 +124,6 @@ class MessagingMixin:
         Returns:
             Formatted message string
         """
-        # print(
-        #     f"\n{str(self)}: _process_collected_messages: {len(self._message_buffer)} messages"
-        # )
-
         if not num_messages_to_process:
             num_messages_to_process = len(self._message_buffer)
 

@@ -1,11 +1,11 @@
 import asyncio
 import copy
-import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
+from ..debug_logger import debug
 from ..enums import StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
@@ -28,8 +28,6 @@ from .base_agent import BaseAgent, BaseAgentMeta
 
 if TYPE_CHECKING:
     from ..program import Program
-
-logger = logging.getLogger(__name__)
 
 
 class AIAgentMeta(BaseAgentMeta):
@@ -208,9 +206,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         def create_idle_task():
             task = asyncio.create_task(self._idle_loop())
             self._background_tasks.append(task)
-            # idle_task.add_done_callback(
-            #     lambda t: print(f"{str(self)} : Idle loop task done")
-            # )
 
         # Find playbooks with a BGN trigger and execute them
         for playbook in self.playbooks.values():
@@ -219,10 +214,8 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                     if trigger.is_begin:
                         # Create task for each BGN playbook
                         task = asyncio.create_task(self.execute_playbook(playbook.name))
-                        # print(f"{str(self)} : BGN task created - {playbook.name}")
 
                         def task_done_callback(t):
-                            # print(f"{str(self)} : BGN task done - {playbook.name}")
                             create_idle_task()
 
                         task.add_done_callback(task_done_callback)
@@ -245,16 +238,11 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         while True:
             if self.program and self.program.execution_finished:
                 break
-            # print(f"\n{str(self)}: _idle_loop")
             # If playbooks are running, we let them receive messages
             if not self.state.call_stack.is_empty():
-                # print(f"{str(self)} : _idle_loop - playbooks are running, sleeping...")
                 await asyncio.sleep(5)
                 sleep_turns += 1
                 if sleep_turns >= sleep_turns_max:
-                    # print(
-                    #     f"{str(self)} : _idle_loop - max sleep turns reached, forcing a continue message"
-                    # )
                     self._message_buffer.append(
                         Message(
                             sender_id="human",
@@ -672,7 +660,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                 await self._post_execute(call, result, langfuse_span)
                 return result
             except ExecutionFinished as e:
-                print("\n\nExecution finished, exiting...")
+                debug("Execution finished, exiting", agent=str(self))
                 self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
                 await self._post_execute(call, message, langfuse_span)

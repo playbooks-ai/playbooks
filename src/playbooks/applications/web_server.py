@@ -13,6 +13,7 @@ from typing import Dict, List, Optional, Set
 import websockets
 
 from playbooks import Playbooks
+from playbooks.debug_logger import debug
 from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.constants import EOM
 from playbooks.exceptions import ExecutionFinished
@@ -69,7 +70,7 @@ class BaseEvent:
             data["type"] = self.type.value
             return data
         except Exception as e:
-            print(f"Error serializing event: {e}")
+            debug("Error serializing event", error=str(e))
             # Return a minimal event on error
             return {
                 "type": self.type.value,
@@ -245,8 +246,10 @@ class PlaybookRun:
             """Create a callback for a specific agent's session log."""
 
             async def callback(event_data):
-                print(
-                    f"[DEBUG] Session log callback called for {agent_klass}({agent_id}): {event_data.get('item_type', 'unknown')}"
+                debug(
+                    "Session log callback",
+                    agent=f"{agent_klass}({agent_id})",
+                    item_type=event_data.get("item_type", "unknown"),
                 )
                 # Create SessionLogEvent
                 event = SessionLogEvent(
@@ -268,13 +271,16 @@ class PlaybookRun:
             return callback
 
         # Replace session logs for all agents
-        print(
-            f"[DEBUG] Setting up streaming session logs for {len(self.playbooks.program.agents)} agents"
+        debug(
+            "Setting up streaming session logs",
+            agent_count=len(self.playbooks.program.agents),
         )
         for agent in self.playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-                print(
-                    f"[DEBUG] Setting up streaming for agent {agent.id} ({agent.klass})"
+                debug(
+                    "Setting up streaming for agent",
+                    agent_id=agent.id,
+                    agent_klass=agent.klass,
                 )
                 # Create streaming callback for this agent
                 callback = create_session_log_callback(agent.id, agent.klass)
@@ -287,15 +293,17 @@ class PlaybookRun:
                 # Copy existing log entries
                 streaming_log.log = original_log.log.copy()
                 agent.state.session_log = streaming_log
-                print(
-                    f"[DEBUG] Replaced session log for agent {agent.id}, existing entries: {len(streaming_log.log)}"
+                debug(
+                    "Replaced session log for agent",
+                    agent_id=agent.id,
+                    existing_entries=len(streaming_log.log),
                 )
             else:
-                print(f"[DEBUG] Agent {agent.id} has no session_log or state")
+                debug("Agent has no session_log or state", agent_id=agent.id)
 
     def _setup_early_streaming(self):
         """Setup streaming before execution starts to catch all events."""
-        print(f"[DEBUG] Setting up early streaming for run {self.run_id}")
+        debug("Setting up early streaming", run_id=self.run_id)
 
         # Setup session log streaming for all agents
         self._setup_streaming_session_logs()
@@ -307,20 +315,25 @@ class PlaybookRun:
 
     async def _setup_streaming_for_new_agent(self, agent):
         """Set up streaming for a newly created agent."""
-        print(
-            f"[DEBUG] Setting up streaming for newly created agent {agent.id} ({agent.klass})"
+        debug(
+            "Setting up streaming for newly created agent",
+            agent_id=agent.id,
+            agent_klass=agent.klass,
         )
 
         # Set up session log streaming if the agent has one
         if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-            print(f"[DEBUG] Setting up session log streaming for new agent {agent.id}")
+            debug("Setting up session log streaming for new agent", agent_id=agent.id)
 
             def create_session_log_callback(agent_id, agent_klass):
                 """Create a callback for a specific agent's session log."""
 
                 async def callback(event_data):
-                    print(
-                        f"[DEBUG] Session log callback called for newly created {agent_klass}({agent_id}): {event_data.get('item_type', 'unknown')}"
+                    debug(
+                        "Session log callback for newly created agent",
+                        agent_klass=agent_klass,
+                        agent_id=agent_id,
+                        item_type=event_data.get("item_type", "unknown"),
                     )
                     # Create SessionLogEvent
                     event = SessionLogEvent(
@@ -352,15 +365,15 @@ class PlaybookRun:
             # Copy existing log entries
             streaming_log.log = original_log.log.copy()
             agent.state.session_log = streaming_log
-            print(
-                f"[DEBUG] Replaced session log for new agent {agent.id}, existing entries: {len(streaming_log.log)}"
+            debug(
+                "Replaced session log for new agent",
+                agent_id=agent.id,
+                existing_entries=len(streaming_log.log),
             )
 
         # Set up agent message streaming if it's not a human agent
         if hasattr(agent, "klass") and agent.klass != "human":
-            print(
-                f"[DEBUG] Setting up agent message streaming for new agent {agent.id}"
-            )
+            debug("Setting up agent message streaming for new agent", agent_id=agent.id)
             self._setup_agent_streaming(agent)
 
         # Broadcast agent created event
@@ -500,8 +513,10 @@ class PlaybookRun:
         """Add a WebSocket client to this run."""
         try:
             self.websocket_clients.add(client)
-            print(
-                f"Added client to run {self.run_id}, total clients: {len(self.websocket_clients)}"
+            debug(
+                "Added client to run",
+                run_id=self.run_id,
+                total_clients=len(self.websocket_clients),
             )
 
             # Signal that a client has connected
@@ -513,31 +528,33 @@ class PlaybookRun:
                 timestamp=datetime.now().isoformat(),
                 run_id=self.run_id,
             )
-            print(f"Sending connection established event: {event.to_dict()}")
+            debug("Sending connection established event", event=event.to_dict())
             await client.send_event(event)
 
             # Send event history
-            print(f"Sending {len(self.event_history)} historical events")
+            debug("Sending historical events", event_count=len(self.event_history))
             for event in self.event_history:
                 await client.send_event(event)
 
             # Always send existing session logs
             await self._send_existing_session_logs(client)
 
-            print(f"Client successfully added and initialized for run {self.run_id}")
+            debug("Client successfully added and initialized", run_id=self.run_id)
         except Exception as e:
-            print(f"Error adding client to run {self.run_id}: {e}")
+            debug("Error adding client to run", run_id=self.run_id, error=str(e))
             raise
 
     async def _send_existing_session_logs(self, client):
         """Send existing session log entries to a newly connected client."""
-        print(f"[DEBUG] Sending existing session logs to client {client.client_id}")
+        debug("Sending existing session logs to client", client_id=client.client_id)
 
         for agent in self.playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
                 session_log = agent.state.session_log
-                print(
-                    f"[DEBUG] Agent {agent.id} has {len(session_log.log)} session log entries"
+                debug(
+                    "Agent session log entries",
+                    agent_id=agent.id,
+                    entry_count=len(session_log.log),
                 )
 
                 for entry in session_log.log:
@@ -641,16 +658,22 @@ class WebSocketClient:
         """Send event to client - always send all events."""
         try:
             event_data = event.to_dict()
-            print(f"Sending event to client {self.client_id}: {event_data}")
+            debug(
+                "Sending event to client",
+                client_id=self.client_id,
+                event_data=event_data,
+            )
             await self.websocket.send(json.dumps(event_data))
         except (
             websockets.exceptions.ConnectionClosed,
             websockets.exceptions.ConnectionClosedError,
         ):
-            print(f"Client {self.client_id} connection closed during send")
+            debug("Client connection closed during send", client_id=self.client_id)
             raise  # Re-raise to trigger cleanup
         except Exception as e:
-            print(f"Error sending event to client {self.client_id}: {e}")
+            debug(
+                "Error sending event to client", client_id=self.client_id, error=str(e)
+            )
             raise
 
     async def handle_message(self, message: str, run_manager: "RunManager"):
@@ -684,8 +707,8 @@ class RunManager:
     ) -> str:
         """Create a new playbook run."""
         run_id = str(uuid.uuid4())
-        print(f"Creating run with id: {run_id}")
-        print(f"playbooks_path: {playbooks_path}")
+        debug("Creating run", run_id=run_id)
+        debug("Playbooks path", playbooks_path=playbooks_path)
 
         try:
             if playbooks_path:
@@ -694,7 +717,7 @@ class RunManager:
                 else:
                     playbooks_paths = [playbooks_path]
 
-                print(f"playbooks_paths: {playbooks_paths}")
+                debug("Playbooks paths", playbooks_paths=playbooks_paths)
                 playbooks = Playbooks(playbooks_paths, session_id=run_id)
             elif program_content:
                 playbooks = Playbooks.from_string(program_content, session_id=run_id)
@@ -723,11 +746,9 @@ class RunManager:
         """Execute a playbook run."""
         try:
             # Wait for at least one WebSocket client to connect before starting execution
-            print(
-                f"[DEBUG] Waiting for WebSocket client to connect to run {run.run_id}"
-            )
+            debug("Waiting for WebSocket client to connect", run_id=run.run_id)
             await run.client_connected_event.wait()
-            print(f"[DEBUG] Client connected, starting execution for run {run.run_id}")
+            debug("Client connected, starting execution", run_id=run.run_id)
 
             # Mark execution as started
             run.execution_started = True
@@ -802,15 +823,15 @@ class RunManager:
         run_id = None
 
         try:
-            print(f"WebSocket connection attempt with path: {path}")
+            debug("WebSocket connection attempt", path=path)
 
             # Extract run_id from path: /ws/{run_id}
             path_parts = path.strip("/").split("/")
             if len(path_parts) >= 2 and path_parts[0] == "ws":
                 run_id = path_parts[1]
-                print(f"Extracted run_id: {run_id}")
+                debug("Extracted run_id", run_id=run_id)
             else:
-                print(f"Invalid path format: {path}")
+                debug("Invalid path format", path=path)
                 await websocket.close(
                     code=1008, reason="Invalid path format. Use /ws/{run_id}"
                 )
@@ -818,34 +839,38 @@ class RunManager:
 
             run = self.runs.get(run_id)
             if not run:
-                print(
-                    f"Run not found: {run_id}. Available runs: {list(self.runs.keys())}"
+                debug(
+                    "Run not found",
+                    run_id=run_id,
+                    available_runs=list(self.runs.keys()),
                 )
                 await websocket.close(code=1008, reason="Run not found")
                 return
 
-            print(f"Adding client to run {run_id}")
+            debug("Adding client to run", run_id=run_id)
             await run.add_client(client)
-            print("Client added successfully, starting message loop")
+            debug("Client added successfully, starting message loop")
 
             # Handle incoming messages
             async for message in websocket:
-                print(f"Received message from client {client_id}: {message}")
+                debug(
+                    "Received message from client", client_id=client_id, message=message
+                )
                 await client.handle_message(message, self)
 
         except (
             websockets.exceptions.ConnectionClosed,
             websockets.exceptions.ConnectionClosedError,
         ):
-            print(f"WebSocket connection closed for client {client_id}")
+            debug("WebSocket connection closed", client_id=client_id)
         except Exception as e:
-            print(f"WebSocket error for client {client_id}: {e}")
+            debug("WebSocket error for client", client_id=client_id, error=str(e))
             import traceback
 
             traceback.print_exc()
         finally:
             # Cleanup
-            print(f"Cleaning up client {client_id}")
+            debug("Cleaning up client", client_id=client_id)
             if client_id in self.clients:
                 del self.clients[client_id]
             if run_id and run_id in self.runs:
@@ -1004,7 +1029,7 @@ async def main():
     try:
         await server.start()
     except KeyboardInterrupt:
-        print("\n🛑 Shutting down server...")
+        debug("Shutting down server")
         server.stop()
 
 

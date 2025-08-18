@@ -5,8 +5,12 @@ from typing import List
 from .compiler import Compiler
 from .event_bus import EventBus
 from .loader import Loader
+from .logging_setup import configure_logging
 from .program import Program
 from .utils.llm_config import LLMConfig
+
+# Configure logging at module import
+configure_logging()
 
 
 class Playbooks:

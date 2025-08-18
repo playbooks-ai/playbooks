@@ -3,6 +3,7 @@ import os
 import logging
 from typing import TYPE_CHECKING, Dict, List, Optional
 
+from playbooks.debug_logger import debug
 from playbooks.llm_messages import (
     AssistantResponseLLMMessage,
     TriggerInstructionsLLMMessage,
@@ -115,7 +116,7 @@ class InterpreterPrompt:
             ) as f:
                 prompt = f.read()
         except FileNotFoundError:
-            print("Error: Prompt template file not found!")
+            debug("Error: Prompt template file not found")
             return "Error: Prompt template missing."
 
         initial_state = json.dumps(self.execution_state.to_dict(), indent=2)
