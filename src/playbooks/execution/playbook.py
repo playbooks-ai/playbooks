@@ -20,6 +20,7 @@ from ..session_log import SessionLogItemLevel, SessionLogItemMessage
 from ..utils.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
+    update_description_in_markdown,
 )
 from ..utils.llm_config import LLMConfig
 from ..utils.llm_helper import get_completion
@@ -70,7 +71,7 @@ class PlaybookLLMExecution(LLMExecution):
                     self.playbook.description, context
                 )
 
-                markdown_for_llm = context.update_description_in_markdown(
+                markdown_for_llm = update_description_in_markdown(
                     self.playbook.markdown, resolved_description
                 )
             except Exception as e:
