@@ -7,6 +7,12 @@ execution_mode: raw
 Give the one word answer only, nothing else.
 Answer: 
 
+## Test2 playbook
+Here is a joke: {Joke()}
+
+### Steps
+- Remember joke as $jk
+
 ## Main
 
 ### Trigger
@@ -14,4 +20,10 @@ Answer:
 
 ### Steps
 - Run test playbook
+- Run test2 playbook
 - End program
+
+## Joke
+
+### Steps
+- Return "Why was the computer cold? It left its Windows open."

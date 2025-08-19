@@ -223,3 +223,7 @@ async def test_example_13_description_injection(test_data_dir):
     log = agent.state.session_log.to_log_full()
     print(log)
     assert "Greed" in log
+    assert (
+        playbooks.program.agents_by_klass["TestAgent"][0].state.variables["$jk"].value
+        == "Why was the computer cold? It left its Windows open."
+    )
