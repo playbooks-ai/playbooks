@@ -9,11 +9,11 @@ Measures:
 """
 
 import asyncio
-import time
-import statistics
 import gc
-from typing import List
+import statistics
+import time
 import tracemalloc
+from typing import List
 
 from playbooks.event_bus import EventBus
 from playbooks.events import Event

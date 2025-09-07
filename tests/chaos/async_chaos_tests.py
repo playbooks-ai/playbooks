@@ -6,16 +6,16 @@ the async architecture handles unexpected situations gracefully.
 """
 
 import asyncio
-import random
-import time
 import gc
 import logging
+import random
+import time
 from contextlib import asynccontextmanager
 
 import pytest
 
-from playbooks.event_bus import EventBus
 from playbooks.async_message_queue import AsyncMessageQueue
+from playbooks.event_bus import EventBus
 from playbooks.events import Event
 from playbooks.message import Message, MessageType
 
