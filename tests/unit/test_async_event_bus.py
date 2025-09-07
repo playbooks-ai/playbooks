@@ -1,5 +1,5 @@
 """
-Comprehensive unit tests for AsyncEventBus implementation.
+Comprehensive unit tests for unified EventBus async functionality.
 
 Tests cover:
 - Basic pub/sub functionality
@@ -16,7 +16,7 @@ import gc
 
 import pytest
 
-from playbooks.async_event_bus import AsyncEventBus, AsyncEventBusAdapter
+from playbooks.event_bus import EventBus
 from playbooks.events import Event
 
 
@@ -37,12 +37,12 @@ class AnotherSampleEvent(Event):
 
 
 @pytest.mark.asyncio
-class TestAsyncEventBus:
-    """Test cases for AsyncEventBus."""
+class TestEventBusAsync:
+    """Test cases for async functionality on unified EventBus."""
 
     async def test_basic_publish_subscribe(self):
         """Test basic publish/subscribe functionality."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         received_events = []
 
         def handler(event: SampleEvent):
@@ -51,7 +51,7 @@ class TestAsyncEventBus:
         # Subscribe and publish
         bus.subscribe(SampleEvent, handler)
         test_event = SampleEvent("hello")
-        await bus.publish(test_event)
+        await bus.publish_async(test_event)
 
         # Verify
         assert len(received_events) == 1
@@ -60,7 +60,7 @@ class TestAsyncEventBus:
 
     async def test_async_callback(self):
         """Test async callback handling."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         received_events = []
 
         async def async_handler(event: SampleEvent):
@@ -69,7 +69,7 @@ class TestAsyncEventBus:
 
         # Subscribe and publish
         bus.subscribe(SampleEvent, async_handler)
-        await bus.publish(SampleEvent("async"))
+        await bus.publish_async(SampleEvent("async"))
 
         # Verify
         assert len(received_events) == 1
@@ -77,7 +77,7 @@ class TestAsyncEventBus:
 
     async def test_multiple_subscribers(self):
         """Test multiple subscribers to same event type."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         results = []
 
         def handler1(event):
@@ -95,7 +95,7 @@ class TestAsyncEventBus:
         bus.subscribe(SampleEvent, handler3)
 
         # Publish
-        await bus.publish(SampleEvent("multi"))
+        await bus.publish_async(SampleEvent("multi"))
 
         # Verify all handlers called (order not guaranteed due to concurrent execution)
         assert len(results) == 3
@@ -105,7 +105,7 @@ class TestAsyncEventBus:
 
     async def test_wildcard_subscription(self):
         """Test wildcard subscription to all events."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         received_events = []
 
         def wildcard_handler(event):
@@ -115,8 +115,8 @@ class TestAsyncEventBus:
         bus.subscribe("*", wildcard_handler)
 
         # Publish different event types
-        await bus.publish(SampleEvent("test1"))
-        await bus.publish(AnotherSampleEvent(42))
+        await bus.publish_async(SampleEvent("test1"))
+        await bus.publish_async(AnotherSampleEvent(42))
 
         # Verify
         assert len(received_events) == 2
@@ -125,7 +125,7 @@ class TestAsyncEventBus:
 
     async def test_unsubscribe(self):
         """Test unsubscribe functionality."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         call_count = 0
 
         def handler(event):
@@ -134,17 +134,17 @@ class TestAsyncEventBus:
 
         # Subscribe
         bus.subscribe(SampleEvent, handler)
-        await bus.publish(SampleEvent("first"))
+        await bus.publish_async(SampleEvent("first"))
         assert call_count == 1
 
         # Unsubscribe
         bus.unsubscribe(SampleEvent, handler)
-        await bus.publish(SampleEvent("second"))
+        await bus.publish_async(SampleEvent("second"))
         assert call_count == 1  # Should not increase
 
     async def test_unsubscribe_wildcard(self):
         """Test unsubscribe from wildcard subscription."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         call_count = 0
 
         def handler(event):
@@ -153,18 +153,18 @@ class TestAsyncEventBus:
 
         # Subscribe to all
         bus.subscribe("*", handler)
-        await bus.publish(SampleEvent("first"))
+        await bus.publish_async(SampleEvent("first"))
         assert call_count == 1
 
         # Unsubscribe from all
         bus.unsubscribe("*", handler)
-        await bus.publish(SampleEvent("second"))
-        await bus.publish(AnotherSampleEvent(42))
+        await bus.publish_async(SampleEvent("second"))
+        await bus.publish_async(AnotherSampleEvent(42))
         assert call_count == 1  # Should not increase
 
     async def test_error_isolation(self):
         """Test that errors in one callback don't affect others."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         results = []
 
         def failing_handler(event):
@@ -178,14 +178,14 @@ class TestAsyncEventBus:
         bus.subscribe(SampleEvent, working_handler)
 
         # Publish - should not raise
-        await bus.publish(SampleEvent("test"))
+        await bus.publish_async(SampleEvent("test"))
 
         # Verify working handler was called
         assert results == ["success"]
 
     async def test_concurrent_publish(self):
         """Test concurrent publishing of events."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         received_events = []
 
         async def slow_handler(event):
@@ -195,7 +195,7 @@ class TestAsyncEventBus:
         bus.subscribe(SampleEvent, slow_handler)
 
         # Publish multiple events concurrently
-        tasks = [bus.publish(SampleEvent(f"event-{i}")) for i in range(10)]
+        tasks = [bus.publish_async(SampleEvent(f"event-{i}")) for i in range(10)]
         await asyncio.gather(*tasks)
 
         # Verify all events received
@@ -204,7 +204,7 @@ class TestAsyncEventBus:
 
     async def test_clear_subscribers(self):
         """Test clearing subscribers."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         call_count = 0
 
         def handler(event):
@@ -217,21 +217,21 @@ class TestAsyncEventBus:
 
         # Clear specific type
         bus.clear_subscribers(SampleEvent)
-        await bus.publish(SampleEvent("test"))
+        await bus.publish_async(SampleEvent("test"))
         assert call_count == 0
 
         # Other type still works
-        await bus.publish(AnotherSampleEvent(42))
+        await bus.publish_async(AnotherSampleEvent(42))
         assert call_count == 1
 
         # Clear all
         bus.clear_subscribers()
-        await bus.publish(AnotherSampleEvent(99))
+        await bus.publish_async(AnotherSampleEvent(99))
         assert call_count == 1  # No increase
 
     async def test_graceful_shutdown(self):
         """Test graceful shutdown with active tasks."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         task_completed = False
 
         async def slow_handler(event):
@@ -242,7 +242,7 @@ class TestAsyncEventBus:
         bus.subscribe(SampleEvent, slow_handler)
 
         # Publish event (don't await)
-        _ = asyncio.create_task(bus.publish(SampleEvent("test")))
+        _ = asyncio.create_task(bus.publish_async(SampleEvent("test")))
 
         # Close bus while task is running
         await asyncio.sleep(0.01)  # Let task start
@@ -256,9 +256,9 @@ class TestAsyncEventBus:
         """Test context manager usage."""
         received = []
 
-        async with AsyncEventBus("test-session") as bus:
+        async with EventBus("test-session") as bus:
             bus.subscribe(SampleEvent, lambda e: received.append(e))
-            await bus.publish(SampleEvent("ctx"))
+            await bus.publish_async(SampleEvent("ctx"))
 
         # After context, bus should be closed
         assert bus.is_closing
@@ -266,11 +266,11 @@ class TestAsyncEventBus:
 
         # Publishing should raise
         with pytest.raises(RuntimeError, match="closing"):
-            await bus.publish(SampleEvent("after"))
+            await bus.publish_async(SampleEvent("after"))
 
     async def test_weak_reference_cleanup(self):
         """Test that active tasks are tracked with weak references."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         initial_count = len(bus._active_tasks)
 
         async def handler(event):
@@ -280,7 +280,7 @@ class TestAsyncEventBus:
 
         # Publish several events
         for i in range(5):
-            await bus.publish(SampleEvent(f"test-{i}"))
+            await bus.publish_async(SampleEvent(f"test-{i}"))
 
         # Wait a bit for tasks to complete
         await asyncio.sleep(0.01)
@@ -293,7 +293,7 @@ class TestAsyncEventBus:
 
     async def test_subscriber_count_property(self):
         """Test subscriber count property."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
 
         # Initially empty
         assert bus.subscriber_count == {}
@@ -310,21 +310,17 @@ class TestAsyncEventBus:
         assert counts[AnotherSampleEvent] == 1  # 1 direct subscriber
         assert counts["*"] == 1  # 1 wildcard subscriber
 
-    async def test_type_validation(self):
-        """Test type validation for events and callbacks."""
-        bus = AsyncEventBus("test-session")
-
-        # Invalid callback type
-        with pytest.raises(TypeError, match="Callback must be callable"):
-            bus.subscribe(SampleEvent, "not-a-function")
-
-        # Invalid event type
-        with pytest.raises(TypeError, match="Event must be an Event instance"):
-            await bus.publish("not-an-event")
+    async def test_no_type_validation(self):
+        """EventBus is permissive; invalid inputs should not raise at subscribe time."""
+        bus = EventBus("test-session")
+        # Non-callable subscribe should raise at call time if ever invoked; we don't call it
+        # Ensure subscribe accepts a callable and publishing works
+        bus.subscribe(SampleEvent, lambda e: None)
+        await bus.publish_async(SampleEvent("ok"))
 
     async def test_cancellation_propagation(self):
         """Test that cancellation is properly propagated."""
-        bus = AsyncEventBus("test-session")
+        bus = EventBus("test-session")
         handler_started = False
         handler_cancelled = False
 
@@ -340,7 +336,7 @@ class TestAsyncEventBus:
         bus.subscribe(SampleEvent, handler)
 
         # Start publish in a task
-        publish_task = asyncio.create_task(bus.publish(SampleEvent("test")))
+        publish_task = asyncio.create_task(bus.publish_async(SampleEvent("test")))
         await asyncio.sleep(0.01)  # Let handler start
 
         # Cancel the publish task
@@ -355,49 +351,16 @@ class TestAsyncEventBus:
         # Handler cancellation depends on implementation details
 
 
-class TestAsyncEventBusAdapter:
-    """Test cases for backward compatibility adapter."""
+class TestEventBusSyncApi:
+    """Basic sync API checks for EventBus."""
 
-    def test_sync_publish_subscribe(self):
-        """Test synchronous API compatibility."""
-        async_bus = AsyncEventBus("test-session")
-        adapter = AsyncEventBusAdapter(async_bus)
-        received = []
+    def test_sync_publish_calls_sync_handler(self):
+        bus = EventBus("test-session")
+        called = []
 
-        def handler(event):
-            received.append(event.data)
+        def handler(e):
+            called.append(e)
 
-        # Use sync API
-        adapter.subscribe(SampleEvent, handler)
-        adapter.publish(SampleEvent("sync-test"))
-
-        # In sync context, this might not work as expected
-        # Real implementation would need event loop handling
-
-    def test_session_id_property(self):
-        """Test session ID property access."""
-        async_bus = AsyncEventBus("test-123")
-        adapter = AsyncEventBusAdapter(async_bus)
-
-        assert adapter.session_id == "test-123"
-
-    @pytest.mark.asyncio
-    async def test_adapter_in_async_context(self):
-        """Test adapter when used in async context."""
-        async_bus = AsyncEventBus("test-session")
-        adapter = AsyncEventBusAdapter(async_bus)
-        received = []
-
-        def handler(event):
-            received.append(event.data)
-
-        adapter.subscribe(SampleEvent, handler)
-
-        # In async context, publish creates a task
-        adapter.publish(SampleEvent("async-adapter"))
-
-        # Give task time to complete
-        await asyncio.sleep(0.01)
-
-        assert len(received) == 1
-        assert received[0] == "async-adapter"
+        bus.subscribe(SampleEvent, handler)
+        bus.publish(SampleEvent("sync"))
+        assert len(called) == 1

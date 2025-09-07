@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from playbooks.async_event_bus import AsyncEventBus
+from playbooks.event_bus import EventBus
 from playbooks.async_message_queue import AsyncMessageQueue
 from playbooks.events import Event
 from playbooks.message import Message, MessageType
@@ -104,12 +104,12 @@ async def chaos_test_context(chaos_monkey: ChaosMonkey, duration: float = 5.0):
 
 
 @pytest.mark.asyncio
-class TestAsyncEventBusChaos:
-    """Chaos tests for AsyncEventBus."""
+class TestEventBusChaos:
+    """Chaos tests for EventBus (async)."""
 
     async def test_high_volume_with_failures(self):
         """Test event bus under high load with random failures."""
-        bus = AsyncEventBus("chaos-session")
+        bus = EventBus("chaos-session")
         chaos = ChaosMonkey(failure_rate=0.2)
 
         received_events = []
@@ -161,7 +161,7 @@ class TestAsyncEventBusChaos:
 
     async def test_rapid_subscribe_unsubscribe(self):
         """Test rapid subscription changes."""
-        bus = AsyncEventBus("chaos-session")
+        bus = EventBus("chaos-session")
         chaos = ChaosMonkey(failure_rate=0.1)
 
         handlers = []
@@ -203,7 +203,7 @@ class TestAsyncEventBusChaos:
 
     async def test_concurrent_close_operations(self):
         """Test closing event bus while operations are active."""
-        bus = AsyncEventBus("chaos-session")
+        bus = EventBus("chaos-session")
         chaos = ChaosMonkey(failure_rate=0.1)
 
         results = []
@@ -448,7 +448,7 @@ class TestIntegratedChaos:
 
     async def test_event_bus_message_queue_integration(self):
         """Test event bus and message queue working together under chaos."""
-        event_bus = AsyncEventBus("integrated-chaos")
+        event_bus = EventBus("integrated-chaos")
         message_queue = AsyncMessageQueue()
         chaos = ChaosMonkey(failure_rate=0.2)
 

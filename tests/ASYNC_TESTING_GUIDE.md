@@ -35,7 +35,7 @@ class TestAsyncComponent:
 ```python
 @pytest.mark.asyncio
 async def test_component_integration():
-    bus = AsyncEventBus("test")
+    bus = EventBus("test")
     queue = AsyncMessageQueue()
     
     # Test interaction
@@ -157,24 +157,24 @@ async def test_concurrent_access():
     assert len(set(results)) == 10  # All unique
 ```
 
-### Pattern 5: Mock Async Functions
+### Pattern 5: Playbooks Async Functions
 
-**Use Case**: Mocking async dependencies
+**Use Case**: Playbooksing async dependencies
 
 ```python
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncPlaybooks, patch
 
 @pytest.mark.asyncio
-async def test_with_mocked_dependency():
-    mock_dependency = AsyncMock()
-    mock_dependency.async_method.return_value = "mocked_result"
+async def test_with_playbooksed_dependency():
+    playbooks_dependency = AsyncPlaybooks()
+    playbooks_dependency.async_method.return_value = "playbooksed_result"
     
-    with patch('module.dependency', mock_dependency):
+    with patch('module.dependency', playbooks_dependency):
         component = AsyncComponent()
         result = await component.operation_using_dependency()
         
-    assert result == "processed_mocked_result"
-    mock_dependency.async_method.assert_called_once()
+    assert result == "processed_playbooksed_result"
+    playbooks_dependency.async_method.assert_called_once()
 ```
 
 ### Pattern 6: Event Testing
@@ -184,7 +184,7 @@ async def test_with_mocked_dependency():
 ```python
 @pytest.mark.asyncio
 async def test_event_handling():
-    bus = AsyncEventBus("test")
+    bus = EventBus("test")
     received_events = []
     
     def handler(event):
@@ -319,7 +319,7 @@ async def test_with_proper_timing():
 ```python
 @pytest.fixture
 async def event_bus():
-    async with AsyncEventBus("test-session") as bus:
+    async with EventBus("test-session") as bus:
         yield bus
 
 @pytest.fixture

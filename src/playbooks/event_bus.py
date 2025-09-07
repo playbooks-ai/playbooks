@@ -151,3 +151,27 @@ class EventBus:
                 logger.warning("Some handlers did not complete during shutdown")
 
         self.clear_subscribers()
+
+    async def __aenter__(self):
+        """Context manager entry."""
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with cleanup."""
+        await self.close()
+
+    @property
+    def subscriber_count(self) -> Dict[Union[Type[Event], str], int]:
+        """Get count of subscribers per event type (including wildcard)."""
+        counts: Dict[Union[Type[Event], str], int] = {
+            event_type: len(callbacks)
+            for event_type, callbacks in self._handlers.items()
+        }
+        if self._global_handlers:
+            counts["*"] = len(self._global_handlers)
+        return counts
+
+    @property
+    def is_closing(self) -> bool:
+        """Check if event bus is closing."""
+        return self._closing

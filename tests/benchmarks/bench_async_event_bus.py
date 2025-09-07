@@ -1,5 +1,5 @@
 """
-Performance benchmarks for AsyncEventBus vs EventBus.
+Performance benchmarks for EventBus async vs sync.
 
 Measures:
 - Publish latency
@@ -16,7 +16,6 @@ from typing import List
 import tracemalloc
 
 from playbooks.event_bus import EventBus
-from playbooks.async_event_bus import AsyncEventBus, AsyncEventBusAdapter
 from playbooks.events import Event
 
 
@@ -64,11 +63,11 @@ class BenchmarkResults:
 async def benchmark_async_event_bus(
     num_events: int = 10000, num_subscribers: int = 10
 ) -> BenchmarkResults:
-    """Benchmark AsyncEventBus performance."""
-    results = BenchmarkResults("AsyncEventBus")
+    """Benchmark EventBus async performance."""
+    results = BenchmarkResults("EventBus (async)")
 
     # Setup
-    bus = AsyncEventBus("bench-session")
+    bus = EventBus("bench-session")
     received_count = 0
 
     async def handler(event):
@@ -172,10 +171,10 @@ async def benchmark_concurrent_publish(
     num_publishers: int = 100, events_per_publisher: int = 100
 ) -> BenchmarkResults:
     """Benchmark concurrent publishing performance."""
-    results = BenchmarkResults("AsyncEventBus (concurrent)")
+    results = BenchmarkResults("EventBus (concurrent async)")
 
     # Setup
-    bus = AsyncEventBus("bench-session")
+    bus = EventBus("bench-session")
     received_count = 0
 
     async def handler(event):
@@ -232,49 +231,10 @@ async def benchmark_concurrent_publish(
 
 
 async def benchmark_adapter_performance(num_events: int = 1000) -> BenchmarkResults:
-    """Benchmark AsyncEventBusAdapter performance."""
-    results = BenchmarkResults("AsyncEventBusAdapter")
-
-    # Setup
-    async_bus = AsyncEventBus("bench-session")
-    adapter = AsyncEventBusAdapter(async_bus)
-    received_count = 0
-
-    def handler(event):
-        nonlocal received_count
-        received_count += 1
-
-    # Subscribe via adapter
-    adapter.subscribe(BenchmarkEvent, handler)
-
-    # Measure
-    gc.collect()
-    tracemalloc.start()
-
-    start_time = time.perf_counter()
-
-    # Publish via adapter (in async context)
-    for i in range(num_events):
-        event_start = time.perf_counter()
-        adapter.publish(BenchmarkEvent(i))
-        event_end = time.perf_counter()
-        results.add_latency(event_end - event_start)
-
-    # Wait for all tasks to complete
-    await asyncio.sleep(0.1)
-
-    end_time = time.perf_counter()
-    total_time = end_time - start_time
-
-    # Stats
-    results.throughput = num_events / total_time
-    current, peak = tracemalloc.get_traced_memory()
-    results.memory_used = peak
-    tracemalloc.stop()
-
-    # Cleanup
-    await async_bus.close()
-
+    """Adapter benchmark removed; use EventBus directly."""
+    results = BenchmarkResults("EventBus (adapter removed)")
+    # No-op benchmark to preserve test harness structure
+    results.throughput = num_events / max(0.0001, num_events)  # dummy value
     return results
 
 
@@ -323,13 +283,13 @@ def print_results(results: List[BenchmarkResults]):
 
 async def main():
     """Run all benchmarks."""
-    print("Starting AsyncEventBus performance benchmarks...")
+    print("Starting EventBus performance benchmarks...")
     print("This may take a few moments...\n")
 
     results = []
 
-    # Benchmark 1: AsyncEventBus
-    print("Running AsyncEventBus benchmark...")
+    # Benchmark 1: EventBus async
+    print("Running EventBus (async) benchmark...")
     results.append(
         await benchmark_async_event_bus(num_events=10000, num_subscribers=10)
     )
@@ -344,8 +304,8 @@ async def main():
         await benchmark_concurrent_publish(num_publishers=100, events_per_publisher=100)
     )
 
-    # Benchmark 4: Adapter performance
-    print("Running adapter benchmark...")
+    # Benchmark 4: Adapter performance (removed)
+    print("Running adapter benchmark (removed)...")
     results.append(await benchmark_adapter_performance(num_events=1000))
 
     # Print results
@@ -376,7 +336,7 @@ async def main():
         )
 
         print("\n" + "=" * 80)
-        print("PERFORMANCE IMPROVEMENTS (AsyncEventBus vs EventBus)")
+        print("PERFORMANCE IMPROVEMENTS (EventBus async vs sync)")
         print("=" * 80)
         print(f"  Latency Reduction: {latency_improvement:.1f}%")
         print(f"  Throughput Increase: {throughput_improvement:.1f}%")
