@@ -1,6 +1,8 @@
 import inspect
 from typing import Any, Callable, Dict, Optional
 
+from playbooks.debug_logger import debug
+
 from .local import LocalPlaybook
 
 
@@ -63,6 +65,7 @@ class PythonPlaybook(LocalPlaybook):
         # Get code for each function
         function_code = {}
         parsed_code = ast.parse(code_block)
+        debug("Parsed Code: " + str(parsed_code))
         for item in parsed_code.body:
             if isinstance(item, ast.AsyncFunctionDef) or isinstance(
                 item, ast.FunctionDef
@@ -71,7 +74,7 @@ class PythonPlaybook(LocalPlaybook):
 
         # Discover all @playbook-decorated functions
         playbooks = cls._discover_playbook_functions(namespace_manager, existing_keys)
-
+        debug("decorated functions: " + str(playbooks))
         # Add function code to playbooks
         for playbook in playbooks.values():
             playbook.code = function_code[playbook.name]
@@ -127,6 +130,7 @@ class PythonPlaybook(LocalPlaybook):
         """
         import inspect
         import re
+
         from ..triggers import PlaybookTriggers
 
         sig = inspect.signature(func)

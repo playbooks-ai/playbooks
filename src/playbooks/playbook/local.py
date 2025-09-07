@@ -1,4 +1,5 @@
 import logging
+import traceback
 from abc import abstractmethod
 from typing import Any, Dict, Optional
 
@@ -61,7 +62,9 @@ class LocalPlaybook(Playbook):
         except ExecutionFinished:
             raise
         except Exception as e:
-            logger.error(f"Local playbook {self.name} failed: {str(e)}")
+            logger.error(
+                f"Local playbook {self.name} failed: {str(e)}\n\n{traceback.format_exc()}"
+            )
             return f"Error: {str(e)}"
 
     @abstractmethod
