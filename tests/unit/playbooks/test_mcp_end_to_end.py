@@ -5,10 +5,10 @@ import json
 import pytest
 from fastmcp import Client
 
+from playbooks.exceptions import AgentConfigurationError
 from src.playbooks.agents import MCPAgent
 from src.playbooks.agents.agent_builder import AgentBuilder
 from src.playbooks.event_bus import EventBus
-from playbooks.exceptions import AgentConfigurationError
 from src.playbooks.program import Program
 from src.playbooks.transport.mcp_transport import MCPTransport
 from src.playbooks.utils.markdown_to_ast import markdown_to_ast
@@ -16,8 +16,8 @@ from src.playbooks.utils.markdown_to_ast import markdown_to_ast
 from .test_mcp_server import get_test_server
 
 
-class TestMCPAgent(MCPAgent):
-    klass = "TestMCPAgent"
+class MCPTestAgent(MCPAgent):
+    klass = "MCPTestAgent"
     description = "Test MCP agent"
     playbooks = {}
     metadata = {}
@@ -103,7 +103,7 @@ class TestMCPEndToEnd:
         # Create MCP agent
         event_bus = EventBus("test-session")
 
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test", "transport": "memory"},
         )
@@ -177,7 +177,7 @@ class TestMCPEndToEnd:
         mcp_server = test_server.get_server()
 
         event_bus = EventBus("test-session")
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test"},
         )
@@ -460,7 +460,7 @@ This is a remote task management agent.
 
         for config in configs:
             event_bus = EventBus("test-session")
-            agent = TestMCPAgent(
+            agent = MCPTestAgent(
                 event_bus=event_bus,
                 remote_config=config,
             )
@@ -510,7 +510,7 @@ This is a comprehensive MCP agent configuration test.
         mcp_server = test_server.get_server()
 
         event_bus = EventBus("test-session")
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test"},
         )
@@ -540,7 +540,7 @@ This is a comprehensive MCP agent configuration test.
         mcp_server = test_server.get_server()
 
         event_bus = EventBus("test-session")
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config={"url": "memory://test"},
         )

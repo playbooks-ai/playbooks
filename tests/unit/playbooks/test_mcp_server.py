@@ -12,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class TestMCPServer:
+class MCPTestServer:
     """Comprehensive test MCP server for testing MCP agent functionality."""
 
     def __init__(self):
@@ -412,11 +412,11 @@ Provide constructive feedback and suggestions for improvement.
 _test_server = None
 
 
-def get_test_server() -> TestMCPServer:
+def get_test_server() -> MCPTestServer:
     """Get the global test server instance."""
     global _test_server
     if _test_server is None:
-        _test_server = TestMCPServer()
+        _test_server = MCPTestServer()
     return _test_server
 
 

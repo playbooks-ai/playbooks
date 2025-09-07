@@ -44,25 +44,25 @@ def mock_program():
     return program
 
 
-class TestMCPAgent(MCPAgent):
-    klass = "TestMCPAgent"
+class MCPTestAgent(MCPAgent):
+    klass = "MCPTestAgent"
     description = "Test MCP agent"
     playbooks = {}
     metadata = {}
 
 
-class TestMCPAgentAll:
+class MCPTestAgentAll:
     """Test cases for MCPAgent."""
 
     def test_mcp_agent_initialization(self, event_bus, mcp_config, mock_program):
         """Test MCPAgent initialization."""
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
         )
 
-        assert agent.klass == "TestMCPAgent"
+        assert agent.klass == "MCPTestAgent"
         assert agent.description == "Test MCP agent"
         assert agent.remote_config == mcp_config
         assert agent.transport is not None
@@ -73,7 +73,7 @@ class TestMCPAgentAll:
         self, event_bus, mcp_config, mock_transport, mock_program
     ):
         """Test connecting and disconnecting from MCP server."""
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -118,7 +118,7 @@ class TestMCPAgentAll:
         ]
         mock_transport.list_tools.return_value = mock_tools
 
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -139,7 +139,7 @@ class TestMCPAgentAll:
         assert isinstance(add_numbers_pb, RemotePlaybook)
         assert add_numbers_pb.name == "add_numbers"
         assert add_numbers_pb.description == "Add two numbers together"
-        assert add_numbers_pb.agent_name == "TestMCPAgent"
+        assert add_numbers_pb.agent_name == "MCPTestAgent"
 
     @pytest.mark.asyncio
     async def test_execute_playbook(
@@ -149,7 +149,7 @@ class TestMCPAgentAll:
         # Setup mock transport
         mock_transport.call_tool.return_value = {"result": 8}
 
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -162,7 +162,7 @@ class TestMCPAgentAll:
         playbook = RemotePlaybook(
             name="add_numbers",
             description="Add two numbers",
-            agent_name="TestMCPAgent",
+            agent_name="MCPTestAgent",
             execute_fn=mock_execute_fn,
         )
         agent.playbooks["add_numbers"] = playbook
@@ -179,7 +179,7 @@ class TestMCPAgentAll:
         self, event_bus, mcp_config, mock_program
     ):
         """Test cross-agent playbook execution."""
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -208,7 +208,7 @@ class TestMCPAgentAll:
     @pytest.mark.asyncio
     async def test_execute_unknown_playbook(self, event_bus, mcp_config, mock_program):
         """Test executing an unknown playbook raises error."""
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
@@ -224,7 +224,7 @@ class TestMCPAgentAll:
         self, event_bus, mcp_config, mock_transport, mock_program
     ):
         """Test using MCPAgent as async context manager."""
-        agent = TestMCPAgent(
+        agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
