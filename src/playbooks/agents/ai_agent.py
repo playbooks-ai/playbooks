@@ -155,6 +155,10 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         # Track background tasks for cleanup
         self._background_tasks = []
 
+        # Create playbook to run BGN playbooks
+        self.bgn_playbook_name = None
+        self.create_begin_playbook()
+
     @abstractmethod
     async def discover_playbooks(self) -> None:
         """Discover and load playbooks for this agent.
@@ -198,6 +202,39 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         """
         return list(self.playbooks.keys())
 
+    def create_begin_playbook(self):
+        begin_playbooks = {}
+        for playbook in self.playbooks.values():
+            if hasattr(playbook, "triggers") and playbook.triggers:
+                for trigger in playbook.triggers.triggers:
+                    if trigger.is_begin:
+                        begin_playbooks[playbook.name] = playbook
+
+        # If there are no BGN playbooks, do nothing
+        if len(begin_playbooks) == 0:
+            return
+
+        # If there is only one BGN playbook, use it directly
+        if len(begin_playbooks) == 1:
+            self.bgn_playbook_name = list(begin_playbooks.keys())[0]
+            return
+
+        # If there are multiple BGN playbooks, create a new playbook that calls them in order
+        self.bgn_playbook_name = "Begin"
+        while self.bgn_playbook_name in self.playbooks:
+            self.bgn_playbook_name = "_" + self.bgn_playbook_name
+        code_block = f"""
+@playbook
+async def {self.bgn_playbook_name}() -> None:
+{"\n".join(["    await " + playbook.name + "()" for playbook in begin_playbooks.values()])}
+"""
+        debug("BGN Playbook Code Block: " + code_block)
+        new_playbook = PythonPlaybook.create_playbooks_from_code_block(
+            code_block,
+            self.namespace_manager,
+        )
+        self.playbooks.update(new_playbook)
+
     async def begin(self):
         """Execute playbooks with BGN trigger."""
         # Create a list to track BGN playbook tasks
@@ -207,20 +244,15 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             task = asyncio.create_task(self._idle_loop())
             self._background_tasks.append(task)
 
-        # Find playbooks with a BGN trigger and execute them
-        for playbook in self.playbooks.values():
-            if hasattr(playbook, "triggers") and playbook.triggers:
-                for trigger in playbook.triggers.triggers:
-                    if trigger.is_begin:
-                        # Create task for each BGN playbook
-                        task = asyncio.create_task(self.execute_playbook(playbook.name))
+        if self.bgn_playbook_name:
+            # Create task for the first BGN playbook
+            task = asyncio.create_task(self.execute_playbook(self.bgn_playbook_name))
 
-                        def task_done_callback(t):
-                            create_idle_task()
+            def task_done_callback(t):
+                create_idle_task()
 
-                        task.add_done_callback(task_done_callback)
-                        bgn_tasks.append(task)
-                        break  # Only need one BGN trigger per playbook
+            task.add_done_callback(task_done_callback)
+            bgn_tasks.append(task)
 
         # If there are BGN tasks, we can optionally wait for them
         # But the idle loop continues running regardless
