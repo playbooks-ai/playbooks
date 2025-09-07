@@ -4,7 +4,7 @@ from typing import Any
 from langfuse import Langfuse
 
 
-class MockLangfuseSpan:
+class PlaybooksLangfuseSpan:
     def update(self, **kwargs: Any) -> None:
         pass
 
@@ -12,12 +12,12 @@ class MockLangfuseSpan:
         pass
 
     def span(self, **kwargs: Any) -> None:
-        return MockLangfuseSpan()
+        return PlaybooksLangfuseSpan()
 
 
-class MockLangfuseInstance:
+class PlaybooksLangfuseInstance:
     def trace(self, **kwargs: Any) -> None:
-        return MockLangfuseSpan()
+        return PlaybooksLangfuseSpan()
 
     def flush(self) -> None:
         pass
@@ -44,7 +44,7 @@ class LangfuseHelper:
         """
         if cls.langfuse is None:
             if os.getenv("LANGFUSE_ENABLED", "false").lower() == "false":
-                cls.langfuse = MockLangfuseInstance()
+                cls.langfuse = PlaybooksLangfuseInstance()
             else:
                 cls.langfuse = Langfuse(
                     secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
