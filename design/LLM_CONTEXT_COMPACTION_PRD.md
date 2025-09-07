@@ -233,7 +233,7 @@ class InterpreterPrompt:
         compacted_size = len(str(compacted_dict_messages))
         compression_ratio = compacted_size / original_size if original_size > 0 else 1.0
         
-        logger.info(f"LLM Context: {original_size} -> {compacted_size} chars ({compression_ratio:.2%})")
+        print(f"LLM Context Compression Ratio: {original_size} -> {compacted_size} chars ({compression_ratio:.2%})")
         
         messages.extend(compacted_dict_messages)
         return messages

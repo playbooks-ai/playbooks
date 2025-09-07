@@ -1,17 +1,17 @@
 import json
-import os
 import logging
+import os
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from playbooks.debug_logger import debug
+from playbooks.llm_context_compactor import LLMContextCompactor
 from playbooks.llm_messages import (
-    AssistantResponseLLMMessage,
-    TriggerInstructionsLLMMessage,
     AgentInfoLLMMessage,
+    AssistantResponseLLMMessage,
     OtherAgentInfoLLMMessage,
+    TriggerInstructionsLLMMessage,
     UserInputLLMMessage,
 )
-from playbooks.llm_context_compactor import LLMContextCompactor
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import get_messages_for_prompt
 
@@ -180,7 +180,7 @@ class InterpreterPrompt:
         compression_ratio = compacted_size / original_size if original_size > 0 else 1.0
 
         logger.info(
-            f"LLM Context: {original_size} -> {compacted_size} chars ({compression_ratio:.2%})"
+            f"LLM Context Compaction: {original_size} -> {compacted_size} chars ({compression_ratio:.2%})"
         )
 
         messages.extend(compacted_dict_messages)
