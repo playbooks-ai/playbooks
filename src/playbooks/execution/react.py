@@ -77,10 +77,10 @@ class ReActLLMExecution(PlaybookLLMExecution):
         try:
             # Create compiler with LLM config
             llm_config = LLMConfig()
-            compiler = Compiler(llm_config, use_cache=False)
+            compiler = Compiler(llm_config)
 
             # Compile the playbook content
-            _, compiled_content = compiler.process_single_file(
+            _, compiled_content, _ = compiler.process_single_file(
                 "react_agent.pb", playbook_content
             )
 

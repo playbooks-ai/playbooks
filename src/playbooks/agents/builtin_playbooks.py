@@ -97,10 +97,10 @@ hidden: true
     def get_llm_playbooks_ast_nodes():
         markdown = BuiltinPlaybooks.get_llm_playbooks_markdown()
         llm_config = LLMConfig()
-        compiler = Compiler(llm_config, use_cache=False)
+        compiler = Compiler(llm_config)
 
         # Compile the playbooks content
-        _, compiled_content = compiler.process_single_file(
+        _, compiled_content, _ = compiler.process_single_file(
             "__builtin_playbooks.pb", markdown
         )
 

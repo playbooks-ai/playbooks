@@ -30,7 +30,7 @@ class Compiler:
     for required headers that define agent name and playbook structure.
     """
 
-    def __init__(self, llm_config: LLMConfig, use_cache: bool = True) -> None:
+    def __init__(self, llm_config: LLMConfig) -> None:
         """
         Initialize the compiler with LLM configuration.
 
@@ -53,7 +53,7 @@ class Compiler:
         else:
             # Default to OpenAI for other models
             self.llm_config.api_key = os.environ.get("OPENAI_API_KEY")
-        self.use_cache = use_cache
+        self.use_cache = True
         self.playbooks_version = self._get_playbooks_version()
         self.prompt_path = os.path.join(
             os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"
@@ -78,18 +78,43 @@ class Compiler:
                 # Already compiled, extract frontmatter and content
                 fm_data = frontmatter.loads(content)
                 compiled_files.append(
-                    (file_path, fm_data.metadata, fm_data.content, is_compiled)
+                    (
+                        file_path,
+                        fm_data.metadata,
+                        fm_data.content,
+                        is_compiled,
+                        file_path,
+                    )
                 )
             else:
                 # Compile individual file
-                frontmatter_dict, compiled_content = self.process_single_file(
-                    file_path, content
+                frontmatter_dict, compiled_content, compiled_file_path = (
+                    self.process_single_file(file_path, content)
                 )
                 compiled_files.append(
-                    (file_path, frontmatter_dict, compiled_content, is_compiled)
+                    (
+                        file_path,
+                        frontmatter_dict,
+                        compiled_content,
+                        is_compiled,
+                        compiled_file_path,
+                    )
                 )
 
         return compiled_files
+
+    def compile(self, file_path: str) -> str:
+        """
+        Compile a single .pb file.
+
+        Args:
+            file_path: Path to the file being compiled
+        """
+
+        with open(file_path, "r") as f:
+            content = f.read()
+
+        return self.process_single_file(file_path, content)
 
     @lru_cache(maxsize=128)
     def process_single_file(self, file_path: str, content: str) -> Tuple[dict, str]:
@@ -101,7 +126,7 @@ class Compiler:
             content: File content to compile (may include frontmatter)
 
         Returns:
-            Tuple[dict, str]: (frontmatter_dict, compiled_content)
+            Tuple[dict, str, Path]: (frontmatter_dict, compiled_content, cache_path)
         """
         source_path = Path(file_path)
 
@@ -111,7 +136,7 @@ class Compiler:
             if self._is_cache_valid(source_path, cache_path):
                 cached_content = cache_path.read_text()
                 fm_data = frontmatter.loads(cached_content)
-                return fm_data.metadata, fm_data.content
+                return fm_data.metadata, fm_data.content, cache_path
 
         # Extract and preserve frontmatter
         fm_data = frontmatter.loads(content)
@@ -148,31 +173,30 @@ class Compiler:
             compiled = "\n\n".join(compiled_agents)
 
         # Cache the result (with frontmatter for proper storage)
-        if self.use_cache:
-            try:
-                cache_path = self._get_cache_path(file_path)
-                cache_path.parent.mkdir(exist_ok=True)
+        try:
+            cache_path = self._get_cache_path(file_path)
+            cache_path.parent.mkdir(exist_ok=True)
 
-                # Add frontmatter back for caching
-                if fm_data.metadata:
-                    compiled_with_frontmatter = frontmatter.Post(
-                        compiled, **fm_data.metadata
-                    )
-                    compiled_content_with_frontmatter = frontmatter.dumps(
-                        compiled_with_frontmatter
-                    )
-                else:
-                    compiled_content_with_frontmatter = compiled
-
-                cache_path.write_text(compiled_content_with_frontmatter)
-            except (OSError, IOError, PermissionError):
-                # Cache write failed, but compilation succeeded - continue silently
-                console.print(
-                    f"[dim yellow]Warning: Could not write cache for {file_path}[/dim yellow]"
+            # Add frontmatter back for caching
+            if fm_data.metadata:
+                compiled_with_frontmatter = frontmatter.Post(
+                    compiled, **fm_data.metadata
                 )
-                pass
+                compiled_content_with_frontmatter = frontmatter.dumps(
+                    compiled_with_frontmatter
+                )
+            else:
+                compiled_content_with_frontmatter = compiled
 
-        return fm_data.metadata, compiled
+            cache_path.write_text(compiled_content_with_frontmatter)
+        except (OSError, IOError, PermissionError):
+            # Cache write failed, but compilation succeeded - continue silently
+            console.print(
+                f"[dim yellow]Warning: Could not write cache for {file_path}[/dim yellow]"
+            )
+            pass
+
+        return fm_data.metadata, compiled, cache_path
 
     def _compile_content(self, content: str) -> str:
         """
