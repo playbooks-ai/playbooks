@@ -273,6 +273,7 @@ def markdown_to_ast(markdown: str) -> Dict[str, Any]:
     if tree.get("type") == "root":
         tree["type"] = "document"
         tree["text"] = ""
+        tree["markdown"] = markdown  # Preserve original markdown
         return tree
 
     # Otherwise wrap the tree in a document node
