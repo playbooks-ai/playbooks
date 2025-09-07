@@ -32,9 +32,10 @@ class Variable:
 class Variables:
     """A collection of variables with change history."""
 
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus, agent_id: str = "unknown"):
         self.variables: Dict[str, Variable] = {}
         self.event_bus = event_bus
+        self.agent_id = agent_id
 
     def update(self, vars: Union["Variables", Dict[str, Any]]) -> None:
         """Update multiple variables at once."""
@@ -59,7 +60,12 @@ class Variables:
         if name not in self.variables:
             self.variables[name] = Variable(name, value)
         self.variables[name].update(value, instruction_pointer)
-        event = VariableUpdateEvent(name=name, value=value)
+        event = VariableUpdateEvent(
+            agent_id=self.agent_id,
+            session_id="",
+            variable_name=name,
+            variable_value=value,
+        )
         self.event_bus.publish(event)
 
     def __contains__(self, name: str) -> bool:

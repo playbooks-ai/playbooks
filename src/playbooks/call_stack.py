@@ -87,10 +87,23 @@ class CallStackFrame:
         self.langfuse_span = langfuse_span
         self.is_meeting = is_meeting
         self.meeting_id = meeting_id
+        self.depth = -1
 
     @property
     def source_line_number(self) -> int:
         return self.instruction_pointer.source_line_number
+
+    @property
+    def line_number(self) -> int:
+        return self.instruction_pointer.line_number
+
+    @property
+    def playbook(self) -> str:
+        return self.instruction_pointer.playbook
+
+    @property
+    def step(self) -> PlaybookStep:
+        return self.instruction_pointer.step
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert the frame to a dictionary representation.
@@ -125,9 +138,10 @@ class CallStackFrame:
 class CallStack:
     """A stack of call frames."""
 
-    def __init__(self, event_bus: EventBus):
+    def __init__(self, event_bus: EventBus, agent_id: str = "unknown"):
         self.frames: List[CallStackFrame] = []
         self.event_bus = event_bus
+        self.agent_id = agent_id
 
     def is_empty(self) -> bool:
         """Check if the call stack is empty.
@@ -144,7 +158,10 @@ class CallStack:
             frame: The frame to push.
         """
         self.frames.append(frame)
-        event = CallStackPushEvent(frame=str(frame), stack=self.to_dict())
+        frame.depth = len(self.frames)
+        event = CallStackPushEvent(
+            session_id=self.agent_id, frame=str(frame), stack=self.to_dict()
+        )
         self.event_bus.publish(event)
 
     def pop(self) -> Optional[CallStackFrame]:
@@ -155,7 +172,9 @@ class CallStack:
         """
         frame = self.frames.pop() if self.frames else None
         if frame:
-            event = CallStackPopEvent(frame=str(frame), stack=self.to_dict())
+            event = CallStackPopEvent(
+                session_id=self.agent_id, frame=str(frame), stack=self.to_dict()
+            )
             self.event_bus.publish(event)
         return frame
 
@@ -177,7 +196,9 @@ class CallStack:
         """
         self.frames[-1].instruction_pointer = instruction_pointer
         event = InstructionPointerEvent(
-            pointer=str(instruction_pointer), stack=self.to_dict()
+            session_id=self.agent_id,
+            pointer=str(instruction_pointer),
+            stack=self.to_dict(),
         )
         self.event_bus.publish(event)
 

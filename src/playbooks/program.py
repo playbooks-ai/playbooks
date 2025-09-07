@@ -4,16 +4,18 @@ import logging
 import re
 
 # Removed threading import - using asyncio only
-from pathlib import Path
 from typing import Any, Dict, List, Type, Union
 
 from playbooks.agents.base_agent import BaseAgent
 from playbooks.constants import HUMAN_AGENT_KLASS
 from playbooks.debug_logger import debug
+from playbooks.utils import file_utils
 
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
-from .debug.server import DebugServer
+from .debug.server import (
+    DebugServer,  # Note: Actually a debug client that connects to VSCode
+)
 from .event_bus import EventBus
 from .events import ProgramTerminatedEvent
 from .exceptions import ExecutionFinished, KlassNotFoundError
@@ -44,30 +46,8 @@ class AsyncAgentRuntime:
 
         self.running_agents[agent.id] = True
 
-        debug("Starting agent", agent_id=agent.id, agent_type=agent.klass)
+        # debug("Starting agent", agent_id=agent.id, agent_type=agent.klass)
 
-        # Register agent with debug server if available
-        if self.program._debug_server:
-            agent_name = str(agent)
-            thread_id = self.program._debug_server.register_agent(
-                agent_id=agent.id, agent_name=agent_name, agent_type=agent.klass
-            )
-            # Store thread_id in agent for later reference
-            agent._debug_thread_id = thread_id
-
-            # Emit agent started event
-            from .events import AgentStartedEvent
-
-            event = AgentStartedEvent(
-                agent_id=agent.id,
-                agent_name=agent_name,
-                thread_id=thread_id,
-                agent_type=agent.klass,
-            )
-            self.program.event_bus.publish(event)
-            self.program._debug_server.update_agent_status(agent.id, "running")
-
-        # Create and start asyncio task
         task = asyncio.create_task(self._agent_main(agent))
         self.agent_tasks[agent.id] = task
         # Don't await - let it run independently
@@ -78,29 +58,10 @@ class AsyncAgentRuntime:
         if agent_id not in self.running_agents:
             return
 
-        debug("Stopping agent", agent_id=agent_id)
+        # debug("Stopping agent", agent_id=agent_id)
 
         # Signal shutdown
         self.running_agents[agent_id] = False
-
-        # Emit agent stopped event if debug server is available
-        if self.program._debug_server:
-            agent = self.program.agents_by_id.get(agent_id)
-            if agent:
-                agent_name = str(agent)
-                thread_id = getattr(agent, "_debug_thread_id", 1)
-
-                from .events import AgentStoppedEvent
-
-                event = AgentStoppedEvent(
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                    thread_id=thread_id,
-                    reason="normal",
-                )
-                self.program.event_bus.publish(event)
-                self.program._debug_server.update_agent_status(agent_id, "stopped")
-                self.program._debug_server.unregister_agent(agent_id)
 
         # Cancel the task
         if agent_id in self.agent_tasks:
@@ -111,6 +72,10 @@ class AsyncAgentRuntime:
                     await task
                 except asyncio.CancelledError:
                     pass
+
+        # Notify debug server of agent termination
+        if self.program._debug_server:
+            await self.program._debug_server.send_thread_exited_event(agent_id)
 
         # Clean up
         self.agent_tasks.pop(agent_id, None)
@@ -148,22 +113,6 @@ class AsyncAgentRuntime:
                 agent_name=str(agent),
                 reason="cancelled",
             )
-
-            # Emit agent stopped event for cancelled agents
-            if self.program._debug_server:
-                agent_name = str(agent)
-                thread_id = getattr(agent, "_debug_thread_id", 1)
-
-                from .events import AgentStoppedEvent
-
-                event = AgentStoppedEvent(
-                    agent_id=agent.id,
-                    agent_name=agent_name,
-                    thread_id=thread_id,
-                    reason="cancelled",
-                )
-                self.program.event_bus.publish(event)
-                self.program._debug_server.update_agent_status(agent.id, "stopped")
 
             raise
         except Exception as e:
@@ -208,22 +157,6 @@ class AsyncAgentRuntime:
             ]
             log_agent_errors(error_info, "agent_runtime")
 
-            # Emit agent stopped event for error cases
-            if self.program._debug_server:
-                agent_name = str(agent)
-                thread_id = getattr(agent, "_debug_thread_id", 1)
-
-                from .events import AgentStoppedEvent
-
-                event = AgentStoppedEvent(
-                    agent_id=agent.id,
-                    agent_name=agent_name,
-                    thread_id=thread_id,
-                    reason="error",
-                )
-                self.program.event_bus.publish(event)
-                self.program._debug_server.update_agent_status(agent.id, "error")
-
             raise
         finally:
             # Cleanup agent resources
@@ -242,13 +175,13 @@ class ProgramAgentsCommunicationMixin:
         meeting_id: str = None,
     ):
         """Routes a message to receiver agent(s) via the runtime."""
-        debug(
-            "Routing message",
-            sender_id=sender_id,
-            receiver_spec=receiver_spec,
-            message_type=message_type.value if message_type else None,
-            message_length=len(message) if message else 0,
-        )
+        # debug(
+        #     "Routing message",
+        #     sender_id=sender_id,
+        #     receiver_spec=receiver_spec,
+        #     message_type=message_type.value if message_type else None,
+        #     message_length=len(message) if message else 0,
+        # )
         recipient_id = SpecUtils.extract_agent_id(receiver_spec)
         recipient = self.agents_by_id.get(recipient_id)
         recipient_klass = recipient.klass if recipient else None
@@ -271,12 +204,6 @@ class ProgramAgentsCommunicationMixin:
             # Send to all agents using event-driven message handling
             await receiver_agent._add_message_to_buffer(message)
 
-        # # If not found by ID, try by class name and send to all agents of that class
-        # agents_by_class = self.agents_by_klass.get(receiver_spec, [])
-        # for agent in agents_by_class:
-        #     # Send to all agents using event-driven message handling
-        #     agent._add_message_to_buffer(message)
-
 
 class AgentIdRegistry:
     """Manages sequential agent ID generation."""
@@ -294,15 +221,15 @@ class AgentIdRegistry:
 class Program(ProgramAgentsCommunicationMixin):
     def __init__(
         self,
-        full_program: str,
         event_bus: EventBus,
         program_paths: List[str] = None,
+        compiled_program_paths: List[str] = None,
         metadata: dict = {},
     ):
-        self.full_program = full_program
         self.metadata = metadata
         self.event_bus = event_bus
         self.program_paths = program_paths or []
+        self.compiled_program_paths = compiled_program_paths or []
         self._debug_server = None
         self.agent_id_registry = AgentIdRegistry()
         self.meeting_id_registry = MeetingRegistry()
@@ -312,8 +239,12 @@ class Program(ProgramAgentsCommunicationMixin):
 
         self.extract_public_json()
         self.parse_metadata()
-        self.ast = markdown_to_ast(self.full_program)
-        self.agent_klasses = AgentBuilder.create_agent_classes_from_ast(self.ast)
+
+        self.agent_klasses = {}
+        for compiled_program_path in self.compiled_program_paths:
+            markdown_content = file_utils.read_file(compiled_program_path)
+            ast = markdown_to_ast(markdown_content)
+            self.agent_klasses.update(AgentBuilder.create_agent_classes_from_ast(ast))
 
         self.agents = []
         self.agents_by_klass = {}
@@ -404,6 +335,8 @@ class Program(ProgramAgentsCommunicationMixin):
         agent.program = self
 
         self.event_agents_changed()
+        if self._debug_server:
+            await self._debug_server.send_thread_started_event(agent.id)
 
         return agent
 
@@ -427,11 +360,7 @@ class Program(ProgramAgentsCommunicationMixin):
 
     def _get_compiled_file_name(self) -> str:
         """Generate the compiled file name based on the first original file."""
-        if self.program_paths:
-            # Use the first file path as the base for the compiled file name
-            first_file = Path(self.program_paths[0])
-            return f"{first_file.stem}.pbasm"
-        return "unknown.pbasm"
+        return self.compiled_program_paths[0]
 
     def _emit_compiled_program_event(self):
         """Emit an event with the compiled program content for debugging."""
@@ -439,8 +368,9 @@ class Program(ProgramAgentsCommunicationMixin):
 
         compiled_file_path = self._get_compiled_file_name()
         event = CompiledProgramEvent(
+            session_id="program",
             compiled_file_path=compiled_file_path,
-            content=self.full_program,
+            content=file_utils.read_file(compiled_file_path),
             original_file_paths=self.program_paths,
         )
         self.event_bus.publish(event)
@@ -452,12 +382,17 @@ class Program(ProgramAgentsCommunicationMixin):
     def extract_public_json(self):
         # Extract publics.json from full_program
         self.public_jsons = []
-        matches = re.findall(r"(```public\.json(.*?)```)", self.full_program, re.DOTALL)
-        if matches:
-            for match in matches:
-                public_json = json.loads(match[1])
-                self.public_jsons.append(public_json)
-                self.full_program = self.full_program.replace(match[0], "")
+
+        for compiled_program_path in self.compiled_program_paths:
+            markdown_content = file_utils.read_file(compiled_program_path)
+            matches = re.findall(
+                r"(```public\.json(.*?)```)", markdown_content, re.DOTALL
+            )
+            if matches:
+                for match in matches:
+                    public_json = json.loads(match[1])
+                    self.public_jsons.append(public_json)
+                    markdown_content = markdown_content.replace(match[0], "")
 
     async def begin(self):
         # Start all agents as asyncio tasks concurrently
@@ -477,6 +412,12 @@ class Program(ProgramAgentsCommunicationMixin):
         try:
             # Create the execution completion event before starting agents
             self.execution_finished_event = asyncio.Event()
+
+            # If debugging with stop-on-entry, wait for continue before starting execution
+            # if self._debug_server and self._debug_server.stop_on_entry:
+            #     # Wait for the continue command from the debug server
+            #     await self._debug_server.wait_for_continue()
+
             await self.begin()
             # Wait for ExecutionFinished to be raised from any agent thread
             # Agent threads are designed to run indefinitely until this exception
@@ -539,7 +480,7 @@ class Program(ProgramAgentsCommunicationMixin):
             self.execution_finished_event.set()
         if self.event_bus:
             termination_event = ProgramTerminatedEvent(
-                reason=reason, exit_code=exit_code
+                session_id="program", reason=reason, exit_code=exit_code
             )
             self.event_bus.publish(termination_event)
 
@@ -554,31 +495,46 @@ class Program(ProgramAgentsCommunicationMixin):
         await self.shutdown_debug_server()
 
     async def start_debug_server(
-        self, host: str = "127.0.0.1", port: int = 5678
+        self, host: str = "127.0.0.1", port: int = 7529, stop_on_entry: bool = False
     ) -> None:
-        """Start a debug server to stream runtime events.
-
-        The debug server connects to the agents' event buses to receive and stream events.
-
-        Args:
-            host: Host address to listen on
-            port: Port to listen on
-        """
+        """Start debug client to connect to VSCode debug adapter."""
+        # debug(
+        #     f"Program.start_debug_server() called with host={host}, port={port}, stop_on_entry={stop_on_entry}",
+        # )
         if self._debug_server is None:
-            self._debug_server = DebugServer(host, port)
+            # debug("Creating new DebugServer instance...")
+            self._debug_server = DebugServer(program=self, host=host, port=port)
+
+            # Set stop-on-entry flag before starting server
+            self._debug_server.set_stop_on_entry(stop_on_entry)
+            # debug(f"Stop-on-entry flag set to: {stop_on_entry}")
+
+            # debug("Starting debug server...")
             await self._debug_server.start()
 
-            # Store reference to this program in the debug server
+            # Create and connect debug handler AFTER the server has started and socket is connected
+            from .debug.debug_handler import DebugHandler
+
+            # debug(
+            #     f"[DEBUG] Creating debug handler after server start, client_socket exists: {self._debug_server.client_socket is not None}",
+            # )
+            debug_handler = DebugHandler(self._debug_server)
+            self._debug_server.set_debug_handler(debug_handler)
+            # debug("Debug handler created and connected to debug server")
+
+            # Store reference to this program in the debug client
             self._debug_server.set_program(self)
 
-            # Register the program's event bus with the debug server
+            # Register the program's event bus with the debug client
             self._debug_server.register_bus(self.event_bus)
 
-            # Emit compiled program content for debugging
-            self._emit_compiled_program_event()
+            for agent in self.agents:
+                await self._debug_server.send_thread_started_event(agent.id)
+        else:
+            debug("Debug server already exists, skipping creation")
 
     async def shutdown_debug_server(self) -> None:
-        """Shutdown the debug server if it's running."""
+        """Shutdown the debug client if it's running."""
         if self._debug_server:
             try:
                 await self._debug_server.shutdown()

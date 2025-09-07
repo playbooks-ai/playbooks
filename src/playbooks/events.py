@@ -1,122 +1,152 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any, List
 
 
+@dataclass(frozen=True)
 class Event:
+    """Base class for all events."""
+
     session_id: str
+    agent_id: str = ""
+    timestamp: datetime = field(default_factory=datetime.now)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CallStackPushEvent(Event):
-    frame: str
-    stack: List[str]
+    """Call stack frame pushed."""
+
+    frame: str = ""
+    stack: List[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class CallStackPopEvent(Event):
-    frame: str
-    stack: List[str]
+    """Call stack frame popped."""
+
+    frame: str = ""
+    stack: List[str] = field(default_factory=list)
 
 
-@dataclass
+@dataclass(frozen=True)
 class InstructionPointerEvent(Event):
-    pointer: str
-    stack: List[str]
+    """Instruction pointer moved."""
+
+    pointer: str = ""
+    stack: List[str] = field(default_factory=list)
 
 
-@dataclass
-class VariableUpdateEvent(Event):
-    name: str
-    value: Any
-
-
-@dataclass
-class PlaybookStartEvent(Event):
-    playbook: str
-
-
-@dataclass
-class PlaybookEndEvent(Event):
-    playbook: str
-    return_value: Any
-    call_stack_depth: int = 0
-
-
-@dataclass
-class LineExecutedEvent(Event):
-    step: str
-    source_line_number: int
-    text: str
-
-
-@dataclass
-class BreakpointHitEvent(Event):
-    source_line_number: int
-    thread_id: int = None
-
-
-@dataclass
+@dataclass(frozen=True)
 class CompiledProgramEvent(Event):
-    compiled_file_path: str  # e.g., "hello.pbasm"
-    content: str  # Full compiled program content
-    original_file_paths: List[str]  # Original source files that were compiled
+    """Program compiled successfully."""
+
+    compiled_file_path: str = ""
+    content: str = ""
+    original_file_paths: List[str] = field(default_factory=list)
 
 
-@dataclass
-class ExecutionPausedEvent(Event):
-    reason: str  # 'step', 'breakpoint', 'entry', 'pause'
-    source_line_number: int
-    step: str
-    thread_id: int = None
-
-
-@dataclass
-class StepCompleteEvent(Event):
-    source_line_number: int
-    thread_id: int = None
-
-
-@dataclass
+@dataclass(frozen=True)
 class ProgramTerminatedEvent(Event):
-    reason: str  # 'normal', 'error', 'cancelled'
+    """Program terminated."""
+
+    reason: str = ""
     exit_code: int = 0
 
 
-@dataclass
+@dataclass(frozen=True)
 class AgentStartedEvent(Event):
-    agent_id: str
-    agent_name: str
-    thread_id: int
-    agent_type: str
+    """Agent started."""
+
+    agent_name: str = ""
+    agent_type: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class AgentStoppedEvent(Event):
-    agent_id: str
-    agent_name: str
-    thread_id: int
-    reason: str  # 'normal', 'error', 'cancelled'
+    """Agent stopped."""
+
+    agent_name: str = ""
+    reason: str = ""
 
 
-@dataclass
+@dataclass(frozen=True)
 class AgentPausedEvent(Event):
-    agent_id: str
-    agent_name: str
-    thread_id: int
-    reason: str  # 'step', 'breakpoint', 'pause'
+    """Agent paused execution."""
+
+    reason: str = ""
+    source_line_number: int = 0
+    step: str = ""
+
+
+@dataclass(frozen=True)
+class AgentResumedEvent(Event):
+    """Agent resumed execution."""
+
+    pass
+
+
+@dataclass(frozen=True)
+class AgentStepEvent(Event):
+    """Agent performed step operation."""
+
+    step_mode: Any = None
+
+
+@dataclass(frozen=True)
+class BreakpointHitEvent(Event):
+    """Breakpoint was hit."""
+
+    file_path: str = ""
+    line_number: int = 0
     source_line_number: int = 0
 
 
-@dataclass
-class AgentResumedEvent(Event):
-    agent_id: str
-    agent_name: str
-    thread_id: int
+@dataclass(frozen=True)
+class StepCompleteEvent(Event):
+    """Step operation completed."""
+
+    source_line_number: int = 0
 
 
-@dataclass
-class AgentVariableUpdateEvent(Event):
-    agent_id: str
-    thread_id: int
-    variable_name: str
-    variable_value: Any
+@dataclass(frozen=True)
+class VariableUpdateEvent(Event):
+    """Agent variables updated."""
+
+    variable_name: str = ""
+    variable_value: Any = None
+
+
+@dataclass(frozen=True)
+class ExecutionPausedEvent(Event):
+    """Execution paused."""
+
+    reason: str = ""
+    source_line_number: int = 0
+    step: str = ""
+
+
+@dataclass(frozen=True)
+class LineExecutedEvent(Event):
+    """Line of code executed."""
+
+    step: str = ""
+    source_line_number: int = 0
+    text: str = ""
+    file_path: str = ""
+    line_number: int = 0
+
+
+@dataclass(frozen=True)
+class PlaybookStartEvent(Event):
+    """Playbook started."""
+
+    playbook: str = ""
+
+
+@dataclass(frozen=True)
+class PlaybookEndEvent(Event):
+    """Playbook ended."""
+
+    playbook: str = ""
+    return_value: Any = None
+    call_stack_depth: int = 0

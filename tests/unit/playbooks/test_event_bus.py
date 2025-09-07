@@ -1,529 +1,519 @@
-import threading
-import time
+"""
+Comprehensive tests for the unified EventBus.
+
+Tests both synchronous and asynchronous event handling, subscription management,
+error handling, and integration with the unified event system.
+"""
+
+import asyncio
+from unittest.mock import AsyncMock, Mock
+
 import pytest
-from unittest.mock import Mock, patch
-from dataclasses import dataclass
 
-from playbooks.event_bus import EventBus
-from playbooks.events import Event, CallStackPushEvent, VariableUpdateEvent
-
-
-@dataclass
-class TestEventForTesting(Event):
-    """Test event for unit testing."""
-
-    message: str
-    session_id: str = ""
+from src.playbooks.event_bus import EventBus
+from src.playbooks.events import (
+    AgentStartedEvent,
+    CallStackPushEvent,
+    VariableUpdateEvent,
+)
 
 
-@dataclass
-class AnotherTestEventForTesting(Event):
-    """Another test event for unit testing."""
+class TestEventBusBasics:
+    """Test basic EventBus functionality."""
 
-    value: int
-    session_id: str = ""
+    def test_eventbus_creation(self):
+        """Test EventBus creation with session_id."""
+        bus = EventBus("test-session")
+        assert bus.session_id == "test-session"
+        assert not bus._closing
 
+    def test_eventbus_subscription_specific_event(self):
+        """Test subscribing to a specific event type."""
+        bus = EventBus("test-session")
+        handler = Mock()
 
-class TestEventForTestingBus:
-    """Comprehensive test suite for EventBus class."""
+        bus.subscribe(CallStackPushEvent, handler)
 
-    def test_init(self):
-        """Test EventBus initialization."""
-        session_id = "test-session-123"
-        event_bus = EventBus(session_id)
+        # Check that handler was added
+        assert CallStackPushEvent in bus._handlers
+        assert handler in bus._handlers[CallStackPushEvent]
 
-        assert event_bus.session_id == session_id
-        assert event_bus._subscribers == {}
-        assert hasattr(event_bus._lock, "acquire") and hasattr(
-            event_bus._lock, "release"
+    def test_eventbus_subscription_all_events(self):
+        """Test subscribing to all events with wildcard."""
+        bus = EventBus("test-session")
+        handler = Mock()
+
+        bus.subscribe("*", handler)
+
+        # Check that handler was added to global handlers
+        assert handler in bus._global_handlers
+
+    def test_eventbus_unsubscribe_specific(self):
+        """Test unsubscribing from specific event type."""
+        bus = EventBus("test-session")
+        handler = Mock()
+
+        bus.subscribe(CallStackPushEvent, handler)
+        bus.unsubscribe(CallStackPushEvent, handler)
+
+        # Handler should be removed
+        assert (
+            CallStackPushEvent not in bus._handlers
+            or handler not in bus._handlers[CallStackPushEvent]
         )
 
-    def test_subscribe_single_event_type(self):
-        """Test subscribing to a single event type."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
+    def test_eventbus_unsubscribe_all(self):
+        """Test unsubscribing from all events."""
+        bus = EventBus("test-session")
+        handler = Mock()
 
-        event_bus.subscribe(TestEventForTesting, callback)
+        bus.subscribe("*", handler)
+        bus.unsubscribe("*", handler)
 
-        assert TestEventForTesting in event_bus._subscribers
-        assert callback in event_bus._subscribers[TestEventForTesting]
-        assert len(event_bus._subscribers[TestEventForTesting]) == 1
+        # Handler should be removed from global handlers
+        assert handler not in bus._global_handlers
 
-    def test_subscribe_multiple_callbacks_same_event(self):
-        """Test subscribing multiple callbacks to the same event type."""
-        event_bus = EventBus("test-session")
-        callback1 = Mock()
-        callback2 = Mock()
-        callback3 = Mock()
+    def test_eventbus_unsubscribe_nonexistent(self):
+        """Test unsubscribing handler that wasn't subscribed (should not raise)."""
+        bus = EventBus("test-session")
+        handler = Mock()
 
-        event_bus.subscribe(TestEventForTesting, callback1)
-        event_bus.subscribe(TestEventForTesting, callback2)
-        event_bus.subscribe(TestEventForTesting, callback3)
+        # Should not raise exception
+        bus.unsubscribe(CallStackPushEvent, handler)
+        bus.unsubscribe("*", handler)
 
-        assert len(event_bus._subscribers[TestEventForTesting]) == 3
-        assert callback1 in event_bus._subscribers[TestEventForTesting]
-        assert callback2 in event_bus._subscribers[TestEventForTesting]
-        assert callback3 in event_bus._subscribers[TestEventForTesting]
+    def test_eventbus_clear_subscribers_specific(self):
+        """Test clearing subscribers for specific event type."""
+        bus = EventBus("test-session")
+        handler1 = Mock()
+        handler2 = Mock()
 
-    def test_subscribe_different_event_types(self):
-        """Test subscribing to different event types."""
-        event_bus = EventBus("test-session")
-        callback1 = Mock()
-        callback2 = Mock()
+        bus.subscribe(CallStackPushEvent, handler1)
+        bus.subscribe(AgentStartedEvent, handler2)
 
-        event_bus.subscribe(TestEventForTesting, callback1)
-        event_bus.subscribe(AnotherTestEventForTesting, callback2)
+        bus.clear_subscribers(CallStackPushEvent)
 
-        assert TestEventForTesting in event_bus._subscribers
-        assert AnotherTestEventForTesting in event_bus._subscribers
-        assert callback1 in event_bus._subscribers[TestEventForTesting]
-        assert callback2 in event_bus._subscribers[AnotherTestEventForTesting]
+        # Only CallStackPushEvent handlers should be cleared
+        assert CallStackPushEvent not in bus._handlers
+        assert AgentStartedEvent in bus._handlers
 
-    def test_subscribe_wildcard_all_events(self):
-        """Test subscribing to all events using wildcard '*'."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
-
-        # Mock Event.__subclasses__ to return known test events
-        with patch.object(Event, "__subclasses__") as mock_subclasses:
-            mock_subclasses.return_value = [
-                TestEventForTesting,
-                AnotherTestEventForTesting,
-                CallStackPushEvent,
-            ]
-
-            event_bus.subscribe("*", callback)
-
-            # Should subscribe to all Event subclasses
-            assert TestEventForTesting in event_bus._subscribers
-            assert AnotherTestEventForTesting in event_bus._subscribers
-            assert CallStackPushEvent in event_bus._subscribers
-            assert callback in event_bus._subscribers[TestEventForTesting]
-            assert callback in event_bus._subscribers[AnotherTestEventForTesting]
-            assert callback in event_bus._subscribers[CallStackPushEvent]
-
-    def test_unsubscribe_single_callback(self):
-        """Test unsubscribing a single callback."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
-
-        event_bus.subscribe(TestEventForTesting, callback)
-        assert callback in event_bus._subscribers[TestEventForTesting]
-
-        event_bus.unsubscribe(TestEventForTesting, callback)
-        assert TestEventForTesting not in event_bus._subscribers
-
-    def test_unsubscribe_multiple_callbacks_same_event(self):
-        """Test unsubscribing one of multiple callbacks for the same event."""
-        event_bus = EventBus("test-session")
-        callback1 = Mock()
-        callback2 = Mock()
-
-        event_bus.subscribe(TestEventForTesting, callback1)
-        event_bus.subscribe(TestEventForTesting, callback2)
-
-        event_bus.unsubscribe(TestEventForTesting, callback1)
-
-        assert TestEventForTesting in event_bus._subscribers
-        assert callback1 not in event_bus._subscribers[TestEventForTesting]
-        assert callback2 in event_bus._subscribers[TestEventForTesting]
-        assert len(event_bus._subscribers[TestEventForTesting]) == 1
-
-    def test_unsubscribe_last_callback_removes_event_type(self):
-        """Test that unsubscribing the last callback removes the event type."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
-
-        event_bus.subscribe(TestEventForTesting, callback)
-        event_bus.unsubscribe(TestEventForTesting, callback)
-
-        assert TestEventForTesting not in event_bus._subscribers
-
-    def test_unsubscribe_wildcard_all_events(self):
-        """Test unsubscribing from all events using wildcard '*'."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
-
-        # First subscribe to all events
-        with patch.object(Event, "__subclasses__") as mock_subclasses:
-            mock_subclasses.return_value = [
-                TestEventForTesting,
-                AnotherTestEventForTesting,
-            ]
-            event_bus.subscribe("*", callback)
-
-            # Verify subscription
-            assert callback in event_bus._subscribers[TestEventForTesting]
-            assert callback in event_bus._subscribers[AnotherTestEventForTesting]
-
-            # Now unsubscribe from all
-            event_bus.unsubscribe("*", callback)
-
-            # Should remove callback from all event types and clean up empty lists
-            assert TestEventForTesting not in event_bus._subscribers
-            assert AnotherTestEventForTesting not in event_bus._subscribers
-
-    def test_unsubscribe_wildcard_with_other_callbacks(self):
-        """Test unsubscribing wildcard when other callbacks exist for same events."""
-        event_bus = EventBus("test-session")
-        wildcard_callback = Mock()
-        specific_callback = Mock()
-
-        # Subscribe specific callback to TestEventForTesting
-        event_bus.subscribe(TestEventForTesting, specific_callback)
-
-        # Subscribe wildcard callback to all events
-        with patch.object(Event, "__subclasses__") as mock_subclasses:
-            mock_subclasses.return_value = [
-                TestEventForTesting,
-                AnotherTestEventForTesting,
-            ]
-            event_bus.subscribe("*", wildcard_callback)
-
-            # Both callbacks should be subscribed to TestEventForTesting
-            assert wildcard_callback in event_bus._subscribers[TestEventForTesting]
-            assert specific_callback in event_bus._subscribers[TestEventForTesting]
-
-            # Unsubscribe wildcard
-            event_bus.unsubscribe("*", wildcard_callback)
-
-            # Specific callback should remain, wildcard callback should be removed
-            assert specific_callback in event_bus._subscribers[TestEventForTesting]
-            assert wildcard_callback not in event_bus._subscribers[TestEventForTesting]
-            assert (
-                AnotherTestEventForTesting not in event_bus._subscribers
-            )  # Should be cleaned up
-
-    def test_unsubscribe_nonexistent_callback_raises_error(self):
-        """Test that unsubscribing a non-existent callback raises KeyError."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
-
-        with pytest.raises(KeyError):
-            event_bus.unsubscribe(TestEventForTesting, callback)
-
-    def test_publish_single_subscriber(self):
-        """Test publishing an event to a single subscriber."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
-        event = TestEventForTesting(message="Hello World")
-
-        event_bus.subscribe(TestEventForTesting, callback)
-        event_bus.publish(event)
-
-        callback.assert_called_once_with(event)
-        assert event.session_id == "test-session"
-
-    def test_publish_multiple_subscribers(self):
-        """Test publishing an event to multiple subscribers."""
-        event_bus = EventBus("test-session")
-        callback1 = Mock()
-        callback2 = Mock()
-        callback3 = Mock()
-        event = TestEventForTesting(message="Hello World")
-
-        event_bus.subscribe(TestEventForTesting, callback1)
-        event_bus.subscribe(TestEventForTesting, callback2)
-        event_bus.subscribe(TestEventForTesting, callback3)
-
-        event_bus.publish(event)
-
-        callback1.assert_called_once_with(event)
-        callback2.assert_called_once_with(event)
-        callback3.assert_called_once_with(event)
-
-    def test_publish_no_subscribers(self):
-        """Test publishing an event with no subscribers."""
-        event_bus = EventBus("test-session")
-        event = TestEventForTesting(message="Hello World")
-
-        # Should not raise any errors
-        event_bus.publish(event)
-        assert event.session_id == "test-session"
-
-    def test_publish_sets_session_id(self):
-        """Test that publish sets the event's session_id."""
-        session_id = "custom-session-456"
-        event_bus = EventBus(session_id)
-        event = TestEventForTesting(message="Test")
-        callback = Mock()
-
-        event_bus.subscribe(TestEventForTesting, callback)
-        event_bus.publish(event)
-
-        assert event.session_id == session_id
-        callback.assert_called_once_with(event)
-
-    def test_publish_overwrites_existing_session_id(self):
-        """Test that publish overwrites existing session_id on event."""
-        event_bus = EventBus("new-session")
-        event = TestEventForTesting(message="Test", session_id="old-session")
-        callback = Mock()
-
-        event_bus.subscribe(TestEventForTesting, callback)
-        event_bus.publish(event)
-
-        assert event.session_id == "new-session"
-
-    def test_publish_with_wildcard_subscribers(self):
-        """Test publishing events with wildcard subscribers."""
-        event_bus = EventBus("test-session")
-        wildcard_callback = Mock()
-        specific_callback = Mock()
-        event = TestEventForTesting(message="Test")
-
-        # Subscribe specific callback
-        event_bus.subscribe(TestEventForTesting, specific_callback)
-
-        # Subscribe wildcard callback
-        with patch.object(Event, "__subclasses__") as mock_subclasses:
-            mock_subclasses.return_value = [
-                TestEventForTesting,
-                AnotherTestEventForTesting,
-            ]
-            event_bus.subscribe("*", wildcard_callback)
-
-        event_bus.publish(event)
-
-        # Both callbacks should be called
-        specific_callback.assert_called_once_with(event)
-        wildcard_callback.assert_called_once_with(event)
-
-    def test_publish_callback_exception_handling(self):
-        """Test that exceptions in callbacks don't break event publishing."""
-        event_bus = EventBus("test-session")
-        failing_callback = Mock(side_effect=Exception("Callback error"))
-        working_callback = Mock()
-        event = TestEventForTesting(message="Test")
-
-        event_bus.subscribe(TestEventForTesting, failing_callback)
-        event_bus.subscribe(TestEventForTesting, working_callback)
-
-        # Should not raise exception, but should print error
-        with patch("builtins.print") as mock_print:
-            event_bus.publish(event)
-
-            # Both callbacks should be attempted
-            failing_callback.assert_called_once_with(event)
-            working_callback.assert_called_once_with(event)
-
-            # Error should be printed
-            mock_print.assert_called_once_with(
-                "Error in subscriber for TestEventForTesting: Callback error"
-            )
-
-    def test_clear_subscribers_all(self):
+    def test_eventbus_clear_subscribers_all(self):
         """Test clearing all subscribers."""
-        event_bus = EventBus("test-session")
-        callback1 = Mock()
-        callback2 = Mock()
+        bus = EventBus("test-session")
+        handler1 = Mock()
+        handler2 = Mock()
 
-        event_bus.subscribe(TestEventForTesting, callback1)
-        event_bus.subscribe(AnotherTestEventForTesting, callback2)
+        bus.subscribe(CallStackPushEvent, handler1)
+        bus.subscribe("*", handler2)
 
-        assert len(event_bus._subscribers) == 2
+        bus.clear_subscribers()
 
-        event_bus.clear_subscribers()
+        # All handlers should be cleared
+        assert len(bus._handlers) == 0
+        assert len(bus._global_handlers) == 0
 
-        assert len(event_bus._subscribers) == 0
 
-    def test_clear_subscribers_specific_event_type(self):
-        """Test clearing subscribers for a specific event type."""
-        event_bus = EventBus("test-session")
-        callback1 = Mock()
-        callback2 = Mock()
+class TestEventBusSyncPublishing:
+    """Test synchronous event publishing."""
 
-        event_bus.subscribe(TestEventForTesting, callback1)
-        event_bus.subscribe(AnotherTestEventForTesting, callback2)
+    def test_sync_publish_to_specific_handler(self):
+        """Test publishing event to specific handler."""
+        bus = EventBus("test-session")
+        handler = Mock()
 
-        event_bus.clear_subscribers(TestEventForTesting)
+        bus.subscribe(CallStackPushEvent, handler)
 
-        assert TestEventForTesting not in event_bus._subscribers
-        assert AnotherTestEventForTesting in event_bus._subscribers
-        assert callback2 in event_bus._subscribers[AnotherTestEventForTesting]
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-    def test_clear_subscribers_nonexistent_event_type(self):
-        """Test clearing subscribers for a non-existent event type."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
+        bus.publish(event)
 
-        event_bus.subscribe(TestEventForTesting, callback)
+        # Handler should be called once with the event
+        handler.assert_called_once_with(event)
 
-        # Should not raise error
-        event_bus.clear_subscribers(AnotherTestEventForTesting)
+    def test_sync_publish_to_wildcard_handler(self):
+        """Test publishing event to wildcard handler."""
+        bus = EventBus("test-session")
+        handler = Mock()
 
-        # Original subscription should remain
-        assert TestEventForTesting in event_bus._subscribers
-        assert callback in event_bus._subscribers[TestEventForTesting]
+        bus.subscribe("*", handler)
 
-    def test_thread_safety_concurrent_subscribe_unsubscribe(self):
-        """Test thread safety with concurrent subscribe/unsubscribe operations."""
-        event_bus = EventBus("test-session")
-        callbacks = [Mock() for _ in range(10)]
-        results = []
-        errors = []
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-        def subscribe_unsubscribe_worker(callback_idx):
-            try:
-                callback = callbacks[callback_idx]
-                # Subscribe
-                event_bus.subscribe(TestEventForTesting, callback)
-                time.sleep(0.001)  # Small delay to increase chance of race conditions
-                # Unsubscribe
-                event_bus.unsubscribe(TestEventForTesting, callback)
-                results.append(f"worker_{callback_idx}_success")
-            except Exception as e:
-                errors.append(f"worker_{callback_idx}_error: {e}")
+        bus.publish(event)
 
-        # Start multiple threads
-        threads = []
-        for i in range(10):
-            thread = threading.Thread(target=subscribe_unsubscribe_worker, args=(i,))
-            threads.append(thread)
-            thread.start()
+        # Handler should be called once with the event
+        handler.assert_called_once_with(event)
 
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
+    def test_sync_publish_to_multiple_handlers(self):
+        """Test publishing event to multiple handlers."""
+        bus = EventBus("test-session")
+        specific_handler = Mock()
+        wildcard_handler = Mock()
 
-        # Should complete without errors
-        assert len(errors) == 0
-        assert len(results) == 10
-        assert TestEventForTesting not in event_bus._subscribers
+        bus.subscribe(CallStackPushEvent, specific_handler)
+        bus.subscribe("*", wildcard_handler)
 
-    def test_thread_safety_concurrent_publish(self):
-        """Test thread safety with concurrent publish operations."""
-        event_bus = EventBus("test-session")
-        callback = Mock()
-        event_bus.subscribe(TestEventForTesting, callback)
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-        call_counts = []
+        bus.publish(event)
 
-        def publish_worker(worker_id):
-            event = TestEventForTesting(message=f"Message from worker {worker_id}")
-            event_bus.publish(event)
-            call_counts.append(worker_id)
+        # Both handlers should be called
+        specific_handler.assert_called_once_with(event)
+        wildcard_handler.assert_called_once_with(event)
 
-        # Start multiple threads publishing events
-        threads = []
-        for i in range(20):
-            thread = threading.Thread(target=publish_worker, args=(i,))
-            threads.append(thread)
-            thread.start()
+    def test_sync_publish_no_handlers(self):
+        """Test publishing event with no handlers (should not raise)."""
+        bus = EventBus("test-session")
 
-        # Wait for all threads to complete
-        for thread in threads:
-            thread.join()
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-        # All events should have been published
-        assert len(call_counts) == 20
-        assert callback.call_count == 20
+        # Should not raise exception
+        bus.publish(event)
 
-    def test_thread_safety_subscribe_during_publish(self):
-        """Test thread safety when subscribing during event publishing."""
-        event_bus = EventBus("test-session")
-        initial_callback = Mock()
-        event_bus.subscribe(TestEventForTesting, initial_callback)
+    def test_sync_publish_handler_exception(self):
+        """Test that handler exceptions are caught and logged."""
+        bus = EventBus("test-session")
+        failing_handler = Mock(side_effect=Exception("Handler failed"))
+        working_handler = Mock()
 
-        new_callbacks = []
-        publish_complete = threading.Event()
+        bus.subscribe(CallStackPushEvent, failing_handler)
+        bus.subscribe(CallStackPushEvent, working_handler)
 
-        def slow_callback(event):
-            """Callback that takes time, allowing subscription during execution."""
-            time.sleep(0.01)
-            # Try to subscribe a new callback during publish
-            new_callback = Mock()
-            new_callbacks.append(new_callback)
-            event_bus.subscribe(AnotherTestEventForTesting, new_callback)
-            initial_callback(event)
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-        # Replace initial callback with slow callback
-        event_bus.unsubscribe(TestEventForTesting, initial_callback)
-        event_bus.subscribe(TestEventForTesting, slow_callback)
+        # Should not raise exception, both handlers should be called
+        bus.publish(event)
 
-        def publish_worker():
-            event = TestEventForTesting(message="Test message")
-            event_bus.publish(event)
-            publish_complete.set()
+        failing_handler.assert_called_once_with(event)
+        working_handler.assert_called_once_with(event)
 
-        # Start publish in separate thread
-        publish_thread = threading.Thread(target=publish_worker)
-        publish_thread.start()
-        publish_thread.join()
 
-        # Should complete without deadlocks
-        assert publish_complete.is_set()
-        assert len(new_callbacks) == 1
-        assert AnotherTestEventForTesting in event_bus._subscribers
+class TestEventBusAsyncPublishing:
+    """Test asynchronous event publishing."""
 
-    def test_publish_copies_subscriber_list(self):
-        """Test that publish makes a copy of subscribers to avoid modification issues."""
-        event_bus = EventBus("test-session")
-        callback1 = Mock()
-        callback2 = Mock()
+    @pytest.mark.asyncio
+    async def test_async_publish_to_async_handler(self):
+        """Test publishing event to async handler."""
+        bus = EventBus("test-session")
+        handler = AsyncMock()
 
-        def modifying_callback(event):
-            """Callback that modifies subscribers during publish."""
-            # This should not affect the current publish cycle
-            event_bus.subscribe(AnotherTestEventForTesting, Mock())
-            callback1(event)
+        bus.subscribe(CallStackPushEvent, handler)
 
-        event_bus.subscribe(TestEventForTesting, modifying_callback)
-        event_bus.subscribe(TestEventForTesting, callback2)
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-        event = TestEventForTesting(message="Test")
-        event_bus.publish(event)
+        await bus.publish_async(event)
 
-        # Both callbacks should have been called despite modification
-        callback1.assert_called_once_with(event)
-        callback2.assert_called_once_with(event)
+        # Handler should be called once with the event
+        handler.assert_called_once_with(event)
 
-        # New subscription should exist
-        assert AnotherTestEventForTesting in event_bus._subscribers
+    @pytest.mark.asyncio
+    async def test_async_publish_to_sync_handler(self):
+        """Test publishing event to sync handler via async method."""
+        bus = EventBus("test-session")
+        handler = Mock()
 
-    def test_integration_real_event_types(self):
-        """Integration test with real event types from the system."""
-        event_bus = EventBus("integration-test-session")
-        callback = Mock()
+        bus.subscribe(CallStackPushEvent, handler)
 
-        # Test with CallStackPushEvent
-        event_bus.subscribe(CallStackPushEvent, callback)
-        push_event = CallStackPushEvent(frame="test_frame", stack=["frame1", "frame2"])
-        event_bus.publish(push_event)
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-        callback.assert_called_once_with(push_event)
-        assert push_event.session_id == "integration-test-session"
+        await bus.publish_async(event)
 
-        # Test with VariableUpdateEvent
-        callback.reset_mock()
-        event_bus.subscribe(VariableUpdateEvent, callback)
-        var_event = VariableUpdateEvent(name="test_var", value=42)
-        event_bus.publish(var_event)
+        # Handler should be called once with the event
+        handler.assert_called_once_with(event)
 
-        assert callback.call_count == 1  # Called for VariableUpdateEvent
-        assert var_event.session_id == "integration-test-session"
+    @pytest.mark.asyncio
+    async def test_async_publish_mixed_handlers(self):
+        """Test publishing to both sync and async handlers."""
+        bus = EventBus("test-session")
+        sync_handler = Mock()
+        async_handler = AsyncMock()
 
-    def test_memory_cleanup_after_unsubscribe(self):
-        """Test that memory is properly cleaned up after unsubscribing."""
-        event_bus = EventBus("test-session")
-        callbacks = [Mock() for _ in range(100)]
+        bus.subscribe(CallStackPushEvent, sync_handler)
+        bus.subscribe(CallStackPushEvent, async_handler)
 
-        # Subscribe many callbacks
-        for callback in callbacks:
-            event_bus.subscribe(TestEventForTesting, callback)
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
 
-        assert len(event_bus._subscribers[TestEventForTesting]) == 100
+        await bus.publish_async(event)
 
-        # Unsubscribe all but one
-        for callback in callbacks[:-1]:
-            event_bus.unsubscribe(TestEventForTesting, callback)
+        # Both handlers should be called
+        sync_handler.assert_called_once_with(event)
+        async_handler.assert_called_once_with(event)
 
-        assert len(event_bus._subscribers[TestEventForTesting]) == 1
-        assert callbacks[-1] in event_bus._subscribers[TestEventForTesting]
+    @pytest.mark.asyncio
+    async def test_async_publish_handler_exception(self):
+        """Test that async handler exceptions are caught and logged."""
+        bus = EventBus("test-session")
+        failing_handler = AsyncMock(side_effect=Exception("Async handler failed"))
+        working_handler = AsyncMock()
 
-        # Unsubscribe the last one
-        event_bus.unsubscribe(TestEventForTesting, callbacks[-1])
+        bus.subscribe(CallStackPushEvent, failing_handler)
+        bus.subscribe(CallStackPushEvent, working_handler)
 
-        # Event type should be completely removed
-        assert TestEventForTesting not in event_bus._subscribers
-        assert len(event_bus._subscribers) == 0
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
+
+        # Should not raise exception, both handlers should be called
+        await bus.publish_async(event)
+
+        failing_handler.assert_called_once_with(event)
+        working_handler.assert_called_once_with(event)
+
+    @pytest.mark.asyncio
+    async def test_async_publish_concurrent_execution(self):
+        """Test that async handlers execute concurrently."""
+        bus = EventBus("test-session")
+
+        # Create handlers that track execution order
+        execution_order = []
+
+        async def slow_handler(event):
+            execution_order.append("slow_start")
+            await asyncio.sleep(0.1)
+            execution_order.append("slow_end")
+
+        async def fast_handler(event):
+            execution_order.append("fast_start")
+            await asyncio.sleep(0.05)
+            execution_order.append("fast_end")
+
+        bus.subscribe(CallStackPushEvent, slow_handler)
+        bus.subscribe(CallStackPushEvent, fast_handler)
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=["main"])
+
+        await bus.publish_async(event)
+
+        # Both handlers should have started before either finished (concurrent execution)
+        assert "slow_start" in execution_order
+        assert "fast_start" in execution_order
+        assert "slow_end" in execution_order
+        assert "fast_end" in execution_order
+
+        # Fast handler should finish before slow handler
+        fast_end_idx = execution_order.index("fast_end")
+        slow_end_idx = execution_order.index("slow_end")
+        assert fast_end_idx < slow_end_idx
+
+
+class TestEventBusIntegration:
+    """Test EventBus integration with different event types."""
+
+    def test_different_event_types(self):
+        """Test handling different event types correctly."""
+        bus = EventBus("test-session")
+
+        # Handlers for different event types
+        callstack_handler = Mock()
+        agent_handler = Mock()
+        variable_handler = Mock()
+
+        bus.subscribe(CallStackPushEvent, callstack_handler)
+        bus.subscribe(AgentStartedEvent, agent_handler)
+        bus.subscribe(VariableUpdateEvent, variable_handler)
+
+        # Publish different event types
+        callstack_event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+        agent_event = AgentStartedEvent(session_id="test", agent_name="TestAgent")
+        variable_event = VariableUpdateEvent(
+            session_id="test", variable_name="x", variable_value=42
+        )
+
+        bus.publish(callstack_event)
+        bus.publish(agent_event)
+        bus.publish(variable_event)
+
+        # Each handler should only be called for its event type
+        callstack_handler.assert_called_once_with(callstack_event)
+        agent_handler.assert_called_once_with(agent_event)
+        variable_handler.assert_called_once_with(variable_event)
+
+    def test_wildcard_receives_all_events(self):
+        """Test that wildcard handler receives all event types."""
+        bus = EventBus("test-session")
+        wildcard_handler = Mock()
+
+        bus.subscribe("*", wildcard_handler)
+
+        # Publish different event types
+        callstack_event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+        agent_event = AgentStartedEvent(session_id="test", agent_name="TestAgent")
+        variable_event = VariableUpdateEvent(
+            session_id="test", variable_name="x", variable_value=42
+        )
+
+        bus.publish(callstack_event)
+        bus.publish(agent_event)
+        bus.publish(variable_event)
+
+        # Wildcard handler should be called for all events
+        assert wildcard_handler.call_count == 3
+        wildcard_handler.assert_any_call(callstack_event)
+        wildcard_handler.assert_any_call(agent_event)
+        wildcard_handler.assert_any_call(variable_event)
+
+
+class TestEventBusLifecycle:
+    """Test EventBus lifecycle management."""
+
+    def test_subscription_after_closing_raises_error(self):
+        """Test that subscription after closing raises error."""
+        bus = EventBus("test-session")
+        bus._closing = True
+
+        with pytest.raises(RuntimeError, match="Cannot subscribe to closing event bus"):
+            bus.subscribe(CallStackPushEvent, Mock())
+
+    @pytest.mark.asyncio
+    async def test_async_publish_after_closing_raises_error(self):
+        """Test that async publish after closing raises error."""
+        bus = EventBus("test-session")
+        bus._closing = True
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+
+        with pytest.raises(RuntimeError, match="Cannot publish to closing event bus"):
+            await bus.publish_async(event)
+
+    @pytest.mark.asyncio
+    async def test_close_cancels_active_tasks(self):
+        """Test that close() cancels active tasks."""
+        bus = EventBus("test-session")
+
+        # Create a long-running handler
+        async def long_handler(event):
+            await asyncio.sleep(1.0)  # Long delay
+
+        bus.subscribe(CallStackPushEvent, long_handler)
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+
+        # Start async publish (don't await)
+        publish_task = asyncio.create_task(bus.publish_async(event))
+
+        # Give it a moment to start
+        await asyncio.sleep(0.01)
+
+        # Close the bus
+        close_task = asyncio.create_task(bus.close())
+
+        # Both should complete quickly (close cancels the handler)
+        await asyncio.wait_for(
+            asyncio.gather(publish_task, close_task, return_exceptions=True),
+            timeout=0.5,
+        )
+
+        assert bus._closing is True
+
+    @pytest.mark.asyncio
+    async def test_close_clears_subscribers(self):
+        """Test that close() clears all subscribers."""
+        bus = EventBus("test-session")
+        handler = Mock()
+
+        bus.subscribe(CallStackPushEvent, handler)
+        bus.subscribe("*", handler)
+
+        await bus.close()
+
+        assert len(bus._handlers) == 0
+        assert len(bus._global_handlers) == 0
+
+
+class TestEventBusErrorHandling:
+    """Test EventBus error handling and edge cases."""
+
+    def test_sync_publish_with_coroutine_handler(self):
+        """Test sync publish with async handler (should schedule it)."""
+        bus = EventBus("test-session")
+
+        async def async_handler(event):
+            return "async result"
+
+        bus.subscribe(CallStackPushEvent, async_handler)
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+
+        # Should not raise exception (async handler gets scheduled)
+        bus.publish(event)
+
+    def test_multiple_subscriptions_same_handler(self):
+        """Test that same handler can be subscribed multiple times."""
+        bus = EventBus("test-session")
+        handler = Mock()
+
+        bus.subscribe(CallStackPushEvent, handler)
+        bus.subscribe(CallStackPushEvent, handler)  # Subscribe again
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+        bus.publish(event)
+
+        # Handler should be called twice
+        assert handler.call_count == 2
+
+    def test_handler_modification_during_publish(self):
+        """Test that handlers can be modified during event publishing."""
+        bus = EventBus("test-session")
+        call_order = []
+
+        def first_handler(event):
+            call_order.append("first")
+            # Unsubscribe self during handling
+            bus.unsubscribe(CallStackPushEvent, first_handler)
+
+        def second_handler(event):
+            call_order.append("second")
+
+        bus.subscribe(CallStackPushEvent, first_handler)
+        bus.subscribe(CallStackPushEvent, second_handler)
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+        bus.publish(event)
+
+        # Both handlers should still be called for this event
+        assert "first" in call_order
+        assert "second" in call_order
+
+        # But first_handler should be unsubscribed for future events
+        call_order.clear()
+        bus.publish(event)
+        assert call_order == ["second"]
+
+
+class TestEventBusPerformance:
+    """Test EventBus performance characteristics."""
+
+    def test_many_handlers_performance(self):
+        """Test performance with many handlers."""
+        bus = EventBus("test-session")
+        handlers = [Mock() for _ in range(100)]
+
+        # Subscribe all handlers
+        for handler in handlers:
+            bus.subscribe(CallStackPushEvent, handler)
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+
+        # Should handle many handlers efficiently
+        bus.publish(event)
+
+        # All handlers should be called
+        for handler in handlers:
+            handler.assert_called_once_with(event)
+
+    @pytest.mark.asyncio
+    async def test_many_async_handlers_performance(self):
+        """Test performance with many async handlers."""
+        bus = EventBus("test-session")
+        handlers = [AsyncMock() for _ in range(50)]
+
+        # Subscribe all handlers
+        for handler in handlers:
+            bus.subscribe(CallStackPushEvent, handler)
+
+        event = CallStackPushEvent(session_id="test", frame="main", stack=[])
+
+        # Should handle many async handlers efficiently
+        await bus.publish_async(event)
+
+        # All handlers should be called
+        for handler in handlers:
+            handler.assert_called_once_with(event)

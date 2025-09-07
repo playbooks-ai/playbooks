@@ -29,16 +29,16 @@ import litellm
 from rich.console import Console
 
 from playbooks import Playbooks
-from playbooks.debug_logger import debug
-from playbooks.user_output import user_output
 from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.constants import EOM, EXECUTION_FINISHED
+from playbooks.debug_logger import debug
 from playbooks.events import Event
 from playbooks.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.message import MessageType
 from playbooks.program import Program
 from playbooks.session_log import SessionLogItemLevel
+from playbooks.user_output import user_output
 from playbooks.utils.error_utils import check_playbooks_health
 
 # Add the src directory to the Python path to import playbooks
@@ -271,7 +271,7 @@ async def patched_route_message(
 async def main(
     program_paths: str,
     verbose: bool,
-    debug: bool = False,
+    enable_debug: bool = False,
     debug_host: str = "127.0.0.1",
     debug_port: int = 7529,
     wait_for_client: bool = False,
@@ -289,7 +289,7 @@ async def main(
     Args:
         program_paths: Path to the playbook file(s) to load
         verbose: Whether to print the session log
-        debug: Whether to start the debug server
+        enable_debug: Whether to start the debug server
         debug_host: Host address for the debug server
         debug_port: Port for the debug server
         wait_for_client: Whether to wait for a client to connect before starting
@@ -344,27 +344,25 @@ async def main(
     def log_event(event: Event):
         print(event)
 
-    # Start debug server if requested
-    if debug:
+    # Connect to debug adapter if requested
+    if enable_debug:
         console.print(
-            f"[green]Starting debug server on {debug_host}:{debug_port}[/green]"
+            "[green]Debug mode enabled - will attempt to connect to VSCode debug adapter[/green]"
         )
-        await playbooks.program.start_debug_server(host=debug_host, port=debug_port)
+        # Start debug server with stop-on-entry flag
+        debug(f"Starting debug server with agents: {playbooks.program.agents}")
+        await playbooks.program.start_debug_server(
+            host=debug_host, port=debug_port, stop_on_entry=stop_on_entry
+        )
 
-        # Set stop_on_entry flag in debug server BEFORE waiting for client
         if stop_on_entry:
-            #     "[DEBUG] agent_chat.main - stop_on_entry=True, setting up debug server"
-            # )
-            playbooks.program._debug_server.set_stop_on_entry(True)
-        else:
-            playbooks.program._debug_server.set_stop_on_entry(False)
+            console.print("[yellow]Stop-on-entry enabled[/yellow]")
 
-        # If wait_for_client is True, pause until a client connects
+        # If wait_for_client is True, wait for debug adapter to connect
         if wait_for_client:
             console.print(
-                f"[yellow]Waiting for a debug client to connect at {debug_host}:{debug_port}...[/yellow]"
+                f"[yellow]Waiting for debug client to connect at {debug_host}:{debug_port}...[/yellow]"
             )
-            # Wait for a client to connect using the debug server's wait_for_client method
             await playbooks.program._debug_server.wait_for_client()
             console.print("[green]Debug client connected.[/green]")
 
@@ -392,7 +390,7 @@ async def main(
         if verbose:
             playbooks.event_bus.unsubscribe("*", log_event)
         # Shutdown debug server if it was started
-        if debug and playbooks.program._debug_server:
+        if enable_debug and playbooks.program._debug_server:
             await playbooks.program.shutdown_debug_server()
         # Restore the original methods when we're done
         MessagingMixin.WaitForMessage = original_wait_for_message

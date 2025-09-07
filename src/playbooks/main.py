@@ -37,10 +37,14 @@ class Playbooks:
 
         # Extract and apply frontmatter from all files (.pb and .pbasm)
         self.program_metadata = {}
-        compiled_content = []
-        for i, (file_path, fm, file_content, is_compiled) in enumerate(
-            self.compiled_program_files
-        ):
+        # compiled_content = []
+        for i, (
+            file_path,
+            fm,
+            file_content,
+            is_compiled,
+            compiled_file_path,
+        ) in enumerate(self.compiled_program_files):
             if fm:
                 # Check for duplicate attributes
                 for key, value in fm.items():
@@ -51,20 +55,25 @@ class Playbooks:
                         )
                     self.program_metadata[key] = value
 
-            compiled_content.append(file_content)
+            # compiled_content.append(file_content)
 
         # Compiled agents without frontmatter
-        self.compiled_program_content = "\n\n".join(compiled_content)
+        # self.compiled_program_content = "\n\n".join(compiled_content)
 
         # Apply program metadata
         self._apply_program_metadata()
 
         self.event_bus = EventBus(self.session_id)
+        compiled_program_paths = [
+            compiled_file_path
+            for _, _, _, _, compiled_file_path in self.compiled_program_files
+        ]
+
         self.program = Program(
-            self.compiled_program_content,
-            self.event_bus,
-            program_paths,
-            self.program_metadata,
+            event_bus=self.event_bus,
+            program_paths=self.program_paths,
+            compiled_program_paths=compiled_program_paths,
+            metadata=self.program_metadata,
         )
 
     async def initialize(self):

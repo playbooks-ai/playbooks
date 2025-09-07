@@ -1,6 +1,7 @@
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict
 
+from playbooks.events import AgentPausedEvent
 from playbooks.utils.spec_utils import SpecUtils
 
 from ..llm_messages import AgentCommunicationLLMMessage
@@ -42,7 +43,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
 
         # Debug context
         self._debug_thread_id: int = None
-        self._debug_status: str = "not_started"
+        self.paused: str = None
 
     async def begin(self):
         """Agent startup logic. Override in subclasses."""
@@ -142,22 +143,6 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         """Set the debug thread ID for this agent."""
         self._debug_thread_id = thread_id
 
-    def get_debug_status(self) -> str:
-        """Get the current debug status."""
-        return self._debug_status
-
-    def set_debug_status(self, status: str) -> None:
-        """Set the debug status."""
-        self._debug_status = status
-
-        # Update debug server if available
-        if (
-            self.program
-            and hasattr(self.program, "_debug_server")
-            and self.program._debug_server
-        ):
-            self.program._debug_server.update_agent_status(self.id, status)
-
     def emit_agent_paused_event(
         self, reason: str = "pause", source_line_number: int = 0
     ) -> None:
@@ -167,13 +152,9 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             and hasattr(self.program, "event_bus")
             and self.program.event_bus
         ):
-            from playbooks.events import AgentPausedEvent
-
-            agent_name = str(self)
             event = AgentPausedEvent(
+                session_id="",
                 agent_id=self.id,
-                agent_name=agent_name,
-                thread_id=self._debug_thread_id or 1,
                 reason=reason,
                 source_line_number=source_line_number,
             )
@@ -188,10 +169,8 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         ):
             from playbooks.events import AgentResumedEvent
 
-            agent_name = str(self)
             event = AgentResumedEvent(
+                session_id="",
                 agent_id=self.id,
-                agent_name=agent_name,
-                thread_id=self._debug_thread_id or 1,
             )
             self.program.event_bus.publish(event)

@@ -35,7 +35,9 @@ class RawLLMExecution(LLMExecution):
 
         # Publish playbook start event
         self.agent.state.event_bus.publish(
-            PlaybookStartEvent(playbook=self.playbook.name)
+            PlaybookStartEvent(
+                agent_id=self.agent.id, session_id="", playbook=self.playbook.name
+            )
         )
 
         # Build the prompt
@@ -51,6 +53,8 @@ class RawLLMExecution(LLMExecution):
         call_stack_depth = len(self.agent.state.call_stack.frames)
         self.agent.state.event_bus.publish(
             PlaybookEndEvent(
+                agent_id=self.agent.id,
+                session_id="",
                 playbook=self.playbook.name,
                 return_value=result,
                 call_stack_depth=call_stack_depth,

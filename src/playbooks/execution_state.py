@@ -36,8 +36,8 @@ class ExecutionState:
         self.klass = klass
         self.agent_id = agent_id
         self.session_log = SessionLog(klass, agent_id)
-        self.call_stack = CallStack(event_bus)
-        self.variables = Variables(event_bus)
+        self.call_stack = CallStack(event_bus, agent_id)
+        self.variables = Variables(event_bus, agent_id)
         self.artifacts = Artifacts()
         self.agents: List[Dict[str, Any]] = []
         self.last_llm_response = ""
