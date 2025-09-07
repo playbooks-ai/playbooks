@@ -8,7 +8,6 @@ from playbooks.debug_logger import debug
 
 from ..call_stack import InstructionPointer
 from .server import DebugServer
-from .types import Frame
 
 # Constants
 POLLING_INTERVAL = 0.01  # Seconds for global continue polling
@@ -173,10 +172,6 @@ class DebugHandler:
     async def handle_execution_end(self):
         """Handle execution end cleanup."""
         # No specific cleanup needed for clean architecture
-        pass
-
-    def _create_frame_from_ip(self, instruction_pointer: InstructionPointer) -> Frame:
-        """Create a Frame from an InstructionPointer."""
         pass
 
     def _should_stop_on_entry(self) -> bool:

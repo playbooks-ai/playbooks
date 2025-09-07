@@ -75,3 +75,11 @@ def get_file_type_description(file_path: str) -> str:
         return "source playbook"
     else:
         return "unknown file type"
+
+
+def read_file(file_path: str) -> str:
+    """
+    Read a file and return its content.
+    """
+    with open(file_path, "r") as file:
+        return file.read()

@@ -6,11 +6,6 @@ from typing import TYPE_CHECKING, Any, List
 from ..constants import EXECUTION_FINISHED
 from ..debug.debug_handler import DebugHandler, NoOpDebugHandler
 from ..debug_logger import debug
-from ..events import (
-    LineExecutedEvent,
-    PlaybookEndEvent,
-    PlaybookStartEvent,
-)
 from ..exceptions import ExecutionFinished
 from ..interpreter_prompt import InterpreterPrompt
 from ..llm_messages import AssistantResponseLLMMessage, PlaybookImplementationLLMMessage
@@ -35,7 +30,7 @@ logger = logging.getLogger(__name__)
 
 
 class PlaybookLLMExecution(LLMExecution):
-    """Traditional playbook execution with defined steps.
+    """Playbook execution with defined steps.
 
     This is the core playbook mode - structured natural language functions
     with explicit steps that execute on LLMs. Aligns with ### Steps sections.
@@ -52,12 +47,34 @@ class PlaybookLLMExecution(LLMExecution):
         """
         super().__init__(agent, playbook)
 
-        # Initialize debug handler
-        self.debug_handler = (
-            DebugHandler(agent.program._debug_server)
-            if agent.program._debug_server
-            else NoOpDebugHandler()
-        )
+        # Initialize debug handler based on whether debug server is available
+        # debug(
+        #     f"[DEBUG] Initializing debug handler - agent has program: {hasattr(agent, 'program')}, program exists: {agent.program if hasattr(agent, 'program') else 'No'}, debug server exists: {agent.program._debug_server if hasattr(agent, 'program') and agent.program else 'No'}",
+        # )
+        if hasattr(agent, "program") and agent.program and agent.program._debug_server:
+            # Check if debug server already has a debug handler
+            if (
+                hasattr(agent.program._debug_server, "debug_handler")
+                and agent.program._debug_server.debug_handler
+            ):
+                # Use the existing debug handler from the debug server
+                # debug(
+                #     "[DEBUG] Using existing DebugHandler from debug server",
+                # )
+                self.debug_handler = agent.program._debug_server.debug_handler
+            else:
+                # Create new debug handler and connect it
+                # debug(
+                #     "[DEBUG] Creating new DebugHandler and connecting to debug server",
+                # )
+                self.debug_handler = DebugHandler(agent.program._debug_server)
+                # Store reference in debug server for bidirectional communication
+                agent.program._debug_server.debug_handler = self.debug_handler
+                # debug(
+                #     "[DEBUG] New debug handler connected to debug server",
+                # )
+        else:
+            self.debug_handler = NoOpDebugHandler()
 
     async def pre_execute(self, call: PlaybookCall) -> None:
         llm_message = []
@@ -101,25 +118,11 @@ class PlaybookLLMExecution(LLMExecution):
         done = False
         return_value = None
 
-        # Reset debug handler for each execution
-        self.debug_handler.reset_for_execution()
-
-        # Publish playbook start event
-        self.agent.state.event_bus.publish(
-            PlaybookStartEvent(playbook=self.playbook.name)
-        )
-
         call = PlaybookCall(self.playbook.name, args, kwargs)
         await self.pre_execute(call)
 
         instruction = f"Execute {str(call)} from step 01. Refer to {self.playbook.name} playbook implementation above."
         artifacts_to_load = []
-        await self.debug_handler.handle_execution_start(
-            self.agent.state.call_stack.peek(),
-            self.agent.state.call_stack.peek(),
-            self.agent.state.event_bus,
-            self.agent.id,
-        )
 
         while not done:
             if self.agent.program.execution_finished:
@@ -173,63 +176,37 @@ class PlaybookLLMExecution(LLMExecution):
                         level=SessionLogItemLevel.LOW,
                     )
 
+                # Process steps but only call handle_execution_start once per line
                 for i in range(len(line.steps)):
-                    debug("Execution step", step_index=i, step=str(line.steps[i]))
+                    # debug("Execution step", step_index=i, step=str(line.steps[i]))
                     step = line.steps[i]
                     if i == len(line.steps) - 1:
                         next_step = step.copy()
-                        debug("Next step prepared", next_step=str(next_step))
-                        self.agent.state.call_stack.advance_instruction_pointer(
-                            next_step
-                        )
-                        debug(
-                            "Call handle_execution_start",
-                            step=str(step),
-                            next_step=str(next_step),
-                        )
-                        await self.debug_handler.handle_execution_start(
-                            step, next_step, self.agent.state.event_bus, self.agent.id
-                        )
+                        # debug("Next step prepared", next_step=str(next_step))
                     else:
                         next_step = step
-                        self.agent.state.call_stack.advance_instruction_pointer(
-                            next_step
-                        )
-                        debug(
-                            "Call handle_execution_start",
-                            step=str(step),
-                            next_step=str(next_step),
-                        )
-                        await self.debug_handler.handle_execution_start(
-                            step, next_step, self.agent.state.event_bus, self.agent.id
-                        )
+
+                    self.agent.state.call_stack.advance_instruction_pointer(next_step)
 
                 # Replace the current call stack frame with the last executed step
                 if line.steps:
-                    last_step = line.steps[-1].copy()
+                    # last_step = line.steps[-1].copy()
 
-                    debug(
-                        "Call handle_breakpoint",
-                        last_step=str(last_step),
-                        next_step=str(next_step),
-                    )
-                    # Check for breakpoints
-                    await self.debug_handler.handle_breakpoint(
-                        source_line_number=last_step.source_line_number,
-                        instruction_pointer=self.agent.state.call_stack.peek(),
-                        next_instruction_pointer=next_step,
-                        event_bus=self.agent.state.event_bus,
-                        agent_id=self.agent.id,
-                    )
+                    # debug(
+                    #     "Call handle_step",
+                    #     last_step=str(last_step),
+                    #     next_step=str(next_step),
+                    # )
 
-                    # Publish line executed event
-                    self.agent.state.event_bus.publish(
-                        LineExecutedEvent(
-                            step=str(last_step),
-                            source_line_number=last_step.source_line_number,
-                            text=line.text,
+                    for step in line.steps:
+                        debug(f"Agent {self.agent.id} pause if needed on step {step}")
+                        await self.debug_handler.pause_if_needed(
+                            instruction_pointer=step,
+                            agent_id=self.agent.id,
                         )
-                    )
+                        debug(
+                            f"Agent {self.agent.id} pause if needed on step {step} done"
+                        )
 
                 # Update variables
                 if len(line.vars) > 0:
@@ -241,7 +218,7 @@ class PlaybookLLMExecution(LLMExecution):
                         if self.agent.program.execution_finished:
                             break
 
-                        debug("Playbook call", playbook_call=str(playbook_call))
+                        # debug("Playbook call", playbook_call=str(playbook_call))
                         if playbook_call.playbook_klass == "Return":
                             if playbook_call.args:
                                 return_value = playbook_call.args[0]
@@ -305,20 +282,6 @@ class PlaybookLLMExecution(LLMExecution):
 
         if self.agent.program.execution_finished:
             return EXECUTION_FINISHED
-
-        # Publish playbook end event
-        call_stack_depth = len(self.agent.state.call_stack.frames)
-
-        self.agent.state.event_bus.publish(
-            PlaybookEndEvent(
-                playbook=self.playbook.name,
-                return_value=return_value,
-                call_stack_depth=call_stack_depth,
-            )
-        )
-
-        # Handle any debug cleanup
-        await self.debug_handler.handle_execution_end()
 
         return return_value
 

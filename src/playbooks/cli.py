@@ -102,7 +102,7 @@ async def run_application(
     program_paths: List[str],
     verbose: bool = False,
     stream: bool = True,
-    debug: bool = False,
+    enable_debug: bool = False,
     debug_host: str = "127.0.0.1",
     debug_port: int = 7529,
     wait_for_client: bool = False,
@@ -115,7 +115,7 @@ async def run_application(
         application_module: Module path like 'playbooks.applications.agent_chat'
         program_paths: List of playbook files to run
         verbose: Whether to print the session log
-        debug: Whether to start the debug server
+        enable_debug: Whether to start the debug server
         debug_host: Host address for the debug server
         debug_port: Port for the debug server
         wait_for_client: Whether to wait for a client to connect before starting
@@ -136,7 +136,7 @@ async def run_application(
             program_paths=program_paths,
             verbose=verbose,
             stream=stream,
-            debug=debug,
+            enable_debug=enable_debug,
             debug_host=debug_host,
             debug_port=debug_port,
             wait_for_client=wait_for_client,
@@ -277,7 +277,7 @@ def main():
                     args.program_paths,
                     verbose=args.verbose,
                     stream=args.stream,
-                    debug=args.debug,
+                    enable_debug=args.debug,
                     debug_host=args.debug_host,
                     debug_port=args.debug_port,
                     wait_for_client=args.wait_for_client,
@@ -331,9 +331,9 @@ def main():
 
     elif args.command == "playground":
         try:
-            import webbrowser
             import threading
             import time
+            import webbrowser
             from pathlib import Path
 
             # Import here to avoid unnecessary imports if not using webserver
