@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "playbooks"
-version = "0.5.0"
+version = "0.6.0"
 description = "A framework for creating AI applications and agents using natural language programming"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 license = "MIT"

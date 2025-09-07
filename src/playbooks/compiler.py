@@ -268,13 +268,6 @@ class Compiler:
 
             return version("playbooks")
         except ImportError:
-            try:
-                from importlib_metadata import version
-
-                return version("playbooks")
-            except ImportError:
-                return "dev"
-        except Exception:
             return "dev"
 
     def _get_cache_path(self, file_path: str) -> Path:
