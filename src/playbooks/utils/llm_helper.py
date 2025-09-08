@@ -11,6 +11,7 @@ from litellm import completion, get_supported_openai_params
 from playbooks.enums import LLMMessageRole
 from playbooks.llm_messages import SystemPromptLLMMessage, UserInputLLMMessage
 
+from ..config import load_settings
 from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..debug_logger import debug
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
@@ -82,18 +83,26 @@ litellm.completion = completion_with_preprocessing
 completion = completion_with_preprocessing
 
 # Initialize cache if enabled
-llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
 cache = None
 
-if llm_cache_enabled:
+# Load cache configuration from config system with environment fallback
+try:
+    settings, _ = load_settings()
+    llm_cache_enabled = settings.llm_cache.enabled
+    llm_cache_type = settings.llm_cache.type.lower()
+    llm_cache_path = settings.llm_cache.path
+except Exception:
+    # Fallback to environment variables if config loading fails
+    llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
     llm_cache_type = os.getenv("LLM_CACHE_TYPE", "disk").lower()
+    llm_cache_path = os.getenv("LLM_CACHE_PATH")
 
+if llm_cache_enabled:
     if llm_cache_type == "disk":
         from diskcache import Cache
 
         cache_dir = (
-            os.getenv("LLM_CACHE_PATH")
-            or tempfile.TemporaryDirectory(prefix="llm_cache_").name
+            llm_cache_path or tempfile.TemporaryDirectory(prefix="llm_cache_").name
         )
         cache = Cache(directory=cache_dir)
 
@@ -123,7 +132,7 @@ def custom_get_cache_key(**kwargs) -> str:
     cache_components = {
         "model": kwargs.get("model", ""),
         "messages": kwargs.get("messages", []),
-        "temperature": kwargs.get("temperature", 0.0),
+        "temperature": kwargs.get("temperature", 0.2),
         "logit_bias": kwargs.get("logit_bias", {}),
     }
 
@@ -277,7 +286,7 @@ def get_completion(
         "messages": messages.copy(),
         "max_completion_tokens": 7500,
         "stream": stream,
-        "temperature": 0.01,
+        "temperature": llm_config.temperature,
         **kwargs,
     }
 

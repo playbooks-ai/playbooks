@@ -2,6 +2,7 @@ import os
 from typing import Any
 
 from langfuse import Langfuse
+from ..config import load_settings
 
 
 class PlaybooksLangfuseSpan:
@@ -43,7 +44,18 @@ class LangfuseHelper:
             Langfuse: The initialized Langfuse client instance, or None
         """
         if cls.langfuse is None:
-            if os.getenv("LANGFUSE_ENABLED", "false").lower() == "false":
+            # Check if Langfuse is enabled via config system first, then env fallback
+            langfuse_enabled = False
+            try:
+                settings, _ = load_settings()
+                langfuse_enabled = settings.langfuse.enabled
+            except Exception:
+                # Fallback to environment variable if config loading fails
+                langfuse_enabled = (
+                    os.getenv("LANGFUSE_ENABLED", "false").lower() == "true"
+                )
+
+            if not langfuse_enabled:
                 cls.langfuse = PlaybooksLangfuseInstance()
             else:
                 cls.langfuse = Langfuse(

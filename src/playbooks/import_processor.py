@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import urlparse
 
-from .debug_logger import warning
+from .debug_logger import debug
 from .exceptions import ProgramLoadError
 
 
@@ -247,7 +247,7 @@ class ImportProcessor:
             else:
                 # For HTTP/HTTPS, would need to download and cache
                 # Not implemented in MVP
-                warning(f"URL imports not yet supported: {import_path}")
+                debug(f"URL imports not yet supported: {import_path}")
                 return None
 
         # Convert to Path object

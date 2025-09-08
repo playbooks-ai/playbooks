@@ -28,6 +28,7 @@ from typing import Any, Optional
 from rich.console import Console
 from rich.text import Text
 
+from .config import load_settings
 from .logging_constants import (
     DEBUG_LOGGER_NAME,
     DEBUG_PREFIX,
@@ -41,7 +42,8 @@ from .logging_constants import (
 _DEBUG_ENABLED: bool = parse_boolean_env(
     os.getenv(ENV_DEBUG_ENABLED, DEFAULT_DEBUG_ENABLED)
 )
-print(f"[DEBUG] _DEBUG_ENABLED: {_DEBUG_ENABLED}")
+settings, _ = load_settings()
+_DEBUG_ENABLED = settings.debug
 _debug_logger: Optional[logging.Logger] = None
 _console: Optional[Console] = None
 

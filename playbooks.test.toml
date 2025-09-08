@@ -1,0 +1,11 @@
+# Test environment overrides
+[model]
+name = "claude-sonnet-4-20250514"
+
+[llm_cache]
+type = "disk"
+enabled = true
+path = ".llm_cache_test"
+
+[langfuse]
+enabled = true

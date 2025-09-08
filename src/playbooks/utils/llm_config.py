@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from ..constants import DEFAULT_MODEL
+from ..config import load_settings
 from .env_loader import load_environment
 
 # Load environment variables from .env files
@@ -15,31 +15,64 @@ class LLMConfig:
     Configuration class for language model settings.
 
     This class manages model selection and API key configuration for different
-    LLM providers (OpenAI, Anthropic, Google). It automatically retrieves
-    appropriate API keys from environment variables based on the selected model.
+    LLM providers (OpenAI, Anthropic, Google). Model configuration comes from
+    the TOML config system, with environment variable override support.
+    API keys are always loaded from environment variables for security.
 
     Attributes:
-        model: The language model to use. If None, uses MODEL env var or DEFAULT_MODEL.
+        model: The language model to use. If None, loaded from config system.
+        provider: The model provider. If None, loaded from config system.
+        temperature: The model temperature. If None, loaded from config system.
         api_key: API key for the model provider. If None, determined by model type.
     """
 
     model: Optional[str] = None
+    provider: Optional[str] = None
+    temperature: Optional[float] = None
     api_key: Optional[str] = None
 
     def __post_init__(self):
-        """Initialize with default values from environment variables if needed."""
-        # Set model from environment or default
-        self.model = self.model or os.environ.get("MODEL") or DEFAULT_MODEL
+        """Initialize with default values from config system and environment variables."""
+        # Load model configuration from config system (which handles env overrides)
+        try:
+            settings, _ = load_settings()
+
+            # Set model name if not explicitly provided
+            if self.model is None:
+                self.model = settings.model.name
+
+            # Set provider if not explicitly provided
+            if self.provider is None:
+                self.provider = settings.model.provider
+
+            # Set temperature if not explicitly provided
+            if self.temperature is None:
+                self.temperature = settings.model.temperature
+
+        except Exception:
+            # Fallback to constants/defaults if config loading fails
+            if self.model is None:
+                from ..constants import DEFAULT_MODEL
+
+                self.model = DEFAULT_MODEL
+            if self.provider is None:
+                self.provider = "openai"  # Default provider
+            if self.temperature is None:
+                self.temperature = 0.2  # Default temperature
 
         # Set appropriate API key based on model provider if none was provided
         if self.api_key is None:
-            if "claude" in self.model:
+            # Use provider field to determine API key, fallback to model name detection
+            provider = self.provider.lower() if self.provider else ""
+            model = self.model.lower() if self.model else ""
+
+            if provider == "anthropic" or "claude" in model:
                 self.api_key = os.environ.get("ANTHROPIC_API_KEY")
-            elif "gemini" in self.model:
+            elif provider == "google" or "gemini" in model:
                 self.api_key = os.environ.get("GEMINI_API_KEY")
-            elif "groq" in self.model:
+            elif "groq" in provider or "groq" in model:
                 self.api_key = os.environ.get("GROQ_API_KEY")
-            elif "openrouter" in self.model:
+            elif "openrouter" in provider or "openrouter" in model:
                 self.api_key = os.environ.get("OPENROUTER_API_KEY")
             else:
                 # Default to OpenAI for other models
@@ -47,8 +80,18 @@ class LLMConfig:
 
     def to_dict(self) -> dict:
         """Convert configuration to a dictionary."""
-        return {"model": self.model, "api_key": self.api_key}
+        return {
+            "model": self.model,
+            "provider": self.provider,
+            "temperature": self.temperature,
+            "api_key": self.api_key,
+        }
 
     def copy(self) -> "LLMConfig":
         """Create a copy of the configuration."""
-        return LLMConfig(model=self.model, api_key=self.api_key)
+        return LLMConfig(
+            model=self.model,
+            provider=self.provider,
+            temperature=self.temperature,
+            api_key=self.api_key,
+        )

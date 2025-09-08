@@ -10,7 +10,9 @@ def environment():
     load_environment()
 
 
+# Set test profile for playbooks config system
 os.environ["ENVIRONMENT"] = "test"
+os.environ["PLAYBOOKS_PROFILE"] = "test"
 environment()
 
 

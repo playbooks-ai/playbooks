@@ -7,13 +7,17 @@ Provides commands for running and compiling playbooks.
 import argparse
 import asyncio
 import importlib
+import json
+import os
 import sys
 import warnings
-from typing import List
+from typing import Any, List
 
 import frontmatter
 import openai
 from rich.console import Console
+from rich.panel import Panel
+from rich.table import Table
 
 from .compiler import Compiler, FileCompilationSpec
 from .exceptions import ProgramLoadError
@@ -163,6 +167,100 @@ async def run_application(
         sys.exit(1)
 
 
+# -------------------------
+# config show implementation
+# -------------------------
+
+
+def _mask_secrets_inplace(obj: Any) -> Any:
+    """
+    Recursively mask values whose keys look secret-ish.
+    Heuristic: key contains one of KEY, TOKEN, SECRET, PASSWORD (case-insensitive).
+    """
+    if isinstance(obj, dict):
+        masked = {}
+        for k, v in obj.items():
+            if isinstance(k, str) and any(
+                s in k.lower() for s in ("key", "token", "secret", "password")
+            ):
+                masked[k] = "********"
+            else:
+                masked[k] = _mask_secrets_inplace(v)
+        return masked
+    if isinstance(obj, list):
+        return [_mask_secrets_inplace(v) for v in obj]
+    return obj
+
+
+def _print_config_pretty(effective: dict, files_used: list[str], mask: bool) -> None:
+    """Pretty render config and file list using rich."""
+    if mask:
+        effective = _mask_secrets_inplace(effective)
+
+    table = Table(title="Effective Playbooks Configuration", show_lines=False)
+    table.add_column("Key", style="cyan", no_wrap=True)
+    table.add_column("Value", style="white")
+
+    def walk(prefix: str, node: Any):
+        if isinstance(node, dict):
+            for k in sorted(node.keys()):
+                walk(f"{prefix}.{k}" if prefix else k, node[k])
+        else:
+            # Render scalars/arrays as JSON for readability
+            table.add_row(prefix, json.dumps(node, ensure_ascii=False))
+
+    walk("", effective)
+    console.print(table)
+
+    if files_used:
+        files_panel = Panel.fit(
+            "\n".join(files_used),
+            title="Files used (lowest → highest among files)",
+            border_style="magenta",
+        )
+        console.print(files_panel)
+
+
+def _cmd_config_show(args) -> None:
+    # Lazy import so CLI still works if config module is missing in other contexts
+    try:
+        from .config import load_settings
+    except Exception as e:
+        console.print(
+            "[bold red]Unable to load configuration module (.config).[/bold red]\n"
+            "Make sure `config.py` (with load_settings) is available in the package."
+        )
+        console.print(f"[red]Detail:[/red] {e}")
+        sys.exit(1)
+
+    profile = args.profile
+    explicit_path = args.config_path
+    overrides = {}  # reserved for future: map additional CLI flags to schema here
+
+    try:
+        settings, files = load_settings(
+            profile=profile,
+            explicit_path=explicit_path,
+            overrides=overrides,
+        )
+    except Exception as e:
+        console.print(f"[bold red]Config error:[/bold red] {e}")
+        sys.exit(1)
+
+    effective = settings.model_dump()
+
+    if args.json:
+        if args.mask_secrets:
+            effective = _mask_secrets_inplace(effective)
+        # Include files in JSON if requested
+        payload = {"config": effective, "files_used": [str(p) for p in files]}
+        console.print_json(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    # Pretty (default)
+    _print_config_pretty(effective, [str(p) for p in files], args.mask_secrets)
+
+
 def main():
     """Main CLI entry point."""
     # Configure logging early
@@ -265,6 +363,38 @@ def main():
     )
     playground_parser.add_argument(
         "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
+    )
+
+    # -------------------------
+    # Config command group
+    # -------------------------
+    config_parser = subparsers.add_parser(
+        "config", help="Inspect and manage Playbooks configuration"
+    )
+    cfg_sub = config_parser.add_subparsers(dest="config_cmd", required=True)
+
+    cfg_show = cfg_sub.add_parser(
+        "show", help="Show effective configuration and sources"
+    )
+    cfg_show.add_argument(
+        "--profile",
+        default=os.getenv("PLAYBOOKS_PROFILE"),
+        help="Profile name to apply (e.g., prod). Defaults to $PLAYBOOKS_PROFILE.",
+    )
+    cfg_show.add_argument(
+        "--config",
+        dest="config_path",
+        help="Explicit config file to load in addition to project/user files.",
+    )
+    cfg_show.add_argument(
+        "--mask-secrets",
+        action="store_true",
+        help="Mask likely secrets (keys containing key/token/secret/password).",
+    )
+    cfg_show.add_argument(
+        "--json",
+        action="store_true",
+        help="Output JSON instead of a table (includes files_used).",
     )
 
     args = parser.parse_args()
@@ -383,6 +513,13 @@ def main():
         except Exception as e:
             console.print(f"[bold red]Error starting playground:[/bold red] {e}")
             sys.exit(1)
+
+    elif args.command == "config":
+        if args.config_cmd == "show":
+            _cmd_config_show(args)
+        else:
+            console.print("[red]Unknown config subcommand[/red]")
+            sys.exit(2)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,15 @@
+debug = true
+timeout_s = 60
+
+[model]
+provider = "anthropic"
+name = "claude-sonnet-4-20250514"
+temperature = 0.2
+
+[llm_cache]
+enabled = true
+type = "disk"
+path = ".llm_cache"
+
+[langfuse]
+enabled = true

@@ -289,7 +289,7 @@ PLAYBOOKS_IMPORT_CACHE_ENABLED=true  # Enable import caching
 
 ### 8.2 Configuration File
 ```yaml
-# playbooks.config.yml
+# .playbooks/config.yml
 import:
   max_depth: 10
   max_file_size: 1048576
@@ -450,23 +450,7 @@ Import a specific playbook from a playbooks file
 ### 📋 Pending Features (Future Phases)
 
 #### Phase 2: Advanced Features
-- [ ] Enhanced source mapping with full debugging support
-- [ ] URL-based imports (HTTP/HTTPS)
-- [ ] Configuration file support (playbooks.config.yml)
-- [ ] Environment variable configuration
-- [ ] Audit logging for import operations
-
-#### Phase 3: Package System
-- [ ] Package-based imports (@playbooks/stdlib)
-- [ ] Import aliases (!import ... as ...)
-- [ ] Selective imports (sections, functions)
-- [ ] Remote repository imports (git)
-
-#### Phase 4: Tooling
-- [ ] VSCode extension integration
-- [ ] Import graph visualization
-- [ ] Performance profiling tools
-- [ ] Migration utilities
+- [ ] Configuration file support (.playbooks/config.yml)
 
 ### Timeline Update
 
