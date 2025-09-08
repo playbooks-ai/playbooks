@@ -1,0 +1,39 @@
+# FactsAboutNearbyCountries
+This program prints interesting facts about nearby countries
+
+```python
+from typing import List
+
+@playbook
+async def process_countries(countries: List[str]) -> None:
+  # Python loop iterates through the list provided by the NL playbook
+  for country in countries:
+    # Python calls the NL playbook 'GetCountryFact' for each country
+    fact = await GetCountryFact(country)
+    await Say("user", f"{country}: {fact}")
+```
+
+## GetCountryFact($country:str) -> str
+Returns an unusual historical fact about a given country
+### Steps
+- 01:RET an unusual historical fact about $country
+
+## Main() -> None
+Main interaction loop that collects user's country, finds nearby countries, and shares interesting facts about each one
+### Triggers
+- T1:BGN At the beginning
+### Steps
+- 01:QUE Say(user, Ask user what $country:str they are from)
+- 02:YLD for user
+- 03:CND If user did not provide a country
+  - 03.01:QUE Say(user, engage in a conversation and gently nudge them to provide a country); YLD for user; done when user provides a country or gives up
+- 04:EXE List 5 $countries:list near $country
+- 05:QUE Say(user, Tell the user the nearby $countries)
+- 06:QUE Say(user, Inform the user that you will now tell them some interesting facts about each of the countries)
+- 07:QUE process_countries(countries=$countries)
+- 08:YLD for call
+- 09:YLD for exit
+
+```public.json
+[]
+```

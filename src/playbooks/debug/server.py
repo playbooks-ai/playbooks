@@ -525,8 +525,8 @@ class DebugServer:
             self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.server_socket.setblocking(False)
 
-            # Bind to port 7529 (different from VSCode's 8529)
-            self.server_socket.bind(("127.0.0.1", 7529))
+            # Bind to the configured host and port
+            self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(1)
 
             # print(

@@ -54,4 +54,4 @@ async def BAXY1(num: float) -> float:
 
 ## BAXY2($num)
 ### Steps
-- return B(A(X($num))) * Y($num)
+- return B(A(X($num))) * Y($num) 

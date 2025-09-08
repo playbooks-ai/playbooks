@@ -18,12 +18,8 @@ def playbooks(md_path):
 @pytest.mark.asyncio
 async def test_load_playbooks(playbooks):
     await playbooks.initialize()
-    assert playbooks.program_content is not None
-    assert playbooks.program_content != playbooks.compiled_program_content
-    assert "BAXY" in playbooks.program_content
-
-    assert playbooks.compiled_program_content is not None
-    assert "BAXY" in playbooks.compiled_program_content
+    assert playbooks.program.markdown_contents
+    assert "BAXY" in playbooks.program.markdown_contents[0]
 
 
 @pytest.mark.asyncio

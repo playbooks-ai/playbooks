@@ -2,7 +2,7 @@ import uuid
 from functools import reduce
 from typing import List
 
-from .compiler import Compiler
+from .compiler import Compiler, FileCompilationSpec
 from .event_bus import EventBus
 from .loader import Loader
 from .logging_setup import configure_logging
@@ -28,9 +28,15 @@ class Playbooks:
         self.session_id = session_id or str(uuid.uuid4())
 
         # Load files
-        self.program_files = Loader.read_program_files(program_paths)
+        program_file_tuples = Loader.read_program_files(program_paths)
+        self.program_files = [
+            FileCompilationSpec(file_path=fp, content=content, is_compiled=is_comp)
+            for fp, content, is_comp in program_file_tuples
+        ]
         self.program_content = "\n\n".join(
-            reduce(lambda content, item: content + [item[1]], self.program_files, [])
+            reduce(
+                lambda content, item: content + [item.content], self.program_files, []
+            )
         )
         compiler = Compiler(self.llm_config)
         self.compiled_program_files = compiler.process_files(self.program_files)
@@ -38,19 +44,13 @@ class Playbooks:
         # Extract and apply frontmatter from all files (.pb and .pbasm)
         self.program_metadata = {}
         # compiled_content = []
-        for i, (
-            file_path,
-            fm,
-            file_content,
-            is_compiled,
-            compiled_file_path,
-        ) in enumerate(self.compiled_program_files):
-            if fm:
+        for i, result in enumerate(self.compiled_program_files):
+            if result.frontmatter_dict:
                 # Check for duplicate attributes
-                for key, value in fm.items():
+                for key, value in result.frontmatter_dict.items():
                     if key in self.program_metadata:
                         raise ValueError(
-                            f"Duplicate frontmatter attribute '{key}' found in {file_path}. "
+                            f"Duplicate frontmatter attribute '{key}' found in {result.file_path}. "
                             f"Previously defined with value: {self.program_metadata[key]}"
                         )
                     self.program_metadata[key] = value

@@ -15,7 +15,7 @@ import frontmatter
 import openai
 from rich.console import Console
 
-from .compiler import Compiler
+from .compiler import Compiler, FileCompilationSpec
 from .exceptions import ProgramLoadError
 from .loader import Loader
 from .logging_setup import configure_logging
@@ -63,7 +63,11 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
         program_paths = [program_paths]
 
     # Load files individually
-    program_files = Loader.read_program_files(program_paths)
+    program_file_tuples = Loader.read_program_files(program_paths)
+    program_files = [
+        FileCompilationSpec(file_path=fp, content=content, is_compiled=is_comp)
+        for fp, content, is_comp in program_file_tuples
+    ]
 
     # Let compiler handle all compilation logic
     llm_config = LLMConfig()
@@ -71,10 +75,11 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
     compiled_results = compiler.process_files(program_files)
 
     try:
-        for _, frontmatter_dict, content, _ in compiled_results:
+        for result in compiled_results:
             # Add frontmatter back to content if present
-            if frontmatter_dict:
-                fm_post = frontmatter.Post(content, **frontmatter_dict)
+            content = result.content
+            if result.frontmatter_dict:
+                fm_post = frontmatter.Post(content, **result.frontmatter_dict)
                 content = frontmatter.dumps(fm_post)
 
             if output_file:

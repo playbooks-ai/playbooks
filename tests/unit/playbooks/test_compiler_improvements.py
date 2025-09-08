@@ -11,7 +11,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from playbooks.agents.builtin_playbooks import BuiltinPlaybooks
-from playbooks.compiler import Compiler
+from playbooks.compiler import Compiler, FileCompilationResult, FileCompilationSpec
 from playbooks.loader import Loader
 from playbooks.main import Playbooks
 from playbooks.utils.llm_config import LLMConfig
@@ -189,8 +189,16 @@ class TestIndependentFileCompilation:
         pbasm_file.write_text("# AlreadyCompiled\nAlready compiled content")
 
         files = [
-            (str(pb_file), simple_playbook_content, False),
-            (str(pbasm_file), "# AlreadyCompiled\nAlready compiled content", True),
+            FileCompilationSpec(
+                file_path=str(pb_file),
+                content=simple_playbook_content,
+                is_compiled=False,
+            ),
+            FileCompilationSpec(
+                file_path=str(pbasm_file),
+                content="# AlreadyCompiled\nAlready compiled content",
+                is_compiled=True,
+            ),
         ]
 
         results = compiler.process_files(files)
@@ -249,7 +257,7 @@ class TestCompilationCaching:
         compiler = Compiler(create_mock_llm_config(), use_cache=True)
 
         # First compilation - should call LLM
-        frontmatter1, content1 = compiler.process_single_file(
+        frontmatter1, content1, cache_path1 = compiler.process_single_file(
             str(test_file), simple_playbook_content
         )
         mock_completion.assert_called_once()
@@ -258,7 +266,7 @@ class TestCompilationCaching:
         mock_completion.reset_mock()
 
         # Second compilation - should use cache
-        frontmatter2, content2 = compiler.process_single_file(
+        frontmatter2, content2, cache_path2 = compiler.process_single_file(
             str(test_file), simple_playbook_content
         )
         mock_completion.assert_not_called()
@@ -331,7 +339,7 @@ class TestAgentLevelCompilation:
         test_file = temp_dir / "single.pb"
         test_file.write_text(simple_playbook_content)
 
-        frontmatter, content = compiler.process_single_file(
+        frontmatter, content, cache_path = compiler.process_single_file(
             str(test_file), simple_playbook_content
         )
 
@@ -352,7 +360,7 @@ class TestAgentLevelCompilation:
         test_file = temp_dir / "multi.pb"
         test_file.write_text(multi_agent_playbook)
 
-        frontmatter, content = compiler.process_single_file(
+        frontmatter, content, cache_path = compiler.process_single_file(
             str(test_file), multi_agent_playbook
         )
 
@@ -375,7 +383,7 @@ class TestFrontmatterPreservation:
         test_file = temp_dir / "with_frontmatter.pb"
         test_file.write_text(playbook_with_frontmatter)
 
-        frontmatter, content = compiler.process_single_file(
+        frontmatter, content, cache_path = compiler.process_single_file(
             str(test_file), playbook_with_frontmatter
         )
 
@@ -423,27 +431,39 @@ class TestFrontmatterPreservation:
         )
 
         files = [
-            (str(test_file), playbook_with_frontmatter, False),
-            (str(compiled_file), compiled_file.read_text(), True),
+            FileCompilationSpec(
+                file_path=str(test_file),
+                content=playbook_with_frontmatter,
+                is_compiled=False,
+            ),
+            FileCompilationSpec(
+                file_path=str(compiled_file),
+                content=compiled_file.read_text(),
+                is_compiled=True,
+            ),
         ]
 
         compiler = Compiler(create_mock_llm_config(), use_cache=False)
 
         # Mock the compilation for .pb file
         with patch.object(compiler, "process_single_file") as mock_process:
-            mock_process.return_value = ({"title": "Test Playbook"}, "compiled content")
+            mock_process.return_value = (
+                {"title": "Test Playbook"},
+                "compiled content",
+                str(test_file),
+            )
 
             results = compiler.process_files(files)
 
         assert len(results) == 2
 
         # Check .pb file result
-        pb_result = next(r for r in results if r[0] == str(test_file))
-        assert pb_result[1]["title"] == "Test Playbook"
+        pb_result = next(r for r in results if r.file_path == str(test_file))
+        assert pb_result.frontmatter_dict["title"] == "Test Playbook"
 
         # Check .pbasm file result
-        pbasm_result = next(r for r in results if r[0] == str(compiled_file))
-        assert pbasm_result[1]["title"] == "Test Playbook"
+        pbasm_result = next(r for r in results if r.file_path == str(compiled_file))
+        assert pbasm_result.frontmatter_dict["title"] == "Test Playbook"
 
 
 class TestIntegration:
@@ -472,7 +492,10 @@ class TestIntegration:
         assert playbooks.program_metadata["author"] == "Test Author"
 
         # Check compiled content
-        assert "CompiledAgent" in playbooks.compiled_program_content
+        compiled_content = "\n".join(
+            result.content for result in playbooks.compiled_program_files
+        )
+        assert "CompiledAgent" in compiled_content
 
     def test_duplicate_frontmatter_detection(self, temp_dir):
         """Test detection of duplicate frontmatter attributes."""
@@ -501,17 +524,19 @@ Content 2"""
             mock_compiler = Mock()
             mock_compiler_class.return_value = mock_compiler
             mock_compiler.process_files.return_value = [
-                (
-                    str(file1),
-                    {"title": "File 1", "shared_key": "value1"},
-                    "# CompiledAgent1\nCompiled content 1",
-                    False,
+                FileCompilationResult(
+                    file_path=str(file1),
+                    frontmatter_dict={"title": "File 1", "shared_key": "value1"},
+                    content="# CompiledAgent1\nCompiled content 1",
+                    is_compiled=False,
+                    compiled_file_path=str(file1),
                 ),
-                (
-                    str(file2),
-                    {"title": "File 2", "shared_key": "value2"},
-                    "# CompiledAgent2\nCompiled content 2",
-                    False,
+                FileCompilationResult(
+                    file_path=str(file2),
+                    frontmatter_dict={"title": "File 2", "shared_key": "value2"},
+                    content="# CompiledAgent2\nCompiled content 2",
+                    is_compiled=False,
+                    compiled_file_path=str(file2),
                 ),
             ]
 
@@ -542,8 +567,11 @@ Content 2"""
         playbooks = Playbooks([str(pb_file), str(pbasm_file)], create_mock_llm_config())
 
         # Should contain content from both files
-        assert "CompiledAgent" in playbooks.compiled_program_content
-        assert "PrecompiledAgent" in playbooks.compiled_program_content
+        compiled_content = "\n".join(
+            result.content for result in playbooks.compiled_program_files
+        )
+        assert "CompiledAgent" in compiled_content
+        assert "PrecompiledAgent" in compiled_content
 
 
 class TestErrorHandling:
@@ -585,7 +613,7 @@ This has no H1 headers"""
                 side_effect=PermissionError("No write permission"),
             ):
                 # Should still work even if cache write fails (graceful error handling)
-                frontmatter, content = compiler.process_single_file(
+                frontmatter, content, cache_path = compiler.process_single_file(
                     str(test_file), simple_playbook_content
                 )
                 assert "CompiledAgent" in content

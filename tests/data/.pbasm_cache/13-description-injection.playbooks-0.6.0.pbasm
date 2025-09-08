@@ -1,0 +1,36 @@
+# TestAgent
+This agent runs test playbooks and tells jokes.
+
+## TestPlaybook() -> str
+metadata:
+  execution_mode: raw
+---
+{Loadfile("tests/data/13-description-injection-story.txt", silent=True)}
+{Loadfile("tests/data/13-description-injection-instructions.txt", inline=True, silent=True)}
+Give the one word answer only, nothing else.
+Answer:
+
+## Test2Playbook() -> None
+Here is a joke: {Joke()}
+### Steps
+- 01:EXE Remember joke as $jk:str
+- 02:RET
+
+## Main() -> None
+Main execution flow that runs test playbooks and terminates.
+### Triggers
+- T1:BGN When program starts
+### Steps
+- 01:QUE TestPlaybook()
+- 02:QUE Test2Playbook()
+- 03:YLD for call
+- 04:YLD for exit
+
+## Joke() -> str
+Returns a computer-themed joke.
+### Steps
+- 01:RET "Why was the computer cold? It left its Windows open."
+
+```public.json
+[]
+```

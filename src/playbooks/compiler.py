@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Iterator, List, Tuple
+from typing import Iterator, List, NamedTuple, Tuple
 
 import frontmatter
 from rich.console import Console
@@ -17,6 +17,24 @@ from .utils.markdown_to_ast import (
 console = Console()
 
 
+class FileCompilationSpec(NamedTuple):
+    """Specification for a file to be compiled."""
+
+    file_path: str
+    content: str
+    is_compiled: bool
+
+
+class FileCompilationResult(NamedTuple):
+    """Result of compiling a file."""
+
+    file_path: str
+    frontmatter_dict: dict
+    content: str
+    is_compiled: bool
+    compiled_file_path: str
+
+
 class Compiler:
     """
     Compiles Markdown playbooks into a format with line types and numbers for processing.
@@ -30,7 +48,7 @@ class Compiler:
     for required headers that define agent name and playbook structure.
     """
 
-    def __init__(self, llm_config: LLMConfig) -> None:
+    def __init__(self, llm_config: LLMConfig, use_cache: bool = True) -> None:
         """
         Initialize the compiler with LLM configuration.
 
@@ -53,51 +71,51 @@ class Compiler:
         else:
             # Default to OpenAI for other models
             self.llm_config.api_key = os.environ.get("OPENAI_API_KEY")
-        self.use_cache = True
+        self.use_cache = use_cache
         self.playbooks_version = self._get_playbooks_version()
         self.prompt_path = os.path.join(
             os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"
         )
 
     def process_files(
-        self, files: List[Tuple[str, str, bool]]
-    ) -> List[Tuple[str, dict, str, bool]]:
+        self, files: List[FileCompilationSpec]
+    ) -> List[FileCompilationResult]:
         """
         Process files individually and combine results.
 
         Args:
-            files: List of (file_path, content, is_compiled) tuples
+            files: List of FileCompilationSpec objects
 
         Returns:
-            List of (file_path, frontmatter_dict, content, is_compiled) tuples
+            List of FileCompilationResult objects
         """
         compiled_files = []
 
-        for file_path, content, is_compiled in files:
-            if is_compiled:
+        for file_spec in files:
+            if file_spec.is_compiled:
                 # Already compiled, extract frontmatter and content
-                fm_data = frontmatter.loads(content)
+                fm_data = frontmatter.loads(file_spec.content)
                 compiled_files.append(
-                    (
-                        file_path,
-                        fm_data.metadata,
-                        fm_data.content,
-                        is_compiled,
-                        file_path,
+                    FileCompilationResult(
+                        file_path=file_spec.file_path,
+                        frontmatter_dict=fm_data.metadata,
+                        content=fm_data.content,
+                        is_compiled=file_spec.is_compiled,
+                        compiled_file_path=file_spec.file_path,
                     )
                 )
             else:
                 # Compile individual file
                 frontmatter_dict, compiled_content, compiled_file_path = (
-                    self.process_single_file(file_path, content)
+                    self.process_single_file(file_spec.file_path, file_spec.content)
                 )
                 compiled_files.append(
-                    (
-                        file_path,
-                        frontmatter_dict,
-                        compiled_content,
-                        is_compiled,
-                        compiled_file_path,
+                    FileCompilationResult(
+                        file_path=file_spec.file_path,
+                        frontmatter_dict=frontmatter_dict,
+                        content=compiled_content,
+                        is_compiled=file_spec.is_compiled,
+                        compiled_file_path=compiled_file_path,
                     )
                 )
 
@@ -284,11 +302,11 @@ class Compiler:
 
         # Check source file timestamp
         try:
-            source_mtime = source_path.stat().st_mtime
             cache_mtime = cache_path.stat().st_mtime
-
-            if source_mtime > cache_mtime:
-                return False
+            if source_path.exists():
+                source_mtime = source_path.stat().st_mtime
+                if source_mtime > cache_mtime:
+                    return False
 
             # Check compiler prompt timestamp
             prompt_mtime = Path(self.prompt_path).stat().st_mtime

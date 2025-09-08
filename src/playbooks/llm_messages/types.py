@@ -115,7 +115,7 @@ class ExecutionResultLLMMessage(LLMMessage):
 
         super().__init__(
             content=content,
-            role=LLMMessageRole.ASSISTANT,  # Fixed: execution results come from assistant
+            role=LLMMessageRole.USER,
             type=LLMMessageType.EXECUTION_RESULT,
             cached=False,
         )

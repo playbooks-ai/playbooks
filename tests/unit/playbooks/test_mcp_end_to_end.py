@@ -218,10 +218,7 @@ class TestMCPEndToEnd:
         mcp_server = test_server.get_server()
 
         # Create a program with MCP agent
-        program_text = """```public.json
-[]
-```
-
+        program_text = """
 # TaskManagerAgent
 metadata:
   remote:
@@ -230,10 +227,14 @@ metadata:
     transport: memory
 ---
 This agent manages tasks using MCP tools.
+
+```public.json
+[]
+```
 """
 
         event_bus = EventBus("test-session")
-        program = Program(program_text, event_bus)
+        program = Program(program_content=program_text, event_bus=event_bus)
         await program.initialize()
 
         # Find the task manager agent
@@ -321,7 +322,7 @@ This is a remote task management agent.
 """
 
         event_bus = EventBus("test-session")
-        program = Program(program_text, event_bus)
+        program = Program(program_content=program_text, event_bus=event_bus)
         await program.initialize()
 
         # Find agents

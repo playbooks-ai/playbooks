@@ -108,7 +108,7 @@ class TestCLIRun:
             run_application(
                 "playbooks.applications.agent_chat",
                 [str(playbooks_path)],
-                debug=True,
+                enable_debug=True,
                 debug_port=debug_port,
                 debug_host="127.0.0.1",
                 wait_for_client=True,

@@ -224,12 +224,24 @@ class Program(ProgramAgentsCommunicationMixin):
         event_bus: EventBus,
         program_paths: List[str] = None,
         compiled_program_paths: List[str] = None,
+        program_content: str = None,
         metadata: dict = {},
     ):
         self.metadata = metadata
         self.event_bus = event_bus
+
         self.program_paths = program_paths or []
         self.compiled_program_paths = compiled_program_paths or []
+        self.program_content = program_content
+        if self.compiled_program_paths and self.program_content:
+            raise ValueError(
+                "Both compiled_program_paths and program_content cannot be provided."
+            )
+        if not self.compiled_program_paths and not self.program_content:
+            raise ValueError(
+                "Either compiled_program_paths or program_content must be provided."
+            )
+
         self._debug_server = None
         self.agent_id_registry = AgentIdRegistry()
         self.meeting_id_registry = MeetingRegistry()
@@ -241,8 +253,7 @@ class Program(ProgramAgentsCommunicationMixin):
         self.parse_metadata()
 
         self.agent_klasses = {}
-        for compiled_program_path in self.compiled_program_paths:
-            markdown_content = file_utils.read_file(compiled_program_path)
+        for markdown_content in self.markdown_contents:
             ast = markdown_to_ast(markdown_content)
             self.agent_klasses.update(AgentBuilder.create_agent_classes_from_ast(ast))
 
@@ -305,6 +316,12 @@ class Program(ProgramAgentsCommunicationMixin):
 
         self.event_agents_changed()
         self.initialized = True
+
+    @property
+    def markdown_contents(self) -> List[str]:
+        if self.program_content:
+            return [self.program_content]
+        return [file_utils.read_file(path) for path in self.compiled_program_paths]
 
     def event_agents_changed(self):
         for agent in self.agents:
@@ -383,8 +400,7 @@ class Program(ProgramAgentsCommunicationMixin):
         # Extract publics.json from full_program
         self.public_jsons = []
 
-        for compiled_program_path in self.compiled_program_paths:
-            markdown_content = file_utils.read_file(compiled_program_path)
+        for markdown_content in self.markdown_contents:
             matches = re.findall(
                 r"(```public\.json(.*?)```)", markdown_content, re.DOTALL
             )

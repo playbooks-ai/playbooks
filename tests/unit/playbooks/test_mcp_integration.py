@@ -37,7 +37,7 @@ This is a weather MCP agent that provides weather information.
         event_bus = EventBus("test-session")
 
         # Create program
-        program = Program(program_text, event_bus)
+        program = Program(program_content=program_text, event_bus=event_bus)
         await program.initialize()
 
         # Find the weather agent

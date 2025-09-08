@@ -1,4 +1,4 @@
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from playbooks.agents.ai_agent import AIAgent
 from playbooks.event_bus import EventBus
@@ -44,15 +44,15 @@ def test_create_begin_playbook_one_bgn_playbook():
     assert agent.bgn_playbook_name == "Main"
 
 
-def test_create_begin_playbook_multiple_bgn_playbooks():
+@patch.object(PythonPlaybook, "create_playbooks_from_code_block")
+def test_create_begin_playbook_multiple_bgn_playbooks(mock_create_playbooks):
     """Test create_begin_playbook when there are multiple BGN playbooks."""
+    mock_create_playbooks.return_value = {"Begin": Mock()}
+
     agent = MockAIAgent()
     playbook1 = create_mock_playbook("Main")
     playbook2 = create_mock_playbook("Main2")
     agent.playbooks = {"Main": playbook1, "Main2": playbook2}
-    PythonPlaybook.create_playbooks_from_code_block = Mock(
-        return_value={"Begin": Mock()}
-    )
 
     agent.create_begin_playbook()
     assert agent.bgn_playbook_name == "Begin"

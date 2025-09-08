@@ -9,6 +9,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from playbooks.cli import compile as cli_compile
+from playbooks.compiler import FileCompilationResult
 from playbooks.exceptions import ProgramLoadError
 
 
@@ -73,7 +74,13 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (str(temp_dir / "test.pb"), {}, "# CompiledAgent\nCompiled content", False)
+            FileCompilationResult(
+                file_path=str(temp_dir / "test.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent\nCompiled content",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test.pbasm"),
+            )
         ]
 
         # Create test file
@@ -104,7 +111,13 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (str(temp_dir / "test.pb"), {}, "# CompiledAgent\nCompiled content", False)
+            FileCompilationResult(
+                file_path=str(temp_dir / "test.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent\nCompiled content",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test.pbasm"),
+            )
         ]
 
         # Create test file
@@ -129,17 +142,19 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (
-                str(temp_dir / "test1.pb"),
-                {},
-                "# CompiledAgent1\nCompiled content 1",
-                False,
+            FileCompilationResult(
+                file_path=str(temp_dir / "test1.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent1\nCompiled content 1",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test1.pbasm"),
             ),
-            (
-                str(temp_dir / "test2.pb"),
-                {},
-                "# CompiledAgent2\nCompiled content 2",
-                False,
+            FileCompilationResult(
+                file_path=str(temp_dir / "test2.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent2\nCompiled content 2",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test2.pbasm"),
             ),
         ]
 
@@ -174,17 +189,19 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (
-                str(temp_dir / "test1.pb"),
-                {},
-                "# CompiledAgent1\nCompiled content 1",
-                False,
+            FileCompilationResult(
+                file_path=str(temp_dir / "test1.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent1\nCompiled content 1",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test1.pbasm"),
             ),
-            (
-                str(temp_dir / "test2.pb"),
-                {},
-                "# CompiledAgent2\nCompiled content 2",
-                False,
+            FileCompilationResult(
+                file_path=str(temp_dir / "test2.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent2\nCompiled content 2",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test2.pbasm"),
             ),
         ]
 
@@ -209,11 +226,15 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (
-                str(temp_dir / "test.pb"),
-                {"title": "CLI Test Playbook", "author": "Test Author"},
-                "# CompiledCLIAgent\nCompiled CLI content",
-                False,
+            FileCompilationResult(
+                file_path=str(temp_dir / "test.pb"),
+                frontmatter_dict={
+                    "title": "CLI Test Playbook",
+                    "author": "Test Author",
+                },
+                content="# CompiledCLIAgent\nCompiled CLI content",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test.pbasm"),
             )
         ]
 
@@ -245,17 +266,19 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (
-                str(temp_dir / "source.pb"),
-                {},
-                "# CompiledFromPB\nCompiled from .pb",
-                False,
+            FileCompilationResult(
+                file_path=str(temp_dir / "source.pb"),
+                frontmatter_dict={},
+                content="# CompiledFromPB\nCompiled from .pb",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "source.pbasm"),
             ),
-            (
-                str(temp_dir / "precompiled.pbasm"),
-                {},
-                "# AlreadyCompiled\nAlready compiled",
-                True,
+            FileCompilationResult(
+                file_path=str(temp_dir / "precompiled.pbasm"),
+                frontmatter_dict={},
+                content="# AlreadyCompiled\nAlready compiled",
+                is_compiled=True,
+                compiled_file_path=str(temp_dir / "precompiled.pbasm"),
             ),
         ]
 
@@ -312,11 +335,12 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (
-                str(temp_dir / "no_extension"),
-                {},
-                "# CompiledAgent\nCompiled content",
-                False,
+            FileCompilationResult(
+                file_path=str(temp_dir / "no_extension"),
+                frontmatter_dict={},
+                content="# CompiledAgent\nCompiled content",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "no_extension"),
             )
         ]
 
@@ -350,7 +374,13 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (str(temp_dir / "test.pb"), {}, "# CompiledAgent\nCompiled content", False)
+            FileCompilationResult(
+                file_path=str(temp_dir / "test.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent\nCompiled content",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test.pbasm"),
+            )
         ]
 
         # Create test file
@@ -380,7 +410,13 @@ class TestCLICompilation:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (str(temp_dir / "test.pb"), {}, "# CompiledAgent\nCompiled content", False)
+            FileCompilationResult(
+                file_path=str(temp_dir / "test.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent\nCompiled content",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test.pbasm"),
+            )
         ]
 
         # Create test file
@@ -415,7 +451,13 @@ class TestCLIIntegration:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            (str(temp_dir / "test.pb"), {}, "# CompiledAgent\nCompiled content", False)
+            FileCompilationResult(
+                file_path=str(temp_dir / "test.pb"),
+                frontmatter_dict={},
+                content="# CompiledAgent\nCompiled content",
+                is_compiled=False,
+                compiled_file_path=str(temp_dir / "test.pbasm"),
+            )
         ]
 
         # Create test file
@@ -443,7 +485,13 @@ class TestCLIIntegration:
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
         mock_compiler.process_files.return_value = [
-            ("./test.pb", {}, "# CompiledAgent\nCompiled content", False)
+            FileCompilationResult(
+                file_path="./test.pb",
+                frontmatter_dict={},
+                content="# CompiledAgent\nCompiled content",
+                is_compiled=False,
+                compiled_file_path="./test.pbasm",
+            )
         ]
 
         # Create test file
