@@ -1,0 +1,5 @@
+- Validate the input data
+- Process the validated data
+  - Apply transformations
+  - Check for errors
+- Generate output report

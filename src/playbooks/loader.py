@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Tuple
 
 from .exceptions import ProgramLoadError
+from .import_processor import ImportProcessor
 from .utils.file_utils import is_compiled_playbook_file
 
 
@@ -98,6 +99,7 @@ class Loader:
     def _read_program_files(paths: List[str]) -> List[Tuple[str, str, bool]]:
         """
         Load program files individually with their metadata.
+        Processes !import directives in non-compiled files.
 
         Args:
             paths: List of file paths or glob patterns
@@ -122,6 +124,9 @@ class Loader:
         if not all_files:
             raise FileNotFoundError("No files found")
 
+        # Initialize import processor
+        import_processor = ImportProcessor()
+
         # Read files individually
         files_data = []
         not_found = []
@@ -131,6 +136,21 @@ class Loader:
             if file_path.is_file() and file_path.exists():
                 content = file_path.read_text()
                 is_compiled = is_compiled_playbook_file(file_path)
+
+                # Process imports for non-compiled files
+                if not is_compiled and "!import" in content:
+                    try:
+                        # Reset processor for each file to avoid cross-file state
+                        import_processor.reset()
+                        content, _ = import_processor.process_imports(
+                            content, file_path
+                        )
+                    except ProgramLoadError as e:
+                        # Re-raise with more context
+                        raise ProgramLoadError(
+                            f"Error processing imports in {file_path}: {str(e)}"
+                        ) from e
+
                 files_data.append((str(file_path), content, is_compiled))
             else:
                 not_found.append(str(file_path))

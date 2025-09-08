@@ -1,0 +1,4 @@
+## Configuration
+- Model: gpt-4
+- Temperature: 0.7
+- Max tokens: 1000
