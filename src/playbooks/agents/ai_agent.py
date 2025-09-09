@@ -25,6 +25,7 @@ from ..utils.expression_engine import (
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.spec_utils import SpecUtils
 from .base_agent import BaseAgent, BaseAgentMeta
+from .namespace_manager import AgentNamespaceManager
 
 if TYPE_CHECKING:
     from ..program import Program
@@ -106,42 +107,8 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             self.__class__.playbooks or {}
         )
 
-        # Create instance-specific namespace manager if available
-        if (
-            hasattr(self.__class__, "namespace_manager")
-            and self.__class__.namespace_manager
-        ):
-            # Use shallow copy of namespace - most objects are safe to share
-            from .namespace_manager import AgentNamespaceManager
-
-            self.namespace_manager = AgentNamespaceManager(
-                namespace=self.__class__.namespace_manager.namespace.copy()
-            )
-            self.namespace_manager.namespace["agent"] = self
-
-            # Create cross-playbook wrapper functions for this instance
-            for playbook_name, playbook in self.playbooks.items():
-                call_through = playbook.create_namespace_function(self)
-                self.namespace_manager.namespace[playbook_name] = call_through
-
-            # Create instance-specific wrapper functions that bind the correct agent
-            for playbook_name, playbook in self.playbooks.items():
-                if hasattr(playbook, "func") and playbook.func:
-                    # For LLMPlaybook, create agent-specific function
-                    if hasattr(playbook, "create_agent_specific_function"):
-                        agent_specific_func = playbook.create_agent_specific_function(
-                            self
-                        )
-                        # Copy globals from original for cross-agent access
-                        agent_specific_func.__globals__.update(
-                            self.namespace_manager.namespace
-                        )
-                        self.playbooks[playbook_name].func = agent_specific_func
-                    else:
-                        # For other playbook types, just update globals
-                        playbook.func.__globals__.update(
-                            self.namespace_manager.namespace
-                        )
+        # Create instance-specific namespace with playbook wrappers
+        self._setup_isolated_namespace()
 
         # Initialize meeting manager
         self.meeting_manager = MeetingManager(agent=self)
@@ -158,6 +125,31 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         # Create playbook to run BGN playbooks
         self.bgn_playbook_name = None
         self.create_begin_playbook()
+
+    def _setup_isolated_namespace(self):
+        """Create isolated namespace with instance-specific agent reference and playbook wrappers."""
+        # Create isolated namespace for this instance
+        self.namespace_manager = AgentNamespaceManager()
+        self.namespace_manager.namespace["agent"] = self
+
+        # Set up cross-playbook wrapper functions and bind agent-specific functions
+        for playbook_name, playbook in self.playbooks.items():
+            # Create cross-playbook wrapper function
+            call_through = playbook.create_namespace_function(self)
+            self.namespace_manager.namespace[playbook_name] = call_through
+
+            # Bind agent-specific function to use correct namespace
+            if hasattr(playbook, "func") and playbook.func:
+                if hasattr(playbook, "create_agent_specific_function"):
+                    # For LLMPlaybook, create agent-specific function
+                    agent_specific_func = playbook.create_agent_specific_function(self)
+                    agent_specific_func.__globals__.update(
+                        self.namespace_manager.namespace
+                    )
+                    self.playbooks[playbook_name].func = agent_specific_func
+                else:
+                    # For other playbook types, just update globals
+                    playbook.func.__globals__.update(self.namespace_manager.namespace)
 
     @abstractmethod
     async def discover_playbooks(self) -> None:

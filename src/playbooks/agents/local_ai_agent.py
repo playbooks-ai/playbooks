@@ -99,7 +99,7 @@ class LocalAIAgent(AIAgent):
                 "description": description,
                 "playbooks": playbooks,
                 "metadata": metadata,
-                "namespace_manager": namespace_manager,
+                "_namespace_manager_template": namespace_manager,
             },
         )
 
