@@ -6,6 +6,7 @@ from typing import Iterator, List, NamedTuple, Tuple
 import frontmatter
 from rich.console import Console
 
+from .config import config
 from .exceptions import ProgramLoadError
 from .utils.langfuse_helper import LangfuseHelper
 from .utils.llm_config import LLMConfig
@@ -56,8 +57,12 @@ class Compiler:
             llm_config: Configuration for the language model
             use_cache: Whether to use compilation caching
         """
+        compilation_model = config.model.compilation
+
         self.llm_config = llm_config.copy()
-        self.llm_config.model = os.getenv("COMPILER_MODEL", self.llm_config.model)
+        self.llm_config.model = compilation_model.name
+        self.llm_config.provider = compilation_model.provider
+        self.llm_config.temperature = compilation_model.temperature
 
         # Re-determine API key after model change
         if "claude" in self.llm_config.model:

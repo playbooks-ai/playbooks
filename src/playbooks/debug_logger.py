@@ -28,22 +28,14 @@ from typing import Any, Optional
 from rich.console import Console
 from rich.text import Text
 
-from .config import load_settings
+from .config import config
 from .logging_constants import (
     DEBUG_LOGGER_NAME,
     DEBUG_PREFIX,
-    DEFAULT_DEBUG_ENABLED,
-    ENV_DEBUG_ENABLED,
     ENV_DEBUG_FILE,
     parse_boolean_env,
 )
 
-# Global debug state - checked once at module load for zero overhead
-_DEBUG_ENABLED: bool = parse_boolean_env(
-    os.getenv(ENV_DEBUG_ENABLED, DEFAULT_DEBUG_ENABLED)
-)
-settings, _ = load_settings()
-_DEBUG_ENABLED = settings.debug
 _debug_logger: Optional[logging.Logger] = None
 _console: Optional[Console] = None
 
@@ -69,7 +61,7 @@ def debug(msg: str = None, **context: Any) -> None:
                   - 'color': str - Apply a color to the entire message
                   - 'style': str - Apply a style to the entire message
     """
-    if not _DEBUG_ENABLED:
+    if not config.debug:
         return
 
     # Handle the case where message is passed as keyword argument
@@ -245,4 +237,4 @@ def _setup_debug_logger() -> None:
 
 def is_debug_enabled() -> bool:
     """Check if debug logging is enabled."""
-    return _DEBUG_ENABLED
+    return config.debug

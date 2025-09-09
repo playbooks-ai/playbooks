@@ -6,6 +6,10 @@ provider = "anthropic"
 name = "claude-sonnet-4-20250514"
 temperature = 0.2
 
+# Specific model overrides can be added
+# [model.execution]
+# [model.compilation]
+
 [llm_cache]
 enabled = true
 type = "disk"

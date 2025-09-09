@@ -2,7 +2,8 @@ import os
 from typing import Any
 
 from langfuse import Langfuse
-from ..config import load_settings
+
+from ..config import config
 
 
 class PlaybooksLangfuseSpan:
@@ -47,8 +48,7 @@ class LangfuseHelper:
             # Check if Langfuse is enabled via config system first, then env fallback
             langfuse_enabled = False
             try:
-                settings, _ = load_settings()
-                langfuse_enabled = settings.langfuse.enabled
+                langfuse_enabled = config.langfuse.enabled
             except Exception:
                 # Fallback to environment variable if config loading fails
                 langfuse_enabled = (

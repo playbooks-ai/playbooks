@@ -33,7 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 # ---------- Typed schema ----------
 
 
-class ModelCfg(BaseModel):
+class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
     provider: str = "openai"
@@ -41,7 +41,41 @@ class ModelCfg(BaseModel):
     temperature: float = Field(0.2, ge=0, le=2.0)
 
 
-class LLMCacheCfg(BaseModel):
+class ModelsConfig(BaseModel):
+    model_config = ConfigDict(extra="allow")  # allow user-defined models
+
+    execution: ModelConfig | None = None
+    compilation: ModelConfig | None = None
+    default: ModelConfig | None = None  # fallback model from [model] section
+
+    def __getattribute__(self, name: str) -> ModelConfig:
+        """Dynamic fallback for all attribute access"""
+        # Get the actual attribute value first
+        value = super().__getattribute__(name)
+
+        # If it's None and we have a default, return the default
+        if value is None and name in ["execution", "compilation"]:
+            default = super().__getattribute__("default")
+            if default is not None:
+                return default
+            # If no default, use the original defaults
+            if name == "execution":
+                return ModelConfig()
+            elif name == "compilation":
+                return ModelConfig(name="gpt-4o-mini", temperature=0.1)
+
+        return value
+
+    def __getattr__(self, name: str) -> ModelConfig:
+        """Dynamic fallback for undefined attributes (e.g., config.model.thinking)"""
+        if self.default is not None:
+            return self.default
+        raise AttributeError(
+            f"Model '{name}' not found and no default model configured"
+        )
+
+
+class LLMCacheConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
     type: str = "disk"  # "disk" or "redis"
@@ -49,27 +83,27 @@ class LLMCacheCfg(BaseModel):
     path: str = ".llm_cache"  # for disk cache
 
 
-class LangfuseCfg(BaseModel):
+class LangfuseConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
     enabled: bool = True
 
 
-class LitellmCfg(BaseModel):
+class LitellmConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
     verbose: bool = False
 
 
-class PlaybooksSettings(BaseModel):
+class PlaybooksConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
     timeout_s: int = 60
     debug: bool = False
-    model: ModelCfg = ModelCfg()
-    llm_cache: LLMCacheCfg = LLMCacheCfg()
-    langfuse: LangfuseCfg = LangfuseCfg()
-    litellm: LitellmCfg = LitellmCfg()
+    model: ModelsConfig = ModelsConfig()
+    llm_cache: LLMCacheConfig = LLMCacheConfig()
+    langfuse: LangfuseConfig = LangfuseConfig()
+    litellm: LitellmConfig = LitellmConfig()
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump()
@@ -212,18 +246,18 @@ def resolve_config_files(
     return tuple(files)
 
 
-def load_settings(
+def load_config(
     *,
     profile: str | None = None,
     explicit_path: str | os.PathLike[str] | None = None,
     overrides: dict[str, Any] | None = None,
     cwd: Path | None = None,
     user_config_dir: Path | None = None,
-) -> Tuple[PlaybooksSettings, Tuple[Path, ...]]:
+) -> Tuple[PlaybooksConfig, Tuple[Path, ...]]:
     """
-    Load settings with precedence:
+    Load config with precedence:
     files (project<profile<user<profile<explicit>) < env(PLAYBOOKS_*) < CLI overrides (passed in `overrides`)
-    Returns (settings, files_used)
+    Returns (config, files_used)
     """
     # Auto-detect profile from environment if not explicitly provided
     if profile is None:
@@ -244,20 +278,40 @@ def load_settings(
     if overrides:
         merged = deep_merge(merged, overrides)
 
+    # Handle [model] section as default fallback before validation
+    if "model" in merged and isinstance(merged["model"], dict):
+        model_section = merged["model"]
+        if "provider" in model_section:
+            # This is a direct [model] section with model config
+            # Extract only ModelConfig fields for the default
+            default_model = {
+                k: v
+                for k, v in model_section.items()
+                if k in ["provider", "name", "temperature"] and not isinstance(v, dict)
+            }
+            merged["model"]["default"] = default_model
+
     try:
-        return PlaybooksSettings.model_validate(merged), files
+        config = PlaybooksConfig.model_validate(merged)
+        return config, files
     except ValidationError as e:
         # pretty print and exit if used as a CLI helper
         print(e, file=sys.stderr)
         raise
 
 
+# Global config instance
+config, _ = load_config()
+
+
 __all__ = [
-    "PlaybooksSettings",
-    "ModelCfg",
-    "LLMCacheCfg",
-    "LangfuseCfg",
-    "load_settings",
+    "PlaybooksConfig",
+    "ModelConfig",
+    "ModelsConfig",
+    "LLMCacheConfig",
+    "LangfuseConfig",
+    "config",
+    "load_config",
     "resolve_config_files",
     "deep_merge",
     "apply_env_overrides",

@@ -1,6 +1,5 @@
 """Test suite for Playbooks-LM preprocessing handler."""
 
-import os
 import pytest
 from unittest.mock import patch, MagicMock
 from playbooks.utils.playbooks_lm_handler import PlaybooksLMHandler
@@ -302,44 +301,6 @@ class TestCompletionWrapper:
         assert call_args["max_tokens"] == 100
         assert call_args["stream"] is True
         assert call_args["custom_param"] == "value"
-
-    @patch("playbooks.utils.llm_helper._original_completion")
-    @patch.dict(
-        os.environ,
-        {
-            "MODEL": "ollama/playbooks-lm",
-            "LLM_API_BASE": "http://localhost:11434",
-            "COMPILER_MODEL": "gpt-4",
-            "COMPILER_LLM_API_BASE": "https://api.openai.com/v1",
-        },
-    )
-    def test_model_specific_api_base(self, mock_completion):
-        """Test that different models get their specific API bases."""
-        mock_completion.return_value = MagicMock()
-
-        # Test main model gets LLM_API_BASE
-        completion_with_preprocessing(
-            model="ollama/playbooks-lm",
-            messages=[
-                {"role": "system", "content": "**Context**\nYou execute *playbooks*..."}
-            ],
-        )
-        call_args = mock_completion.call_args[1]
-        assert call_args["api_base"] == "http://localhost:11434"
-
-        # Test compiler model gets COMPILER_LLM_API_BASE
-        completion_with_preprocessing(
-            model="gpt-4", messages=[{"role": "user", "content": "test"}]
-        )
-        call_args = mock_completion.call_args[1]
-        assert call_args["api_base"] == "https://api.openai.com/v1"
-
-        # Test other model gets no API base
-        completion_with_preprocessing(
-            model="claude-3", messages=[{"role": "user", "content": "test"}]
-        )
-        call_args = mock_completion.call_args[1]
-        assert "api_base" not in call_args
 
     @patch("playbooks.utils.llm_helper._original_completion")
     def test_explicit_api_base_not_overridden(self, mock_completion):

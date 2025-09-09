@@ -224,11 +224,11 @@ def _print_config_pretty(effective: dict, files_used: list[str], mask: bool) -> 
 def _cmd_config_show(args) -> None:
     # Lazy import so CLI still works if config module is missing in other contexts
     try:
-        from .config import load_settings
+        from .config import load_config
     except Exception as e:
         console.print(
             "[bold red]Unable to load configuration module (.config).[/bold red]\n"
-            "Make sure `config.py` (with load_settings) is available in the package."
+            "Make sure `config.py` (with load_config) is available in the package."
         )
         console.print(f"[red]Detail:[/red] {e}")
         sys.exit(1)
@@ -238,7 +238,7 @@ def _cmd_config_show(args) -> None:
     overrides = {}  # reserved for future: map additional CLI flags to schema here
 
     try:
-        settings, files = load_settings(
+        config, files = load_config(
             profile=profile,
             explicit_path=explicit_path,
             overrides=overrides,
@@ -247,7 +247,7 @@ def _cmd_config_show(args) -> None:
         console.print(f"[bold red]Config error:[/bold red] {e}")
         sys.exit(1)
 
-    effective = settings.model_dump()
+    effective = config.model_dump()
 
     if args.json:
         if args.mask_secrets:

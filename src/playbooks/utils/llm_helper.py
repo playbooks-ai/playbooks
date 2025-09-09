@@ -12,7 +12,7 @@ from litellm import completion, get_supported_openai_params
 from playbooks.enums import LLMMessageRole
 from playbooks.llm_messages import SystemPromptLLMMessage, UserInputLLMMessage
 
-from ..config import load_settings
+from ..config import config
 from ..constants import SYSTEM_PROMPT_DELIMITER
 from ..debug_logger import debug
 from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
@@ -27,7 +27,6 @@ for logger_name in loggers:
     logger = logging.getLogger(logger_name)
     logger.setLevel(logging.CRITICAL + 1)
 
-settings, _ = load_settings()
 litellm.suppress_debug_info = True
 # Handle different litellm versions
 litellm.drop_params = True
@@ -43,31 +42,11 @@ _original_completion = completion
 
 def completion_with_preprocessing(*args, **kwargs):
     """
-    Wrapper for litellm.completion that applies preprocessing for playbooks-lm models
-    and handles model-specific API base configuration.
+    Wrapper for litellm.completion that applies preprocessing for playbooks-lm models.
     """
     model = kwargs.get("model", "")
 
-    # Apply model-specific API base if not already provided
-    if "api_base" not in kwargs:
-        # Check if this model matches specific environment variables
-        main_model = os.getenv("MODEL")
-        compiler_model = os.getenv("COMPILER_MODEL")
-
-        if model == main_model:
-            # This is the main model, use LLM_API_BASE
-            llm_api_base = os.getenv("LLM_API_BASE")
-            if llm_api_base:
-                kwargs["api_base"] = llm_api_base
-        elif model == compiler_model:
-            # This is the compiler model, use COMPILER_LLM_API_BASE
-            compiler_api_base = os.getenv("COMPILER_LLM_API_BASE")
-            if compiler_api_base:
-                kwargs["api_base"] = compiler_api_base
-        # For other models, no specific API base is set (use default)
-
     # Note: Playbooks-LM preprocessing is now handled in get_completion() before Langfuse logging
-    # This wrapper only handles API base configuration
 
     # Debug: log the call to help diagnose auth issues when verbose mode is enabled
     if os.getenv("LLM_SET_VERBOSE", "False").lower() == "true":
@@ -95,15 +74,9 @@ completion = completion_with_preprocessing
 cache = None
 
 # Load cache configuration from config system with environment fallback
-try:
-    llm_cache_enabled = settings.llm_cache.enabled
-    llm_cache_type = settings.llm_cache.type.lower()
-    llm_cache_path = settings.llm_cache.path
-except Exception:
-    # Fallback to environment variables if config loading fails
-    llm_cache_enabled = os.getenv("LLM_CACHE_ENABLED", "False").lower() == "true"
-    llm_cache_type = os.getenv("LLM_CACHE_TYPE", "disk").lower()
-    llm_cache_path = os.getenv("LLM_CACHE_PATH")
+llm_cache_enabled = config.llm_cache.enabled
+llm_cache_type = config.llm_cache.type.lower()
+llm_cache_path = config.llm_cache.path
 
 if llm_cache_enabled:
     if llm_cache_type == "disk":

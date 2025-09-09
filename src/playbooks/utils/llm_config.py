@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from ..config import load_settings
+from ..config import config
 from .env_loader import load_environment
 
 # Load environment variables from .env files
@@ -35,19 +35,17 @@ class LLMConfig:
         """Initialize with default values from config system and environment variables."""
         # Load model configuration from config system (which handles env overrides)
         try:
-            settings, _ = load_settings()
-
             # Set model name if not explicitly provided
             if self.model is None:
-                self.model = settings.model.name
+                self.model = config.model.name
 
             # Set provider if not explicitly provided
             if self.provider is None:
-                self.provider = settings.model.provider
+                self.provider = config.model.provider
 
             # Set temperature if not explicitly provided
             if self.temperature is None:
-                self.temperature = settings.model.temperature
+                self.temperature = config.model.temperature
 
         except Exception:
             # Fallback to constants/defaults if config loading fails

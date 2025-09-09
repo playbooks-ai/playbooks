@@ -3,8 +3,8 @@ from pathlib import Path
 import pytest
 
 from playbooks.config import (
-    PlaybooksSettings,
-    load_settings,
+    PlaybooksConfig,
+    load_config,
     resolve_config_files,
 )
 
@@ -23,9 +23,8 @@ def test_precedence_profiles_env_cli(tmp_path, monkeypatch):
     write(
         proj / "playbooks.toml",
         """
-project = "playbooks"
 timeout_s = 60
-[model]
+[model.execution]
 provider = "openai"
 name = "gpt-4o-mini"
 temperature = 0.20
@@ -49,7 +48,7 @@ timeout_s = 30
     write(
         user_cfg,
         """
-[model]
+[model.execution]
 temperature = 0.40
 """,
     )
@@ -58,19 +57,21 @@ temperature = 0.40
     write(
         user_cfg.with_name("playbooks.prod.toml"),
         """
-[model]
+[model.execution]
 name = "gpt-4o"
 """,
     )
 
     # Env overrides
-    monkeypatch.setenv("PLAYBOOKS_MODEL__PROVIDER", "openai")  # same
-    monkeypatch.setenv("PLAYBOOKS_MODEL__TEMPERATURE", "0.7")  # numeric via JSON parse
+    monkeypatch.setenv("PLAYBOOKS_MODEL__EXECUTION__PROVIDER", "openai")  # same
+    monkeypatch.setenv(
+        "PLAYBOOKS_MODEL__EXECUTION__TEMPERATURE", "0.7"
+    )  # numeric via JSON parse
     # CLI overrides (simulated via `overrides` dict)
     overrides = {"timeout_s": 45}
 
     # Act
-    settings, files = load_settings(
+    config, files = load_config(
         profile="prod", overrides=overrides, user_config_dir=user_dir, cwd=proj
     )
 
@@ -82,14 +83,14 @@ name = "gpt-4o"
         "playbooks.prod.toml",  # user profile
     ]
 
-    # Assert effective settings
-    assert isinstance(settings, PlaybooksSettings)
+    # Assert effective config
+    assert isinstance(config, PlaybooksConfig)
     # timeout: project.prod (30) < user.base (no change) < user.prod (no change) < env (no change) < CLI (45)
-    assert settings.timeout_s == 45
+    assert config.timeout_s == 45
     # temperature: project.base (0.2) < user.base (0.4) < user.prod (no change) < env (0.7)
-    assert abs(settings.model.temperature - 0.7) < 1e-9
+    assert abs(config.model.execution.temperature - 0.7) < 1e-9
     # name: project.base (gpt-4o-mini) < user.base (no change) < user.prod (gpt-4o)
-    assert settings.model.name == "gpt-4o"
+    assert config.model.execution.name == "gpt-4o"
 
 
 def test_explicit_path_wins_over_user_and_project(tmp_path, monkeypatch):
@@ -104,15 +105,15 @@ def test_explicit_path_wins_over_user_and_project(tmp_path, monkeypatch):
     write(user_dir / "playbooks.toml", "timeout_s = 20\n")
 
     explicit = tmp_path / "custom.toml"
-    write(explicit, "timeout_s = 99\n[model]\nname = 'x'\n")
+    write(explicit, "timeout_s = 99\n[model.execution]\nname = 'x'\n")
 
-    settings, files = load_settings(
+    config, files = load_config(
         explicit_path=str(explicit), user_config_dir=user_dir, cwd=repo
     )
     # explicit is last among files → wins before env/CLI
     assert files[-1] == explicit
-    assert settings.timeout_s == 99
-    assert settings.model.name == "x"
+    assert config.timeout_s == 99
+    assert config.model.execution.name == "x"
 
 
 def test_env_nested_complex_types(tmp_path, monkeypatch):
@@ -120,22 +121,22 @@ def test_env_nested_complex_types(tmp_path, monkeypatch):
     write(
         tmp_path / "playbooks.toml",
         """
-[model]
+[model.execution]
 temperature = 0.25
 """,
     )
     # booleans, nulls, numbers, arrays/objects
-    monkeypatch.setenv("PLAYBOOKS_MODEL__TEMPERATURE", "1")
+    monkeypatch.setenv("PLAYBOOKS_MODEL__EXECUTION__TEMPERATURE", "1")
     # unknown key should be rejected because extra='forbid'
-    monkeypatch.setenv("PLAYBOOKS_MODEL__unknown_field", "123")
+    monkeypatch.setenv("PLAYBOOKS_MODEL__EXECUTION__unknown_field", "123")
 
     with pytest.raises(Exception):
-        load_settings()
+        load_config()
 
     # remove bad key and confirm parsing works
-    monkeypatch.delenv("PLAYBOOKS_MODEL__unknown_field")
-    s, _ = load_settings()
-    assert s.model.temperature == 1.0
+    monkeypatch.delenv("PLAYBOOKS_MODEL__EXECUTION__unknown_field")
+    s, _ = load_config()
+    assert s.model.execution.temperature == 1.0
 
 
 def test_resolve_only_existing_files(tmp_path, monkeypatch):
@@ -144,3 +145,36 @@ def test_resolve_only_existing_files(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     files = resolve_config_files(profile="prod", user_config_dir=tmp_path / "empty")
     assert files == ()
+
+
+def test_model_fallback_to_default(tmp_path, monkeypatch):
+    """Test that config.model.execution falls back to [model] values when no [model.execution] is defined"""
+    monkeypatch.chdir(tmp_path)
+
+    # Create config with only [model] section (no specific [model.execution])
+    write(
+        tmp_path / "playbooks.toml",
+        """
+timeout_s = 60
+[model]
+provider = "anthropic"
+name = "claude-3-opus"
+temperature = 0.8
+""",
+    )
+
+    config, _ = load_config(cwd=tmp_path)
+
+    # Test that execution model falls back to default [model] values
+    assert config.model.execution.name == "claude-3-opus"
+    assert config.model.execution.provider == "anthropic"
+    assert config.model.execution.temperature == 0.8
+
+    # Test that compilation model also falls back to default [model] values
+    assert config.model.compilation.name == "claude-3-opus"
+    assert config.model.compilation.provider == "anthropic"
+    assert config.model.compilation.temperature == 0.8
+
+    # Test that any arbitrary model name falls back to default [model] values
+    assert config.model.thinking.name == "claude-3-opus"
+    assert config.model.custom.provider == "anthropic"
