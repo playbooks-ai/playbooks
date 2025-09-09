@@ -55,6 +55,12 @@ class LangfuseCfg(BaseModel):
     enabled: bool = True
 
 
+class LitellmCfg(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # catch typos early
+
+    verbose: bool = False
+
+
 class PlaybooksSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
@@ -63,6 +69,7 @@ class PlaybooksSettings(BaseModel):
     model: ModelCfg = ModelCfg()
     llm_cache: LLMCacheCfg = LLMCacheCfg()
     langfuse: LangfuseCfg = LangfuseCfg()
+    litellm: LitellmCfg = LitellmCfg()
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump()

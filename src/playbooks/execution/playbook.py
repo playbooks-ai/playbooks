@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any, List
 
 from ..constants import EXECUTION_FINISHED
 from ..debug.debug_handler import DebugHandler, NoOpDebugHandler
-from ..debug_logger import debug
 from ..exceptions import ExecutionFinished
 from ..interpreter_prompt import InterpreterPrompt
 from ..llm_messages import AssistantResponseLLMMessage, PlaybookImplementationLLMMessage
@@ -199,14 +198,14 @@ class PlaybookLLMExecution(LLMExecution):
                     # )
 
                     for step in line.steps:
-                        debug(f"Agent {self.agent.id} pause if needed on step {step}")
+                        # debug(f"Agent {self.agent.id} pause if needed on step {step}")
                         await self.debug_handler.pause_if_needed(
                             instruction_pointer=step,
                             agent_id=self.agent.id,
                         )
-                        debug(
-                            f"Agent {self.agent.id} pause if needed on step {step} done"
-                        )
+                        # debug(
+                        #     f"Agent {self.agent.id} pause if needed on step {step} done"
+                        # )
 
                 # Update variables
                 if len(line.vars) > 0:

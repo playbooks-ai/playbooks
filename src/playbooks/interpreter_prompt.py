@@ -1,5 +1,4 @@
 import json
-import logging
 import os
 from typing import TYPE_CHECKING, Dict, List, Optional
 
@@ -17,8 +16,6 @@ from playbooks.utils.llm_helper import get_messages_for_prompt
 
 if TYPE_CHECKING:
     from playbooks.execution_state import ExecutionState
-
-logger = logging.getLogger(__name__)
 
 
 class InterpreterPrompt:
@@ -179,7 +176,7 @@ class InterpreterPrompt:
         compacted_size = len(str(compacted_dict_messages))
         compression_ratio = compacted_size / original_size if original_size > 0 else 1.0
 
-        logger.info(
+        debug(
             f"LLM Context Compaction: {original_size} -> {compacted_size} chars ({compression_ratio:.2%})"
         )
 

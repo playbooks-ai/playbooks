@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import tempfile
 import time
@@ -19,8 +20,16 @@ from .langfuse_helper import LangfuseHelper
 from .llm_config import LLMConfig
 from .playbooks_lm_handler import PlaybooksLMHandler
 
-# Configure litellm based on environment variable
-litellm.set_verbose = os.getenv("LLM_SET_VERBOSE", "False").lower() == "true"
+# https://github.com/BerriAI/litellm/issues/2256#issuecomment-2041374430
+loggers = ["LiteLLM Proxy", "LiteLLM Router", "LiteLLM"]
+
+for logger_name in loggers:
+    logger = logging.getLogger(logger_name)
+    logger.setLevel(logging.CRITICAL + 1)
+
+settings, _ = load_settings()
+litellm.suppress_debug_info = True
+# Handle different litellm versions
 litellm.drop_params = True
 # Note: LLM_API_BASE is now applied per-model basis, not globally
 # litellm._turn_on_debug()
@@ -87,7 +96,6 @@ cache = None
 
 # Load cache configuration from config system with environment fallback
 try:
-    settings, _ = load_settings()
     llm_cache_enabled = settings.llm_cache.enabled
     llm_cache_type = settings.llm_cache.type.lower()
     llm_cache_path = settings.llm_cache.path
