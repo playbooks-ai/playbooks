@@ -248,6 +248,9 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     markdown_parts = [current_markdown] if current_markdown else []
     for child in node.get("children", []):
         if "markdown" in child:
+            # For list-item nodes, skip nested lists since they're already handled above
+            if node["type"] == "list-item" and child["type"] == "list":
+                continue
             markdown_parts.append(child["markdown"])
 
     node["markdown"] = "\n".join(markdown_parts).strip()

@@ -1089,5 +1089,32 @@ def test_public_json_preserved():
     assert "```public.json" in markdown
 
 
+def test_nested_list_items():
+    markdown_text = """- Item 1
+  - Subitem 1.1
+  - Subitem 1.2
+- Item 2"""
+    ast = markdown_to_ast(markdown_text)
+    refresh_markdown_attributes(ast)
+
+    markdown = ast["markdown"]
+
+    # Wrong output:
+    # - Item 1
+    #   - Subitem 1.1
+    #   - Subitem 1.2
+    # - Subitem 1.1
+    # - Subitem 1.2
+    # - Item 2
+
+    # Correct output:
+    # - Item 1
+    #   - Subitem 1.1
+    #   - Subitem 1.2
+    # - Item 2
+    assert markdown.count("Subitem 1.1") == 1
+    assert markdown.count("Subitem 1.2") == 1
+
+
 if __name__ == "__main__":
     pytest.main(["-xvs", __file__])
