@@ -65,13 +65,16 @@ class LocalAIAgent(AIAgent):
         """
 
         playbooks = {}
+
+        # First create markdown playbooks to ensure their namespace functions are available
+        markdown_playbooks = LLMPlaybook.create_playbooks_from_h1(h1, namespace_manager)
+        playbooks.update(markdown_playbooks)
+
+        # Then create python playbooks so they can access the markdown playbook functions
         python_playbooks = PythonPlaybook.create_playbooks_from_h1(
             h1, namespace_manager
         )
-        markdown_playbooks = LLMPlaybook.create_playbooks_from_h1(h1, namespace_manager)
-
         playbooks.update(python_playbooks)
-        playbooks.update(markdown_playbooks)
 
         if not playbooks:
             raise AgentConfigurationError(f"No playbooks defined for AI agent {klass}")
@@ -79,12 +82,16 @@ class LocalAIAgent(AIAgent):
         # Refresh markdown attributes to ensure Python code is not sent to the LLM
         refresh_markdown_attributes(h1)
 
+        # Extract source file path from h1 node
+        source_file_path = h1.get("source_file_path")
+
         # Define __init__ for the new class
         def __init__(self, event_bus: EventBus, agent_id: str = None, **kwargs):
             LocalAIAgent.__init__(
                 self,
                 event_bus=event_bus,
                 source_line_number=source_line_number,
+                source_file_path=source_file_path,
                 agent_id=agent_id,
                 **kwargs,
             )
@@ -99,7 +106,7 @@ class LocalAIAgent(AIAgent):
                 "description": description,
                 "playbooks": playbooks,
                 "metadata": metadata,
-                "_namespace_manager_template": namespace_manager,
+                "namespace_manager": namespace_manager,
             },
         )
 
@@ -107,6 +114,7 @@ class LocalAIAgent(AIAgent):
         self,
         event_bus: EventBus,
         source_line_number: int = None,
+        source_file_path: str = None,
         agent_id: str = None,
         program: "Program" = None,
         **kwargs,
@@ -125,6 +133,7 @@ class LocalAIAgent(AIAgent):
         super().__init__(
             event_bus=event_bus,
             source_line_number=source_line_number,
+            source_file_path=source_file_path,
             agent_id=agent_id,
             program=program,
             **kwargs,

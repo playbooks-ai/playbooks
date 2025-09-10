@@ -100,12 +100,10 @@ hidden: true
         compiler = Compiler(llm_config)
 
         # Compile the playbooks content
-        _, compiled_content, _ = compiler.process_single_file(
-            "__builtin_playbooks.pb", markdown
-        )
+        _, compiled_content, compiled_file_path = compiler.compile(content=markdown)
 
         # Parse the compiled content to extract steps
-        ast = markdown_to_ast(compiled_content)
+        ast = markdown_to_ast(compiled_content, source_file_path=compiled_file_path)
         h1 = ast.get("children")[0]
         if not h1.get("type") == "h1":
             raise Exception("Expected a single h1 child")

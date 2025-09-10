@@ -30,7 +30,14 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
     The runtime (Program) decides when and where they run.
     """
 
-    def __init__(self, agent_id: str, program: "Program", **kwargs):
+    def __init__(
+        self,
+        agent_id: str,
+        program: "Program",
+        source_line_number: int = None,
+        source_file_path: str = None,
+        **kwargs,
+    ):
         """Initialize a new BaseAgent."""
         super().__init__()
         self.klass = self.__class__.klass
@@ -40,6 +47,10 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         self.id = agent_id
         self.kwargs = kwargs
         self.program = program
+
+        # Source tracking
+        self.source_line_number = source_line_number
+        self.source_file_path = source_file_path
 
         # Debug context
         self._debug_thread_id: int = None

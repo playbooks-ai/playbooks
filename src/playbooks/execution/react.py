@@ -141,6 +141,7 @@ class ReActLLMExecution(PlaybookLLMExecution):
             step = PlaybookStep.from_text(step_text)
             if step:
                 step.source_line_number = int(line_number)
+                step.source_file_path = getattr(self.playbook, "source_file_path", None)
                 step_collection.add_step(step)
 
         return step_collection
@@ -162,9 +163,11 @@ class ReActLLMExecution(PlaybookLLMExecution):
             if node.get("type") == "list-item":
                 text = node.get("text", "").strip()
                 item_line_number = node.get("line_number")
+                source_file_path = node.get("source_file_path")
                 step = PlaybookStep.from_text(text)
                 if step:
                     step.source_line_number = item_line_number
+                    step.source_file_path = source_file_path
                     step_collection.add_step(step)
 
                     if node.get("children"):

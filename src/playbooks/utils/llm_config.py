@@ -37,15 +37,15 @@ class LLMConfig:
         try:
             # Set model name if not explicitly provided
             if self.model is None:
-                self.model = config.model.name
+                self.model = config.model.default.name
 
             # Set provider if not explicitly provided
             if self.provider is None:
-                self.provider = config.model.provider
+                self.provider = config.model.default.provider
 
             # Set temperature if not explicitly provided
             if self.temperature is None:
-                self.temperature = config.model.temperature
+                self.temperature = config.model.default.temperature
 
         except Exception:
             # Fallback to constants/defaults if config loading fails

@@ -142,9 +142,7 @@ class Loader:
                     try:
                         # Reset processor for each file to avoid cross-file state
                         import_processor.reset()
-                        content, _ = import_processor.process_imports(
-                            content, file_path
-                        )
+                        content = import_processor.process_imports(content, file_path)
                     except ProgramLoadError as e:
                         # Re-raise with more context
                         raise ProgramLoadError(

@@ -190,6 +190,7 @@ class LLMPlaybook(LocalPlaybook):
             step_collection=steps,
             metadata=metadata,
             source_line_number=h2.get("line_number"),
+            source_file_path=h2.get("source_file_path"),
         )
 
     @classmethod
@@ -231,9 +232,11 @@ class LLMPlaybook(LocalPlaybook):
             if node.get("type") == "list-item":
                 text = node.get("text", "").strip()
                 item_line_number = node.get("line_number")
+                source_file_path = node.get("source_file_path")
                 step = PlaybookStep.from_text(text)
                 if step:
                     step.source_line_number = item_line_number
+                    step.source_file_path = source_file_path
                     step_collection.add_step(step)
 
                     if node.get("children"):
@@ -316,6 +319,7 @@ class LLMPlaybook(LocalPlaybook):
         step_collection: Optional[PlaybookStepCollection] = None,
         metadata: Optional[Dict[str, Any]] = None,
         source_line_number: Optional[int] = None,
+        source_file_path: Optional[str] = None,
     ):
         """Initialize an LLMPlaybook.
 
@@ -332,6 +336,8 @@ class LLMPlaybook(LocalPlaybook):
             step_collection: The collection of steps for LLM playbooks.
             metadata: Metadata dict.
             source_line_number: The line number in the source markdown where this
+                playbook is defined.
+            source_file_path: The file path of the source markdown where this
                 playbook is defined.
         """
         # Parse metadata and description, merging with provided metadata
@@ -360,6 +366,7 @@ class LLMPlaybook(LocalPlaybook):
         self.markdown = markdown
         self.step_collection = step_collection
         self.source_line_number = source_line_number
+        self.source_file_path = source_file_path
 
         # Set execution mode from metadata
         self.execution_mode = LLMExecutionMode(

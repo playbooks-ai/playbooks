@@ -53,3 +53,4 @@ Thumbs.db
 
 # Playbooks
 **/.llm_cache
+**/.pbasm_cache

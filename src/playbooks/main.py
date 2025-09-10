@@ -65,8 +65,7 @@ class Playbooks:
 
         self.event_bus = EventBus(self.session_id)
         compiled_program_paths = [
-            compiled_file_path
-            for _, _, _, _, compiled_file_path in self.compiled_program_files
+            result.compiled_file_path for result in self.compiled_program_files
         ]
 
         self.program = Program(

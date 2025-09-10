@@ -446,7 +446,7 @@ Only consider cities in the United States.
 - While the city is not a US city or unclear which state the city is from
   - Ask user to specify a US city or disambiguate
 
-# ProcessMe($report)
+## ProcessMe($report)
 You are a processor who will take each line of the report and count how many lines it has. You have tools like LookupInfo that you can call. 
 
 **Output:**
@@ -529,7 +529,7 @@ Only consider cities in the United States.
   - 01.02:JMP 01
 - 02:RET $city in "Austin, TX" format
 
-# ProcessMe($report: str) -> int
+## ProcessMe($report: str) -> int
 execution_mode:react
 You are a processor who will take each line of the report and count how many lines it has. You have tools like LookupInfo that you can call. 
 

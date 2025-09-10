@@ -146,13 +146,15 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
 
         elif token.type == "fence":  # For code blocks
             line_number = get_line_number(token)
-            stack[-1]["children"].append(
-                {
-                    "type": "code-block",
-                    "text": token.content,
-                    "line_number": line_number,
-                }
-            )
+            code_block = {
+                "type": "code-block",
+                "text": token.content,
+                "line_number": line_number,
+            }
+            # Preserve language/filename from fence info
+            if token.info:
+                code_block["language"] = token.info
+            stack[-1]["children"].append(code_block)
             i += 1
 
         elif token.type == "hr":  # Handle horizontal rules (---)
@@ -208,7 +210,8 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     elif node["type"] == "quote":
         current_markdown = "> " + node["text"]
     elif node["type"] == "code-block":
-        current_markdown = "```\n" + node["text"] + "\n```"
+        language = node.get("language", "")
+        current_markdown = f"```{language}\n" + node["text"] + "\n```"
     elif node["type"] == "hr":
         current_markdown = "---"
     elif node["type"] == "list":
@@ -254,17 +257,37 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
     node.pop("_number", None)
 
 
-def markdown_to_ast(markdown: str) -> Dict[str, Any]:
+def _set_source_file_path_recursively(
+    node: Dict[str, Any], source_file_path: str
+) -> None:
+    """
+    Recursively set source_file_path on all nodes in the AST.
+
+    Args:
+        node: The AST node to process
+        source_file_path: The source file path to set
+    """
+    if isinstance(node, dict):
+        node["source_file_path"] = source_file_path
+
+        # Process children
+        if "children" in node and isinstance(node["children"], list):
+            for child in node["children"]:
+                _set_source_file_path_recursively(child, source_file_path)
+
+
+def markdown_to_ast(markdown: str, source_file_path: str = None) -> Dict[str, Any]:
     """
     Convert markdown text to an Abstract Syntax Tree (AST) representation
-    with line numbers.
+    with line numbers and source file path.
 
     Args:
         markdown: The markdown text to convert
+        source_file_path: Optional path to the source file (typically .pbasm cache file)
 
     Returns:
         A dictionary representing the AST of the markdown text with a
-        'document' root and line numbers on all nodes
+        'document' root, line numbers, and source file path on all nodes
     """
     tree = parse_markdown_to_dict(markdown)
     refresh_markdown_attributes(tree)
@@ -274,14 +297,25 @@ def markdown_to_ast(markdown: str) -> Dict[str, Any]:
         tree["type"] = "document"
         tree["text"] = ""
         tree["markdown"] = markdown  # Preserve original markdown
+
+        # Set source file path on all nodes if provided
+        if source_file_path:
+            _set_source_file_path_recursively(tree, source_file_path)
+
         return tree
 
     # Otherwise wrap the tree in a document node
     children = [tree] if isinstance(tree, dict) else tree.get("children", [])
-    return {
+    document_node = {
         "type": "document",
         "text": "",
         "children": children,
         "markdown": markdown,
         "line_number": 1,
     }
+
+    # Set source file path on all nodes if provided
+    if source_file_path:
+        _set_source_file_path_recursively(document_node, source_file_path)
+
+    return document_node

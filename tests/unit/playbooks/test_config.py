@@ -174,7 +174,3 @@ temperature = 0.8
     assert config.model.compilation.name == "claude-3-opus"
     assert config.model.compilation.provider == "anthropic"
     assert config.model.compilation.temperature == 0.8
-
-    # Test that any arbitrary model name falls back to default [model] values
-    assert config.model.thinking.name == "claude-3-opus"
-    assert config.model.custom.provider == "anthropic"

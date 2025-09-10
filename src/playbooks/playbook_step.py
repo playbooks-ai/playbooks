@@ -14,6 +14,7 @@ class PlaybookStep:
         content: str,
         raw_text: str,
         source_line_number: Optional[int] = None,
+        source_file_path: Optional[str] = None,
     ):
         """Initialize a playbook step.
 
@@ -24,12 +25,15 @@ class PlaybookStep:
             raw_text: The raw text of the step as it appears in the playbook.
             source_line_number: The line number in the source markdown where this
                 step is defined.
+            source_file_path: The file path of the source markdown where this
+                step is defined.
         """
         self.line_number = line_number
         self.step_type = step_type
         self.content = content
         self.raw_text = raw_text
         self.source_line_number = source_line_number
+        self.source_file_path = source_file_path
 
         # DAG navigation properties
         self.next_steps: List[PlaybookStep] = []

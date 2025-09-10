@@ -36,8 +36,8 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
-    provider: str = "openai"
-    name: str = "gpt-4o-mini"
+    provider: str = "anthropic"
+    name: str = "claude-sonnet-4-20250514"
     temperature: float = Field(0.2, ge=0, le=2.0)
 
 
@@ -48,31 +48,11 @@ class ModelsConfig(BaseModel):
     compilation: ModelConfig | None = None
     default: ModelConfig | None = None  # fallback model from [model] section
 
-    def __getattribute__(self, name: str) -> ModelConfig:
-        """Dynamic fallback for all attribute access"""
-        # Get the actual attribute value first
-        value = super().__getattribute__(name)
-
-        # If it's None and we have a default, return the default
-        if value is None and name in ["execution", "compilation"]:
-            default = super().__getattribute__("default")
-            if default is not None:
-                return default
-            # If no default, use the original defaults
-            if name == "execution":
-                return ModelConfig()
-            elif name == "compilation":
-                return ModelConfig(name="gpt-4o-mini", temperature=0.1)
-
-        return value
-
-    def __getattr__(self, name: str) -> ModelConfig:
-        """Dynamic fallback for undefined attributes (e.g., config.model.thinking)"""
-        if self.default is not None:
-            return self.default
-        raise AttributeError(
-            f"Model '{name}' not found and no default model configured"
-        )
+    def model_post_init(self, _):
+        if self.execution is None:
+            self.execution = self.default
+        if self.compilation is None:
+            self.compilation = self.default
 
 
 class LLMCacheConfig(BaseModel):

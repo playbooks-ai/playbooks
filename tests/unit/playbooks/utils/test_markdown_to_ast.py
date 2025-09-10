@@ -1065,5 +1065,29 @@ Legal support agent providing paralegal services and assistance."""
     assert "url: http://lawoffice.com/Paralegal" in paralegal_metadata["text"]
 
 
+def test_public_json_preserved():
+    markdown_text = """```public.json
+[
+  {
+    "name": "A",
+    "description": "Compute square root of a number",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "num": {"type": "number", "description": "Number to compute square root of"}
+      }
+    },
+    "triggers": ["T1:CND When you need to compute square root"]
+  }
+]
+```"""
+
+    ast = markdown_to_ast(markdown_text)
+    refresh_markdown_attributes(ast)
+
+    markdown = ast["markdown"]
+    assert "```public.json" in markdown
+
+
 if __name__ == "__main__":
     pytest.main(["-xvs", __file__])

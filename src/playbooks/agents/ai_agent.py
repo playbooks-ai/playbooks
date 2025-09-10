@@ -87,6 +87,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self,
         event_bus: EventBus,
         source_line_number: int = None,
+        source_file_path: str = None,
         agent_id: str = None,
         program: "Program" = None,
         **kwargs,
@@ -102,7 +103,13 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                 agent is defined.
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
-        super().__init__(agent_id=agent_id, program=program, **kwargs)
+        super().__init__(
+            agent_id=agent_id,
+            program=program,
+            source_line_number=source_line_number,
+            source_file_path=source_file_path,
+            **kwargs,
+        )
         self.playbooks: Dict[str, Playbook] = copy.deepcopy(
             self.__class__.playbooks or {}
         )

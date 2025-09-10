@@ -7,7 +7,7 @@ resolving file paths, detecting circular dependencies, and preserving indentatio
 
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 from .debug_logger import debug
@@ -50,24 +50,6 @@ class ImportNotFoundError(ProgramLoadError):
         )
 
 
-class SourceMapping:
-    """Tracks the mapping between processed lines and their original sources."""
-
-    def __init__(self):
-        self.mappings: List[Tuple[int, Path, int]] = []
-
-    def add_mapping(self, processed_line: int, source_file: Path, source_line: int):
-        """Add a mapping from processed line to original source."""
-        self.mappings.append((processed_line, source_file, source_line))
-
-    def get_original_location(self, processed_line: int) -> Optional[Tuple[Path, int]]:
-        """Get the original file and line number for a processed line."""
-        for p_line, s_file, s_line in self.mappings:
-            if p_line == processed_line:
-                return (s_file, s_line)
-        return None
-
-
 class ImportProcessor:
     """Processes !import directives in playbook files."""
 
@@ -99,11 +81,8 @@ class ImportProcessor:
         # Track import state during processing
         self.import_stack: List[Path] = []
         self.processed_files: Dict[Path, str] = {}
-        self.source_mapping = SourceMapping()
 
-    def process_imports(
-        self, content: str, file_path: Path, depth: int = 0
-    ) -> Tuple[str, SourceMapping]:
+    def process_imports(self, content: str, file_path: Path, depth: int = 0) -> str:
         """
         Process all import directives in the given content.
 
@@ -113,7 +92,7 @@ class ImportProcessor:
             depth: Current import depth (for recursion tracking)
 
         Returns:
-            Tuple of (processed content, source mapping)
+            Processed content with imports inlined
 
         Raises:
             CircularImportError: If circular dependency detected
@@ -138,7 +117,6 @@ class ImportProcessor:
             # Process the content line by line
             lines = content.split("\n")
             result_lines = []
-            processed_line_num = 0
 
             for line_num, line in enumerate(lines, 1):
                 match = self.IMPORT_PATTERN.match(line)
@@ -152,22 +130,12 @@ class ImportProcessor:
                     imported_lines = self._process_single_import(
                         import_path, file_path, line_num, indentation, depth
                     )
-
-                    # Add imported lines to result
-                    for imported_line in imported_lines:
-                        processed_line_num += 1
-                        result_lines.append(imported_line)
-                        # Track source mapping for imported content
-                        # (simplified - would need more detail for accurate mapping)
+                    result_lines.extend(imported_lines)
                 else:
                     # Regular line - add as-is
-                    processed_line_num += 1
                     result_lines.append(line)
-                    self.source_mapping.add_mapping(
-                        processed_line_num, file_path, line_num
-                    )
 
-            return "\n".join(result_lines), self.source_mapping
+            return "\n".join(result_lines)
 
         finally:
             # Remove from import stack
@@ -212,7 +180,7 @@ class ImportProcessor:
 
             # Process nested imports recursively
             if "!import" in content:
-                content, _ = self.process_imports(content, resolved_path, depth + 1)
+                content = self.process_imports(content, resolved_path, depth + 1)
 
             # Cache the processed content
             self.processed_files[resolved_path] = content
@@ -312,4 +280,3 @@ class ImportProcessor:
         """Reset the processor state for a new processing session."""
         self.import_stack.clear()
         self.processed_files.clear()
-        self.source_mapping = SourceMapping()

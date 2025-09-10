@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import re
+from pathlib import Path
 
 # Removed threading import - using asyncio only
 from typing import Any, Dict, List, Type, Union
@@ -253,9 +254,21 @@ class Program(ProgramAgentsCommunicationMixin):
         self.parse_metadata()
 
         self.agent_klasses = {}
-        for markdown_content in self.markdown_contents:
-            ast = markdown_to_ast(markdown_content)
+
+        if self.program_content:
+            # Using program content directly (no cache file)
+            ast = markdown_to_ast(self.program_content)
             self.agent_klasses.update(AgentBuilder.create_agent_classes_from_ast(ast))
+        else:
+            # Using compiled program paths (cache files)
+            for i, markdown_content in enumerate(self.markdown_contents):
+                cache_file_path = self.compiled_program_paths[i]
+                # Convert to absolute path for consistent tracking
+                abs_cache_path = str(Path(cache_file_path).resolve())
+                ast = markdown_to_ast(markdown_content, source_file_path=abs_cache_path)
+                self.agent_klasses.update(
+                    AgentBuilder.create_agent_classes_from_ast(ast)
+                )
 
         self.agents = []
         self.agents_by_klass = {}

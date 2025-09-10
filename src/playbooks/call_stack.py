@@ -14,6 +14,7 @@ class InstructionPointer:
         playbook: The name of the playbook.
         line_number: The line number within the playbook.
         source_line_number: The source line number in the markdown.
+        source_file_path: The file path of the source markdown.
     """
 
     def __init__(
@@ -22,10 +23,12 @@ class InstructionPointer:
         line_number: str,
         source_line_number: int,
         step: PlaybookStep = None,
+        source_file_path: str = None,
     ):
         self.playbook = playbook
         self.line_number = line_number
         self.source_line_number = source_line_number
+        self.source_file_path = source_file_path
         self.step = step
 
     def copy(self) -> "InstructionPointer":
@@ -34,6 +37,7 @@ class InstructionPointer:
             self.line_number,
             self.source_line_number,
             self.step,
+            self.source_file_path,
         )
 
     def increment_instruction_pointer(self) -> None:
