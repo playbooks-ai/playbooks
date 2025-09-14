@@ -23,10 +23,6 @@ class DebugHandler:
 
     def __init__(self, debug_server: DebugServer):
         self.debug_server = debug_server
-        self._is_first_iteration = True
-        self._has_stopped_on_entry = (
-            False  # Track if we've already stopped on entry for this debug session
-        )
         # Track continue events for each agent
         self._continue_events: Dict[str, asyncio.Event] = {}
         # Track step events for each agent
@@ -42,16 +38,19 @@ class DebugHandler:
         should_pause = False
         reason = None
 
-        # Check for breakpoints first
+        # Check for breakpoints first - breakpoints are set on compiled files
         file_path = self.debug_server.compiled_file_path
         line_number = instruction_pointer.source_line_number
 
         debug(f"Agent {agent_id} pause if needed on step {instruction_pointer}")
 
-        if self.debug_server.get_stop_on_entry():
+        if (
+            self.debug_server.get_stop_on_entry()
+            and not self.debug_server.has_agent_stopped_on_entry(agent_id)
+        ):
             should_pause = True
             reason = "stop on entry"
-            self.debug_server.set_stop_on_entry(False)
+            self.debug_server.set_agent_stopped_on_entry(agent_id)
 
         # Check if we should pause due to pause request
         elif self.debug_server and self.debug_server.is_pause_requested(agent_id):
@@ -95,7 +94,7 @@ class DebugHandler:
                             "lineNumber": instruction_pointer.line_number,
                             "playbook": instruction_pointer.playbook,
                             "sourceLineNumber": instruction_pointer.source_line_number,
-                            "filePath": self.debug_server.compiled_file_path,
+                            "filePath": instruction_pointer.source_file_path,
                         },
                     }
 

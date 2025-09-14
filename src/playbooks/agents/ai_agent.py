@@ -353,12 +353,14 @@ async def {self.bgn_playbook_name}() -> None:
                     line_number=step_number,
                     source_line_number=line.source_line_number,
                     step=line,
+                    source_file_path=line.source_file_path,
                 )
         return InstructionPointer(
             playbook=playbook_name,
             line_number=step_number,
             source_line_number=0,
             step=None,
+            source_file_path=None,
         )
 
     def trigger_instructions(

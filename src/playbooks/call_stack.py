@@ -56,7 +56,7 @@ class InstructionPointer:
     def __str__(self) -> str:
         compact_str = self.to_compact_str()
         if self.source_line_number is not None:
-            return f"{compact_str} (src:{self.source_line_number})"
+            return f"{compact_str} ({self.source_file_path}:{self.source_line_number})"
         return compact_str
 
     def __repr__(self) -> str:

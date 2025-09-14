@@ -49,6 +49,8 @@ class ModelsConfig(BaseModel):
     default: ModelConfig | None = None  # fallback model from [model] section
 
     def model_post_init(self, _):
+        if self.default is None:
+            self.default = ModelConfig()
         if self.execution is None:
             self.execution = self.default
         if self.compilation is None:

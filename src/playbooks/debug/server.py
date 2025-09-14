@@ -117,6 +117,9 @@ class DebugServer:
         self._breakpoint_id_counter = 1
 
         self._pause_requested: Dict[str, bool] = {}  # agent_id -> pause_requested
+        self.agent_stopped_on_entry: Dict[str, bool] = (
+            {}
+        )  # agent_id -> stopped_on_entry
 
         # Debug handler - will be set later
         self.debug_handler = None
@@ -253,7 +256,7 @@ class DebugServer:
 
         # Handle setBreakpoints request (global command - doesn't need debug_handler)
         if command == "setBreakpoints":
-            await self._handle_set_breakpoints(message)
+            await self._handle_set(message)
             return
 
         # Handle get_threads request (doesn't need debug_handler or threadId)
@@ -380,6 +383,7 @@ class DebugServer:
                             "playbook": frame.instruction_pointer.playbook,
                             "playbook_line_number": frame.instruction_pointer.line_number,
                             "source_line_number": frame.instruction_pointer.source_line_number,
+                            "source_file_path": frame.instruction_pointer.source_file_path,
                         }
                     )
 
@@ -469,6 +473,18 @@ class DebugServer:
         """Set stop on entry flag."""
         # print(f"[DEBUG] set_stop_on_entry called with: {stop}", file=sys.stderr)
         self.stop_on_entry = stop
+
+    def has_agent_stopped_on_entry(self, agent_id: str) -> bool:
+        """Check if agent has already stopped on entry."""
+        return self.agent_stopped_on_entry.get(agent_id, False)
+
+    def set_agent_stopped_on_entry(self, agent_id: str, stopped: bool = True):
+        """Set that agent has stopped on entry."""
+        self.agent_stopped_on_entry[agent_id] = stopped
+
+    def reset_agent_stop_on_entry_flags(self):
+        """Reset all agent stop-on-entry flags (for new debug session)."""
+        self.agent_stopped_on_entry.clear()
 
     async def wait_for_continue(self):
         """Wait for continue command from VSCode."""
@@ -567,32 +583,15 @@ class DebugServer:
                     {"type": "event", "event": "initialized", "body": {}}
                 )
 
-                # Send compiled file path if available
-                if (
-                    self.program
-                    and hasattr(self.program, "program_paths")
-                    and self.program.program_paths
-                ):
-                    original_file = self.program.program_paths[0]
-                    compiled_file = self.program.compiled_program_paths[0]
-                    # print(
-                    #     f"[DEBUG] Sending compiled file path: {compiled_file}",
-                    #     file=sys.stderr,
-                    # )
-                    # print(
-                    #     f"[DEBUG] Original file: {original_file}",
-                    #     file=sys.stderr,
-                    # )
-                    await self._send_message(
-                        {
-                            "type": "event",
-                            "event": "compiledFile",
-                            "body": {
-                                "originalFile": str(original_file),
-                                "compiledFile": str(compiled_file),
-                            },
-                        }
-                    )
+                await self._send_message(
+                    {
+                        "type": "event",
+                        "event": "compiledProgramPaths",
+                        "body": {
+                            "compiled_program_paths": self.program.compiled_program_paths,
+                        },
+                    }
+                )
 
                 # Debug server is now ready for breakpoints and execution control
 
@@ -632,7 +631,7 @@ class DebugServer:
         """Get the compiled file path."""
         return str(self.program.compiled_program_paths[0])
 
-    async def _handle_set_breakpoints(self, message: Dict[str, Any]):
+    async def _handle_set(self, message: Dict[str, Any]):
         """Handle setBreakpoints command from the debug adapter."""
         # debug(f"_handle_set_breakpoints called with message: {message}")
         body = message.get("body", {})
@@ -857,19 +856,26 @@ class DebugServer:
     async def check_breakpoint(
         self, agent_id: str, file_path: str, line_number: int
     ) -> bool:
-        # debug(f"Checking breakpoint for agent {agent_id} at {file_path}:{line_number}")
-        # debug(f"Breakpoints: {self._breakpoints}")
-        # debug(f"Stored breakpoint file paths: {list(self._breakpoints.keys())}")
-        # debug(f"Looking for file path: '{file_path}'")
-        # debug(f"File path type: {type(file_path)}, length: {len(file_path)}")
+        debug(f"Checking breakpoint for agent {agent_id} at {file_path}:{line_number}")
+        debug(f"Breakpoints: {self._breakpoints}")
+        debug(f"Stored breakpoint file paths: {list(self._breakpoints.keys())}")
+        debug(f"Looking for file path: '{file_path}'")
+        debug(f"File path type: {type(file_path)}, length: {len(file_path)}")
         """Check if we should break at this location."""
-        if file_path not in self._breakpoints:
-            # debug(f"No breakpoints set for file: {file_path}")
+
+        # Normalize the file path to handle absolute vs relative path mismatches
+        normalized_file_path = self._normalize_breakpoint_path(file_path)
+        debug(f"Normalized file path: '{normalized_file_path}'")
+
+        if normalized_file_path not in self._breakpoints:
+            debug(f"No breakpoints set for file: {normalized_file_path}")
             return False
 
-        file_breakpoints = self._breakpoints[file_path]
+        file_breakpoints = self._breakpoints[normalized_file_path]
         if line_number not in file_breakpoints:
-            # debug(f"No breakpoint set for line: {line_number} in file: {file_path}")
+            debug(
+                f"No breakpoint set for line: {line_number} in file: {normalized_file_path}"
+            )
             return False
 
         bp_info = file_breakpoints[line_number]
@@ -913,6 +919,38 @@ class DebugServer:
 
         # Replace {variable} with actual values
         return re.sub(r"\{(\w+)\}", replace_var, message)
+
+    def _normalize_breakpoint_path(self, file_path: str) -> str:
+        """Normalize file path for breakpoint matching.
+
+        This handles the mismatch between absolute paths stored by VS Code
+        and relative paths used during execution.
+        """
+        import os
+
+        # If it's already an absolute path that exists in breakpoints, use it as-is
+        if os.path.isabs(file_path) and file_path in self._breakpoints:
+            return file_path
+
+        # If it's a relative path, try to find matching absolute path in breakpoints
+        if not os.path.isabs(file_path):
+            # Normalize separators for comparison
+            normalized_input = file_path.replace("\\", "/")
+            for stored_path in self._breakpoints.keys():
+                if stored_path.endswith(normalized_input) or stored_path.replace(
+                    "\\", "/"
+                ).endswith(normalized_input):
+                    return stored_path
+
+        # If it's an absolute path, try to find matching relative path in breakpoints
+        if os.path.isabs(file_path):
+            # Extract the relative part (e.g., get ".pbasm_cache/file.pbasm" from full path)
+            for stored_path in self._breakpoints.keys():
+                if file_path.endswith(stored_path.replace(os.path.sep, "/")):
+                    return stored_path
+
+        # If no match found, return original path
+        return file_path
 
     @property
     def current_call_stack(self) -> List[Dict[str, Any]]:
