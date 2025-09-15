@@ -318,8 +318,8 @@ class LLMPlaybook(LocalPlaybook):
         markdown: str,
         step_collection: Optional[PlaybookStepCollection] = None,
         metadata: Optional[Dict[str, Any]] = None,
-        source_line_number: Optional[int] = None,
         source_file_path: Optional[str] = None,
+        source_line_number: Optional[int] = None,
     ):
         """Initialize an LLMPlaybook.
 
@@ -335,9 +335,9 @@ class LLMPlaybook(LocalPlaybook):
             markdown: The markdown representation of the playbook.
             step_collection: The collection of steps for LLM playbooks.
             metadata: Metadata dict.
-            source_line_number: The line number in the source markdown where this
-                playbook is defined.
             source_file_path: The file path of the source markdown where this
+                playbook is defined.
+            source_line_number: The line number in the source markdown where this
                 playbook is defined.
         """
         # Parse metadata and description, merging with provided metadata
@@ -353,6 +353,8 @@ class LLMPlaybook(LocalPlaybook):
             description=final_description,
             agent_name=None,  # Will be set by the agent
             metadata=merged_metadata,
+            source_file_path=source_file_path,
+            source_line_number=source_line_number,
         )
 
         # Keep existing attributes for backward compatibility
@@ -365,8 +367,6 @@ class LLMPlaybook(LocalPlaybook):
         self.func = func
         self.markdown = markdown
         self.step_collection = step_collection
-        self.source_line_number = source_line_number
-        self.source_file_path = source_file_path
 
         # Set execution mode from metadata
         self.execution_mode = LLMExecutionMode(

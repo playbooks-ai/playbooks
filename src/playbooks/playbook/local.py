@@ -23,6 +23,8 @@ class LocalPlaybook(Playbook):
         description: Optional[str] = None,
         agent_name: Optional[str] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        source_file_path: Optional[str] = None,
+        source_line_number: Optional[int] = None,
     ):
         """Initialize a local playbook.
 
@@ -30,6 +32,8 @@ class LocalPlaybook(Playbook):
             name: The name/class of the playbook
             description: Human-readable description of the playbook
             agent_name: Name of the agent this playbook belongs to
+            source_file_path: The file path of the source where this playbook is defined
+            source_line_number: The line number in the source where this playbook is defined
         """
         super().__init__(
             name=name,
@@ -37,6 +41,8 @@ class LocalPlaybook(Playbook):
             agent_name=agent_name,
             metadata=metadata,
         )
+        self.source_file_path = source_file_path
+        self.source_line_number = source_line_number
 
     async def execute(self, *args, **kwargs) -> Any:
         """Execute the local playbook with error handling and logging.

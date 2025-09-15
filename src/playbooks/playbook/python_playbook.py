@@ -29,7 +29,10 @@ class PythonPlaybook(LocalPlaybook):
         for child in h1.get("children", []):
             if child.get("type") == "code-block":
                 new_playbooks = cls.create_playbooks_from_code_block(
-                    child["text"], namespace_manager
+                    child["text"],
+                    namespace_manager,
+                    child.get("source_file_path"),
+                    child.get("line_number"),
                 )
                 playbooks.update(new_playbooks)
 
@@ -37,7 +40,11 @@ class PythonPlaybook(LocalPlaybook):
 
     @classmethod
     def create_playbooks_from_code_block(
-        cls, code_block: str, namespace_manager
+        cls,
+        code_block: str,
+        namespace_manager,
+        source_file_path: Optional[str] = None,
+        source_line_number: Optional[int] = None,
     ) -> Dict[str, "PythonPlaybook"]:
         """Create PythonPlaybook instances from a code block.
 
@@ -62,6 +69,7 @@ class PythonPlaybook(LocalPlaybook):
 
         # Get code for each function
         function_code = {}
+        items = {}
         parsed_code = ast.parse(code_block)
         # debug("Parsed Code: " + str(parsed_code))
         for item in parsed_code.body:
@@ -69,6 +77,7 @@ class PythonPlaybook(LocalPlaybook):
                 item, ast.FunctionDef
             ):
                 function_code[item.name] = ast.unparse(item)
+                items[item.name] = item
 
         # Discover all @playbook-decorated functions
         playbooks = cls._discover_playbook_functions(namespace_manager, existing_keys)
@@ -76,6 +85,12 @@ class PythonPlaybook(LocalPlaybook):
         # Add function code to playbooks
         for playbook in playbooks.values():
             playbook.code = function_code[playbook.name]
+            playbook.source_file_path = source_file_path
+
+            line_offset = 0
+            if items[playbook.name].lineno is not None:
+                line_offset = items[playbook.name].lineno
+            playbook.source_line_number = source_line_number + line_offset
 
         return playbooks
 
@@ -177,6 +192,7 @@ class PythonPlaybook(LocalPlaybook):
         triggers: Optional[Any] = None,
         metadata: Optional[Dict[str, Any]] = None,
         code: Optional[str] = None,
+        source_file_path: Optional[str] = None,
         source_line_number: Optional[int] = None,
     ):
         """Initialize a PythonPlaybook.
@@ -190,6 +206,7 @@ class PythonPlaybook(LocalPlaybook):
             triggers: Trigger configuration for the playbook
             metadata: Additional metadata for the playbook
             code: The source code of the function
+            source_file_path: The file path of the source where this playbook is defined
             source_line_number: The line number in the source where this playbook is defined
         """
         super().__init__(
@@ -197,14 +214,14 @@ class PythonPlaybook(LocalPlaybook):
             description=description,
             agent_name=agent_name,
             metadata=metadata,
+            source_file_path=source_file_path,
+            source_line_number=source_line_number,
         )
 
         self.func = func
         self.signature = signature
         self.triggers = triggers
         self.code = code
-        self.source_line_number = source_line_number
-
         # For backward compatibility with existing code
         self.klass = name
 

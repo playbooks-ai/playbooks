@@ -56,7 +56,17 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
     while i < len(tokens):
         token = tokens[i]
 
-        if token.type == "heading_open":
+        if token.type == "html_block":
+            stack[-1]["children"].append(
+                {
+                    "type": "html_block",
+                    "content": token.content,
+                    "line_number": get_line_number(token),
+                }
+            )
+            i += 1
+
+        elif token.type == "heading_open":
             level = int(token.tag[1])  # Extract level from h1, h2, etc.
             close_until_level(level)
 
@@ -168,6 +178,12 @@ def parse_markdown_to_dict(markdown_text: str) -> Dict[str, Any]:
             )
             i += 1
 
+        elif token.type == "comment":
+            line_number = get_line_number(token)
+            stack[-1]["children"].append(
+                {"type": "comment", "text": token.content, "line_number": line_number}
+            )
+            i += 1
         else:
             i += 1
 
@@ -198,18 +214,23 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
 
     # Generate markdown for current node
     current_markdown = ""
+    markdown_prefix = ""
+    markdown_suffix = ""
     if (
         node["type"].startswith("h")
         and len(node["type"]) == 2
         and node["type"][1].isdigit()
     ):
         level = int(node["type"][1])  # Extract number from h1, h2, etc.
+        if level <= 3:
+            markdown_prefix = "\n"
         current_markdown = "#" * level + " " + node["text"]
     elif node["type"] == "paragraph":
         current_markdown = node["text"]
     elif node["type"] == "quote":
         current_markdown = "> " + node["text"]
     elif node["type"] == "code-block":
+        markdown_prefix = "\n"
         language = node.get("language", "")
         current_markdown = f"```{language}\n" + node["text"] + "\n```"
     elif node["type"] == "hr":
@@ -243,6 +264,8 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
 
         if children_markdown:
             current_markdown += "\n" + "\n".join(children_markdown)
+    elif node["type"] == "html_block":
+        current_markdown = node["content"]
 
     # Combine current node's markdown with children's markdown
     markdown_parts = [current_markdown] if current_markdown else []
@@ -253,7 +276,9 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
                 continue
             markdown_parts.append(child["markdown"])
 
-    node["markdown"] = "\n".join(markdown_parts).strip()
+    node["markdown"] = (
+        markdown_prefix + "\n".join(markdown_parts).strip() + markdown_suffix
+    )
 
     # Clean up internal attributes
     node.pop("_ordered", None)

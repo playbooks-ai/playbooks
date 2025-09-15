@@ -379,11 +379,10 @@ class DebugServer:
                     stack_trace.append(
                         {
                             "name": name,
-                            "file": self.compiled_file_path,
+                            "file": frame.instruction_pointer.source_file_path,
                             "playbook": frame.instruction_pointer.playbook,
                             "playbook_line_number": frame.instruction_pointer.line_number,
                             "source_line_number": frame.instruction_pointer.source_line_number,
-                            "source_file_path": frame.instruction_pointer.source_file_path,
                         }
                     )
 

@@ -104,7 +104,7 @@ hidden: true
 
         # Parse the compiled content to extract steps
         ast = markdown_to_ast(compiled_content, source_file_path=compiled_file_path)
-        h1 = ast.get("children")[0]
+        h1 = list(filter(lambda node: node.get("type") == "h1", ast.get("children")))[0]
         if not h1.get("type") == "h1":
             raise Exception("Expected a single h1 child")
 

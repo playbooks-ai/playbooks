@@ -13,6 +13,7 @@ from .utils.langfuse_helper import LangfuseHelper
 from .utils.llm_config import LLMConfig
 from .utils.llm_helper import get_completion, get_messages_for_prompt
 from .utils.markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
+from .utils.version import get_playbooks_version
 
 console = Console()
 
@@ -299,7 +300,7 @@ class Compiler:
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 ast = markdown_to_ast(compiled_agent)
                 refresh_markdown_attributes(ast)
-                compiled_agent = ast["markdown"]
+                compiled_agent = ast["markdown"].strip()
                 cache_path.write_text(compiled_agent)
             except (OSError, IOError, PermissionError):
                 # Cache write failed, continue without caching
@@ -343,4 +344,17 @@ class Compiler:
         compiled = next(response)
         langfuse_span.update(output=compiled)
 
+        version = get_playbooks_version()
+        compiled = (
+            f"""<!-- 
+============================================
+Playbooks Assembly Language v{version}
+============================================ 
+-->
+
+"""
+            + compiled
+        )
+
+        print(compiled)
         return compiled

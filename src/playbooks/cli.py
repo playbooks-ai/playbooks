@@ -24,6 +24,7 @@ from .exceptions import ProgramLoadError
 from .loader import Loader
 from .logging_setup import configure_logging
 from .utils.llm_config import LLMConfig
+from .utils.version import get_playbooks_version
 
 # Suppress deprecation warnings from external libraries
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="httpx")
@@ -35,24 +36,6 @@ warnings.filterwarnings(
 )
 
 console = Console()
-
-
-def get_version() -> str:
-    """Get the version of the playbooks package."""
-    try:
-        from importlib.metadata import version
-
-        return version("playbooks")
-    except ImportError:
-        # Fallback for Python < 3.8
-        try:
-            from importlib_metadata import version
-
-            return version("playbooks")
-        except ImportError:
-            return "unknown"
-    except Exception:
-        return "unknown"
 
 
 def compile(program_paths: List[str], output_file: str = None) -> None:
@@ -273,7 +256,7 @@ def main():
 
     # Add version argument
     parser.add_argument(
-        "--version", action="version", version=f"playbooks {get_version()}"
+        "--version", action="version", version=f"playbooks {get_playbooks_version()}"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
