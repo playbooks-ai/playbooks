@@ -75,37 +75,15 @@ class DebugHandler:
         debug(f"Agent {agent_id} should pause: {should_pause}, reason: {reason}")
         if should_pause:
             logger.debug(f"Pausing execution for agent {agent_id}")
-            self.debug_server.program.agents_by_id[agent_id].paused = reason
+            self.debug_server.program.agents_by_id[agent_id].paused = {
+                "reason": reason,
+                "instruction_pointer": instruction_pointer,
+            }
             self.debug_server.clear_pause_request(agent_id)
             # Set global state to stop all threads
             # self.debug_server.set_all_threads_stopped(True)
-            messages = []
-            for agent in self.debug_server.program.agents:
-                a_id = agent.id
-                if agent.paused is not None:
-                    message = {
-                        "type": "event",
-                        "event": "stopped",
-                        "body": {
-                            "reason": agent.paused,
-                            "threadId": self.debug_server.agent_id_to_thread_id(a_id),
-                            "allThreadsStopped": False,
-                            "description": "Paused",
-                            "lineNumber": instruction_pointer.line_number,
-                            "playbook": instruction_pointer.playbook,
-                            "sourceLineNumber": instruction_pointer.source_line_number,
-                            "filePath": instruction_pointer.source_file_path,
-                        },
-                    }
+            await self.refresh_stopped_status(agent_id)
 
-                    # Keep the agent that paused at the end, so VSCode focuses back on it
-                    if a_id == agent_id:
-                        messages.append(message)
-                    else:
-                        messages.insert(0, message)
-
-            for message in messages:
-                await self.debug_server._send_message(message)
             await self._wait_for_continue(agent_id)
             await self.debug_server._send_message(
                 {
@@ -118,6 +96,37 @@ class DebugHandler:
                 }
             )
             self.debug_server.program.agents_by_id[agent_id].paused = None
+
+    async def refresh_stopped_status(self, agent_id_to_focus: str):
+        messages = []
+        for agent in self.debug_server.program.agents:
+            a_id = agent.id
+            if agent.paused is not None:
+                reason = agent.paused["reason"]
+                instruction_pointer = agent.paused["instruction_pointer"]
+                message = {
+                    "type": "event",
+                    "event": "stopped",
+                    "body": {
+                        "reason": reason,
+                        "threadId": self.debug_server.agent_id_to_thread_id(a_id),
+                        "allThreadsStopped": False,
+                        "description": "Paused",
+                        "lineNumber": instruction_pointer.line_number,
+                        "playbook": instruction_pointer.playbook,
+                        "sourceLineNumber": instruction_pointer.source_line_number,
+                        "filePath": instruction_pointer.source_file_path,
+                    },
+                }
+
+                # Keep the agent that paused at the end, so VSCode focuses back on it
+                if a_id == agent_id_to_focus:
+                    messages.append(message)
+                else:
+                    messages.insert(0, message)
+
+        for message in messages:
+            await self.debug_server._send_message(message)
 
     def reset_for_execution(self):
         """Reset state for new execution."""
@@ -183,9 +192,14 @@ class DebugHandler:
         if not agent_id:
             agent_id = "default"
 
-        # Set the event for this agent if it exists
-        if agent_id in self._continue_events:
-            self._continue_events[agent_id].set()
+        logger.debug(f"Signaling continue for agent {agent_id}")
+
+        # Create an event for this agent if it doesn't exist
+        if agent_id not in self._continue_events:
+            self._continue_events[agent_id] = asyncio.Event()
+
+        # Set the event for this agent
+        self._continue_events[agent_id].set()
 
     async def _wait_for_continue(self, agent_id: str):
         """Wait for continue command from debugger."""

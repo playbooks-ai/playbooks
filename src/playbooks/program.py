@@ -445,7 +445,8 @@ class Program(ProgramAgentsCommunicationMixin):
             # If debugging with stop-on-entry, wait for continue before starting execution
             # if self._debug_server and self._debug_server.stop_on_entry:
             #     # Wait for the continue command from the debug server
-            #     await self._debug_server.wait_for_continue()
+            #     # NOTE: wait_for_continue now requires agent_id parameter
+            #     await self._debug_server.wait_for_continue(agent_id="default")
 
             await self.begin()
             # Wait for ExecutionFinished to be raised from any agent thread

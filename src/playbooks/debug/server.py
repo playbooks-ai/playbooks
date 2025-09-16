@@ -97,9 +97,8 @@ class DebugServer:
         self.is_running = False
         self.debug_session_active = False  # Controls message handler lifecycle
         self.stop_on_entry = False
-        self._continue_event = (
-            asyncio.Event()
-        )  # Event to signal continue has been received
+        # Per-agent continue events - managed by debug handler
+        # self._continue_event removed - now using per-agent events in debug_handler
         # self._all_threads_stopped = (
         #     False  # Flag to indicate all threads/agents are stopped
         # )
@@ -283,9 +282,14 @@ class DebugServer:
 
         # Handle basic debug commands
         if command == "continue":
+            debug(
+                f"Processing continue command for agent {agent_id} (thread {thread_id})"
+            )
+
             # Signal that continue has been received
             self.clear_pause_request(agent_id)
-            self._continue_event.set()
+            # Use per-agent continue events via debug handler
+            # self._continue_event.set()  # Removed global event
 
             # Clear the all threads stopped flag since we're resuming
             # self.set_all_threads_stopped(False)
@@ -293,11 +297,9 @@ class DebugServer:
             # Continue execution - signal the debug handler
             self.debug_handler.signal_continue(agent_id)
 
-            # Check if single thread execution is requested (DAP compliance)
-            single_thread = message.get("body", {}).get("singleThread", False)
-            all_threads_continued = (
-                not single_thread
-            )  # If single thread, not all threads continued
+            # For per-agent debugging, we should always continue only the specific thread
+            # DAP compliance: allThreadsContinued should be False for single-thread continues
+            all_threads_continued = False  # Only continue the specific agent/thread
 
             # Send response back to VSCode with proper DAP semantics
             await self._send_message(
@@ -321,6 +323,9 @@ class DebugServer:
                     },
                 }
             )
+
+            self.program.agents_by_id[agent_id].paused = None
+            await self.debug_handler.refresh_stopped_status(agent_id)
         elif command == "next":
             await self.debug_handler.handle_step(
                 agent_id, command, request_seq=message["seq"]
@@ -489,14 +494,19 @@ class DebugServer:
         """Reset all agent stop-on-entry flags (for new debug session)."""
         self.agent_stopped_on_entry.clear()
 
-    async def wait_for_continue(self):
-        """Wait for continue command from VSCode."""
-        # print("[DEBUG] Waiting for continue command...", file=sys.stderr)
-        await self._continue_event.wait()
-        # print(
-        #     "[DEBUG] Continue command received, proceeding with execution",
-        #     file=sys.stderr,
-        # )
+    async def wait_for_continue(self, agent_id: str = None):
+        """Wait for continue command from VSCode for a specific agent."""
+        if not agent_id:
+            agent_id = "default"
+
+        # Use the debug handler's per-agent continue events
+        if hasattr(self, "debug_handler") and self.debug_handler:
+            await self.debug_handler._wait_for_continue(agent_id)
+        else:
+            # Fallback - should not happen in normal operation
+            import asyncio
+
+            await asyncio.Event().wait()  # This will wait forever - should be avoided
 
     def set_pause_request(self, agent_id: str):
         """Set pause request flag."""
