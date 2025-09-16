@@ -152,9 +152,8 @@ class DebugServer:
         )
 
         try:
-            print(
+            debug(
                 f"[DEBUG] About to start message loop - debug_session_active={self.debug_session_active}",
-                file=sys.stderr,
             )
             # debug("[MESSAGE_HANDLER] Starting message loop")
             while self.debug_session_active:

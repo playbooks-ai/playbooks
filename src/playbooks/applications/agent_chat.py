@@ -346,17 +346,11 @@ async def main(
 
     # Connect to debug adapter if requested
     if enable_debug:
-        console.print(
-            "[green]Debug mode enabled - will attempt to connect to VSCode debug adapter[/green]"
-        )
         # Start debug server with stop-on-entry flag
         debug(f"Starting debug server with agents: {playbooks.program.agents}")
         await playbooks.program.start_debug_server(
             host=debug_host, port=debug_port, stop_on_entry=stop_on_entry
         )
-
-        if stop_on_entry:
-            console.print("[yellow]Stop-on-entry enabled[/yellow]")
 
         # If wait_for_client is True, wait for debug adapter to connect
         if wait_for_client:
