@@ -175,6 +175,8 @@ class DebugServer:
                         #     file=sys.stderr,
                         # )
                         debug("[MESSAGE_HANDLER] Connection closed by client")
+                        # Terminate the debug session and shutdown the program
+                        await self._handle_client_disconnection()
                         break
 
                     # print(
@@ -227,6 +229,8 @@ class DebugServer:
                     continue
                 except ConnectionResetError:
                     debug("Connection reset by client")
+                    # Terminate the debug session and shutdown the program
+                    await self._handle_client_disconnection()
                     break
 
         except Exception as e:
@@ -609,6 +613,26 @@ class DebugServer:
                 self.server_socket.close()
                 self.server_socket = None
             raise
+
+    async def _handle_client_disconnection(self):
+        """Handle client disconnection by terminating debug session and program."""
+        debug("[DEBUG] Handling client disconnection - terminating debug session")
+
+        # Mark debug session as inactive
+        self.debug_session_active = False
+
+        # Shutdown the debug server
+        await self.shutdown()
+
+        # Trigger program shutdown if we have a program reference
+        if self.program:
+            debug(
+                "[DEBUG] Triggering program shutdown due to debug client disconnection"
+            )
+            # Set execution finished to trigger clean shutdown
+            self.program.set_execution_finished(
+                reason="debug_client_disconnected", exit_code=0
+            )
 
     async def shutdown(self):
         """Shutdown the debug server."""
