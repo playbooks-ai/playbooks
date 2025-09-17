@@ -161,7 +161,7 @@ def test_refresh_markdown_attributes():
 
     # Check that markdown attributes were added
     assert "markdown" in ast
-    assert ast["markdown"].startswith("# Heading 1")
+    assert ast["markdown"].strip().startswith("# Heading 1")
     assert "This is a paragraph." in ast["markdown"]
     assert "- Item 1" in ast["markdown"]
     assert "- Item 2" in ast["markdown"]

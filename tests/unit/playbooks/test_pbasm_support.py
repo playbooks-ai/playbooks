@@ -4,6 +4,8 @@ Test script to verify .pbasm file support in the playbooks framework.
 """
 
 # Add the src directory to the Python path
+from pathlib import Path
+
 import pytest
 
 from playbooks import Playbooks
@@ -65,10 +67,11 @@ async def test_playbooks_compilation_skip(test_data_dir, tmp_path):
 
     # First, compile the .pb file to get the compiled content
     playbooks_pb = Playbooks([str(pb_file_path)])
-    pbasm_file_path = playbooks_pb.compiled_program_files[0][4]
+    pbasm_file_path = playbooks_pb.compiled_program_files[0].compiled_file_path
 
     # The compiled content should be different from the original content
     # (because compilation adds processing steps)
+    pbasm_file_path = Path(pbasm_file_path).absolute()
     assert pbasm_file_path.read_text() != source_content
 
     # Test with .pbasm file - should skip compilation
@@ -76,4 +79,9 @@ async def test_playbooks_compilation_skip(test_data_dir, tmp_path):
 
     # The compiled content should be the same as what we wrote to the .pbasm file
     # (no additional compilation should occur)
-    assert str(playbooks_pbasm.compiled_program_files[0][4]) == str(pbasm_file_path)
+    assert str(playbooks_pbasm.compiled_program_files[0].file_path) == str(
+        pbasm_file_path
+    )
+    assert str(playbooks_pbasm.compiled_program_files[0].compiled_file_path) == str(
+        pbasm_file_path
+    )

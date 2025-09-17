@@ -80,9 +80,7 @@ class ReActLLMExecution(PlaybookLLMExecution):
             compiler = Compiler(llm_config)
 
             # Compile the playbook content
-            _, compiled_content, _ = compiler.process_single_file(
-                "react_agent.pb", playbook_content
-            )
+            _, compiled_content, _ = compiler.compile(content=playbook_content)
 
             # Parse the compiled content to extract steps
             ast = markdown_to_ast(compiled_content)
@@ -112,39 +110,10 @@ class ReActLLMExecution(PlaybookLLMExecution):
             # Extract steps from the compiled H2 section
             return self._extract_steps_from_h2(react_steps_h2)
 
-        except Exception:
+        except Exception as e:
             # If any error occurs during compilation or parsing,
             # fall back to the original implementation
-            return self._create_fallback_steps()
-
-    def _create_fallback_steps(self) -> PlaybookStepCollection:
-        """Create fallback step collection if compilation fails.
-
-        Returns:
-            PlaybookStepCollection: A basic step collection
-        """
-        steps_text = [
-            "Think deeply about the $task to understand requirements",
-            "Write down $exit_conditions for the task",
-            "While $exit_conditions are not met:",
-            "  - Analyze current state and progress",
-            "  - Decide what action to take next",
-            "  - Execute the action (tool call, user interaction, computation)",
-            "  - Evaluate results against exit conditions",
-            "Return final results",
-        ]
-
-        step_collection = PlaybookStepCollection()
-
-        for i, step_text in enumerate(steps_text, 1):
-            line_number = f"{i:02d}"
-            step = PlaybookStep.from_text(step_text)
-            if step:
-                step.source_line_number = int(line_number)
-                step.source_file_path = getattr(self.playbook, "source_file_path", None)
-                step_collection.add_step(step)
-
-        return step_collection
+            raise Exception(f"Error creating react steps: {e}") from e
 
     def _extract_steps_from_h2(self, h2_node: dict) -> PlaybookStepCollection:
         """Extract steps from a compiled H2 node.

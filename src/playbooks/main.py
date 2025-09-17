@@ -2,7 +2,9 @@ import uuid
 from functools import reduce
 from typing import List
 
-from .compiler import Compiler, FileCompilationSpec
+import frontmatter
+
+from .compiler import Compiler, FileCompilationResult, FileCompilationSpec
 from .event_bus import EventBus
 from .loader import Loader
 from .logging_setup import configure_logging
@@ -38,8 +40,30 @@ class Playbooks:
                 lambda content, item: content + [item.content], self.program_files, []
             )
         )
-        compiler = Compiler(self.llm_config)
-        self.compiled_program_files = compiler.process_files(self.program_files)
+
+        # Check if all files are already compiled (.pbasm files)
+        all_files_compiled = all(
+            file_spec.is_compiled for file_spec in self.program_files
+        )
+
+        if all_files_compiled:
+            # Skip compilation - convert FileCompilationSpec to FileCompilationResult directly
+            self.compiled_program_files = []
+            for file_spec in self.program_files:
+                fm_data = frontmatter.loads(file_spec.content)
+                self.compiled_program_files.append(
+                    FileCompilationResult(
+                        file_path=file_spec.file_path,
+                        frontmatter_dict=fm_data.metadata,
+                        content=fm_data.content,
+                        is_compiled=True,
+                        compiled_file_path=file_spec.file_path,
+                    )
+                )
+        else:
+            # Some files need compilation
+            compiler = Compiler(self.llm_config)
+            self.compiled_program_files = compiler.process_files(self.program_files)
 
         # Extract and apply frontmatter from all files (.pb and .pbasm)
         self.program_metadata = {}

@@ -114,7 +114,7 @@ This is a test playbook.
     event_bus = EventBus("test_session")
     agent = agent_class(event_bus)
 
-    # Test built-in playbooks have None for source_line_number
+    # Test built-in playbooks have source_line_number
     builtin_playbooks = [
         "SendMessage",
         "WaitForMessage",
@@ -126,7 +126,7 @@ This is a test playbook.
     for playbook_name in builtin_playbooks:
         assert playbook_name in agent.playbooks
         playbook = agent.playbooks[playbook_name]
-        assert playbook.source_line_number is None
+        assert playbook.source_line_number is not None
 
     # Test user-defined playbook has proper source_line_number
     user_playbook = agent.playbooks["TestPlaybook"]

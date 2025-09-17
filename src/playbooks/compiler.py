@@ -175,6 +175,7 @@ class Compiler:
                 # Sort results by original index to maintain order
                 compilation_results = [results_by_index[i] for i in range(len(agents))]
 
+        compilation_results[0].frontmatter_dict.update(all_frontmatter)
         return compilation_results
 
     def compile(

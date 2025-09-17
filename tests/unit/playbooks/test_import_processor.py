@@ -48,7 +48,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         # Verify imported content is included
         assert "This is imported content" in result
@@ -68,7 +68,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         assert "Utility functions" in result
 
@@ -85,7 +85,7 @@ class TestImportProcessor:
         main_file = subdir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         assert "Shared content" in result
 
@@ -117,7 +117,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         # Check that indentation is applied
         assert "  - Step 1" in result
@@ -141,7 +141,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         # Verify all content is included
         assert "Content A" in result
@@ -239,7 +239,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         # Verify all imports are included in order
         assert "Header content" in result
@@ -263,7 +263,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         assert "Important data" in result
         assert "This imports the data file" not in result
@@ -285,7 +285,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         # Should still have before and after content
         assert "Before import" in result
@@ -308,7 +308,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         # Content should appear twice
         assert result.count("Shared content") == 2
@@ -363,7 +363,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         # Verify structure is maintained
         assert "model: gpt-4" in result
@@ -382,7 +382,7 @@ class TestImportProcessor:
         main_file = temp_dir / "main.pb"
 
         # Process imports
-        result, _ = processor.process_imports(main_content, main_file)
+        result = processor.process_imports(main_content, main_file)
 
         assert "Absolute import" in result
 

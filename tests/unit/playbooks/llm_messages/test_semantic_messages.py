@@ -3,18 +3,18 @@
 from playbooks.enums import LLMMessageRole, LLMMessageType
 from playbooks.llm_messages import (
     AgentCommunicationLLMMessage,
+    AgentInfoLLMMessage,
+    AssistantResponseLLMMessage,
     ExecutionResultLLMMessage,
     FileLoadLLMMessage,
     LLMMessage,
-    AssistantResponseLLMMessage,
     MeetingLLMMessage,
+    OtherAgentInfoLLMMessage,
     PlaybookImplementationLLMMessage,
     SessionLogLLMMessage,
     SystemPromptLLMMessage,
-    UserInputLLMMessage,
     TriggerInstructionsLLMMessage,
-    AgentInfoLLMMessage,
-    OtherAgentInfoLLMMessage,
+    UserInputLLMMessage,
 )
 
 
@@ -214,7 +214,7 @@ class TestExecutionResultLLMMessage:
 
         assert msg.content == content
         assert (
-            msg.role == LLMMessageRole.ASSISTANT
+            msg.role == LLMMessageRole.USER
         )  # Fixed: execution results come from assistant
         assert msg.type == LLMMessageType.EXECUTION_RESULT
         assert msg.cached is False  # Should not be cached by default

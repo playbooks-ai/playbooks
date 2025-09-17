@@ -23,16 +23,16 @@ from playbooks.events import Event
 class SampleEvent(Event):
     """Sample event for unit tests."""
 
-    def __init__(self, data: str):
-        super().__init__()
+    def __init__(self, data: str, session_id: str = "test-session"):
+        super().__init__(session_id=session_id)
         self.data = data
 
 
 class AnotherSampleEvent(Event):
     """Another sample event type."""
 
-    def __init__(self, value: int):
-        super().__init__()
+    def __init__(self, value: int, session_id: str = "test-session"):
+        super().__init__(session_id=session_id)
         self.value = value
 
 

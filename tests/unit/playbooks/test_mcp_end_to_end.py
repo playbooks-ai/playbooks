@@ -93,6 +93,11 @@ class InMemoryMCPTransport(MCPTransport):
 class TestMCPEndToEnd:
     """Comprehensive end-to-end tests for MCP agent functionality."""
 
+    def setup_method(self):
+        """Reset the MCPTestAgent class state before each test."""
+        # Reset the class-level playbooks to ensure test isolation
+        MCPTestAgent.playbooks = {}
+
     @pytest.mark.asyncio
     async def test_mcp_agent_full_lifecycle(self):
         """Test complete MCP agent lifecycle with real server."""

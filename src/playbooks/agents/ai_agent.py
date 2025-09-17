@@ -604,6 +604,8 @@ async def {self.bgn_playbook_name}() -> None:
                 trace_str = f"Markdown: {trace_str}"
             elif isinstance(playbook, PythonPlaybook):
                 trace_str = f"Python: {trace_str}"
+            elif isinstance(playbook, RemotePlaybook):
+                trace_str = f"Remote: {trace_str}"
         else:
             trace_str = f"External: {trace_str}"
 
@@ -637,12 +639,18 @@ async def {self.bgn_playbook_name}() -> None:
             # Try to get meeting ID from kwargs or current context
             meeting_id = kwargs.get("meeting_id") or self.state.get_current_meeting()
 
+        source_file_path = (
+            playbook.source_file_path
+            if playbook and hasattr(playbook, "source_file_path")
+            else None
+        )
+        source_file_path = source_file_path or "[unknown]"
         call_stack_frame = CallStackFrame(
             InstructionPointer(
                 playbook=call.playbook_klass,
                 line_number="01",
                 source_line_number=first_step_line_number,
-                source_file_path=playbook.source_file_path,
+                source_file_path=source_file_path,
             ),
             langfuse_span=langfuse_span,
             is_meeting=is_meeting,

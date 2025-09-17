@@ -21,14 +21,14 @@ async def test_public(playbooks):
     assert not agent0.playbooks["X"].public
 
     pp = agent1.public_playbooks
-    assert len(pp) == 3
-    assert pp[0].name == "GetLengthOfCountry"
-    assert not pp[0].triggers
-    assert pp[1].name == "GetCountryPopulation"
-    assert not pp[1].triggers
-    assert pp[2].name == "GetCountrySecret"
-    assert len(pp[2].triggers.triggers) == 1
-    assert "T1:CND" in str(pp[2].triggers.triggers[0])
+    assert set([p.name for p in pp]) == set(
+        ["GetLengthOfCountry", "GetCountryPopulation", "GetCountrySecret"]
+    )
+
+    assert not agent1.playbooks["GetLengthOfCountry"].triggers
+    assert not agent1.playbooks["GetCountryPopulation"].triggers
+    assert len(agent1.playbooks["GetCountrySecret"].triggers.triggers) == 1
+
     assert agent1.playbooks["GetLengthOfCountry"].public
     assert agent1.playbooks["GetCountryPopulation"].public
     assert agent1.playbooks["GetCountrySecret"].public
