@@ -117,9 +117,6 @@ This method came from cache.
                 compiled_program_paths=[str(cache_file)],
             )
 
-            # Initialize the program (this should create agent classes with source tracking)
-            program.initialize()
-
             # Verify we have the CachedAgent
             assert "CachedAgent" in program.agent_klasses
             print("✅ Found agent: CachedAgent")
