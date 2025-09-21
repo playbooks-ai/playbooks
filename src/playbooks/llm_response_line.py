@@ -30,7 +30,7 @@ class LLMResponseLine:
         self.exit_program = False
         self.return_value = None
         self.is_thinking = False
-        self.vars = Variables(event_bus)
+        self.vars = Variables(event_bus, agent.id)
         self.parse_line(self.text)
 
     def parse_line(self, line: str):

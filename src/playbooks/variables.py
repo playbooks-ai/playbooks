@@ -77,12 +77,13 @@ class Variables:
     def __len__(self) -> int:
         return len(self.variables)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self, include_private: bool = False) -> Dict[str, Any]:
         return {
             name: variable.value
             for name, variable in self.variables.items()
-            if variable.value is not None and not variable.name.startswith("$_")
+            if variable.value is not None
+            and (include_private or not variable.name.startswith("$_"))
         }
 
     def __repr__(self) -> str:
-        return f"Variables({self.to_dict()})"
+        return f"Variables({self.to_dict(include_private=True)})"

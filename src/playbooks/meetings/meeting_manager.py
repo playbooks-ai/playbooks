@@ -468,7 +468,7 @@ class MeetingManager:
         self.agent.state.call_stack.add_llm_message(meeting_msg)
 
         # Check if agent is busy (has active call stack)
-        if len(self.agent.state.call_stack.frames) > 0:
+        if self.agent.state.variables["$_busy"].value == "true":
             log = f"Rejecting meeting {meeting_id} - agent is busy"
             self.agent.state.session_log.append(log)
             meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)

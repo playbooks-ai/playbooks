@@ -72,6 +72,7 @@ async def SetVar(name: str, value):
         name = f"${name}"
     agent.state.variables[name] = value
     return value
+
 ```        
 '''
 
@@ -91,6 +92,17 @@ hidden: true
 - If $expression is not valid Python syntax and is a natural language instruction
     - Attempt to convert it to valid Python syntax. If ambiguous or not known how to convert, leave it as is.
 - Return description with any converted placeholders. No other changes to description allowed.
+
+## MessageProcessingEventLoop
+hidden: true
+
+### Steps
+- Loop forever
+    - Set $_busy = False
+    - WaitForMessage("*")
+    - Here we will decide if any playbook should be triggered. Carefully consider recent messages received and the current state. Now go through available triggers listed above, and think deeply about whether any should be triggered. 
+    - If any playbook should be triggered, set $_busy = True and output an appropriate trig? line.
+    - If a playbook was executed, look at the message that was received and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
 """
 
     @staticmethod

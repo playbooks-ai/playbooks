@@ -110,6 +110,8 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         # Add to current frame context if available
         if hasattr(self, "state") and self.state.call_stack.peek():
             current_frame = self.state.call_stack.peek()
+            if current_frame.playbook == "Say":
+                current_frame = self.state.call_stack.frames[-2]
             target_agent = self.program.agents_by_id.get(target_agent_id)
             target_name = (
                 str(target_agent)

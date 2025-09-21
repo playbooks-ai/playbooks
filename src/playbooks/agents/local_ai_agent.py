@@ -74,6 +74,9 @@ class LocalAIAgent(AIAgent):
         python_playbooks = PythonPlaybook.create_playbooks_from_h1(
             h1, namespace_manager
         )
+        for playbook in python_playbooks.values():
+            playbook.source_file_path = h1.get("source_file_path")
+            playbook.agent_name = klass
         playbooks.update(python_playbooks)
 
         if not playbooks:

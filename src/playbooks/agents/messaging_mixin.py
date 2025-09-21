@@ -60,7 +60,7 @@ class MessagingMixin:
                     first_message_time = message.created_at.timestamp()
 
                 # Check if we should release the buffer
-                if self._should_release_buffer(
+                if release_buffer or self._should_release_buffer(
                     wait_for_message_from, message, first_message_time, buffer_timeout
                 ):
                     release_buffer = True
@@ -70,7 +70,7 @@ class MessagingMixin:
                     release_buffer = True
                     break
             if release_buffer:
-                return self._process_collected_messages(num_messages_to_process)
+                return await self._process_collected_messages(num_messages_to_process)
 
             # Wait for new messages or timeout
             try:
@@ -81,7 +81,11 @@ class MessagingMixin:
                 pass
 
     def _should_release_buffer(
-        self, source: str, message, first_message_time: float, buffer_timeout: float
+        self,
+        source: str,
+        message: Message,
+        first_message_time: float,
+        buffer_timeout: float,
     ) -> bool:
         """Determine if we should release the buffer now.
 
@@ -97,6 +101,13 @@ class MessagingMixin:
         time_elapsed = time.time() - first_message_time if first_message_time else 0
 
         if source.startswith("meeting "):
+            # if the message mentions me, release immediately
+            if self.id.lower() in message.content.lower():
+                return True
+
+            if self.name.lower() in message.content.lower():
+                return True
+
             # Meeting: always wait full 5s to accumulate chatter
             return time_elapsed >= buffer_timeout
         else:
@@ -106,14 +117,16 @@ class MessagingMixin:
                 or message.sender_id == "human"
                 or source == "*"
             )
+            sent_directly_to_me = message.recipient_id == self.id
             if (
                 target_source_message
+                or sent_directly_to_me
                 or message.content == EOM
                 or time_elapsed >= buffer_timeout
             ):
                 return True
 
-    def _process_collected_messages(
+    async def _process_collected_messages(
         self, num_messages_to_process: int = None
     ) -> List[Message]:
         """Process and format collected messages.
@@ -137,20 +150,25 @@ class MessagingMixin:
             if msg.content != EOM
         ]
 
-        messages_str = []
-        for message in messages:
-            messages_str.append(
-                f"Received message from {message.sender_klass}(agent {message.sender_id}): {message.content}"
-            )
-
-        # Use the first sender agent for the semantic message type
-        sender_agent = messages[0].sender_klass if messages else None
-        agent_comm_msg = AgentCommunicationLLMMessage(
-            "\n".join(messages_str), sender_agent=sender_agent, target_agent=self.klass
-        )
-        self.state.call_stack.add_llm_message(agent_comm_msg)
-
         # Remove processed messages from buffer
         self._message_buffer = self._message_buffer[num_messages_to_process:]
+
+        if self.state.call_stack.is_empty():
+            await self.execute_playbook("ProcessMessages", messages=messages)
+        else:
+            messages_str = []
+            for message in messages:
+                messages_str.append(
+                    f"Received message from {message.sender_klass}(agent {message.sender_id}): {message.content}"
+                )
+
+            # Use the first sender agent for the semantic message type
+            sender_agent = messages[0].sender_klass if messages else None
+            agent_comm_msg = AgentCommunicationLLMMessage(
+                "\n".join(messages_str),
+                sender_agent=sender_agent,
+                target_agent=self.klass,
+            )
+            self.state.call_stack.add_llm_message(agent_comm_msg)
 
         return messages

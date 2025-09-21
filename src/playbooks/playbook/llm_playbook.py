@@ -44,23 +44,6 @@ class LLMPlaybook(LocalPlaybook):
             if child.get("type") == "h2":
                 playbook = cls.from_h2(child)
 
-                # Create Python wrapper for the LLM playbook
-                def create_wrapper(pb):
-                    async def wrapper(*args, **kwargs):
-                        # This wrapper will be replaced with agent-specific version during agent initialization
-                        # For now, try to get agent from globals as fallback
-                        agent = wrapper.__globals__.get("agent")
-                        if agent is None:
-                            raise RuntimeError(
-                                f"No agent available for playbook {pb.name}"
-                            )
-                        return await pb.execute_with_agent(agent, *args, **kwargs)
-
-                    return wrapper
-
-                playbook.func = create_wrapper(playbook)
-                playbook.func.__globals__.update(namespace_manager.namespace)
-
                 # Add call-through wrapper to namespace if agent is available
                 agent = namespace_manager.namespace.get("agent")
                 if agent is not None:
@@ -74,8 +57,8 @@ class LLMPlaybook(LocalPlaybook):
     def create_agent_specific_function(self, agent):
         """Create an agent-specific function that bypasses globals lookup."""
 
-        async def agent_specific_wrapper(*args, **kwargs):
-            return await self.execute_with_agent(agent, *args, **kwargs)
+        async def agent_specific_wrapper(*args, _agent=agent, **kwargs):
+            return await self.execute_with_agent(_agent, *args, **kwargs)
 
         return agent_specific_wrapper
 

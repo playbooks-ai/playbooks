@@ -163,7 +163,7 @@ class Playbook(ABC):
             Callable: A function that routes calls to agent.execute_playbook()
         """
 
-        def call_through_agent(*args, **kwargs):
-            return agent.execute_playbook(self.name, args, kwargs)
+        def call_through_agent(*args, _agent=agent, **kwargs):
+            return _agent.execute_playbook(self.name, args, kwargs)
 
         return call_through_agent

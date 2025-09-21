@@ -129,7 +129,7 @@ class CallStackFrame:
         self.llm_messages.append(message)
 
     def __repr__(self) -> str:
-        base_repr = str(self.instruction_pointer)
+        base_repr = self.instruction_pointer.to_compact_str()
         if self.is_meeting and self.meeting_id:
             return f"{base_repr}[meeting {self.meeting_id}]"
         return base_repr
