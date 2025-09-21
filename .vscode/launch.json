@@ -5,21 +5,6 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python Debugger: Attach using Process Id",
-      "type": "debugpy",
-      "request": "attach",
-      "processId": "${command:pickProcess}"
-    },
-    {
-      "type": "playbooks",
-      "request": "launch",
-      "name": "Launch Playbooks Program",
-      "program": "${file}",
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal",
-      "stopOnEntry": false
-    },
-    {
       "name": "Command line agent chat",
       "type": "debugpy",
       "request": "launch",

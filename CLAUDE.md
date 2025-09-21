@@ -136,31 +136,31 @@ cp .env.example .env
 ### Running Tests
 ```bash
 # Run all tests
-pytest
+poetry run pytest
 
 # Run specific test file
-pytest tests/unit/playbooks/test_compiler.py
+poetry run pytest tests/unit/playbooks/test_compiler.py
 
 # Run tests with coverage
-pytest --cov=src/playbooks --cov-report=html
+poetry run pytest --cov=src/playbooks --cov-report=html
 
 # Run tests matching a pattern
-pytest -k "test_compilation"
+poetry run pytest -k "test_compilation"
 
 # Run tests in verbose mode
-pytest -v
+poetry run pytest -v
 ```
 
 ### Code Quality
 ```bash
 # Format code with black
-black .
+poetry run black .
 
 # Run linting checks
-ruff check .
+poetry run ruff check .
 
 # Fix linting issues automatically
-ruff check . --fix
+poetry run ruff check . --fix
 ```
 
 ### Building & Distribution
@@ -312,11 +312,11 @@ cp .env.example .env
 # Edit .env with your API keys
 
 # Run tests to verify setup
-pytest
+poetry run pytest
 
 # Format and lint code before committing
-black .
-ruff check . --fix
+poetry run black .
+poetry run ruff check . --fix
 ```
 
 ### Code Standards
