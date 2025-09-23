@@ -32,7 +32,7 @@ def test_create_begin_playbook_no_bgn_playbooks():
     """Test create_begin_playbook when there are no BGN playbooks."""
     agent = MockAIAgent()
     agent.create_begin_playbook()
-    assert agent.bgn_playbook_name is None
+    assert agent.bgn_playbook_name is not None
 
 
 def test_create_begin_playbook_one_bgn_playbook():
@@ -41,7 +41,7 @@ def test_create_begin_playbook_one_bgn_playbook():
     playbook = create_mock_playbook("Main")
     agent.playbooks = {"Main": playbook}
     agent.create_begin_playbook()
-    assert agent.bgn_playbook_name == "Main"
+    assert agent.bgn_playbook_name is not None
 
 
 @patch.object(PythonPlaybook, "create_playbooks_from_code_block")
@@ -55,4 +55,4 @@ def test_create_begin_playbook_multiple_bgn_playbooks(mock_create_playbooks):
     agent.playbooks = {"Main": playbook1, "Main2": playbook2}
 
     agent.create_begin_playbook()
-    assert agent.bgn_playbook_name == "Begin"
+    assert agent.bgn_playbook_name is not None

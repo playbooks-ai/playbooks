@@ -1,6 +1,7 @@
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict
 
+from playbooks.debug_logger import debug
 from playbooks.events import AgentPausedEvent
 from playbooks.utils.spec_utils import SpecUtils
 
@@ -76,6 +77,9 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
                 and hasattr(self.state, "owned_meetings")
                 and meeting_id in self.state.owned_meetings
             ):
+                debug(
+                    f"{str(self)}: Broadcasting to meeting {meeting_id} as owner: {message}"
+                )
                 await self.meeting_manager.broadcast_to_meeting_as_owner(
                     meeting_id, message
                 )
@@ -84,11 +88,18 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
                 and hasattr(self.state, "joined_meetings")
                 and meeting_id in self.state.joined_meetings
             ):
+                debug(
+                    f"{str(self)}: Broadcasting to meeting {meeting_id} as participant: {message}"
+                )
                 await self.meeting_manager.broadcast_to_meeting_as_participant(
                     meeting_id, message
                 )
             else:
                 # Error: not in this meeting
+                debug(f"{str(self)}: state {self.state.joined_meetings}")
+                debug(
+                    f"{str(self)}: Cannot broadcast to meeting {meeting_id} - not a participant"
+                )
                 self.state.session_log.append(
                     f"Cannot broadcast to meeting {meeting_id} - not a participant"
                 )

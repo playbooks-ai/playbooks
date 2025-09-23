@@ -64,7 +64,13 @@ class PlaybookCallResult(SessionLogItem):
         return "\n".join(output)
 
     def to_log_full(self) -> str:
-        return self.to_log(str(self.result) if self.result else "")
+        # if result is a list, join str() of items with newlines
+        result_str = None
+        if isinstance(self.result, list):
+            result_str = "\n".join([str(item) for item in self.result])
+        else:
+            result_str = str(self.result)
+        return self.to_log(result_str if result_str else "")
 
     def to_log_compact(self) -> str:
         return self.to_log(

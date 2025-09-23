@@ -7,6 +7,7 @@ import time
 from typing import List
 
 from ..constants import EOM, EXECUTION_FINISHED
+from ..debug_logger import debug
 from ..exceptions import ExecutionFinished
 from ..llm_messages import AgentCommunicationLLMMessage
 from ..message import Message
@@ -26,13 +27,16 @@ class MessagingMixin:
         This is the single entry point for all incoming messages.
         """
         if hasattr(self, "meeting_manager") and self.meeting_manager:
+            debug(f"{str(self)}: Adding message to meeting manager: {message}")
             message_handled = await self.meeting_manager._add_message_to_buffer(message)
             if message_handled:
                 return
 
         # Regular messages go to buffer
+        debug(f"{str(self)}: Adding message to buffer: {message}")
         self._message_buffer.append(message)
         # Wake up any agents waiting for messages
+        debug(f"{str(self)}: Waking up any threads waiting for messages")
         self._message_event.set()
 
     async def WaitForMessage(self, wait_for_message_from: str) -> List[Message]:
@@ -45,6 +49,7 @@ class MessagingMixin:
             Collected messages as string
         """
         while True:
+            debug(f"{str(self)}: Waiting for message from {wait_for_message_from}")
             if self.program.execution_finished:
                 raise ExecutionFinished(EXECUTION_FINISHED)
 
@@ -60,6 +65,9 @@ class MessagingMixin:
                     first_message_time = message.created_at.timestamp()
 
                 # Check if we should release the buffer
+                debug(
+                    f"{str(self)}: Checking if we should release the buffer for message {message}"
+                )
                 if release_buffer or self._should_release_buffer(
                     wait_for_message_from, message, first_message_time, buffer_timeout
                 ):
@@ -70,14 +78,18 @@ class MessagingMixin:
                     release_buffer = True
                     break
             if release_buffer:
+                debug(f"{str(self)}: Releasing buffer")
                 return await self._process_collected_messages(num_messages_to_process)
 
             # Wait for new messages or timeout
             try:
+                debug(f"{str(self)}: Waiting for new messages")
                 await asyncio.wait_for(self._message_event.wait(), timeout=5)
+                debug(f"{str(self)}: New messages received")
                 self._message_event.clear()
             except asyncio.TimeoutError:
                 # Loop back to process received messages
+                debug(f"{str(self)}: Timeout waiting for new messages")
                 pass
 
     def _should_release_buffer(
@@ -140,6 +152,7 @@ class MessagingMixin:
         if not num_messages_to_process:
             num_messages_to_process = len(self._message_buffer)
 
+        debug(f"{str(self)}: Processing {num_messages_to_process} messages")
         if not num_messages_to_process:
             return ""
 
@@ -161,7 +174,7 @@ class MessagingMixin:
                 messages_str.append(
                     f"Received message from {message.sender_klass}(agent {message.sender_id}): {message.content}"
                 )
-
+            debug(f"{str(self)}: Messages to process: {messages_str}")
             # Use the first sender agent for the semantic message type
             sender_agent = messages[0].sender_klass if messages else None
             agent_comm_msg = AgentCommunicationLLMMessage(

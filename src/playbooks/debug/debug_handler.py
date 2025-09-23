@@ -115,7 +115,7 @@ class DebugHandler:
                         "lineNumber": instruction_pointer.line_number,
                         "playbook": instruction_pointer.playbook,
                         "sourceLineNumber": instruction_pointer.source_line_number,
-                        "filePath": instruction_pointer.source_file_path,
+                        "filePath": str(instruction_pointer.source_file_path),
                     },
                 }
 

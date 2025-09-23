@@ -6,6 +6,7 @@ import socket
 import sys
 import traceback
 from logging import error
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..debug_logger import debug
@@ -233,6 +234,7 @@ class DebugServer:
 
         except Exception as e:
             debug("Message handling error", error=str(e))
+            debug(traceback.format_exc())
         finally:
             # debug(
             #     f"[MESSAGE_HANDLER] Exiting - debug_session_active={self.debug_session_active}, has_socket={self.client_socket is not None}"
@@ -387,7 +389,11 @@ class DebugServer:
                     stack_trace.append(
                         {
                             "name": name,
-                            "file": frame.instruction_pointer.source_file_path,
+                            "file": str(
+                                Path(
+                                    frame.instruction_pointer.source_file_path
+                                ).absolute()
+                            ),
                             "playbook": frame.instruction_pointer.playbook,
                             "playbook_line_number": frame.instruction_pointer.line_number,
                             "source_line_number": frame.instruction_pointer.source_line_number,
@@ -432,6 +438,7 @@ class DebugServer:
             content = f"[green]Response: {message.get('command')}[/green]"
         else:
             content = f"[purple]Message: {message.get('type')}[/purple]"
+        debug(str(message))
         debug(
             f"{content}: {json.dumps(message, indent=2)}",
         )

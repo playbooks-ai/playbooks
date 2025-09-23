@@ -176,13 +176,13 @@ class ProgramAgentsCommunicationMixin:
         meeting_id: str = None,
     ):
         """Routes a message to receiver agent(s) via the runtime."""
-        # debug(
-        #     "Routing message",
-        #     sender_id=sender_id,
-        #     receiver_spec=receiver_spec,
-        #     message_type=message_type.value if message_type else None,
-        #     message_length=len(message) if message else 0,
-        # )
+        debug(
+            "Routing message",
+            sender_id=sender_id,
+            receiver_spec=receiver_spec,
+            message_type=message_type.value if message_type else None,
+            message_length=len(message) if message else 0,
+        )
         recipient_id = SpecUtils.extract_agent_id(receiver_spec)
         recipient = self.agents_by_id.get(recipient_id)
         recipient_klass = recipient.klass if recipient else None
@@ -201,8 +201,10 @@ class ProgramAgentsCommunicationMixin:
         receiver_agent = self.agents_by_id.get(
             SpecUtils.extract_agent_id(receiver_spec)
         )
+        debug(f"Receiver agent: {receiver_agent}")
         if receiver_agent:
             # Send to all agents using event-driven message handling
+            debug(f"Sending message to receiver agent: {receiver_agent}")
             await receiver_agent._add_message_to_buffer(message)
 
 

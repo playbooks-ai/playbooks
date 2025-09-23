@@ -30,3 +30,12 @@ class Message:
 
     id: str = uuid.uuid4()
     created_at: datetime = datetime.now()
+
+    def __str__(self):
+        meeting_message = f", in meeting {self.meeting_id}" if self.meeting_id else ""
+        message_type = (
+            "[MEETING INVITATION] "
+            if self.message_type == MessageType.MEETING_INVITATION
+            else ""
+        )
+        return f"{message_type}Message from {self.sender_klass}(agent {self.sender_id}) to {self.recipient_klass}(agent {self.recipient_id}){meeting_message}: {self.content}"

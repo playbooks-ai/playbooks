@@ -13,6 +13,7 @@ from playbooks.llm_messages import (
 )
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import get_messages_for_prompt
+from playbooks.utils.token_counter import get_messages_token_count
 
 if TYPE_CHECKING:
     from playbooks.execution_state import ExecutionState
@@ -168,16 +169,18 @@ class InterpreterPrompt:
             call_stack_llm_messages
         )
 
-        # Log compaction stats
+        # Log compaction stats using token counts
         original_dict_messages = [
             msg.to_full_message() for msg in call_stack_llm_messages
         ]
-        original_size = len(str(original_dict_messages))
-        compacted_size = len(str(compacted_dict_messages))
-        compression_ratio = compacted_size / original_size if original_size > 0 else 1.0
+        original_tokens = get_messages_token_count(messages + original_dict_messages)
+        compacted_tokens = get_messages_token_count(messages + compacted_dict_messages)
+        compression_ratio = (
+            compacted_tokens / original_tokens if original_tokens > 0 else 1.0
+        )
 
         debug(
-            f"LLM Context Compaction: {original_size} -> {compacted_size} chars ({compression_ratio:.2%})"
+            f"LLM Context Compaction: {original_tokens} -> {compacted_tokens} tokens ({compression_ratio:.2%})"
         )
 
         messages.extend(compacted_dict_messages)

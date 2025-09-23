@@ -40,6 +40,7 @@ class MeetingMessageHandler:
             return False
 
         meeting_id = agent_message.meeting_id
+        meeting_id = meeting_id.replace("meeting ", "")
         if not meeting_id or meeting_id not in agent.state.owned_meetings:
             return False
 

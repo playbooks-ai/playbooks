@@ -61,6 +61,10 @@ async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
     return await agent.invite_to_meeting(meeting_id, attendees)
 
+@playbook(hidden=True)
+async def AcceptMeetingInvitation(meeting_id: str, inviter_id: str, topic: str, meeting_playbook_name: str):
+    return await agent.meeting_manager._accept_meeting_invitation(meeting_id, inviter_id, topic, meeting_playbook_name)
+
 @playbook
 async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
     return await agent.load_file(file_path, inline, silent)
@@ -98,11 +102,17 @@ hidden: true
 
 ### Steps
 - Loop forever
-    - Set $_busy = False
-    - WaitForMessage("*")
-    - Here we will decide if any playbook should be triggered. Carefully consider recent messages received and the current state. Now go through available triggers listed above, and think deeply about whether any should be triggered. 
-    - If any playbook should be triggered, set $_busy = True and output an appropriate trig? line.
-    - If a playbook was executed, look at the message that was received and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
+  - Set $_busy = False
+  - WaitForMessage("*")
+  - If you received a MEETING INVITATION
+    - Find a suitable meeting playbook
+    - If meeting playbook is found
+      - Set $_busy = True
+      - AcceptMeetingInvitation(meeting_id, inviter_id, topic, meeting_playbook_name)
+      - Continue
+  - Here we will decide if any playbook should be triggered. Carefully consider recent messages received and the current state. Now go through available triggers listed above, and think deeply about whether any should be triggered. 
+  - If any playbook should be triggered, set $_busy = True and output an appropriate trig? line.
+  - If a playbook was executed, look at the message that was received and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
 """
 
     @staticmethod

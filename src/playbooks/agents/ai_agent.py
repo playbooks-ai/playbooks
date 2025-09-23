@@ -154,6 +154,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             self.namespace_manager.namespace[playbook_name] = call_through
             playbook.agent_name = str(self)
 
+        for playbook_name, playbook in self.playbooks.items():
             if (
                 hasattr(playbook, "create_agent_specific_function")
                 and not playbook.func
@@ -161,7 +162,11 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                 playbook.func = playbook.create_agent_specific_function(self)
             else:
                 playbook.func = copy_func(
-                    playbook.func, globals=self.namespace_manager.namespace
+                    playbook.func,
+                    globals={
+                        **playbook.func.__globals__,
+                        **self.namespace_manager.namespace,
+                    },
                 )
 
     def create_agent_wrapper(self, agent, func):
@@ -255,7 +260,7 @@ async def {self.bgn_playbook_name}() -> None:
             f.flush()
             file_path = f.name
 
-        debug("BGN Playbook Code Block: " + code_block)
+        # debug("BGN Playbook Code Block: " + code_block)
         new_playbook = PythonPlaybook.create_playbooks_from_code_block(
             code_block,
             self.namespace_manager,
@@ -617,6 +622,10 @@ async def {self.bgn_playbook_name}() -> None:
 
         try:
             # Handle meeting playbook initialization (only for new meetings, not when joining existing ones)
+            debug(f"{str(self)}: Handling meeting playbook execution: {playbook_name}")
+            debug(
+                f"{str(self)}: Current meeting from call stack: {self.meeting_manager.get_current_meeting_from_call_stack()}"
+            )
             if (
                 playbook
                 and playbook.meeting
@@ -637,7 +646,6 @@ async def {self.bgn_playbook_name}() -> None:
 
                 meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
                 self.state.call_stack.add_llm_message(meeting_msg)
-
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
             await self._post_execute(call, error_msg, langfuse_span)
