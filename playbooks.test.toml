@@ -8,4 +8,4 @@ enabled = true
 path = ".llm_cache_test"
 
 [langfuse]
-enabled = true
+enabled = false
