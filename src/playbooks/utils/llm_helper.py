@@ -353,11 +353,12 @@ def get_completion(
             and full_response is not None
             and len(full_response) > 0
         ):
+            full_response = str(full_response)
             cache.set(cache_key, full_response)
 
         if langfuse_generation and not error_occurred:
             # Only update if no exception occurred
-            langfuse_generation.end(output=str(full_response))
+            langfuse_generation.end(output=full_response)
             LangfuseHelper.flush()
 
 
