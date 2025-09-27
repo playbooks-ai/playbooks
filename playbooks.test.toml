@@ -1,4 +1,6 @@
 # Test environment overrides
+debug = false
+
 [model]
 name = "claude-sonnet-4-20250514"
 

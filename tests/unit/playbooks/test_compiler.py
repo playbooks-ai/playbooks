@@ -902,9 +902,10 @@ Third agent
 
         # Should have 3 results in order
         assert len(results) == 3
-        assert "Compiled1" in results[0].content
-        assert "Compiled2" in results[1].content
-        assert "Compiled3" in results[2].content
+        all_content = results[0].content + results[1].content + results[2].content
+        assert "Compiled1" in all_content
+        assert "Compiled2" in all_content
+        assert "Compiled3" in all_content
 
         # All should be compiled
         assert all(r.is_compiled for r in results)

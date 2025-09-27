@@ -59,7 +59,7 @@ async def LoadArtifact(artifact_name: str):
 @playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
-    return await agent.invite_to_meeting(meeting_id, attendees)
+    return await agent.meeting_manager.InviteToMeeting(meeting_id, attendees)
 
 @playbook(hidden=True)
 async def AcceptMeetingInvitation(meeting_id: str, inviter_id: str, topic: str, meeting_playbook_name: str):

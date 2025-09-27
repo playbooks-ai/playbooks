@@ -357,5 +357,4 @@ Playbooks Assembly Language v{version}
             + compiled
         )
 
-        print(compiled)
         return compiled
