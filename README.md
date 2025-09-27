@@ -123,6 +123,10 @@ The extension provides debugging capabilities for playbooks programs, making it 
 
 Visit our [documentation](https://playbooks-ai.github.io/playbooks-docs/) for comprehensive guides, tutorials, and reference materials.
 
+## Changelog
+
+See [CHANGELOG.md](CHANGELOG.md) for the latest updates.
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
@@ -138,3 +142,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 <a href="https://github.com/playbooks-ai/playbooks/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=playbooks-ai/playbooks" />
 </a>
+
