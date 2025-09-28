@@ -111,6 +111,11 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         ):
             self.state.last_message_target = resolved_target
 
+        if resolved_target == "human":
+            await self.start_streaming_say()
+            await self.stream_say_update(message)
+            await self.complete_streaming_say()
+
         await self.SendMessage(resolved_target, message)
 
     async def SendMessage(self, target_agent_id: str, message: str):
