@@ -66,7 +66,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         pass
 
     # Built-in playbook methods
-    async def Say(self, target: str, message: str):
+    async def Say(self, target: str, message: str, already_streamed: bool = False):
         resolved_target = self.resolve_target(target, allow_fallback=True)
 
         # Handle meeting targets with broadcasting
@@ -111,7 +111,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         ):
             self.state.last_message_target = resolved_target
 
-        if resolved_target == "human":
+        if not already_streamed and resolved_target == "human":
             await self.start_streaming_say()
             await self.stream_say_update(message)
             await self.complete_streaming_say()

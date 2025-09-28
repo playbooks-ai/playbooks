@@ -39,8 +39,8 @@ async def WaitForMessage(source_agent_id: str) -> str | None:
     return await agent.WaitForMessage(source_agent_id)
 
 @playbook
-async def Say(target: str, message: str):
-    await agent.Say(target, message)
+async def Say(target: str, message: str, already_streamed: bool = False):
+    await agent.Say(target, message, already_streamed)
 
 @playbook
 async def CreateAgent(agent_klass: str, **kwargs):

@@ -224,6 +224,8 @@ class PlaybookLLMExecution(LLMExecution):
                         elif playbook_call.playbook_klass == "LoadArtifact":
                             artifacts_to_load.append(playbook_call.args[0])
                         else:
+                            if playbook_call.playbook_klass == "Say":
+                                playbook_call.kwargs["already_streamed"] = True
                             await self.agent.execute_playbook(
                                 playbook_call.playbook_klass,
                                 playbook_call.args,
