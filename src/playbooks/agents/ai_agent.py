@@ -144,7 +144,17 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
     def _setup_isolated_namespace(self):
         """Create isolated namespace with instance-specific agent reference and playbook wrappers."""
         # Create isolated namespace for this instance
-        self.namespace_manager = AgentNamespaceManager()
+        # Preserve class-level namespace if it exists (contains imports from Python code blocks)
+        if (
+            hasattr(self.__class__, "namespace_manager")
+            and self.__class__.namespace_manager
+        ):
+            # Copy the class namespace to preserve imports and module-level variables
+            self.namespace_manager = AgentNamespaceManager(
+                namespace=self.__class__.namespace_manager.namespace.copy()
+            )
+        else:
+            self.namespace_manager = AgentNamespaceManager()
         self.namespace_manager.namespace["agent"] = self
 
         # Set up cross-playbook wrapper functions and bind agent-specific functions

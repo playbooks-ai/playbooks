@@ -77,25 +77,20 @@ class PlaybookLLMExecution(LLMExecution):
 
     async def pre_execute(self, call: PlaybookCall) -> None:
         llm_message = []
+        markdown_for_llm = self.playbook.markdown  # Default to original markdown
+
         # Resolve description placeholders if present
         if self.playbook.description and "{" in self.playbook.description:
-            try:
-                context = ExpressionContext(
-                    agent=self.agent, state=self.agent.state, call=call
-                )
-                resolved_description = await resolve_description_placeholders(
-                    self.playbook.description, context
-                )
+            context = ExpressionContext(
+                agent=self.agent, state=self.agent.state, call=call
+            )
+            resolved_description = await resolve_description_placeholders(
+                self.playbook.description, context
+            )
 
-                markdown_for_llm = update_description_in_markdown(
-                    self.playbook.markdown, resolved_description
-                )
-            except Exception as e:
-                logger.error(
-                    f"Failed to resolve description placeholders for {call.playbook_klass}: {e}"
-                )
-        else:
-            markdown_for_llm = self.playbook.markdown
+            markdown_for_llm = update_description_in_markdown(
+                self.playbook.markdown, resolved_description
+            )
 
         llm_message.append(
             f"{self.playbook.name} playbook implementation:\n\n```md\n{markdown_for_llm}\n```"

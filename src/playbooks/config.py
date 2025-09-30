@@ -4,7 +4,7 @@ Playbooks configuration loader (TOML, env, CLI overrides)
 Locations (same filename for consistency):
 - Project defaults (checked in):        ./playbooks.toml
 - User overrides (per-dev, cross-OS):   $XDG_CONFIG_HOME/playbooks/playbooks.toml
-  (resolved via platformdirs; macOS: ~/Library/Application Support/playbooks/, Windows: %APPDATA%\\playbooks\\)
+  (resolved via platformdirs; Linux: $HOME/.config/playbooks, macOS: ~/Library/Application Support/playbooks/, Windows: %APPDATA%\\playbooks\\)
 
 Profiles:
 - Optional sibling files named playbooks.<profile>.toml next to the base file.

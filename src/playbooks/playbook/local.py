@@ -1,13 +1,12 @@
-import logging
-import traceback
 from abc import abstractmethod
 from typing import Any, Dict, Optional
 
+from rich.console import Console
+
+from playbooks.debug_logger import debug
 from playbooks.exceptions import ExecutionFinished
 
 from .base import Playbook
-
-logger = logging.getLogger(__name__)
 
 
 class LocalPlaybook(Playbook):
@@ -57,20 +56,17 @@ class LocalPlaybook(Playbook):
         Raises:
             Exception: If execution fails
         """
-        logger.debug(
-            f"Executing local playbook {self.name} with args={args}, kwargs={kwargs}"
-        )
+        debug(f"Executing local playbook {self.name} with args={args}, kwargs={kwargs}")
 
         try:
             result = await self._execute_impl(*args, **kwargs)
-            logger.debug(f"Local playbook {self.name} completed successfully")
+            debug(f"Local playbook {self.name} completed successfully")
             return result
         except ExecutionFinished:
             raise
         except Exception as e:
-            logger.error(
-                f"Local playbook {self.name} failed: {str(e)}\n\n{traceback.format_exc()}"
-            )
+            error_msg = f"Local playbook {self.name} failed: {str(e)}"
+            Console(stderr=True).print(f"[bold red]ERROR:[/bold red] {error_msg}")
             return f"Error: {str(e)}"
 
     @abstractmethod

@@ -330,10 +330,16 @@ class ExpressionContext:
                 "abs": abs,
                 "round": round,
             }
+
+            # Merge namespace into globals with safe builtins
+            # This is needed so that imported modules (like date) work correctly
+            eval_globals = {"__builtins__": safe_builtins}
+            eval_globals.update(namespace)
+
             result = eval(
                 compile(ast_node, "<expression>", "eval"),
-                {"__builtins__": safe_builtins},
-                namespace,
+                eval_globals,
+                {},  # Empty locals, everything is in globals
             )
 
             # Handle coroutines by awaiting them if possible, otherwise return the coroutine
@@ -347,13 +353,20 @@ class ExpressionContext:
         except ExpressionError:
             raise
         except Exception as e:
-            raise ExpressionError(expr, f"{type(e).__name__}: {e}")
+            # Format as simple error without redundant "Expression error" prefix
+            raise ExpressionError(expr, f"{type(e).__name__}: {e}") from None
 
     def _create_namespace(self) -> Dict[str, Any]:
         """Create namespace for expression evaluation."""
         namespace = {}
 
-        # Add all resolvable variables
+        # Start with agent's namespace manager (includes imports and functions)
+        if hasattr(self.agent, "namespace_manager") and hasattr(
+            self.agent.namespace_manager, "namespace"
+        ):
+            namespace.update(self.agent.namespace_manager.namespace)
+
+        # Add all resolvable variables (may override namespace items)
         available_vars = self._get_available_variables()
         for var_name in available_vars:
             try:
@@ -361,14 +374,6 @@ class ExpressionContext:
             except (KeyError, RecursionError):
                 # Skip variables that can't be resolved
                 continue
-
-        # Add playbook functions from agent namespace
-        if hasattr(self.agent, "namespace_manager") and hasattr(
-            self.agent.namespace_manager, "namespace"
-        ):
-            for name, value in self.agent.namespace_manager.namespace.items():
-                if callable(value) and name not in namespace:
-                    namespace[name] = value
 
         return namespace
 
@@ -509,14 +514,22 @@ async def resolve_description_placeholders(
                 result_desc[: match.start()] + replacement + result_desc[match.end() :]
             )
         except Exception as e:
+            # Extract the root error message, avoiding nested ExpressionError wrapping
+            if isinstance(e, ExpressionError):
+                # Just re-raise as-is to avoid double-wrapping
+                raise
+            else:
+                error_detail = f"{type(e).__name__}: {e}"
+
             # Calculate position for error context
             pos = match.start()
             line_num = description[:pos].count("\n") + 1
             col_num = pos - description.rfind("\n", 0, pos)
+
             raise ExpressionError(
                 expr,
-                f"Error in placeholder at line {line_num}, column {col_num}: {type(e).__name__}: {e}",
-            )
+                f"{error_detail} (at line {line_num}, column {col_num})",
+            ) from None
 
     return result_desc
 
@@ -736,7 +749,11 @@ class ExpressionError(Exception):
 
     def _format_message(self) -> str:
         """Format error message with context."""
-        msg = f"Expression error in '{self.expr}': {self.message}"
+        # Don't include "Expression error in" if message already has it
+        if self.message.startswith("Expression error in"):
+            return self.message
+
+        msg = f"Error evaluating '{self.expr}': {self.message}"
         if self.line is not None:
             msg += f" at line {self.line}"
             if self.column is not None:
