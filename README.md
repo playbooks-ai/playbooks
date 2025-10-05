@@ -1,8 +1,8 @@
 <div align="center">
    <h1>
    <picture>
-      <img alt="Playbooks AI" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo-dark.png#gh-dark-mode-only" width=200 height=200>
-      <img alt="Playbooks AI" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png#gh-light-mode-only" width=200 height=200>
+      <source media="(prefers-color-scheme: dark)" srcset="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo-dark.png">
+      <img alt="Playbooks AI" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png" width=200 height=200>
    </picture>
   <h2 align="center">Playbooks AI<br/>LLM is your new CPU<br/>Welcome to Software 3.0</h2>
 </div>
