@@ -1,10 +1,10 @@
 <div align="center">
    <h1>
    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo-dark.png">
-      <img alt="Text changing depending on mode. Light: 'So light!' Dark: 'So dark!'" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png" width=200 height=200>
+      <img alt="Playbooks AI" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo-dark.png#gh-dark-mode-only" width=200 height=200>
+      <img alt="Playbooks AI" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png#gh-light-mode-only" width=200 height=200>
    </picture>
-  <h2 align="center">Welcome to Software 3.0, where LLM is your new CPU</h2>
+  <h2 align="center">Playbooks AI<br/>LLM is your new CPU<br/>Welcome to Software 3.0</h2>
 </div>
 
 <div align="center">
@@ -28,7 +28,7 @@ Stop writing prompts and hoping that the LLM will follow them faithfully. Instea
 
 Playbooks is an innovative framework for building and executing AI agents using "playbooks" – structured workflows defined in natural language and Python code. Created by [Amol Kelkar](https://www.linkedin.com/in/amol-kelkar/), the framework is part of the world's first Software 3.0 tech stack, Playbooks AI. It includes a **new programming language** (markdown-formatted .pb files) that are compiled to Playbooks Assembly Language (.pbasm files), that are then executed by the Playbooks Runtime.
 
-Unlike other AI agent frameworks, **Playbooks programs are highly readable**. Business users can understand, tweak, and approve agent behavior specified in natural language; while developers benefit from the flexibility of running Python code on CPU and natural lanuage code on LLM, on the same call stack, and with full observability and control.
+Unlike other AI agent frameworks, **Playbooks programs are highly readable**. Business users can understand, change, and approve agent behavior specified in natural language; while developers benefit from the flexibility of running Python code on CPU and natural lanuage code on LLM, on the same call stack, and with full observability and control.
 
 ---
 
@@ -69,23 +69,32 @@ async def process_countries(countries: List[str]):
 - Return an unusual historical fact about $country
 ````
 
-Run this program:
-
-### Using Playbooks CLI
-```bash
-# Python 3.12+
+### Install Playbooks
+```
+# You will need Python 3.12+ and your Anthropic API key
 pip install playbooks
+```
+
+### Run using Playbooks CLI
+```bash
 ANTHROPIC_API_KEY=sk-ant-... playbooks run country-facts.pb
 ```
 
-### Programmatic
+### Run in Playbooks Playground
+```bash
+ANTHROPIC_API_KEY=sk-ant-... playbooks playground
+```
+Put your program path and click "Run Program". You can turn on "Execution Logs" to see the program execution details.
+
+### Run programmatically
    ```python
    from playbooks import Playbooks
 
-   pb = Playbooks(["hello.pb"])
+   pb = Playbooks(["country-facts.pb"]) # absolute or relative path
    await pb.initialize()
    await pb.program.run_till_exit()
    ```
+
 ### Step debugging in VSCode (Optional)
 
 Install the **Playbooks Language Support** extension for Visual Studio Code:
