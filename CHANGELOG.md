@@ -52,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Typed Message System** - `LLMMessage` type for better prompt management
 - **Playbook Description Placeholders** - Dynamic placeholder resolution in descriptions
 - **Deterministic Cache Keys** - Consistent LLM caching across different environments
+- **Return values** - Use expression engine for parsing return values to support expression like `Return[$amount * 2]`
 
 #### Debugging Experience
 - **VSCode Integration** - Enhanced step debugging with accurate source line mapping
