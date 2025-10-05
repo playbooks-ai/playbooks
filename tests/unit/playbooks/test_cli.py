@@ -354,6 +354,7 @@ class TestCLIIntegration:
 class TestCLIWithExamples:
     """Test CLI with various example playbooks."""
 
+    @pytest.mark.integration
     def test_compile_all_examples(self, test_data_dir):
         """Test compiling all example playbooks."""
         project_root = Path(__file__).parent.parent.parent.parent

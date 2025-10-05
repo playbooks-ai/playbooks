@@ -1,22 +1,23 @@
 import ast
-import json
 import re
 from typing import TYPE_CHECKING, Any, List
 
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.playbook_call import PlaybookCall
+from playbooks.utils.async_init_mixin import AsyncInitMixin
 from playbooks.utils.spec_utils import SpecUtils
 from playbooks.variables import Variables
 
-from .utils.expression_engine import parse_playbook_call
+from .utils.expression_engine import ExpressionContext, parse_playbook_call
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
 
 
-class LLMResponseLine:
+class LLMResponseLine(AsyncInitMixin):
     def __init__(self, text: str, event_bus: EventBus, agent: "LocalAIAgent"):
+        super().__init__()
         self.text = text
         self.event_bus = event_bus
         self.agent = agent
@@ -31,9 +32,13 @@ class LLMResponseLine:
         self.return_value = None
         self.is_thinking = False
         self.vars = Variables(event_bus, agent.id)
-        self.parse_line(self.text)
 
-    def parse_line(self, line: str):
+        self.expression_context = ExpressionContext(agent, agent.state, None)
+
+    async def _async_init(self):
+        await self.parse_line()
+
+    async def parse_line(self):
         # Extract Step metadata, e.g., `Step["auth_step"]`
         steps = re.findall(r'`Step\["([^"]+)"\]`', self.text)
 
@@ -85,7 +90,9 @@ class LLMResponseLine:
             elif expression.startswith('"') and expression.endswith('"'):
                 self.return_value = expression[1:-1]
             else:
-                self.return_value = json.loads(match.group(1))
+                self.return_value = self.expression_context.evaluate_expression(
+                    match.group(1)
+                )
 
         # Extract playbook calls enclosed in backticks.
         # e.g., `MyPlaybook(arg1, arg2, kwarg1="value")` or `Playbook(key1=$var1)`

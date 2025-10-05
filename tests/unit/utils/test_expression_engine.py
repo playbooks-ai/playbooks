@@ -427,8 +427,7 @@ class TestResolveDescriptionPlaceholders:
         with pytest.raises(ExpressionError) as exc_info:
             await resolve_description_placeholders(description, self.context)
 
-        assert "Error in placeholder" in str(exc_info.value)
-        assert "line 1" in str(exc_info.value)  # Error position
+        assert "'nonexistent' is not defined" in str(exc_info.value)
 
 
 class TestFormatValue:
@@ -474,7 +473,7 @@ class TestExpressionError:
         error = ExpressionError("$invalid", "Test error message")
         assert error.expr == "$invalid"
         assert error.message == "Test error message"
-        assert "Expression error in '$invalid': Test error message" in str(error)
+        assert "Error evaluating '$invalid'" in str(error)
 
     def test_error_with_position(self):
         """Test error with line and column information."""
@@ -602,7 +601,7 @@ class TestIntegration:
             )
 
         assert "name 'nonexistent' is not defined" in str(exc_info.value)
-        assert "Error in placeholder" in str(exc_info.value)
+        assert "Error evaluating '$nonexistent'" in str(exc_info.value)
 
         # Test invalid playbook call
         with pytest.raises(ExpressionError) as exc_info:

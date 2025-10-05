@@ -123,7 +123,7 @@ class PlaybookLLMExecution(LLMExecution):
                 break
 
             description_paragraph = self.agent.description.split("\n\n")[0]
-            llm_response = LLMResponse(
+            llm_response = await LLMResponse.create(
                 await self.make_llm_call(
                     instruction=instruction,
                     agent_instructions=f"Remember: You are {str(self.agent)}. {description_paragraph}",

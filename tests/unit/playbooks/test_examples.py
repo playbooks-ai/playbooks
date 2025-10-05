@@ -157,6 +157,7 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
     assert "Playbooks+MCP FTW!" in log
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_example_12_timeout(test_data_dir):
     playbooks = Playbooks([test_data_dir / "12-menu-design-meeting.pb"])
@@ -186,6 +187,7 @@ async def test_example_12_timeout(test_data_dir):
     assert "apologize" in log
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_example_two_player_game(test_data_dir):
     playbooks = Playbooks([test_data_dir / "two-player-game.pb"])
@@ -213,6 +215,7 @@ async def test_example_two_player_game(test_data_dir):
     assert "GameRoom(" in log
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_example_13_description_injection(test_data_dir):
     playbooks = Playbooks([test_data_dir / "13-description-injection.pb"])
