@@ -59,22 +59,30 @@ class LLMConfig:
                 self.temperature = 0.2  # Default temperature
 
         # Set appropriate API key based on model provider if none was provided
-        if self.api_key is None:
+        if not self.api_key:
             # Use provider field to determine API key, fallback to model name detection
             provider = self.provider.lower() if self.provider else ""
             model = self.model.lower() if self.model else ""
 
+            api_key_env_var = None
             if provider == "anthropic" or "claude" in model:
-                self.api_key = os.environ.get("ANTHROPIC_API_KEY")
+                api_key_env_var = "ANTHROPIC_API_KEY"
             elif provider == "google" or "gemini" in model:
-                self.api_key = os.environ.get("GEMINI_API_KEY")
+                api_key_env_var = "GEMINI_API_KEY"
             elif "groq" in provider or "groq" in model:
-                self.api_key = os.environ.get("GROQ_API_KEY")
+                api_key_env_var = "GROQ_API_KEY"
             elif "openrouter" in provider or "openrouter" in model:
-                self.api_key = os.environ.get("OPENROUTER_API_KEY")
+                api_key_env_var = "OPENROUTER_API_KEY"
             else:
                 # Default to OpenAI for other models
-                self.api_key = os.environ.get("OPENAI_API_KEY")
+                api_key_env_var = "OPENAI_API_KEY"
+
+            self.api_key = os.environ.get(api_key_env_var)
+
+        if not self.api_key:
+            raise ValueError(
+                f"Set {api_key_env_var} environment variable to use model {self.model}"
+            )
 
     def to_dict(self) -> dict:
         """Convert configuration to a dictionary."""

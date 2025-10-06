@@ -115,9 +115,13 @@ async def run_application(
     """
     # Import the application module
     try:
+        LLMConfig()  # Check if API key is set for selected model
         module = importlib.import_module(application_module)
     except ModuleNotFoundError as e:
         console.print(f"[bold red]Error importing application:[/bold red] {e}")
+        sys.exit(1)
+    except ValueError as e:
+        console.print(f"[bold red]Error: {e}[/bold red]")
         sys.exit(1)
 
     if isinstance(program_paths, str):
@@ -246,6 +250,11 @@ def _cmd_config_show(args) -> None:
 
 def main():
     """Main CLI entry point."""
+    # Print heading message
+    print("-" * 80)
+    print(f"Playbooks {get_playbooks_version()}")
+    print("-" * 80)
+
     # Configure logging early
     configure_logging()
 
@@ -405,7 +414,7 @@ def main():
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted by user[/yellow]")
         except ProgramLoadError as e:
-            console.print(f"[bold red]Error loading program:[/bold red] {e}")
+            console.print(f"[red]Error loading program:[/red] {e}")
             sys.exit(1)
 
     elif args.command == "compile":
