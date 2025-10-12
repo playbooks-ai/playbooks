@@ -167,6 +167,7 @@ class SessionLogWrapper:
 original_wait_for_message = MessagingMixin.WaitForMessage
 original_broadcast_to_meeting = None  # Will be set after MeetingManager is imported
 original_route_message = None  # Will be set after Program is loaded
+original_create_agent = None  # Will be set after Program is loaded
 
 
 @functools.wraps(original_wait_for_message)
@@ -251,9 +252,10 @@ async def patched_route_message(
     recipient_klass = recipient.klass if recipient else "Unknown"
 
     # Display agent-to-agent message with formatting
-    console.print(
-        f"\n[bold magenta]💬 Message[/bold magenta]: [purple]{sender_klass}({sender_id})[/purple] → [purple]{recipient_klass}({recipient_id})[/purple]: {message}"
-    )
+    if message != EOM:
+        console.print(
+            f"\n[bold magenta]💬 Message[/bold magenta]: [purple]{sender_klass}({sender_id})[/purple] → [purple]{recipient_klass}({recipient_id})[/purple]: {message}"
+        )
 
     # Call the original method
     if original_route_message:
@@ -316,9 +318,10 @@ async def main(
         raise
 
     # Store original methods and apply patches after playbooks are loaded
-    global original_broadcast_to_meeting, original_route_message
+    global original_broadcast_to_meeting, original_route_message, original_create_agent
     original_broadcast_to_meeting = MeetingManager.broadcast_to_meeting_as_owner
     original_route_message = Program.route_message
+    original_create_agent = Program.create_agent
 
     # Apply patches
     MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting_as_owner
@@ -327,8 +330,8 @@ async def main(
 
     pubsub = PubSub()
 
-    # Wrap the session_log with the custom wrapper for all agents
-    for agent in playbooks.program.agents:
+    def setup_agent_streaming(agent):
+        """Helper function to set up streaming for an agent."""
         if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
             wrapper = SessionLogWrapper(
                 agent.state.session_log, pubsub, verbose, agent, stream
@@ -340,6 +343,24 @@ async def main(
                 agent.start_streaming_say = wrapper.start_streaming_say
                 agent.stream_say_update = wrapper.stream_say_update
                 agent.complete_streaming_say = wrapper.complete_streaming_say
+
+    # Create patched version of create_agent that sets up streaming for new agents
+    async def patched_create_agent(program_self, agent_klass, **kwargs):
+        """Patched version of create_agent that sets up streaming for runtime-created agents."""
+        # Call original create_agent method
+        agent = await original_create_agent(program_self, agent_klass, **kwargs)
+
+        # Set up streaming for the newly created agent
+        setup_agent_streaming(agent)
+
+        return agent
+
+    # Patch Program.create_agent to handle runtime-created agents
+    Program.create_agent = patched_create_agent
+
+    # Wrap the session_log with the custom wrapper for all existing agents
+    for agent in playbooks.program.agents:
+        setup_agent_streaming(agent)
 
     def log_event(event: Event):
         print(event)
@@ -392,6 +413,8 @@ async def main(
             MeetingManager.broadcast_to_meeting_as_owner = original_broadcast_to_meeting
         if original_route_message:
             Program.route_message = original_route_message
+        if original_create_agent:
+            Program.create_agent = original_create_agent
 
 
 if __name__ == "__main__":
