@@ -1,4 +1,4 @@
-# Host
+# Host agent
 
 ## Main
 ### Trigger
@@ -10,7 +10,6 @@
 - Tell user the $tax_amount
 - End program
 
-
 ```python
 @playbook
 async def CalculateTax(gross_income, tax_rate):
@@ -20,7 +19,7 @@ async def CalculateTax(gross_income, tax_rate):
     return gross_income * tax_rate / 100
 ```
 
-# Tax accountant
+# Tax accountant agent
 
 ## Get tax rate($gross_income)
 public: true
