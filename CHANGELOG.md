@@ -4,6 +4,23 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.6.1] - 2025-10-11
+
+### Added
+
+- **LangGraph Example** - Added comprehensive tax agent implementation using LangGraph as a comparison example
+
+### Improved
+
+- **Error Handling** - Gracefully display missing LLM API key errors from the CLI with helpful messages
+- **Dependencies** - Upgraded all dependencies to address security vulnerabilities
+
+### Fixed
+
+- **CreateAgent Streaming** - Fixed issue #37 where dynamically created agents using `CreateAgent()` didn't stream output properly
+
+---
+
 ## [0.6.0] - 2025-09-27
 
 ### Added
