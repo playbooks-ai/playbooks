@@ -15,6 +15,7 @@ import pytest
 from playbooks.compiler import Compiler, FileCompilationResult, FileCompilationSpec
 from playbooks.exceptions import ProgramLoadError
 from playbooks.utils.llm_config import LLMConfig
+from playbooks.utils.version import get_playbooks_version
 
 
 @pytest.fixture
@@ -325,9 +326,10 @@ class TestAgentCompilation:
         mock_completion.reset_mock()
 
         # Mock cache file read - should include the version header that gets added during compilation
-        cached_content = """<!-- 
+        version = get_playbooks_version()
+        cached_content = f"""<!-- 
 ============================================
-Playbooks Assembly Language v0.6.0
+Playbooks Assembly Language v{version}
 ============================================ 
 -->
 
