@@ -32,7 +32,7 @@ Unlike other AI agent frameworks, **Playbooks programs are highly readable**. Bu
 
 ---
 
-Here is an example Playbooks program. It contains both Python and natural language "playbooks", i.e. functions. Notice how natural language playbook `Main` (line 4) calls (line 13) a Python playbook `process_countries` (line 20), which in turn calls (line 23) a natural language playbook `GetCountryFact` (line 27). See equivalent [LangGraph implementation](https://playbooks-ai.github.io/playbooks-docs/reference/playbooks-traditional-comparison/).
+Here is an example Playbooks program. It contains both Python and natural language "playbooks", i.e. functions. It contains a single `Country facts agent`. Notice how natural language playbook `Main` calls a Python playbook `process_countries`, which in turn calls a natural language playbook `GetCountryFact`. See equivalent [LangGraph implementation](https://playbooks-ai.github.io/playbooks-docs/reference/playbooks-traditional-comparison/).
 
 **country-facts.pb**, an example Playbooks program -
 ````markdown
