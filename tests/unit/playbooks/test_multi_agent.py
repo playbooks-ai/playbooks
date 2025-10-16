@@ -4,6 +4,7 @@ from playbooks import Playbooks
 from playbooks.constants import EOM
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_multi_agent(test_data_dir):
     playbooks = Playbooks([test_data_dir / "multi-agent.pb"])
@@ -26,6 +27,7 @@ async def test_multi_agent(test_data_dir):
     assert "yld for exit" in log
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_agent_to_agent_interaction(test_data_dir):
     playbooks = Playbooks([test_data_dir / "two-agent.pb"])
