@@ -221,7 +221,7 @@ class PlaybookLLMExecution(LLMExecution):
                         else:
                             if playbook_call.playbook_klass == "Say":
                                 playbook_call.kwargs["already_streamed"] = True
-                            await self.agent.execute_playbook(
+                            success, result = await self.agent.execute_playbook(
                                 playbook_call.playbook_klass,
                                 playbook_call.args,
                                 playbook_call.kwargs,

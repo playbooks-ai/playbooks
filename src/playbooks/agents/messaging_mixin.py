@@ -167,7 +167,9 @@ class MessagingMixin:
         self._message_buffer = self._message_buffer[num_messages_to_process:]
 
         if self.state.call_stack.is_empty():
-            await self.execute_playbook("ProcessMessages", messages=messages)
+            success, result = await self.execute_playbook(
+                "ProcessMessages", messages=messages
+            )
         else:
             messages_str = []
             for message in messages:

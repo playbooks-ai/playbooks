@@ -168,9 +168,12 @@ class MCPTestAgentAll:
         agent.playbooks["add_numbers"] = playbook
 
         # Execute playbook
-        result = await agent.execute_playbook("add_numbers", [], {"a": 3, "b": 5})
+        success, result = await agent.execute_playbook(
+            "add_numbers", [], {"a": 3, "b": 5}
+        )
 
         # Verify result
+        assert success
         assert result == {"result": 8}
         mock_execute_fn.assert_called_once_with(a=3, b=5)
 
@@ -191,15 +194,16 @@ class MCPTestAgentAll:
             klass="OtherAgent",
             playbooks={"some_playbook": AsyncMock(spec=RemotePlaybook, public=True)},
         )
-        other_agent.execute_playbook = AsyncMock(return_value="other_result")
+        other_agent.execute_playbook = AsyncMock(return_value=(True, "other_result"))
         mock_program.agents = [other_agent]
 
         # Execute cross-agent call
-        result = await agent.execute_playbook(
+        success, result = await agent.execute_playbook(
             "OtherAgent.some_playbook", [], {"param": "value"}
         )
 
         # Verify cross-agent call
+        assert success
         assert result == "other_result"
         other_agent.execute_playbook.assert_called_once_with(
             "some_playbook", [], {"param": "value"}
@@ -216,7 +220,8 @@ class MCPTestAgentAll:
         agent._connected = True
 
         # Try to execute unknown playbook
-        result = await agent.execute_playbook("unknown_playbook")
+        success, result = await agent.execute_playbook("unknown_playbook")
+        assert not success
         assert "Playbook 'unknown_playbook' not found" in result
 
     @pytest.mark.asyncio

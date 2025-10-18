@@ -283,7 +283,7 @@ async def {self.bgn_playbook_name}() -> None:
         self.playbooks.update(new_playbook)
 
     async def begin(self):
-        await self.execute_playbook(self.bgn_playbook_name)
+        success, result = await self.execute_playbook(self.bgn_playbook_name)
         return
 
     async def cleanup(self):
@@ -601,9 +601,9 @@ async def {self.bgn_playbook_name}() -> None:
 
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
-    ) -> Any:
+    ) -> tuple[bool, Any]:
         if self.program and self.program.execution_finished:
-            return EXECUTION_FINISHED
+            return (True, EXECUTION_FINISHED)
 
         playbook, call, langfuse_span = await self._pre_execute(
             playbook_name, args, kwargs
@@ -658,27 +658,27 @@ async def {self.bgn_playbook_name}() -> None:
                 self.state.call_stack.add_llm_message(meeting_msg)
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
-            await self._post_execute(call, error_msg, langfuse_span)
-            return error_msg
+            await self._post_execute(call, False, error_msg, langfuse_span)
+            return (False, error_msg)
 
         # Execute local playbook in this agent
         if playbook:
             try:
                 if self.program and self.program.execution_finished:
-                    return EXECUTION_FINISHED
+                    return (False, EXECUTION_FINISHED)
 
                 result = await playbook.execute(*args, **kwargs)
-                await self._post_execute(call, result, langfuse_span)
-                return result
+                await self._post_execute(call, True, result, langfuse_span)
+                return (True, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
                 self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
-                await self._post_execute(call, message, langfuse_span)
-                return message
+                await self._post_execute(call, False, message, langfuse_span)
+                return (False, message)
             except Exception as e:
                 message = f"Error: {str(e)}"
-                await self._post_execute(call, message, langfuse_span)
+                await self._post_execute(call, False, message, langfuse_span)
                 raise
         else:
             # Handle cross-agent playbook calls (AgentName.PlaybookName format)
@@ -695,11 +695,11 @@ async def {self.bgn_playbook_name}() -> None:
                     and actual_playbook_name in target_agent.playbooks
                     and target_agent.playbooks[actual_playbook_name].public
                 ):
-                    result = await target_agent.execute_playbook(
+                    success, result = await target_agent.execute_playbook(
                         actual_playbook_name, args, kwargs
                     )
-                    await self._post_execute(call, result, langfuse_span)
-                    return result
+                    await self._post_execute(call, success, result, langfuse_span)
+                    return (success, result)
 
             # Try to execute playbook in other agents (fallback)
             for agent in self.other_agents:
@@ -707,17 +707,19 @@ async def {self.bgn_playbook_name}() -> None:
                     playbook_name in agent.playbooks
                     and agent.playbooks[playbook_name].public
                 ):
-                    result = await agent.execute_playbook(playbook_name, args, kwargs)
-                    await self._post_execute(call, result, langfuse_span)
-                    return result
+                    success, result = await agent.execute_playbook(
+                        playbook_name, args, kwargs
+                    )
+                    await self._post_execute(call, success, result, langfuse_span)
+                    return (success, result)
 
             # Playbook not found
             error_msg = f"Playbook '{playbook_name}' not found in agent '{self.klass}' or any registered agents"
-            await self._post_execute(call, error_msg, langfuse_span)
-            return error_msg
+            await self._post_execute(call, False, error_msg, langfuse_span)
+            return (False, error_msg)
 
     async def _post_execute(
-        self, call: PlaybookCall, result: Any, langfuse_span: Any
+        self, call: PlaybookCall, success: bool, result: Any, langfuse_span: Any
     ) -> None:
         execution_summary = self.state.variables.variables["$__"].value
         call_result = PlaybookCallResult(call, result, execution_summary)
@@ -726,7 +728,9 @@ async def {self.bgn_playbook_name}() -> None:
         self.state.call_stack.pop()
 
         result_msg = ExecutionResultLLMMessage(
-            call_result.to_log_full(), playbook_name=call.playbook_klass, success=True
+            call_result.to_log_full(),
+            playbook_name=call.playbook_klass,
+            success=success,
         )
         self.state.call_stack.add_llm_message(result_msg)
 

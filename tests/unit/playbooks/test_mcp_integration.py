@@ -96,9 +96,10 @@ This is a weather MCP agent that provides weather information.
         assert playbook.description == "Get current weather for a location"
 
         # Execute the playbook
-        result = await weather_agent.execute_playbook(
+        success, result = await weather_agent.execute_playbook(
             "get_weather", [], {"location": "San Francisco"}
         )
+        assert success
 
         # Verify the result
         result = json.loads(result)
