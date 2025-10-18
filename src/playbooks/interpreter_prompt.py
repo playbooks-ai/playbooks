@@ -19,6 +19,15 @@ if TYPE_CHECKING:
     from playbooks.execution_state import ExecutionState
 
 
+class SetEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        if obj is Ellipsis:
+            return "..."
+        return json.JSONEncoder.default(self, obj)
+
+
 class InterpreterPrompt:
     """Generates the prompt for the interpreter LLM based on the current state."""
 
@@ -117,7 +126,9 @@ class InterpreterPrompt:
             debug("Error: Prompt template file not found")
             return "Error: Prompt template missing."
 
-        initial_state = json.dumps(self.execution_state.to_dict(), indent=2)
+        initial_state = json.dumps(
+            self.execution_state.to_dict(), indent=2, cls=SetEncoder
+        )
 
         # session_log_str = str(self.execution_state.session_log)
 
