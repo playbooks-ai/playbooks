@@ -1,5 +1,6 @@
 debug = true
 timeout_s = 60
+artifact_result_threshold = 200  # Auto-create artifact for playbook results longer than this (# of chars)
 
 [model]
 provider = "anthropic"

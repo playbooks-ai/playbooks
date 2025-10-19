@@ -1,7 +1,10 @@
 import copy
 import tempfile
+import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List
+
+from playbooks.llm_messages.types import ArtifactLLMMessage
 
 from ..call_stack import CallStackFrame, InstructionPointer
 from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
@@ -721,11 +724,29 @@ async def {self.bgn_playbook_name}() -> None:
     async def _post_execute(
         self, call: PlaybookCall, success: bool, result: Any, langfuse_span: Any
     ) -> None:
+        from playbooks.config import config
+
         execution_summary = self.state.variables.variables["$__"].value
+
+        artifact_result = False
+        if success and len(str(result)) > config.artifact_result_threshold:
+            # Create an artifact to store the result
+            artifact_name = f"${call.playbook_klass}_{uuid.uuid4()}_result_artifact"
+            self.state.artifacts.set(
+                artifact_name, f"Result of {call.to_log_compact()}", str(result)
+            )
+            artifact_result = True
+            result = artifact_name
+
         call_result = PlaybookCallResult(call, result, execution_summary)
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
+
+        if artifact_result:
+            artifact_obj = self.state.artifacts[result]
+            artifact_msg = ArtifactLLMMessage(artifact_obj)
+            self.state.call_stack.add_llm_message(artifact_msg)
 
         result_msg = ExecutionResultLLMMessage(
             call_result.to_log_full(),
@@ -734,7 +755,10 @@ async def {self.bgn_playbook_name}() -> None:
         )
         self.state.call_stack.add_llm_message(result_msg)
 
-        langfuse_span.update(output=result)
+        if artifact_result:
+            langfuse_span.update(output=self.state.artifacts[result].content)
+        else:
+            langfuse_span.update(output=result)
 
     def __str__(self):
         if self.kwargs:

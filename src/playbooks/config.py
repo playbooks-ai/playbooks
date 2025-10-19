@@ -82,6 +82,9 @@ class PlaybooksConfig(BaseModel):
 
     timeout_s: int = 60
     debug: bool = False
+    artifact_result_threshold: int = Field(
+        200, gt=0
+    )  # Min chars to auto-create artifact
     model: ModelsConfig = ModelsConfig()
     llm_cache: LLMCacheConfig = LLMCacheConfig()
     langfuse: LangfuseConfig = LangfuseConfig()

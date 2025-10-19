@@ -2,6 +2,7 @@
 
 from typing import Any, Dict, Optional
 
+from playbooks.artifacts import Artifact
 from playbooks.enums import LLMMessageRole, LLMMessageType
 
 from .base import LLMMessage
@@ -330,4 +331,18 @@ class SessionLogLLMMessage(LLMMessage):
                 self.cached,
                 self.log_level,
             )
+        )
+
+
+class ArtifactLLMMessage(LLMMessage):
+    """Artifacts - cached for performance."""
+
+    def __init__(self, artifact: Artifact) -> None:
+        self.artifact = artifact
+
+        super().__init__(
+            content=f"Artifact[{artifact.name}]\n\nSummary: {artifact.summary}\n\n{artifact.content}",
+            role=LLMMessageRole.USER,
+            type=LLMMessageType.ARTIFACT,
+            cached=True,
         )
