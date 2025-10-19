@@ -370,3 +370,22 @@ class TestLLMResponseLine:
         assert len(line.playbook_calls) == 1
         assert line.playbook_calls[0].playbook_klass == "GetOrder"
         assert line.playbook_calls[0].args == ["$id"]
+
+    async def test_reported_bug_case(self, event_bus, mock_agent):
+        """Test the specific bug case reported by the user."""
+        line = await LLMResponseLine.create(
+            '`Step["ResearchQuestion:03.03.01:QUE"]` `FileSystemAgent.list_directory(path=$folder_path, recursive=true)`',
+            event_bus,
+            mock_agent,
+        )
+        assert len(line.playbook_calls) == 1
+        call = line.playbook_calls[0]
+        assert call.playbook_klass == "FileSystemAgent.list_directory"
+        assert "path" in call.kwargs
+        assert call.kwargs["path"] == "$folder_path"
+        assert "recursive" in call.kwargs
+        # The bug: recursive should be True (boolean), not "$true" (string)
+        assert (
+            call.kwargs["recursive"] is True
+        ), f"Expected True but got {call.kwargs['recursive']!r}"
+        assert isinstance(call.kwargs["recursive"], bool)

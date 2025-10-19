@@ -287,6 +287,28 @@ class TestParsePlaybookCall:
         assert call.args == ["$order"]
         assert call.kwargs == {"status": "pending"}
 
+    def test_call_with_boolean_literals(self):
+        """Test parsing calls with boolean literals (true, false)."""
+        # Test true literal
+        call = parse_playbook_call(
+            "FileSystem.list_directory(path=$folder, recursive=true)"
+        )
+        assert call.playbook_klass == "FileSystem.list_directory"
+        assert call.kwargs == {"path": "$folder", "recursive": True}
+        assert isinstance(call.kwargs["recursive"], bool)
+        assert call.kwargs["recursive"] is True
+
+        # Test false literal
+        call = parse_playbook_call(
+            "FileSystem.list_directory(path=$folder, recursive=false)"
+        )
+        assert call.kwargs["recursive"] is False
+        assert isinstance(call.kwargs["recursive"], bool)
+
+        # Test with null literal
+        call = parse_playbook_call("ProcessData(data=$data, default=null)")
+        assert call.kwargs["default"] is None
+
     def test_complex_variable_expressions(self):
         """Test parsing calls with complex variable expressions."""
         call = parse_playbook_call("GetOrder($order['id'])")

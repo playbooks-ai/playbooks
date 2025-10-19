@@ -628,6 +628,16 @@ def _node_to_value(
 ) -> Any:
     """Convert AST node to value, preserving variable references."""
     if isinstance(node, ast.Name):
+        # Check if it's a known literal (true, false, null, None)
+        # These should not be treated as variables
+        literal_map = {
+            "true": True,
+            "false": False,
+            "null": None,
+            "None": None,
+        }
+        if node.id in literal_map:
+            return literal_map[node.id]
         # Variable reference - return with $ prefix for later resolution
         return f"${node.id}"
     elif isinstance(node, ast.Attribute):
