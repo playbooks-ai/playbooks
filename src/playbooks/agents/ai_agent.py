@@ -731,9 +731,12 @@ async def {self.bgn_playbook_name}() -> None:
         artifact_result = False
         if success and len(str(result)) > config.artifact_result_threshold:
             # Create an artifact to store the result
-            artifact_name = f"${call.playbook_klass}_{uuid.uuid4()}_result_artifact"
+            artifact_name = str(uuid.uuid4())[:8] + "_artifact"
+            artifact_contents = call.to_log_full() + " → \n\n" + str(result)
             self.state.artifacts.set(
-                artifact_name, f"Result of {call.to_log_compact()}", str(result)
+                artifact_name,
+                f"Result of {call.playbook_klass} call",
+                artifact_contents,
             )
             artifact_result = True
             result = artifact_name

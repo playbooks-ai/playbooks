@@ -341,7 +341,7 @@ class ArtifactLLMMessage(LLMMessage):
         self.artifact = artifact
 
         super().__init__(
-            content=f"Artifact[{artifact.name}]\n\nSummary: {artifact.summary}\n\n{artifact.content}",
+            content=f"Artifact ${artifact.name}\n\nSummary: {artifact.summary}\n\n{artifact.content}\n\n",
             role=LLMMessageRole.USER,
             type=LLMMessageType.ARTIFACT,
             cached=True,
