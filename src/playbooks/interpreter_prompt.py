@@ -6,7 +6,6 @@ from playbooks.debug_logger import debug
 from playbooks.llm_context_compactor import LLMContextCompactor
 from playbooks.llm_messages import (
     AgentInfoLLMMessage,
-    AssistantResponseLLMMessage,
     OtherAgentInfoLLMMessage,
     TriggerInstructionsLLMMessage,
     UserInputLLMMessage,
@@ -195,18 +194,5 @@ class InterpreterPrompt:
         )
 
         messages.extend(compacted_dict_messages)
-        # messages.extend(self._get_artifact_messages())
-        # messages.append(prompt_messages[1])
 
         return messages
-
-    def _get_artifact_messages(self) -> List[Dict[str, str]]:
-        """Generates messages for the artifacts to load."""
-        artifact_messages = []
-        for artifact in self.artifacts_to_load:
-            artifact = self.execution_state.artifacts[artifact]
-            artifact_message = f"Artifact[{artifact.name}]\n\nSummary: {artifact.summary}\n\nContent: {artifact.content}"
-            artifact_messages.append(
-                AssistantResponseLLMMessage(artifact_message).to_full_message()
-            )
-        return artifact_messages
