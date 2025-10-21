@@ -254,7 +254,7 @@ def get_completion(
     """
 
     messages = remove_empty_messages(messages)
-    messages = consolidate_messages(messages)
+    # messages = consolidate_messages(messages)
     messages = ensure_upto_N_cached_messages(messages)
 
     # Apply playbooks-lm preprocessing if needed (before Langfuse logging)

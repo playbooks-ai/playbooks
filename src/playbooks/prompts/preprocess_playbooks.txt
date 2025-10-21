@@ -112,29 +112,18 @@ These playbooks are always available without declaration:
 - Meeting ends with host returns from the meeting playbook. So, if agent is meeting host, just return from the meeting playbook `- 09:RET`
 - If agent is a meeting participant, request openly `- 01:QUE Say(meeting, request to end the meeting with reason)` or privately to the host `- 01:QUE Say(Conductor, request to end the meeting with reason)`
 
-**LoadArtifact(filename)**
-- Load artifact into memory (artifact will be available after YLD)
-- Example: `- 01:QUE LoadArtifact(report artifact)`
-
-**SaveArtifact(filename, summary, content)**
-- Create or update artifact
-- Example: `- 01:QUE SaveArtifact("results.json", One line about $task, Summary of $data)`
-
 ## Natural Language Elements
 
 Some elements use natural language that the LLM runtime interprets:
 
 1. **Completion conditions after YLD**
-   - `- 01:QUE Say(ask user to pick a product); YLD for user; done after 4 turns or user gives up`
-   - `- 01:QUE Say(ask user for email); YLD for user; done when user provides valid email or gives up`
+  - `- 01:QUE Say(ask user to pick a product); YLD for user; done after 4 turns or user gives up`
+  - `- 01:QUE Say(ask user for email); YLD for user; done when user provides valid email or gives up`
    
 2. **Informal step descriptions**
-   - `- 01:EXE List 5 cities near user's location`
-   - `- 01:EXE Fill weather dict by collecting loaded weather info by $city`
-   - `- 01:QUE Create 3 player agents with sequential names like "MW001", "MW002" and random age`
-
-3. **Artifact references**
-   - Show artifact to user/Agent/meeting: `- 01:QUE Say(user/Agent/meeting, Here is your report - Artifact[report.md])`
+  - `- 01:EXE List 5 cities near user's location`
+  - `- 01:EXE Fill weather dict by collecting loaded weather info by $city`
+  - `- 01:QUE Create 3 player agents with sequential names like "MW001", "MW002" and random age`
 
 The LLM runtime understands context and intent rather than requiring strict syntax.
 
@@ -219,6 +208,7 @@ Raw:
   - When user provides 0
     - Inform user that it must be nonzero
 - Tell user the square root of the number
+- Exit program
 Compiled:
 - 01:CND Until $number:int is a perfect square
   - 01.01:QUE Say(user, Ask user for $number)
@@ -229,12 +219,8 @@ Compiled:
   - 01.04:JMP 01
 - 02:EXE $square_root = square root of the $number
 - 03:QUE Say(Tell user the $square_root of the $number)
+- 04:YLD for exit
 ```
-
-### Artifact Operations
-- Load artifact: `- 01:QUE LoadArtifact(filename)`
-- Save artifact: `- 01:QUE SaveArtifact(filename, summary, content)`
-- Show artifact: `- 01:QUE Say(user, Here is your report - Artifact[filename])`
 
 ### Complex Instructions
 Split when instruction contains multiple actions that cannot or should not be executed together:
@@ -422,6 +408,7 @@ def LookupInfo(query:str):
 - List 5 cities near user's city
 - Think deeply about something common among these 5 cities
 - Tell user about that common thing
+- End program
 
 ### Notes
 - If name is a Jack Sparrow, start speaking in pirate speak
@@ -491,18 +478,18 @@ Main interaction loop that guides user conversations through a friendly informat
 ### Triggers
 - T1:BGN When program starts
 ### Steps
-- 01:QUE Say(Greet the user); no need to YLD
+- 01:QUE Say(Greet the user)
 - 02:QUE Say(user, Ask user for their $name:str and $city:str they are from)
 - 03:YLD for user
 - 04:CHK N1
 - 05:QUE Say(user, Give an interesting fact about the $city)
 - 06:QUE $weather:dict = GetWeather(city=$city)
 - 07:YLD for call
-- 08:QUE Say(user, Tell user what the weather is like); no need to YLD
+- 08:QUE Say(user, Tell user what the weather is like)
 - 09:EXE List 5 $cities:list near $city
 - 10:TNK Think deeply about something common among these 5 cities
 - 11:QUE Say(user, Tell user about that common thing)
-- 12:RET # RET implicitly does `YLD for call`
+- 12:YLD for exit
 
 ### Notes
 - N1 If name is a Jack Sparrow, start speaking in pirate speak
@@ -562,18 +549,17 @@ You are a processor who will take each line of the report and count how many lin
 ## P1($name, $age)
 model: gpt-4o
 - Say hello $name
-- Lookup $info for $name from Example agent
-- Save "greeting.txt" with summary "Greeting" and content "Hello $name, your info is $info"
+- Lookup info from Example agent
+- return detailed description of $info
 
 ## P2
 public: true
-- Load "greeting.txt"
-- Show "greeting.txt" to user
+- Load "greeting.txt" and show contents to user
 
-## summarize the given report artifact
+## summarize the given document
 execution_mode: raw
 Produce a 1 paragraph summary of the following document:
-{{Artifact[greeting.txt]}}
+{{document}}
 
 **Output:**
 # GreetAgent
@@ -586,10 +572,9 @@ metadata:
 Says hello to the user
 ### Steps
 - 01:QUE Say(user, Say hello $name)
-- 02:QUE $info:str = ExampleAgent.LookupInfo(query=$name)
+- 02:QUE $info:dict = ExampleAgent.LookupInfo(query=$name)
 - 03:YLD for call
-- 04:QUE SaveArtifact("greeting.txt", "Greeting", "Hello $name, your info is $info")
-- 04:RET # RET implicitly does `YLD for call`
+- 04:EXE Write and return detailed description of the $info
 
 ## P2() -> None
 metadata:
@@ -597,17 +582,17 @@ metadata:
 ---
 Says goodbye to the user
 ### Steps
-- 01:QUE LoadArtifact("greeting.txt")
-- 02:YLD for call # must YLD for the artifact to load
-- 02:QUE Say(user, Here is your greeting - Artifact[greeting.txt])
+- 01:QUE $greeting_txt = LoadFile("greeting.txt")
+- 02:YLD for call
+- 02:QUE Say(user, $greeting_txt)
 - 03:RET # RET implicitly does `YLD for call`
 
-## SummarizeReport($report_artifact_name)
+## SummarizeDocument($document)
 metadata:
   execution_mode: raw
 ---
-Produce a 1 paragraph summary of the following report:
-{{Artifact[$report_artifact_name]}}
+Produce a 1 paragraph summary of the following document:
+{{$document}}
 
 ```public.json
 [

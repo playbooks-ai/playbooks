@@ -10,7 +10,7 @@ async def Playbook3():
 async def Playbook4():
     artifact = await LoadArtifact("artifact1.txt")
     await Say("Artifact[artifact1.txt]")
-    await Say(artifact.content)
+    await Say(artifact.value)
 ```
 
 ## Playbook1

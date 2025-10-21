@@ -29,6 +29,86 @@ class Variable:
         return f"{self.name}={self.value}"
 
 
+class Artifact(Variable):
+    """An artifact - a Variable with additional summary metadata."""
+
+    def __init__(self, name: str, summary: str, value: Any):
+        """Initialize an Artifact.
+
+        Args:
+            name: Variable name (without $ prefix)
+            summary: Short summary of the artifact
+            value: The actual content/value
+        """
+        super().__init__(name, value)
+        self.summary = summary
+
+    def __repr__(self) -> str:
+        return f"Artifact(name={self.name}, summary={self.summary})"
+
+    def __str__(self) -> str:
+        return str(self.value)
+
+    # String operation support - delegate to string representation of value
+    def __len__(self) -> int:
+        """Support len(artifact)."""
+        return len(str(self.value))
+
+    def __add__(self, other):
+        """Support artifact + "text"."""
+        return str(self.value) + str(other)
+
+    def __radd__(self, other):
+        """Support "text" + artifact."""
+        return str(other) + str(self.value)
+
+    def __mul__(self, n):
+        """Support artifact * 3."""
+        return str(self.value) * n
+
+    def __rmul__(self, n):
+        """Support 3 * artifact."""
+        return n * str(self.value)
+
+    def __getitem__(self, key):
+        """Support artifact[0] and artifact[0:5] (indexing/slicing)."""
+        return str(self.value)[key]
+
+    def __contains__(self, item):
+        """Support "substring" in artifact."""
+        return str(item) in str(self.value)
+
+    def __eq__(self, other):
+        """Support artifact == "string"."""
+        if isinstance(other, Artifact):
+            return self.value == other.value
+        return str(self.value) == str(other)
+
+    def __lt__(self, other):
+        """Support artifact < "string"."""
+        if isinstance(other, Artifact):
+            return str(self.value) < str(other.value)
+        return str(self.value) < str(other)
+
+    def __le__(self, other):
+        """Support artifact <= "string"."""
+        if isinstance(other, Artifact):
+            return str(self.value) <= str(other.value)
+        return str(self.value) <= str(other)
+
+    def __gt__(self, other):
+        """Support artifact > "string"."""
+        if isinstance(other, Artifact):
+            return str(self.value) > str(other.value)
+        return str(self.value) > str(other)
+
+    def __ge__(self, other):
+        """Support artifact >= "string"."""
+        if isinstance(other, Artifact):
+            return str(self.value) >= str(other.value)
+        return str(self.value) >= str(other)
+
+
 class Variables:
     """A collection of variables with change history."""
 
@@ -77,13 +157,34 @@ class Variables:
     def __len__(self) -> int:
         return len(self.variables)
 
-    def to_dict(self, include_private: bool = False) -> Dict[str, Any]:
+    def public_variables(self) -> Dict[str, Variable]:
+        """Return variables whose names do not start with underscore.
+
+        Returns:
+            Dictionary of public variables (names not starting with $_)
+        """
         return {
-            name: variable.value
+            name: variable
             for name, variable in self.variables.items()
-            if variable.value is not None
-            and (include_private or not variable.name.startswith("$_"))
+            if not variable.name.startswith("$_")
         }
+
+    def to_dict(self, include_private: bool = False) -> Dict[str, Any]:
+
+        result = {}
+        for name, variable in self.variables.items():
+            if variable.value is None:
+                continue
+            if not include_private and variable.name.startswith("$_"):
+                continue
+
+            # If value is an Artifact, use its string representation
+            if isinstance(variable.value, Artifact):
+                result[name] = str(variable.value.summary)
+            else:
+                result[name] = variable.value
+
+        return result
 
     def __repr__(self) -> str:
         return f"Variables({self.to_dict(include_private=True)})"

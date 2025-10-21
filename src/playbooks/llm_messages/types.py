@@ -2,9 +2,8 @@
 
 from typing import Any, Dict, Optional
 
-from playbooks.artifacts import Artifact
-from playbooks.enums import LLMMessageRole, LLMMessageType
-
+from ..enums import LLMMessageRole, LLMMessageType
+from ..variables import Artifact
 from .base import LLMMessage
 
 # Core semantic message types - minimal set covering all use cases
@@ -341,7 +340,7 @@ class ArtifactLLMMessage(LLMMessage):
         self.artifact = artifact
 
         super().__init__(
-            content=f"Artifact ${artifact.name}\n\nSummary: {artifact.summary}\n\n{artifact.content}\n\n",
+            content=f"Artifact ${artifact.name}\n\nSummary: {artifact.summary}\n\n{artifact.value}\n\n",
             role=LLMMessageRole.USER,
             type=LLMMessageType.ARTIFACT,
             cached=True,

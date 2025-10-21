@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from playbooks.argument_types import LiteralValue, VariableReference
 from playbooks.utils.expression_engine import (
     ExpressionContext,
     ExpressionError,
@@ -267,25 +268,32 @@ class TestParsePlaybookCall:
         """Test parsing calls with positional arguments."""
         call = parse_playbook_call("GetOrder($order_id)")
         assert call.playbook_klass == "GetOrder"
-        assert call.args == ["$order_id"]
+        assert isinstance(call.args[0], VariableReference)
+        assert call.args[0].reference == "$order_id"
 
         call = parse_playbook_call("ProcessOrder($order, $user)")
         assert call.playbook_klass == "ProcessOrder"
-        assert call.args == ["$order", "$user"]
+        assert isinstance(call.args[0], VariableReference)
+        assert call.args[0].reference == "$order"
+        assert isinstance(call.args[1], VariableReference)
+        assert call.args[1].reference == "$user"
 
     def test_call_with_kwargs(self):
         """Test parsing calls with keyword arguments."""
         call = parse_playbook_call("GetOrder(order_id=$id)")
         assert call.playbook_klass == "GetOrder"
         assert call.args == []
-        assert call.kwargs == {"order_id": "$id"}
+        assert isinstance(call.kwargs["order_id"], VariableReference)
+        assert call.kwargs["order_id"].reference == "$id"
 
     def test_call_with_mixed_args(self):
         """Test parsing calls with both positional and keyword arguments."""
         call = parse_playbook_call("ProcessOrder($order, status='pending')")
         assert call.playbook_klass == "ProcessOrder"
-        assert call.args == ["$order"]
-        assert call.kwargs == {"status": "pending"}
+        assert isinstance(call.args[0], VariableReference)
+        assert call.args[0].reference == "$order"
+        assert isinstance(call.kwargs["status"], LiteralValue)
+        assert call.kwargs["status"].value == "pending"
 
     def test_call_with_boolean_literals(self):
         """Test parsing calls with boolean literals (true, false)."""
@@ -294,29 +302,35 @@ class TestParsePlaybookCall:
             "FileSystem.list_directory(path=$folder, recursive=true)"
         )
         assert call.playbook_klass == "FileSystem.list_directory"
-        assert call.kwargs == {"path": "$folder", "recursive": True}
-        assert isinstance(call.kwargs["recursive"], bool)
-        assert call.kwargs["recursive"] is True
+        assert isinstance(call.kwargs["path"], VariableReference)
+        assert call.kwargs["path"].reference == "$folder"
+        assert isinstance(call.kwargs["recursive"], LiteralValue)
+        assert isinstance(call.kwargs["recursive"].value, bool)
+        assert call.kwargs["recursive"].value is True
 
         # Test false literal
         call = parse_playbook_call(
             "FileSystem.list_directory(path=$folder, recursive=false)"
         )
-        assert call.kwargs["recursive"] is False
-        assert isinstance(call.kwargs["recursive"], bool)
+        assert isinstance(call.kwargs["recursive"], LiteralValue)
+        assert call.kwargs["recursive"].value is False
+        assert isinstance(call.kwargs["recursive"].value, bool)
 
         # Test with null literal
         call = parse_playbook_call("ProcessData(data=$data, default=null)")
-        assert call.kwargs["default"] is None
+        assert isinstance(call.kwargs["default"], LiteralValue)
+        assert call.kwargs["default"].value is None
 
     def test_complex_variable_expressions(self):
         """Test parsing calls with complex variable expressions."""
         call = parse_playbook_call("GetOrder($order['id'])")
         # Accept both single and double quotes (Python AST may normalize)
-        assert call.args[0] in ["$order['id']", '$order["id"]']
+        assert isinstance(call.args[0], VariableReference)
+        assert call.args[0].reference in ["$order['id']", '$order["id"]']
 
         call = parse_playbook_call("ProcessUser($user.profile)")
-        assert call.args == ["$user.profile"]
+        assert isinstance(call.args[0], VariableReference)
+        assert call.args[0].reference == "$user.profile"
 
     def test_module_qualified_calls(self):
         """Test parsing module-qualified playbook calls."""
@@ -583,13 +597,20 @@ class TestIntegration:
         call = parse_playbook_call(call_str, self.context)
 
         assert call.playbook_klass == "ProcessOrder"
-        assert call.args == ["$order"]
-        assert call.kwargs["customer"] == "$user"
+        assert isinstance(call.args[0], VariableReference)
+        assert call.args[0].reference == "$order"
+        assert isinstance(call.kwargs["customer"], VariableReference)
+        assert call.kwargs["customer"].reference == "$user"
         # Accept both quote formats due to AST normalization
-        assert call.kwargs["notify_email"] in ["$user['email']", '$user["email"]']
+        assert isinstance(call.kwargs["notify_email"], VariableReference)
+        assert call.kwargs["notify_email"].reference in [
+            "$user['email']",
+            '$user["email"]',
+        ]
         # Function call should preserve variable references
-        assert call.kwargs["total"].startswith("len($order")
-        assert "items" in call.kwargs["total"]
+        assert isinstance(call.kwargs["total"], VariableReference)
+        assert call.kwargs["total"].reference.startswith("len($order")
+        assert "items" in call.kwargs["total"].reference
 
     @pytest.mark.asyncio
     async def test_end_to_end_workflow(self):

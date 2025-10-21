@@ -1,7 +1,6 @@
-from playbooks.utils.markdown_to_ast import markdown_to_ast
-
 from ..compiler import Compiler
 from ..utils.llm_config import LLMConfig
+from ..utils.markdown_to_ast import markdown_to_ast
 
 
 class BuiltinPlaybooks:
@@ -29,6 +28,7 @@ class BuiltinPlaybooks:
         code_block = '''
 ```python
 from playbooks.utils.spec_utils import SpecUtils
+from playbooks.llm_messages.types import ArtifactLLMMessage
 
 @playbook(hidden=True)
 async def SendMessage(target_agent_id: str, message: str):
@@ -49,12 +49,14 @@ async def CreateAgent(agent_klass: str, **kwargs):
     return new_agent
     
 @playbook
-async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_content: str):
-    agent.state.artifacts.set(artifact_name, artifact_summary, artifact_content)
-
-@playbook
 async def LoadArtifact(artifact_name: str):
-    return agent.state.artifacts[artifact_name]
+    # Load artifact from variables
+    artifact = agent.state.variables[artifact_name].value
+    
+    # Add ArtifactLLMMessage to stack[-2] frame
+    if len(agent.state.call_stack.frames) >= 2:
+        artifact_msg = ArtifactLLMMessage(artifact)
+        agent.state.call_stack.frames[-2].llm_messages.append(artifact_msg)
 
 @playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):

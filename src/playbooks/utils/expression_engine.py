@@ -11,6 +11,8 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
+from ..variables import Artifact
+
 if TYPE_CHECKING:
     from ..agents.base_agent import Agent
     from ..execution_state import ExecutionState
@@ -210,7 +212,13 @@ class ExpressionContext:
                 self.state.variables, "variables"
             ):
                 if var_key in self.state.variables.variables:
-                    value = self.state.variables.variables[var_key].value
+                    variable = self.state.variables.variables[var_key]
+                    # If the variable itself is an Artifact, return it directly
+                    # Otherwise, return its value
+                    if isinstance(variable, Artifact):
+                        value = variable
+                    else:
+                        value = variable.value
                     self._cache[name] = value
                     return value
 
@@ -388,13 +396,18 @@ class ExpressionContext:
 
 
 def parse_playbook_call(
-    call_str: str, context: Optional[ExpressionContext] = None
+    call_str: str,
+    context: Optional[ExpressionContext] = None,
+    variable_to_assign: str = None,
+    type_annotation: str = None,
 ) -> "PlaybookCall":
     """Parse playbook call with optional argument resolution.
 
     Args:
         call_str: Playbook call string (e.g., "MyPlaybook($arg1, kwarg=$arg2)")
         context: Optional context for variable resolution
+        variable_to_assign: Optional variable name to assign result to (e.g., "$result")
+        type_annotation: Optional type annotation for the variable (e.g., "bool")
 
     Returns:
         PlaybookCall object with parsed arguments
@@ -441,7 +454,9 @@ def parse_playbook_call(
             kwarg_value = _node_to_value(keyword.value, call_str, context)
             kwargs[keyword.arg] = kwarg_value
 
-        return PlaybookCall(playbook_name, args, kwargs)
+        return PlaybookCall(
+            playbook_name, args, kwargs, variable_to_assign, type_annotation
+        )
 
     except ExpressionError:
         raise
@@ -466,8 +481,9 @@ def extract_playbook_calls(text: str) -> List[str]:
         ['GetOrder($order_id)']
     """
     # Pattern matches backtick-wrapped calls, optionally with assignment
+    # re.DOTALL allows matching multi-line strings with triple quotes
     pattern = r"`(?:.*\W*=\W*)?([A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\(.*?\))`"
-    matches = re.findall(pattern, text)
+    matches = re.findall(pattern, text, re.DOTALL)
     return matches
 
 
@@ -587,7 +603,11 @@ def format_value(value: Any) -> str:
         >>> format_value(None)
         ''
     """
-    if value is None:
+    # Handle Artifact objects by using their content
+
+    if isinstance(value, Artifact):
+        return str(value.value)
+    elif value is None:
         return ""
     elif isinstance(value, (list, dict)):
         json_str = json.dumps(value, default=str, ensure_ascii=False)
@@ -626,8 +646,13 @@ def _extract_playbook_name(call_node: ast.Call) -> str:
 def _node_to_value(
     node: ast.AST, original_expr: str, context: Optional[ExpressionContext]
 ) -> Any:
-    """Convert AST node to value, preserving variable references."""
-    if isinstance(node, ast.Name):
+    """Convert AST node to typed value (LiteralValue or VariableReference)."""
+    from playbooks.argument_types import LiteralValue, VariableReference
+
+    if isinstance(node, ast.Constant):
+        # Literal value
+        return LiteralValue(node.value)
+    elif isinstance(node, ast.Name):
         # Check if it's a known literal (true, false, null, None)
         # These should not be treated as variables
         literal_map = {
@@ -637,32 +662,32 @@ def _node_to_value(
             "None": None,
         }
         if node.id in literal_map:
-            return literal_map[node.id]
+            return LiteralValue(literal_map[node.id])
         # Variable reference - return with $ prefix for later resolution
-        return f"${node.id}"
+        return VariableReference(f"${node.id}")
     elif isinstance(node, ast.Attribute):
         # Attribute access like $user.name
-        return _build_attribute_expr(node)
+        expr_str = _build_attribute_expr(node)
+        return VariableReference(expr_str)
     elif isinstance(node, ast.Subscript):
         # Subscript access like $user['name'] or $items[0]
-        return _build_subscript_expr(node)
+        expr_str = _build_subscript_expr(node)
+        return VariableReference(expr_str)
     elif isinstance(node, ast.Call):
-        # Function call like len($items) - return as unparsed expression with $ restoration
+        # Function call like len($items) - return as expression with $ restoration
         expr_str = ast.unparse(node)
         # Restore $ prefix for variables in the expression, but not function names
-        return _restore_variable_prefixes(expr_str, node)
-    elif isinstance(node, ast.Constant):
-        # Literal value
-        return node.value
+        expr_str = _restore_variable_prefixes(expr_str, node)
+        return VariableReference(expr_str)
     else:
         # Try to evaluate as literal
         try:
-            return ast.literal_eval(node)
+            literal_value = ast.literal_eval(node)
+            return LiteralValue(literal_value)
         except (ValueError, TypeError):
-            # If not a literal, return the unparsed expression
+            # If not a literal, return as variable reference (expression)
             expr_str = ast.unparse(node)
-            # For now, just return the unparsed expression
-            return expr_str
+            return VariableReference(expr_str)
 
 
 def _build_attribute_expr(node: ast.Attribute) -> str:

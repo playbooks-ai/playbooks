@@ -72,14 +72,14 @@ class TestPlaybookResultArtifacts:
 
             await agent._post_execute(playbook_call, True, long_result, Mock())
 
-            # Verify artifact was created
-            expected_artifact_name = "$TestPlaybook_test-uuid-1234_result_artifact"
-            assert expected_artifact_name in agent.state.artifacts
+            # Verify artifact was created (UUID is truncated to first 4 chars with a_ prefix)
+            expected_artifact_name = "$a_test"
+            assert expected_artifact_name in agent.state.variables
 
-        # Verify artifact content
-        artifact = agent.state.artifacts[expected_artifact_name]
-        assert artifact.content == long_result
-        assert artifact.summary.startswith("Result of TestPlaybook")
+        # Verify artifact content (includes playbook call prefix)
+        artifact = agent.state.variables[expected_artifact_name].value
+        assert long_result in artifact.value
+        assert artifact.summary.startswith("Output from TestPlaybook")
 
     @pytest.mark.asyncio
     async def test_result_exactly_80_chars_no_artifact(self, agent, playbook_call):
@@ -88,8 +88,8 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(playbook_call, True, exact_result, Mock())
 
-        # Verify no artifact was created
-        assert len(agent.state.artifacts) == 0
+        # Verify no artifact was created (only $__ and $_ variables exist)
+        assert len(agent.state.variables.public_variables()) == 0
 
     @pytest.mark.asyncio
     async def test_result_under_80_chars_no_artifact(self, agent, playbook_call):
@@ -98,8 +98,8 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(playbook_call, True, short_result, Mock())
 
-        # Verify no artifact was created
-        assert len(agent.state.artifacts) == 0
+        # Verify no artifact was created (only $__ and $_ variables exist)
+        assert len(agent.state.variables.public_variables()) == 0
 
     @pytest.mark.asyncio
     async def test_failure_with_long_result_no_artifact(self, agent, playbook_call):
@@ -108,8 +108,8 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(playbook_call, False, long_result, Mock())
 
-        # Verify no artifact was created
-        assert len(agent.state.artifacts) == 0
+        # Verify no artifact was created (only $__ and $_ variables exist)
+        assert len(agent.state.variables.public_variables()) == 0
 
     @pytest.mark.asyncio
     async def test_artifact_name_format(self, agent, playbook_call):
@@ -121,9 +121,9 @@ class TestPlaybookResultArtifacts:
 
             await agent._post_execute(playbook_call, True, long_result, Mock())
 
-            # Verify artifact name format
-            expected_name = "$TestPlaybook_custom-uuid-5678_result_artifact"
-            assert expected_name in agent.state.artifacts
+            # Verify artifact name format (UUID truncated to first 4 chars with a_ prefix)
+            expected_name = "$a_cust"
+            assert expected_name in agent.state.variables
 
     @pytest.mark.asyncio
     async def test_artifact_summary_format(self, agent):
@@ -134,12 +134,12 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(call, True, long_result, Mock())
 
-        # Get the created artifact
-        artifacts_list = list(agent.state.artifacts.artifacts.values())
-        assert len(artifacts_list) == 1
+        # Get the created artifact (excluding $__ and $_)
+        artifact_vars = list(agent.state.variables.public_variables().values())
+        assert len(artifact_vars) == 1
 
-        artifact = artifacts_list[0]
-        assert artifact.summary.startswith("Result of MyPlaybook")
+        artifact = artifact_vars[0].value
+        assert artifact.summary.startswith("Output from MyPlaybook")
 
     @pytest.mark.asyncio
     async def test_artifact_llm_message_added_to_call_stack(self, agent, playbook_call):
@@ -186,8 +186,8 @@ class TestPlaybookResultArtifacts:
             call_result = session_log_items[-1]["item"]
             assert isinstance(call_result, PlaybookCallResult)
 
-            # Verify result is the artifact name, not the actual result
-            expected_artifact_name = "$TestPlaybook_uuid-for-result_result_artifact"
+            # Verify result is the artifact name, not the actual result (UUID truncated to 4 chars with a_ prefix)
+            expected_artifact_name = "$a_uuid"
             assert call_result.result == expected_artifact_name
             assert call_result.result != long_result
 
@@ -234,20 +234,21 @@ class TestPlaybookResultArtifacts:
         await agent._post_execute(call1, True, result1, Mock())
         await agent._post_execute(call2, True, result2, Mock())
 
-        # Verify two artifacts were created
-        assert len(agent.state.artifacts) == 2
+        # Verify two artifacts were created (plus $__ and $_ variables)
+        artifact_vars = list(agent.state.variables.public_variables().values())
+        assert len(artifact_vars) == 2
 
         # Verify artifacts have unique names
-        artifact_names = list(agent.state.artifacts.artifacts.keys())
+        artifact_names = [v.name for v in artifact_vars]
         assert artifact_names[0] != artifact_names[1]
 
-        # Verify first artifact contains result1
-        first_artifact = agent.state.artifacts[artifact_names[0]]
-        assert first_artifact.content == result1
+        # Verify first artifact contains result1 (content includes playbook call prefix)
+        first_artifact = artifact_vars[0].value
+        assert result1 in first_artifact.value
 
-        # Verify second artifact contains result2
-        second_artifact = agent.state.artifacts[artifact_names[1]]
-        assert second_artifact.content == result2
+        # Verify second artifact contains result2 (content includes playbook call prefix)
+        second_artifact = artifact_vars[1].value
+        assert result2 in second_artifact.value
 
     @pytest.mark.asyncio
     async def test_artifact_stores_string_representation(self, agent, playbook_call):
@@ -263,14 +264,18 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(playbook_call, True, dict_result, Mock())
 
-        # Verify artifact was created
-        artifacts_list = list(agent.state.artifacts.artifacts.values())
-        assert len(artifacts_list) == 1
+        # Verify artifact was created (excluding $__ and $_)
+        artifact_vars = [
+            v
+            for v in agent.state.variables
+            if not v.name.startswith("$__") and v.name != "$_"
+        ]
+        assert len(artifact_vars) == 1
 
-        artifact = artifacts_list[0]
-        # Verify content is string representation
-        assert artifact.content == str(dict_result)
-        assert isinstance(artifact.content, str)
+        artifact = artifact_vars[0].value
+        # Verify content includes string representation (also has playbook call prefix)
+        assert str(dict_result) in artifact.value
+        assert isinstance(artifact.value, str)
 
     @pytest.mark.asyncio
     async def test_artifact_with_list_result(self, agent, playbook_call):
@@ -290,28 +295,33 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(playbook_call, True, list_result, Mock())
 
-        # Verify artifact was created
-        artifacts_list = list(agent.state.artifacts.artifacts.values())
-        assert len(artifacts_list) == 1
+        # Verify artifact was created (excluding $__ and $_)
+        artifact_vars = [
+            v
+            for v in agent.state.variables
+            if not v.name.startswith("$__") and v.name != "$_"
+        ]
+        assert len(artifact_vars) == 1
 
-        artifact = artifacts_list[0]
-        assert artifact.content == str(list_result)
+        artifact = artifact_vars[0].value
+        # Content includes playbook call prefix
+        assert str(list_result) in artifact.value
 
     @pytest.mark.asyncio
     async def test_artifact_with_none_result_no_artifact(self, agent, playbook_call):
         """Test that None results don't create artifacts."""
         await agent._post_execute(playbook_call, True, None, Mock())
 
-        # Verify no artifact was created
-        assert len(agent.state.artifacts) == 0
+        # Verify no artifact was created (only $__ and $_ variables exist)
+        assert len(agent.state.variables.public_variables()) == 0
 
     @pytest.mark.asyncio
     async def test_artifact_with_empty_string_no_artifact(self, agent, playbook_call):
         """Test that empty strings don't create artifacts."""
         await agent._post_execute(playbook_call, True, "", Mock())
 
-        # Verify no artifact was created
-        assert len(agent.state.artifacts) == 0
+        # Verify no artifact was created (only $__ and $_ variables exist)
+        assert len(agent.state.variables.public_variables()) == 0
 
     @pytest.mark.asyncio
     async def test_langfuse_span_updated_with_artifact_content(
@@ -371,11 +381,13 @@ class TestPlaybookResultArtifacts:
         await agent._post_execute(playbook_call, True, special_result, Mock())
 
         # Get the created artifact
-        artifacts_list = list(agent.state.artifacts.artifacts.values())
-        artifact = artifacts_list[0]
+        artifact_vars = [
+            v for v in agent.state.variables if not v.name.startswith("$__")
+        ]
+        artifact = artifact_vars[0].value
 
-        # Verify exact content preservation
-        assert artifact.content == special_result
+        # Verify content preservation (includes playbook call prefix)
+        assert special_result in artifact.value
 
     @pytest.mark.asyncio
     async def test_boundary_79_chars_no_artifact(self, agent, playbook_call):
@@ -384,8 +396,8 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(playbook_call, True, result_79_chars, Mock())
 
-        # Verify no artifact was created
-        assert len(agent.state.artifacts) == 0
+        # Verify no artifact was created (only $__ and $_ variables exist)
+        assert len(agent.state.variables.public_variables()) == 0
 
     @pytest.mark.asyncio
     async def test_boundary_81_chars_creates_artifact(self, agent, playbook_call):
@@ -394,8 +406,8 @@ class TestPlaybookResultArtifacts:
 
         await agent._post_execute(playbook_call, True, result_81_chars, Mock())
 
-        # Verify artifact was created
-        assert len(agent.state.artifacts) == 1
+        # Verify artifact was created (plus $__ and $_ variables)
+        assert len(agent.state.variables.public_variables()) == 1
 
     @pytest.mark.asyncio
     async def test_config_threshold_override(self, agent, playbook_call):
@@ -413,17 +425,20 @@ class TestPlaybookResultArtifacts:
 
             await agent._post_execute(playbook_call, True, result_11_chars, Mock())
 
-            # Should create artifact with the lower threshold
-            assert len(agent.state.artifacts) == 1
+            # Should create artifact with the lower threshold (plus $__ and $_ variables)
+            assert len(agent.state.variables.public_variables()) == 1
 
             # Reset and test with value under threshold
-            agent.state.artifacts.artifacts.clear()
+            # Clear artifact variables (but keep $__ and $_)
+            for var_name in list(agent.state.variables.variables.keys()):
+                if not var_name.startswith("$__") and var_name != "$_":
+                    del agent.state.variables.variables[var_name]
 
             result_10_chars = "x" * 10  # Exactly at threshold
             await agent._post_execute(playbook_call, True, result_10_chars, Mock())
 
-            # Should NOT create artifact
-            assert len(agent.state.artifacts) == 0
+            # Should NOT create artifact (only $__ and $_ variables exist)
+            assert len(agent.state.variables.public_variables()) == 0
 
         finally:
             # Restore original
@@ -453,8 +468,132 @@ class TestPlaybookResultArtifacts:
             assert len(artifact_messages) == 1
             artifact_msg = artifact_messages[0]
 
-            # Verify the message content includes the artifact details
-            expected_artifact_name = "$TestPlaybook_test-uuid_result_artifact"
+            # Verify the message content includes the artifact details (UUID truncated to 4 chars with a_ prefix)
+            expected_artifact_name = "$a_test"
             assert expected_artifact_name in artifact_msg.content
             assert "Summary:" in artifact_msg.content
             assert long_result in artifact_msg.content
+
+    # ========================================================================
+    # Variable Assignment Tests
+    # ========================================================================
+
+    @pytest.mark.asyncio
+    async def test_artifact_with_variable_assignment_uses_custom_name(self, agent):
+        """Test that long results with variable assignment use the specified name."""
+        call = PlaybookCall(
+            "LongPlaybook",
+            ["arg1"],
+            {"key": "value"},
+            variable_to_assign="$custom_name",
+            type_annotation="str",
+        )
+        long_result = "x" * 200
+
+        await agent._post_execute(call, True, long_result, Mock())
+
+        # Verify artifact was created with custom name
+        assert "$custom_name" in agent.state.variables
+        artifact = agent.state.variables["$custom_name"].value
+        assert artifact.name == "custom_name"
+        assert artifact.summary == "Output from LongPlaybook()"
+        assert artifact.value.endswith(long_result)
+
+    @pytest.mark.asyncio
+    async def test_artifact_with_variable_assignment_no_uuid(self, agent):
+        """Test that variable assignment doesn't include UUID in artifact name."""
+        call = PlaybookCall(
+            "GetData",
+            [],
+            {},
+            variable_to_assign="$my_data",
+            type_annotation=None,
+        )
+        long_result = "x" * 100
+
+        await agent._post_execute(call, True, long_result, Mock())
+
+        # Verify artifact name doesn't contain UUID
+        assert "$my_data" in agent.state.variables
+        artifact = agent.state.variables["$my_data"].value
+        assert artifact.name == "my_data"
+        # Ensure no UUID pattern in name
+        assert "_result_artifact" not in artifact.name
+        assert len(artifact.name.split("_")) == 2  # Just "my_data"
+
+    @pytest.mark.asyncio
+    async def test_artifact_variable_name_without_dollar_sign(self, agent):
+        """Test artifact naming when variable doesn't start with $."""
+        call = PlaybookCall(
+            "Process",
+            [],
+            {},
+            variable_to_assign="data",  # No $ prefix
+            type_annotation=None,
+        )
+        long_result = "x" * 100
+
+        await agent._post_execute(call, True, long_result, Mock())
+
+        # Verify artifact was stored under variable name without $
+        assert "data" in agent.state.variables
+        artifact = agent.state.variables["data"].value
+        assert artifact.name == "data"
+
+    @pytest.mark.asyncio
+    async def test_playbook_call_result_with_custom_variable_name(self, agent):
+        """Test that PlaybookCallResult contains custom variable name as result."""
+        call = PlaybookCall(
+            "FetchReport",
+            [],
+            {},
+            variable_to_assign="$report",
+            type_annotation=None,
+        )
+        long_result = "x" * 100
+
+        await agent._post_execute(call, True, long_result, Mock())
+
+        # Get the session log item
+        session_log_items = agent.state.session_log.log
+        call_result = session_log_items[-1]["item"]
+
+        # Verify result is the custom variable name
+        assert call_result.result == "$report"
+        assert call_result.result != long_result
+
+    @pytest.mark.asyncio
+    async def test_complex_variable_name_in_artifact(self, agent):
+        """Test artifact with complex variable name like $user_data_2024."""
+        call = PlaybookCall(
+            "FetchUserData",
+            [],
+            {},
+            variable_to_assign="$user_data_2024",
+            type_annotation="dict",
+        )
+        long_result = "x" * 100
+
+        await agent._post_execute(call, True, long_result, Mock())
+
+        # Verify artifact created with complex name
+        assert "$user_data_2024" in agent.state.variables
+        artifact = agent.state.variables["$user_data_2024"].value
+        assert artifact.name == "user_data_2024"
+
+    @pytest.mark.asyncio
+    async def test_backward_compatibility_no_variable_assignment(self, agent):
+        """Test that calls without variable assignment still use UUID-based names."""
+        call = PlaybookCall("TestPlaybook", ["arg1"], {"key": "value"})
+        long_result = "x" * 100
+
+        with patch("playbooks.agents.ai_agent.uuid.uuid4") as mock_uuid:
+            mock_uuid.return_value = "backward-compat-test"
+
+            await agent._post_execute(call, True, long_result, Mock())
+
+            # Verify artifact was created with UUID-based name (UUID truncated to 4 chars with a_ prefix)
+            expected_artifact_var = "$a_back"
+            assert expected_artifact_var in agent.state.variables
+            artifact = agent.state.variables[expected_artifact_var].value
+            assert artifact.name == "a_back"

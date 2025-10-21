@@ -226,18 +226,25 @@ class PlaybookLLMExecution(LLMExecution):
                                 playbook_call.args,
                                 playbook_call.kwargs,
                             )
+                            # Store result in variable if assignment was specified
+                            if playbook_call.variable_to_assign:
+                                # Only assign if result isn't already the variable name itself
+                                # (which indicates an artifact was already created and stored)
+                                if result != playbook_call.variable_to_assign:
+                                    self.agent.state.variables[
+                                        playbook_call.variable_to_assign
+                                    ] = result
 
                 # Return value
                 if line.return_value:
                     return_value = line.return_value
                     str_return_value = str(return_value)
-                    if (
-                        str_return_value.startswith("$")
-                        and str_return_value in self.agent.state.variables
-                    ):
-                        return_value = self.agent.state.variables[
-                            str_return_value
-                        ].value
+                    # If it's a variable reference or expression (starts with $), evaluate it
+                    if str_return_value.startswith("$"):
+                        context = ExpressionContext(
+                            agent=self.agent, state=self.agent.state, call=None
+                        )
+                        return_value = context.evaluate_expression(str_return_value)
 
                 # Wait for external event
                 if line.wait_for_user_input:
@@ -312,6 +319,7 @@ class PlaybookLLMExecution(LLMExecution):
         say_start_pos = 0
         say_recipient = ""
         processed_up_to = 0  # Track how much of buffer we've already processed
+        say_has_placeholders = False  # Track if current Say has {$var} placeholders
 
         for chunk in get_completion(
             messages=prompt.messages,
@@ -347,6 +355,7 @@ class PlaybookLLMExecution(LLMExecution):
                                 recipient_end_pattern
                             )  # Position after recipient and ", "
                             current_say_content = ""
+                            say_has_placeholders = False  # Reset for new Say call
                             processed_up_to = say_start_pos
                             await self.agent.start_streaming_say(say_recipient)
                         else:
@@ -366,15 +375,31 @@ class PlaybookLLMExecution(LLMExecution):
                 if end_pos != -1:
                     # Found end - extract final content and complete
                     final_content = buffer[say_start_pos:end_pos]
-                    if len(final_content) > len(current_say_content):
-                        new_content = final_content[len(current_say_content) :]
-                        if new_content:
-                            await self.agent.stream_say_update(new_content)
+
+                    # Resolve any {$var} placeholders in the message before streaming
+                    if "{" in final_content:
+                        final_content = await self._resolve_string_placeholders(
+                            final_content
+                        )
+
+                    # If we deferred streaming due to placeholders, stream entire resolved content
+                    # Otherwise, only stream the delta
+                    if say_has_placeholders:
+                        # Stream entire resolved content
+                        if final_content:
+                            await self.agent.stream_say_update(final_content)
+                    else:
+                        # Stream only new content since last update
+                        if len(final_content) > len(current_say_content):
+                            new_content = final_content[len(current_say_content) :]
+                            if new_content:
+                                await self.agent.stream_say_update(new_content)
 
                     await self.agent.complete_streaming_say()
                     in_say_call = False
                     current_say_content = ""
                     say_recipient = ""
+                    say_has_placeholders = False
                     processed_up_to = end_pos + len(end_pattern)
                 else:
                     # Still streaming - extract new content since last update
@@ -382,26 +407,54 @@ class PlaybookLLMExecution(LLMExecution):
                     # but make sure we don't include the closing quote if it's there
                     available_content = buffer[say_start_pos:]
 
+                    # Check if content has placeholders - if so, defer streaming until complete
+                    if "{$" in available_content and not say_has_placeholders:
+                        say_has_placeholders = True
+
                     # If we see the closing quote, don't include it in streaming
                     if available_content.endswith('")'):
                         available_content = available_content[:-2]  # Remove ")
                     elif available_content.endswith('"'):
                         available_content = available_content[:-1]  # Remove just "
 
-                    # Don't stream if it ends with escape character (incomplete)
-                    if not available_content.endswith("\\"):
-                        if len(available_content) > len(current_say_content):
-                            new_content = available_content[len(current_say_content) :]
-                            current_say_content = available_content
+                    # Don't stream incrementally if there are placeholders to resolve
+                    # Wait until message is complete to resolve and stream
+                    if not say_has_placeholders:
+                        # Don't stream if it ends with escape character (incomplete)
+                        if not available_content.endswith("\\"):
+                            if len(available_content) > len(current_say_content):
+                                new_content = available_content[
+                                    len(current_say_content) :
+                                ]
+                                current_say_content = available_content
 
-                            if new_content:
-                                await self.agent.stream_say_update(new_content)
+                                if new_content:
+                                    await self.agent.stream_say_update(new_content)
 
         # If we ended while still in a Say call, complete it
         if in_say_call:
             await self.agent.complete_streaming_say()
 
         return buffer
+
+    async def _resolve_string_placeholders(self, message: str) -> str:
+        """Resolve {$var} placeholders in a message string during streaming.
+
+        Args:
+            message: Message string that may contain {$var} placeholders
+
+        Returns:
+            Message with placeholders resolved to actual values
+        """
+        if not message or "{" not in message:
+            return message
+
+        # Create expression context for resolution
+        context = ExpressionContext(agent=self.agent, state=self.agent.state, call=None)
+
+        # Resolve placeholders
+        resolved = await resolve_description_placeholders(message, context)
+        return resolved
 
     def _resolve_yld_target(self, target: str) -> str:
         """Resolve a YLD target to an agent ID.

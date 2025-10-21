@@ -1,9 +1,11 @@
 """Test suite for Playbooks-LM preprocessing handler."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from playbooks.utils.playbooks_lm_handler import PlaybooksLMHandler
+
 from playbooks.utils.llm_helper import completion_with_preprocessing
+from playbooks.utils.playbooks_lm_handler import PlaybooksLMHandler
 
 
 class TestPlaybooksLMHandler:
@@ -44,7 +46,7 @@ class TestPlaybooksLMHandler:
         assert "executes markdown playbooks" in processed[0]["content"]
 
     def test_consecutive_message_merging(self, handler):
-        """Test that consecutive messages from same role are merged."""
+        """Test that consecutive messages from same role are NOT merged (merging disabled)."""
         messages = [
             {
                 "role": "system",
@@ -58,14 +60,16 @@ class TestPlaybooksLMHandler:
 
         processed = handler.preprocess_messages(messages)
 
-        # Should have alternating pattern after merging
-        roles = [m["role"] for m in processed]
-        for i in range(len(roles) - 1):
-            assert roles[i] != roles[i + 1], f"Consecutive same roles at {i} and {i+1}"
+        # Without merging: system becomes user, then 2 user msgs, 1 assistant, 1 user = 5 total
+        assert len(processed) == 5
+        assert processed[0]["role"] == "user"  # converted system
+        assert processed[1]["role"] == "user"  # first message
+        assert processed[2]["role"] == "user"  # second message
+        assert processed[3]["role"] == "assistant"  # first response
+        assert processed[4]["role"] == "user"  # final user message
 
     def test_alternating_pattern_validation(self, handler):
-        """Test that consecutive messages get merged properly."""
-        # After merging consecutive messages, pattern should be valid
+        """Test that consecutive messages are preserved without merging."""
         messages = [
             {
                 "role": "system",
@@ -76,17 +80,19 @@ class TestPlaybooksLMHandler:
             {
                 "role": "assistant",
                 "content": "How can I help?",
-            },  # Will merge with previous
+            },  # NOT merged with previous
             {"role": "user", "content": "Test"},
         ]
 
-        # This should work (consecutive messages get merged)
+        # Without merging, all messages stay separate
         processed = handler.preprocess_messages(messages)
-        # System becomes user and merges with next user, assistants merge, user stays
-        assert len(processed) == 3  # user(system+user merged), assistant(merged), user
-        assert processed[0]["role"] == "user"
-        assert processed[1]["role"] == "assistant"
-        assert processed[2]["role"] == "user"
+        # System becomes user, then user, assistant, assistant, user = 5 total
+        assert len(processed) == 5
+        assert processed[0]["role"] == "user"  # converted system
+        assert processed[1]["role"] == "user"
+        assert processed[2]["role"] == "assistant"
+        assert processed[3]["role"] == "assistant"  # NOT merged
+        assert processed[4]["role"] == "user"
 
     def test_last_message_must_be_user(self, handler):
         """Test that messages ending with assistant raise an error."""
@@ -189,10 +195,7 @@ class TestPlaybooksLMHandler:
         assert "interpreter" in processed[0]["content"]
 
     def test_invalid_alternating_pattern_raises_error(self, handler):
-        """Test that broken alternating pattern raises error."""
-        # Test case where preprocessing would result in invalid pattern
-        # This test case may not be needed if the handler now just validates strictly
-        # For now, just test that a valid case works
+        """Test that valid single-user message works correctly."""
         messages = [
             {
                 "role": "system",
@@ -203,8 +206,10 @@ class TestPlaybooksLMHandler:
 
         # Should not raise an error
         processed = handler.preprocess_messages(messages)
-        assert len(processed) == 1
-        assert processed[0]["role"] == "user"
+        # Without merging: system becomes user, then user message = 2 total
+        assert len(processed) == 2
+        assert processed[0]["role"] == "user"  # converted system
+        assert processed[1]["role"] == "user"  # user message
 
 
 class TestCompletionWrapper:

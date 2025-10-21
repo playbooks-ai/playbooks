@@ -2,6 +2,7 @@
 
 import pytest
 
+from playbooks.argument_types import LiteralValue, VariableReference
 from playbooks.event_bus import EventBus
 from playbooks.llm_response_line import LLMResponseLine
 
@@ -185,7 +186,8 @@ class TestLLMResponseLine:
         )
         assert len(line.playbook_calls) == 1
         assert line.playbook_calls[0].playbook_klass == "GetOrder"
-        assert line.playbook_calls[0].args == ["$order_id"]
+        assert isinstance(line.playbook_calls[0].args[0], VariableReference)
+        assert line.playbook_calls[0].args[0].reference == "$order_id"
 
     async def test_playbook_call_with_string_arg(self, event_bus, mock_agent):
         """Test parsing playbook call with string argument."""
@@ -195,7 +197,8 @@ class TestLLMResponseLine:
         assert len(line.playbook_calls) == 1
         call = line.playbook_calls[0]
         assert call.playbook_klass == "ProcessOrder"
-        assert call.args == ["pending"]
+        assert isinstance(call.args[0], LiteralValue)
+        assert call.args[0].value == "pending"
 
     async def test_playbook_call_with_kwargs(self, event_bus, mock_agent):
         """Test parsing playbook call with keyword arguments."""
@@ -205,7 +208,8 @@ class TestLLMResponseLine:
         assert len(line.playbook_calls) == 1
         call = line.playbook_calls[0]
         assert call.playbook_klass == "GetOrder"
-        assert call.kwargs == {"order_id": "$id"}
+        assert isinstance(call.kwargs["order_id"], VariableReference)
+        assert call.kwargs["order_id"].reference == "$id"
 
     async def test_playbook_call_with_boolean_kwargs(self, event_bus, mock_agent):
         """Test parsing playbook call with boolean keyword arguments."""
@@ -217,10 +221,12 @@ class TestLLMResponseLine:
         assert len(line.playbook_calls) == 1
         call = line.playbook_calls[0]
         assert call.playbook_klass == "FileSystemAgent.list_directory"
-        assert call.kwargs == {"path": "$folder_path", "recursive": True}
+        assert isinstance(call.kwargs["path"], VariableReference)
+        assert call.kwargs["path"].reference == "$folder_path"
         # Ensure it's a boolean, not the string "$true"
-        assert isinstance(call.kwargs["recursive"], bool)
-        assert call.kwargs["recursive"] is True
+        assert isinstance(call.kwargs["recursive"], LiteralValue)
+        assert isinstance(call.kwargs["recursive"].value, bool)
+        assert call.kwargs["recursive"].value is True
 
     async def test_playbook_call_with_false_kwarg(self, event_bus, mock_agent):
         """Test parsing playbook call with false keyword argument."""
@@ -231,8 +237,9 @@ class TestLLMResponseLine:
         )
         assert len(line.playbook_calls) == 1
         call = line.playbook_calls[0]
-        assert call.kwargs["recursive"] is False
-        assert isinstance(call.kwargs["recursive"], bool)
+        assert isinstance(call.kwargs["recursive"], LiteralValue)
+        assert call.kwargs["recursive"].value is False
+        assert isinstance(call.kwargs["recursive"].value, bool)
 
     async def test_playbook_call_with_multiple_kwargs(self, event_bus, mock_agent):
         """Test parsing playbook call with multiple keyword arguments."""
@@ -244,8 +251,12 @@ class TestLLMResponseLine:
         assert len(line.playbook_calls) == 1
         call = line.playbook_calls[0]
         assert call.playbook_klass == "ProcessOrder"
-        assert call.args == ["$order"]
-        assert call.kwargs == {"status": "pending", "notify": True}
+        assert isinstance(call.args[0], VariableReference)
+        assert call.args[0].reference == "$order"
+        assert isinstance(call.kwargs["status"], LiteralValue)
+        assert call.kwargs["status"].value == "pending"
+        assert isinstance(call.kwargs["notify"], LiteralValue)
+        assert call.kwargs["notify"].value is True
 
     async def test_playbook_call_with_numeric_arg(self, event_bus, mock_agent):
         """Test parsing playbook call with numeric arguments."""
@@ -254,7 +265,8 @@ class TestLLMResponseLine:
         )
         assert len(line.playbook_calls) == 1
         call = line.playbook_calls[0]
-        assert call.args == [100]
+        assert isinstance(call.args[0], LiteralValue)
+        assert call.args[0].value == 100
 
     async def test_module_qualified_playbook_call(self, event_bus, mock_agent):
         """Test parsing module-qualified playbook calls."""
@@ -369,7 +381,8 @@ class TestLLMResponseLine:
         )
         assert len(line.playbook_calls) == 1
         assert line.playbook_calls[0].playbook_klass == "GetOrder"
-        assert line.playbook_calls[0].args == ["$id"]
+        assert isinstance(line.playbook_calls[0].args[0], VariableReference)
+        assert line.playbook_calls[0].args[0].reference == "$id"
 
     async def test_reported_bug_case(self, event_bus, mock_agent):
         """Test the specific bug case reported by the user."""
@@ -382,10 +395,12 @@ class TestLLMResponseLine:
         call = line.playbook_calls[0]
         assert call.playbook_klass == "FileSystemAgent.list_directory"
         assert "path" in call.kwargs
-        assert call.kwargs["path"] == "$folder_path"
+        assert isinstance(call.kwargs["path"], VariableReference)
+        assert call.kwargs["path"].reference == "$folder_path"
         assert "recursive" in call.kwargs
         # The bug: recursive should be True (boolean), not "$true" (string)
+        assert isinstance(call.kwargs["recursive"], LiteralValue)
         assert (
-            call.kwargs["recursive"] is True
-        ), f"Expected True but got {call.kwargs['recursive']!r}"
-        assert isinstance(call.kwargs["recursive"], bool)
+            call.kwargs["recursive"].value is True
+        ), f"Expected True but got {call.kwargs['recursive'].value!r}"
+        assert isinstance(call.kwargs["recursive"].value, bool)
