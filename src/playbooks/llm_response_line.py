@@ -1,3 +1,4 @@
+import ast
 import json
 import re
 from typing import TYPE_CHECKING, Any, List
@@ -190,11 +191,13 @@ class LLMResponseLine(AsyncInitMixin):
         try:
             return simple_eval(arg_value)
         except (ValueError, SyntaxError, FeatureNotAvailable, NameNotDefined):
-            # If literal_eval fails, parse it as json
             try:
-                return json.loads(arg_value)
+                return ast.literal_eval(arg_value)
             except (ValueError, SyntaxError):
-                return arg_value
+                try:
+                    return json.loads(arg_value)
+                except (ValueError, SyntaxError):
+                    return arg_value
 
     def _parse_yld_patterns(self):
         """Parse YLD patterns and set appropriate wait flags."""
