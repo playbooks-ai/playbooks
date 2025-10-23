@@ -27,8 +27,9 @@ class LLMResponse(AsyncInitMixin):
         # Find all artifact blocks with triple quotes (can span multiple lines)
         artifact_pattern = r'`Artifact\[\$[^,\]]+,\s*"[^"]+",\s*""".*?"""\]`'
 
-        # Find all Var blocks with triple quotes (can span multiple lines)
-        var_multiline_pattern = r'`Var\[\$[^,\]]+,\s*""".*?"""\]`'
+        # Find all Var blocks (can span multiple lines)
+        # Matches from `Var[ to ]` allowing any content including newlines
+        var_multiline_pattern = r"`Var\[[^\`]+\]`"
 
         # Find all playbook calls with triple quotes (can span multiple lines)
         # Matches: `PlaybookName("""...""")` or `$var = PlaybookName("""...""")`

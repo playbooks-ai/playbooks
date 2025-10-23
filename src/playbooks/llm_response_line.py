@@ -2,7 +2,7 @@ import json
 import re
 from typing import TYPE_CHECKING, Any, List
 
-from simpleeval import FeatureNotAvailable, simple_eval
+from simpleeval import FeatureNotAvailable, NameNotDefined, simple_eval
 
 from playbooks.call_stack import InstructionPointer
 from playbooks.event_bus import EventBus
@@ -81,7 +81,8 @@ class LLMResponseLine(AsyncInitMixin):
             self.vars[var_name] = var_value
 
         # Then check for regular variable syntax
-        var_matches = re.findall(r"`Var\[(\$[^,\]]+),\s*(.*?)\]`", self.text)
+        # Use DOTALL to match multi-line content (e.g., JSON arrays/objects)
+        var_matches = re.findall(r"`Var\[(\$[^,]+?),\s*(.*?)\]`", self.text, re.DOTALL)
 
         for var_name, var_value_str in var_matches:
             # Skip if this was already processed as an artifact or multi-line string
@@ -188,7 +189,7 @@ class LLMResponseLine(AsyncInitMixin):
         # Try to parse as a Python literal using ast.literal_eval
         try:
             return simple_eval(arg_value)
-        except (ValueError, SyntaxError, FeatureNotAvailable):
+        except (ValueError, SyntaxError, FeatureNotAvailable, NameNotDefined):
             # If literal_eval fails, parse it as json
             try:
                 return json.loads(arg_value)
