@@ -177,6 +177,8 @@ class TestArtifactNamingWithAssignment:
 
     def test_long_result_creates_artifact_with_custom_name(self, agent):
         """Test that long results with assignment create artifact with specified name."""
+        import hashlib
+
         call = PlaybookCall(
             "LongPlaybook",
             [],
@@ -196,7 +198,9 @@ class TestArtifactNamingWithAssignment:
                     else artifact_var_name
                 )
             else:
-                artifact_name_base = f"{call.playbook_klass}_uuid_result_artifact"
+                # Use hash of content for stable names across runs
+                content_hash = hashlib.sha256(str(long_result).encode()).hexdigest()[:8]
+                artifact_name_base = f"a_{content_hash}"
                 artifact_var_name = f"${artifact_name_base}"
 
         artifact = Artifact(
@@ -213,8 +217,10 @@ class TestArtifactNamingWithAssignment:
         assert artifact.name == "custom_name"
         assert artifact.summary == "Result of LongPlaybook call"
 
-    def test_long_result_without_assignment_uses_uuid(self, agent):
-        """Test that long results without assignment use UUID-based names."""
+    def test_long_result_without_assignment_uses_hash(self, agent):
+        """Test that long results without assignment use hash-based names for stability."""
+        import hashlib
+
         call = PlaybookCall("LongPlaybook", [], {})
         long_result = "x" * (config.artifact_result_threshold + 1)
 
@@ -228,7 +234,9 @@ class TestArtifactNamingWithAssignment:
                     else artifact_var_name
                 )
             else:
-                artifact_name_base = f"{call.playbook_klass}_test_uuid_result_artifact"
+                # Use hash of content for stable names across runs
+                content_hash = hashlib.sha256(str(long_result).encode()).hexdigest()[:8]
+                artifact_name_base = f"a_{content_hash}"
                 artifact_var_name = f"${artifact_name_base}"
 
         artifact = Artifact(
@@ -238,15 +246,17 @@ class TestArtifactNamingWithAssignment:
         )
         agent.state.variables[artifact_var_name] = artifact
 
-        # Verify artifact was created with UUID-based name
-        artifact_var_name = "$LongPlaybook_test_uuid_result_artifact"
+        # Verify artifact was created with hash-based name
         assert artifact_var_name in agent.state.variables
         artifact = agent.state.variables[artifact_var_name].value
         assert isinstance(artifact, Artifact)
-        assert "_result_artifact" in artifact.name
+        assert artifact.name == artifact_name_base
+        assert artifact.summary == f"Result of {call.playbook_klass} call"
 
     def test_variable_name_without_dollar_prefix(self, agent):
         """Test artifact naming when variable has no $ prefix."""
+        import hashlib
+
         call = PlaybookCall(
             "GetData",
             [],
@@ -266,7 +276,9 @@ class TestArtifactNamingWithAssignment:
                     else artifact_var_name
                 )
             else:
-                artifact_name_base = f"{call.playbook_klass}_uuid_result_artifact"
+                # Use hash of content for stable names across runs
+                content_hash = hashlib.sha256(str(long_result).encode()).hexdigest()[:8]
+                artifact_name_base = f"a_{content_hash}"
                 artifact_var_name = f"${artifact_name_base}"
 
         artifact = Artifact(
@@ -283,6 +295,8 @@ class TestArtifactNamingWithAssignment:
 
     def test_complex_variable_name_in_artifact(self, agent):
         """Test artifact with complex variable name like $user_data_2024."""
+        import hashlib
+
         call = PlaybookCall(
             "FetchData",
             [],
@@ -302,7 +316,9 @@ class TestArtifactNamingWithAssignment:
                     else artifact_var_name
                 )
             else:
-                artifact_name_base = f"{call.playbook_klass}_uuid_result_artifact"
+                # Use hash of content for stable names across runs
+                content_hash = hashlib.sha256(str(long_result).encode()).hexdigest()[:8]
+                artifact_name_base = f"a_{content_hash}"
                 artifact_var_name = f"${artifact_name_base}"
 
         artifact = Artifact(

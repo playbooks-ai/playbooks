@@ -67,13 +67,16 @@ class TestPlaybookResultArtifacts:
         """Test that results over 80 characters automatically create an artifact."""
         long_result = "x" * 81  # 81 characters
 
-        with patch("playbooks.agents.ai_agent.uuid.uuid4") as mock_uuid:
-            mock_uuid.return_value = "test-uuid-1234"
+        with patch("playbooks.agents.ai_agent.hashlib.sha256") as mock_hash:
+            # Mock the hash to return a predictable value
+            mock_hash_obj = Mock()
+            mock_hash_obj.hexdigest.return_value = "testhash1234567890"
+            mock_hash.return_value = mock_hash_obj
 
             await agent._post_execute(playbook_call, True, long_result, Mock())
 
-            # Verify artifact was created (UUID is truncated to first 4 chars with a_ prefix)
-            expected_artifact_name = "$a_test"
+            # Verify artifact was created with hash-based name (first 8 chars of hash)
+            expected_artifact_name = "$a_testhash"
             assert expected_artifact_name in agent.state.variables
 
         # Verify artifact content (includes playbook call prefix)
@@ -113,17 +116,29 @@ class TestPlaybookResultArtifacts:
 
     @pytest.mark.asyncio
     async def test_artifact_name_format(self, agent, playbook_call):
-        """Test that artifact names follow the correct format."""
+        """Test that artifact names follow the correct format with content hash."""
         long_result = "x" * 100
 
-        with patch("playbooks.agents.ai_agent.uuid.uuid4") as mock_uuid:
-            mock_uuid.return_value = "custom-uuid-5678"
+        with patch("playbooks.agents.ai_agent.hashlib.sha256") as mock_hash:
+            # Mock the hash to return a predictable value
+            mock_hash_obj = Mock()
+            mock_hash_obj.hexdigest.return_value = "custom_hash_1234567890"
+            mock_hash.return_value = mock_hash_obj
 
             await agent._post_execute(playbook_call, True, long_result, Mock())
 
-            # Verify artifact name format (UUID truncated to first 4 chars with a_ prefix)
-            expected_name = "$a_cust"
-            assert expected_name in agent.state.variables
+            # Verify artifact name format (hash-based with first 8 chars of hash)
+            # Should be $a_ + first 8 chars of hash = $a_custom_h
+            created_artifacts = [
+                v for v in agent.state.variables if not v.name.startswith("$__")
+            ]
+            assert len(created_artifacts) > 0
+            artifact_var = created_artifacts[0]
+            # The variable name includes the $ prefix, so it should be "$a_custom_h"
+            assert artifact_var.name == "$a_custom_h"
+            # And the artifact.name field (without $) should be "a_custom_h"
+            artifact = artifact_var.value
+            assert artifact.name == "a_custom_h"
 
     @pytest.mark.asyncio
     async def test_artifact_summary_format(self, agent):
@@ -174,8 +189,11 @@ class TestPlaybookResultArtifacts:
         """Test that PlaybookCallResult contains the artifact name instead of the result."""
         long_result = "x" * 100
 
-        with patch("playbooks.agents.ai_agent.uuid.uuid4") as mock_uuid:
-            mock_uuid.return_value = "uuid-for-result"
+        with patch("playbooks.agents.ai_agent.hashlib.sha256") as mock_hash:
+            # Mock the hash to return a predictable value
+            mock_hash_obj = Mock()
+            mock_hash_obj.hexdigest.return_value = "abcd1234567890ef"
+            mock_hash.return_value = mock_hash_obj
 
             await agent._post_execute(playbook_call, True, long_result, Mock())
 
@@ -186,8 +204,9 @@ class TestPlaybookResultArtifacts:
             call_result = session_log_items[-1]["item"]
             assert isinstance(call_result, PlaybookCallResult)
 
-            # Verify result is the artifact name, not the actual result (UUID truncated to 4 chars with a_ prefix)
-            expected_artifact_name = "$a_uuid"
+            # Verify result is the artifact name (hash-based with first 8 chars)
+            # The artifact name should be $a_ + first 8 chars of hash
+            expected_artifact_name = "$a_abcd1234"
             assert call_result.result == expected_artifact_name
             assert call_result.result != long_result
 
@@ -331,8 +350,11 @@ class TestPlaybookResultArtifacts:
         long_result = "x" * 100
         mock_langfuse_span = Mock()
 
-        with patch("playbooks.agents.ai_agent.uuid.uuid4") as mock_uuid:
-            mock_uuid.return_value = "test-uuid"
+        with patch("playbooks.agents.ai_agent.hashlib.sha256") as mock_hash:
+            # Mock the hash to return a predictable value
+            mock_hash_obj = Mock()
+            mock_hash_obj.hexdigest.return_value = "test_hash_1234567890"
+            mock_hash.return_value = mock_hash_obj
 
             await agent._post_execute(
                 playbook_call, True, long_result, mock_langfuse_span
@@ -454,8 +476,11 @@ class TestPlaybookResultArtifacts:
         frame = CallStackFrame(instruction_pointer)
         agent.state.call_stack.push(frame)
 
-        with patch("playbooks.agents.ai_agent.uuid.uuid4") as mock_uuid:
-            mock_uuid.return_value = "test-uuid"
+        with patch("playbooks.agents.ai_agent.hashlib.sha256") as mock_hash:
+            # Mock the hash to return a predictable value
+            mock_hash_obj = Mock()
+            mock_hash_obj.hexdigest.return_value = "test_hash_1234567890"
+            mock_hash.return_value = mock_hash_obj
 
             await agent._post_execute(playbook_call, True, long_result, Mock())
 
@@ -468,8 +493,8 @@ class TestPlaybookResultArtifacts:
             assert len(artifact_messages) == 1
             artifact_msg = artifact_messages[0]
 
-            # Verify the message content includes the artifact details (UUID truncated to 4 chars with a_ prefix)
-            expected_artifact_name = "$a_test"
+            # Verify the message content includes the artifact details (hash-based name)
+            expected_artifact_name = "$a_test_has"  # First 8 chars of hash after a_
             assert expected_artifact_name in artifact_msg.content
             assert "Summary:" in artifact_msg.content
             assert long_result in artifact_msg.content
@@ -582,18 +607,22 @@ class TestPlaybookResultArtifacts:
         assert artifact.name == "user_data_2024"
 
     @pytest.mark.asyncio
-    async def test_backward_compatibility_no_variable_assignment(self, agent):
-        """Test that calls without variable assignment still use UUID-based names."""
+    async def test_hash_based_naming_no_variable_assignment(self, agent):
+        """Test that calls without variable assignment use hash-based stable names."""
         call = PlaybookCall("TestPlaybook", ["arg1"], {"key": "value"})
         long_result = "x" * 100
 
-        with patch("playbooks.agents.ai_agent.uuid.uuid4") as mock_uuid:
-            mock_uuid.return_value = "backward-compat-test"
+        with patch("playbooks.agents.ai_agent.hashlib.sha256") as mock_hash:
+            # Mock the hash to return a predictable value
+            mock_hash_obj = Mock()
+            mock_hash_obj.hexdigest.return_value = "backward_compat_hash_123456"
+            mock_hash.return_value = mock_hash_obj
 
             await agent._post_execute(call, True, long_result, Mock())
 
-            # Verify artifact was created with UUID-based name (UUID truncated to 4 chars with a_ prefix)
-            expected_artifact_var = "$a_back"
+            # Verify artifact was created with hash-based stable name
+            # Expected: $a_ + first 8 chars of hash = $a_backward
+            expected_artifact_var = "$a_backward"
             assert expected_artifact_var in agent.state.variables
             artifact = agent.state.variables[expected_artifact_var].value
-            assert artifact.name == "a_back"
+            assert artifact.name == "a_backward"

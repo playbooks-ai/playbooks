@@ -1,6 +1,6 @@
 import copy
+import hashlib
 import tempfile
-import uuid
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Dict, List
 
@@ -825,9 +825,12 @@ async def {self.bgn_playbook_name}() -> None:
                     else artifact_var_name
                 )
             else:
-                # Prefix with 'a' to ensure valid Python identifier (can't start with digit)
-                artifact_name_base = f"a_{str(uuid.uuid4())[:4]}"
+                # Generate a hash of the content to use as the artifact name
+                # This ensures stable artifact names across runs
+                content_hash = hashlib.sha256(str(result).encode()).hexdigest()[:8]
+                artifact_name_base = f"a_{content_hash}"
                 artifact_var_name = f"${artifact_name_base}"
+
             artifact_summary = f"Output from {call.playbook_klass}()"
             artifact_contents = str(result)
 
