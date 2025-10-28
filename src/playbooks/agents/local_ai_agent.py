@@ -142,6 +142,8 @@ class LocalAIAgent(AIAgent):
             **kwargs,
         )
         # Namespace setup is now handled in AIAgent.__init__
+        # Track execution counter for Python code execution
+        self.execution_counter = 0
 
     async def discover_playbooks(self) -> None:
         """Discover playbooks for local agent.

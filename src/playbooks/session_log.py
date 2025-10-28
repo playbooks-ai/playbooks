@@ -1,13 +1,6 @@
 import textwrap
 from abc import ABC
-from enum import Enum
 from typing import Iterator, List
-
-
-class SessionLogItemLevel(Enum):
-    HIGH = 0
-    MEDIUM = 1
-    LOW = 2
 
 
 class SessionLogItem(ABC):
@@ -33,25 +26,18 @@ class SessionLogItemMessage(SessionLogItem):
     def to_log_full(self) -> str:
         return self.message
 
-    def to_log_compact(self) -> str:
-        return self.shorten(self.message, 200, placeholder="...")
-
-    def to_log_minimal(self) -> str:
-        return self.shorten(self.message, 50, placeholder="...")
-
 
 class SessionLog:
     def __init__(self, klass: str, agent_id: str):
         self.klass = klass
         self.agent_id = agent_id
-        self.log: List[dict[SessionLogItemLevel, SessionLogItem]] = []
+        self.log: List[dict] = []
 
     def add(
         self,
         item: SessionLogItem,
-        level: SessionLogItemLevel = SessionLogItemLevel.MEDIUM,
     ):
-        self.append(item, level)
+        self.append(item)
 
     def __getitem__(self, index):
         return self.log[index]["item"]
@@ -68,46 +54,19 @@ class SessionLog:
     def append(
         self,
         item: SessionLogItem | str,
-        level: SessionLogItemLevel = SessionLogItemLevel.MEDIUM,
     ):
         if isinstance(item, str):
             if not item.strip():
                 return
             item = SessionLogItemMessage(item)
-        self.log.append({"item": item, "level": level})
+        self.log.append({"item": item})
 
     def __str__(self) -> str:
         parts = []
-        for index, item in enumerate(self.log):
-            reverse_index = len(self.log) - index
-            level = item["level"]
-
-            if (
-                (level == SessionLogItemLevel.HIGH and reverse_index < 30)
-                or (level == SessionLogItemLevel.MEDIUM and reverse_index < 20)
-                or (level == SessionLogItemLevel.LOW and reverse_index < 10)
-            ):
-                item_str = item["item"].to_log_full()
-
-            elif (
-                (level == SessionLogItemLevel.HIGH and reverse_index < 40)
-                or (level == SessionLogItemLevel.MEDIUM and reverse_index < 30)
-                or (level == SessionLogItemLevel.LOW and reverse_index < 20)
-            ):
-                item_str = item["item"].to_log_compact()
-
-            elif (
-                (level == SessionLogItemLevel.HIGH and reverse_index < 50)
-                or (level == SessionLogItemLevel.MEDIUM and reverse_index < 40)
-                or (level == SessionLogItemLevel.LOW and reverse_index < 30)
-            ):
-                item_str = item["item"].to_log_minimal()
-
-            else:
-                item_str = ""
-
-            if item_str:
-                parts.append(item_str)
+        for item in self.log:
+            message = item["item"].to_log_full()
+            if message:
+                parts.append(message)
         return "\n".join(parts)
 
     def to_log_full(self) -> str:

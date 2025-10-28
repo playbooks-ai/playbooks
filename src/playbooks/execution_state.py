@@ -55,15 +55,28 @@ class ExecutionState:
 
     def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary representation of the execution state."""
-        # Build meetings list for LLM visibility from owned meetings
-        meetings_list = []
+        # Owned meetings
+        owned_meetings_list = []
+        joined_meetings_list = []
+
         for meeting_id, meeting in self.owned_meetings.items():
             participants_list = []
             for participant in meeting.joined_attendees:
                 participants_list.append(f"{participant.klass}(agent {participant.id})")
-
-            meetings_list.append(
+            owned_meetings_list.append(
                 {"meeting_id": meeting_id, "participants": participants_list}
+            )
+            joined_meetings_list.append(
+                {
+                    "meeting_id": meeting_id,
+                    "owner": f"Owned by me - agent {meeting.owner_id}",
+                }
+            )
+
+        # Joined meetings
+        for meeting_id, meeting in self.joined_meetings.items():
+            joined_meetings_list.append(
+                {"meeting_id": meeting_id, "owner": f"agent {meeting.owner_id}"}
             )
 
         return {
@@ -73,7 +86,8 @@ class ExecutionState:
             ],
             "variables": self.variables.to_dict(),
             "agents": self.agents,
-            "meetings": meetings_list,
+            "owned_meetings": owned_meetings_list,
+            "joined_meetings": joined_meetings_list,
         }
 
     def __str__(self) -> str:

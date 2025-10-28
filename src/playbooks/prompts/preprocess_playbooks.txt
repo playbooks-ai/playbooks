@@ -517,7 +517,9 @@ Only consider cities in the United States.
 - 02:RET $city in "Austin, TX" format
 
 ## ProcessMe($report: str) -> int
-execution_mode:react
+metadata:
+  execution_mode: react
+---
 You are a processor who will take each line of the report and count how many lines it has. You have tools like LookupInfo that you can call. 
 
 ```public.json

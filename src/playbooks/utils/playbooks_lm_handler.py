@@ -83,8 +83,8 @@ class PlaybooksLMHandler:
 Output Contract — **WRITE NOTHING ELSE**
 
 ```
-recap – one‑sentence summary
-plan  – one‑sentence immediate goal
+# recap: one‑sentence summary
+# plan: one‑sentence immediate goal
 `Var[$name, <value>]`
 `SaveArtifact($name, "one line summary", "long form content...")`
 trig? <no | `Trigger["PB:Ln:Code"]` \n yld for call>

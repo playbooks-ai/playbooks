@@ -2,6 +2,7 @@ import copy
 import hashlib
 import tempfile
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..argument_types import LiteralValue, VariableReference
@@ -267,14 +268,10 @@ async def {self.bgn_playbook_name}() -> None:
 """
 
         # Save to tmp file
-        prefix = f"{self.klass}_{self.bgn_playbook_name}"
-        file_path = None
-        with tempfile.NamedTemporaryFile(
-            mode="w", prefix=prefix, suffix=".pb", delete=False
-        ) as f:
+        filename = f"{self.klass}_{self.bgn_playbook_name}_{hashlib.sha256(code_block.encode()).hexdigest()[:16]}.pb"
+        file_path = Path(tempfile.gettempdir()) / filename
+        with open(file_path, "w") as f:
             f.write(code_block)
-            f.flush()
-            file_path = f.name
 
         # debug("BGN Playbook Code Block: " + code_block)
         new_playbook = PythonPlaybook.create_playbooks_from_code_block(
@@ -806,7 +803,10 @@ async def {self.bgn_playbook_name}() -> None:
         self, call: PlaybookCall, success: bool, result: Any, langfuse_span: Any
     ) -> None:
 
-        execution_summary = self.state.variables.variables["$__"].value
+        if "$__" in self.state.variables:
+            execution_summary = self.state.variables.variables["$__"].value
+        else:
+            execution_summary = None
 
         # Check if result is already an Artifact object (before it gets modified)
         returned_artifact = None
@@ -819,7 +819,7 @@ async def {self.bgn_playbook_name}() -> None:
             # Use user-specified variable name if provided, otherwise auto-generate
             if call.variable_to_assign:
                 artifact_var_name = call.variable_to_assign
-                artifact_name_base = (
+                artifact_var_name = (
                     artifact_var_name[1:]
                     if artifact_var_name.startswith("$")
                     else artifact_var_name
@@ -828,31 +828,44 @@ async def {self.bgn_playbook_name}() -> None:
                 # Generate a hash of the content to use as the artifact name
                 # This ensures stable artifact names across runs
                 content_hash = hashlib.sha256(str(result).encode()).hexdigest()[:8]
-                artifact_name_base = f"a_{content_hash}"
-                artifact_var_name = f"${artifact_name_base}"
+                artifact_var_name = f"a_{content_hash}"
 
-            artifact_summary = f"Output from {call.playbook_klass}()"
+            artifact_summary = f"Output from {call.to_log_full()}"
             artifact_contents = str(result)
 
             # Create artifact and store in variables
             artifact = Artifact(
-                name=artifact_name_base,
+                name=f"${artifact_var_name}",
                 summary=artifact_summary,
                 value=artifact_contents,
             )
-            self.state.variables[artifact_var_name] = artifact
+            # Store with $ prefix to follow variable naming convention
+            self.state.variables[f"${artifact_var_name}"] = artifact
             artifact_result = True
-            result = artifact_var_name
+            result = f"${artifact_var_name}"
 
         # Set $_ to capture the return value for next operation
         # If artifact was created, result is now the artifact var reference
         # Otherwise it's the plain result value
         if artifact_result:
-            # result is now a string like "$a_uuid", store the actual artifact
-            self.state.variables["$_"] = self.state.variables[result].value
+            # result is now a string like "$a_uuid", retrieve the artifact
+            if isinstance(self.state.variables[result], Artifact):
+                artifact_obj = self.state.variables[result]
+            elif isinstance(self.state.variables[result].value, Artifact):
+                artifact_obj = self.state.variables[result].value
+            else:
+                raise ValueError(
+                    f"Invalid artifact object: {self.state.variables[result]}"
+                )
+            # Store in $_ for chaining operations
+            # Create with the $ prefix key to match dictionary key for proper filtering
+            self.state.variables["$_"] = artifact_obj
+            # Note: result stays as $a_... (the artifact variable reference)
         elif returned_artifact:
             # Playbook returned an artifact object directly
             self.state.variables["$_"] = returned_artifact
+            artifact_var_name = returned_artifact.name
+            result = f"Artifact: {artifact_var_name}"
         else:
             # Plain result value
             self.state.variables["$_"] = result
@@ -863,12 +876,9 @@ async def {self.bgn_playbook_name}() -> None:
         self.state.call_stack.pop()
 
         if artifact_result:
-            artifact_obj = self.state.variables[result].value
             artifact_msg = ArtifactLLMMessage(artifact_obj)
             self.state.call_stack.add_llm_message(artifact_msg)
         elif returned_artifact:
-            # If a playbook returned an artifact object, add ArtifactLLMMessage
-            # to the calling frame so the LLM can see the artifact content
             artifact_msg = ArtifactLLMMessage(returned_artifact)
             self.state.call_stack.add_llm_message(artifact_msg)
 
@@ -880,7 +890,7 @@ async def {self.bgn_playbook_name}() -> None:
         self.state.call_stack.add_llm_message(result_msg)
 
         if artifact_result:
-            langfuse_span.update(output=self.state.variables[result].value)
+            langfuse_span.update(output=artifact_obj.value)
         else:
             langfuse_span.update(output=result)
 

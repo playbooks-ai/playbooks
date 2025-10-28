@@ -8,6 +8,7 @@ from playbooks.agents.ai_agent import AIAgent
 from playbooks.call_stack import CallStackFrame, InstructionPointer
 from playbooks.event_bus import EventBus
 from playbooks.execution_state import ExecutionState
+from playbooks.llm_messages import ExecutionResultLLMMessage
 from playbooks.llm_messages.types import ArtifactLLMMessage
 from playbooks.playbook_call import PlaybookCall
 from playbooks.variables import Artifact
@@ -66,9 +67,12 @@ class TestReturnedArtifactLLMMessage:
     @pytest.mark.asyncio
     async def test_returned_artifact_creates_llm_message(self, agent, playbook_call):
         """Test that when a playbook returns an Artifact, an ArtifactLLMMessage is added."""
+        assert len(agent.state.call_stack.frames) == 1
+        frame1 = agent.state.call_stack.peek()
+
         # Create an artifact that will be returned
         artifact = Artifact(
-            name="test_artifact",
+            name="$test_artifact",
             summary="Test artifact summary",
             value="This is the artifact content.",
         )
@@ -78,28 +82,24 @@ class TestReturnedArtifactLLMMessage:
 
         # Push an extra frame since post_execute will pop one
         instruction_pointer = InstructionPointer("TestPlaybook2", "1", 1)
-        frame = CallStackFrame(instruction_pointer)
-        agent.state.call_stack.push(frame)
+        frame2 = CallStackFrame(instruction_pointer)
+        agent.state.call_stack.push(frame2)
 
-        initial_message_count = len(agent.state.call_stack.peek().llm_messages)
+        assert len(agent.state.call_stack.frames) == 2
+        frame1_message_count = len(frame1.llm_messages)
+        assert frame1_message_count == 0
+        frame2_message_count = len(frame2.llm_messages)
+        assert frame2_message_count == 0
 
         # The playbook returns an artifact object
         await agent._post_execute(playbook_call, True, artifact, Mock())
 
         # Get the messages from the call stack (after pop)
-        final_messages = agent.state.call_stack.peek().llm_messages
-
-        # Should have added ArtifactLLMMessage and ExecutionResultLLMMessage
-        assert len(final_messages) == initial_message_count + 2
-
-        # Check that one of the new messages is an ArtifactLLMMessage
-        artifact_messages = [
-            msg for msg in final_messages if isinstance(msg, ArtifactLLMMessage)
-        ]
-        assert len(artifact_messages) == 1
-
-        # Verify it's the correct artifact
-        assert artifact_messages[0].artifact == artifact
+        assert len(agent.state.call_stack.frames) == 1
+        assert agent.state.call_stack.peek() == frame1
+        assert len(frame1.llm_messages) == 2
+        assert isinstance(frame1.llm_messages[0], ArtifactLLMMessage)
+        assert isinstance(frame1.llm_messages[1], ExecutionResultLLMMessage)
 
     @pytest.mark.asyncio
     async def test_returned_artifact_preserves_artifact_details(

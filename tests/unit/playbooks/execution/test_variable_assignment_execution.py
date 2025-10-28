@@ -290,7 +290,7 @@ class TestArtifactNamingWithAssignment:
 
         # Verify artifact name doesn't have $ prefix
         assert "data" in agent.state.variables
-        artifact = agent.state.variables["data"].value
+        artifact = agent.state.variables["data"]
         assert artifact.name == "data"
 
     def test_complex_variable_name_in_artifact(self, agent):

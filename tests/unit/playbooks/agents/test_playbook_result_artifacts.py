@@ -80,7 +80,7 @@ class TestPlaybookResultArtifacts:
             assert expected_artifact_name in agent.state.variables
 
         # Verify artifact content (includes playbook call prefix)
-        artifact = agent.state.variables[expected_artifact_name].value
+        artifact = agent.state.variables[expected_artifact_name]
         assert long_result in artifact.value
         assert artifact.summary.startswith("Output from TestPlaybook")
 
@@ -134,11 +134,10 @@ class TestPlaybookResultArtifacts:
             ]
             assert len(created_artifacts) > 0
             artifact_var = created_artifacts[0]
-            # The variable name includes the $ prefix, so it should be "$a_custom_h"
+            # The artifact.name field should be "$a_custom_h" (with $ prefix to match dict key)
             assert artifact_var.name == "$a_custom_h"
-            # And the artifact.name field (without $) should be "a_custom_h"
-            artifact = artifact_var.value
-            assert artifact.name == "a_custom_h"
+            # The artifact object should also have the same name
+            assert artifact_var.name == "$a_custom_h"
 
     @pytest.mark.asyncio
     async def test_artifact_summary_format(self, agent):
@@ -153,7 +152,7 @@ class TestPlaybookResultArtifacts:
         artifact_vars = list(agent.state.variables.public_variables().values())
         assert len(artifact_vars) == 1
 
-        artifact = artifact_vars[0].value
+        artifact = artifact_vars[0]
         assert artifact.summary.startswith("Output from MyPlaybook")
 
     @pytest.mark.asyncio
@@ -262,11 +261,11 @@ class TestPlaybookResultArtifacts:
         assert artifact_names[0] != artifact_names[1]
 
         # Verify first artifact contains result1 (content includes playbook call prefix)
-        first_artifact = artifact_vars[0].value
+        first_artifact = artifact_vars[0]
         assert result1 in first_artifact.value
 
         # Verify second artifact contains result2 (content includes playbook call prefix)
-        second_artifact = artifact_vars[1].value
+        second_artifact = artifact_vars[1]
         assert result2 in second_artifact.value
 
     @pytest.mark.asyncio
@@ -291,7 +290,7 @@ class TestPlaybookResultArtifacts:
         ]
         assert len(artifact_vars) == 1
 
-        artifact = artifact_vars[0].value
+        artifact = artifact_vars[0]
         # Verify content includes string representation (also has playbook call prefix)
         assert str(dict_result) in artifact.value
         assert isinstance(artifact.value, str)
@@ -322,7 +321,7 @@ class TestPlaybookResultArtifacts:
         ]
         assert len(artifact_vars) == 1
 
-        artifact = artifact_vars[0].value
+        artifact = artifact_vars[0]
         # Content includes playbook call prefix
         assert str(list_result) in artifact.value
 
@@ -406,7 +405,7 @@ class TestPlaybookResultArtifacts:
         artifact_vars = [
             v for v in agent.state.variables if not v.name.startswith("$__")
         ]
-        artifact = artifact_vars[0].value
+        artifact = artifact_vars[0]
 
         # Verify content preservation (includes playbook call prefix)
         assert special_result in artifact.value
@@ -519,10 +518,10 @@ class TestPlaybookResultArtifacts:
 
         # Verify artifact was created with custom name
         assert "$custom_name" in agent.state.variables
-        artifact = agent.state.variables["$custom_name"].value
-        assert artifact.name == "custom_name"
-        assert artifact.summary == "Output from LongPlaybook()"
-        assert artifact.value.endswith(long_result)
+        artifact = agent.state.variables["$custom_name"]
+        assert artifact.name == "$custom_name"
+        assert artifact.summary == "Output from LongPlaybook(arg1, key=value)"
+        assert artifact.value == long_result
 
     @pytest.mark.asyncio
     async def test_artifact_with_variable_assignment_no_uuid(self, agent):
@@ -540,8 +539,8 @@ class TestPlaybookResultArtifacts:
 
         # Verify artifact name doesn't contain UUID
         assert "$my_data" in agent.state.variables
-        artifact = agent.state.variables["$my_data"].value
-        assert artifact.name == "my_data"
+        artifact = agent.state.variables["$my_data"]
+        assert artifact.name == "$my_data"
         # Ensure no UUID pattern in name
         assert "_result_artifact" not in artifact.name
         assert len(artifact.name.split("_")) == 2  # Just "my_data"
@@ -561,9 +560,9 @@ class TestPlaybookResultArtifacts:
         await agent._post_execute(call, True, long_result, Mock())
 
         # Verify artifact was stored under variable name without $
-        assert "data" in agent.state.variables
-        artifact = agent.state.variables["data"].value
-        assert artifact.name == "data"
+        assert "$data" in agent.state.variables
+        artifact = agent.state.variables["$data"]
+        assert artifact.name == "$data"
 
     @pytest.mark.asyncio
     async def test_playbook_call_result_with_custom_variable_name(self, agent):
@@ -603,8 +602,8 @@ class TestPlaybookResultArtifacts:
 
         # Verify artifact created with complex name
         assert "$user_data_2024" in agent.state.variables
-        artifact = agent.state.variables["$user_data_2024"].value
-        assert artifact.name == "user_data_2024"
+        artifact = agent.state.variables["$user_data_2024"]
+        assert artifact.name == "$user_data_2024"
 
     @pytest.mark.asyncio
     async def test_hash_based_naming_no_variable_assignment(self, agent):
@@ -624,5 +623,5 @@ class TestPlaybookResultArtifacts:
             # Expected: $a_ + first 8 chars of hash = $a_backward
             expected_artifact_var = "$a_backward"
             assert expected_artifact_var in agent.state.variables
-            artifact = agent.state.variables[expected_artifact_var].value
-            assert artifact.name == "a_backward"
+            artifact = agent.state.variables[expected_artifact_var]
+            assert artifact.name == "$a_backward"

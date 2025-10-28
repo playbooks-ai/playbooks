@@ -1,8 +1,6 @@
-import textwrap
 from typing import Any
 
 from playbooks.session_log import SessionLogItem
-from playbooks.utils.text_utils import simple_shorten
 from playbooks.variables import Artifact
 
 
@@ -61,15 +59,7 @@ class PlaybookCall(SessionLogItem):
         return "".join(code)
 
     def to_log_full(self) -> str:
-        if self.playbook_klass == "Say" or self.playbook_klass == "SaveArtifact":
-            return self.to_log_minimal()
         return str(self)
-
-    def to_log_compact(self) -> str:
-        return simple_shorten(str(self), 30, placeholder="...")
-
-    def to_log_minimal(self) -> str:
-        return self.playbook_klass + "()"
 
 
 class PlaybookCallResult(SessionLogItem):
@@ -111,13 +101,3 @@ class PlaybookCallResult(SessionLogItem):
         else:
             result_str = str(self.result)
         return self.to_log(result_str if result_str else "")
-
-    def to_log_compact(self) -> str:
-        return self.to_log(
-            textwrap.shorten(str(self.result), 20, placeholder="...")
-            if self.result
-            else ""
-        )
-
-    def to_log_minimal(self) -> str:
-        return self.to_log("success")

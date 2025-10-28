@@ -233,3 +233,11 @@ class CallStack:
         current_frame = self.peek()
         if current_frame is not None:
             current_frame.add_llm_message(message)
+
+    def add_llm_message_on_caller(self, message) -> None:
+        """Safely add an LLM message to the top frame if the stack is not empty."""
+        if len(self.frames) < 2:
+            return
+        current_frame = self.frames[-2]
+        if current_frame is not None:
+            current_frame.add_llm_message(message)

@@ -1,3 +1,4 @@
+import types
 from typing import Any, Dict, List, Optional, Union
 
 from .call_stack import InstructionPointer
@@ -42,6 +43,18 @@ class Artifact(Variable):
         """
         super().__init__(name, value)
         self.summary = summary
+
+    def update(
+        self, new_value: Any, instruction_pointer: Optional[InstructionPointer] = None
+    ):
+        self.change_history.append(
+            VariableChangeHistoryEntry(instruction_pointer, new_value)
+        )
+        if isinstance(new_value, Artifact):
+            self.summary = new_value.summary
+            self.value = new_value.value
+        else:
+            raise ValueError("Artifact must be updated using an Artifact object")
 
     def __repr__(self) -> str:
         return f"Artifact(name={self.name}, summary={self.summary})"
@@ -137,9 +150,24 @@ class Variables:
     ) -> None:
         if ":" in name:
             name = name.split(":")[0]
-        if name not in self.variables:
-            self.variables[name] = Variable(name, value)
-        self.variables[name].update(value, instruction_pointer)
+        if isinstance(value, Artifact):
+            if name not in self.variables:
+                if name == value.name:
+                    self.variables[name] = value
+                else:
+                    self.variables[name] = Variable(name, value)
+
+            self.variables[name].update(value, instruction_pointer)
+        elif isinstance(value, Variable):
+            value = value.value
+            if name not in self.variables:
+                self.variables[name] = Variable(name, value)
+            self.variables[name].update(value, instruction_pointer)
+        else:
+            if name not in self.variables:
+                self.variables[name] = Variable(name, value)
+            self.variables[name].update(value, instruction_pointer)
+
         event = VariableUpdateEvent(
             agent_id=self.agent_id,
             session_id="",
@@ -158,15 +186,14 @@ class Variables:
         return len(self.variables)
 
     def public_variables(self) -> Dict[str, Variable]:
-        """Return variables whose names do not start with underscore.
-
+        """
         Returns:
             Dictionary of public variables (names not starting with $_)
         """
         return {
             name: variable
             for name, variable in self.variables.items()
-            if not variable.name.startswith("$_")
+            if not name.startswith("$_")
         }
 
     def to_dict(self, include_private: bool = False) -> Dict[str, Any]:
@@ -175,11 +202,19 @@ class Variables:
         for name, variable in self.variables.items():
             if variable.value is None:
                 continue
-            if not include_private and variable.name.startswith("$_"):
+            if not include_private and (
+                variable.name.startswith("$_") or variable.name.startswith("_")
+            ):
+                continue
+
+            # Skip non-serializable objects like modules and classes
+            if isinstance(variable.value, (types.ModuleType, type)):
                 continue
 
             # If value is an Artifact, use its string representation
-            if isinstance(variable.value, Artifact):
+            if isinstance(variable, Artifact):
+                result[name] = variable.summary
+            elif isinstance(variable.value, Artifact):
                 result[name] = str(variable.value.summary)
             else:
                 result[name] = variable.value

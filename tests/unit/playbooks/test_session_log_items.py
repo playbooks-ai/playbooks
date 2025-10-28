@@ -3,16 +3,16 @@
 from datetime import datetime
 
 from playbooks.session_log_items import (
+    SessionLogItemAgentMessage,
     SessionLogItemBase,
-    SessionLogItemPlaybookStart,
-    SessionLogItemPlaybookEnd,
+    SessionLogItemDebug,
+    SessionLogItemError,
     SessionLogItemLLMRequest,
     SessionLogItemLLMResponse,
+    SessionLogItemPlaybookEnd,
+    SessionLogItemPlaybookStart,
     SessionLogItemStepExecution,
     SessionLogItemVariableUpdate,
-    SessionLogItemAgentMessage,
-    SessionLogItemError,
-    SessionLogItemDebug,
 )
 
 
@@ -27,12 +27,6 @@ class TestSessionLogItemBase:
             def to_log_full(self) -> str:
                 return "test"
 
-            def to_log_compact(self) -> str:
-                return "test"
-
-            def to_log_minimal(self) -> str:
-                return "test"
-
         timestamp = datetime.now()
         item = SessionLogItemTestType(
             timestamp=timestamp, agent_id="test-agent", agent_klass="TestAgent"
@@ -45,12 +39,6 @@ class TestSessionLogItemBase:
 
         class SessionLogItemTestType(SessionLogItemBase):
             def to_log_full(self) -> str:
-                return "test"
-
-            def to_log_compact(self) -> str:
-                return "test"
-
-            def to_log_minimal(self) -> str:
                 return "test"
 
         timestamp = datetime(2024, 1, 15, 10, 30, 45)
@@ -70,12 +58,6 @@ class TestSessionLogItemBase:
 
         class SessionLogItemTestType(SessionLogItemBase):
             def to_log_full(self) -> str:
-                return "test"
-
-            def to_log_compact(self) -> str:
-                return "test"
-
-            def to_log_minimal(self) -> str:
                 return "test"
 
         # Test with microseconds
@@ -132,30 +114,6 @@ class TestSessionLogItemPlaybookStart:
         )
 
         assert item.to_log_full() == "▶ Starting playbook: my_awesome_playbook"
-
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-        item = SessionLogItemPlaybookStart(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            playbook_name="my_playbook",
-        )
-
-        assert item.to_log_compact() == "▶ my_playbook"
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-        item = SessionLogItemPlaybookStart(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            playbook_name="test",
-        )
-
-        assert item.to_log_minimal() == "▶"
 
     def test_to_metadata(self):
         """Test metadata conversion."""
@@ -297,58 +255,6 @@ class TestSessionLogItemPlaybookEnd:
         expected = "✗ Finished playbook: test_playbook - Error: Runtime error occurred"
         assert item.to_log_full() == expected
 
-    def test_to_log_compact_success(self):
-        """Test compact log format for success."""
-        timestamp = datetime.now()
-        item = SessionLogItemPlaybookEnd(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            playbook_name="my_playbook",
-            success=True,
-        )
-
-        assert item.to_log_compact() == "✓ my_playbook"
-
-    def test_to_log_compact_failure(self):
-        """Test compact log format for failure."""
-        timestamp = datetime.now()
-        item = SessionLogItemPlaybookEnd(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            playbook_name="my_playbook",
-            success=False,
-        )
-
-        assert item.to_log_compact() == "✗ my_playbook"
-
-    def test_to_log_minimal_success(self):
-        """Test minimal log format for success."""
-        timestamp = datetime.now()
-        item = SessionLogItemPlaybookEnd(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            playbook_name="test",
-            success=True,
-        )
-
-        assert item.to_log_minimal() == "✓"
-
-    def test_to_log_minimal_failure(self):
-        """Test minimal log format for failure."""
-        timestamp = datetime.now()
-        item = SessionLogItemPlaybookEnd(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            playbook_name="test",
-            success=False,
-        )
-
-        assert item.to_log_minimal() == "✗"
-
     def test_to_metadata(self):
         """Test metadata conversion."""
         timestamp = datetime(2024, 1, 15, 10, 30, 45)
@@ -445,34 +351,6 @@ class TestSessionLogItemLLMRequest:
 
         expected = "🤖 LLM Request to gpt-4-turbo (3 messages)"
         assert item.to_log_full() == expected
-
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-        messages = [{"role": "user", "content": "Hello"}]
-
-        item = SessionLogItemLLMRequest(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            model="gpt-3.5-turbo",
-            messages=messages,
-        )
-
-        assert item.to_log_compact() == "🤖 gpt-3.5-turbo"
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-        item = SessionLogItemLLMRequest(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            model="gpt-4",
-            messages=[],
-        )
-
-        assert item.to_log_minimal() == "🤖"
 
     def test_to_metadata(self):
         """Test metadata conversion."""
@@ -587,54 +465,6 @@ class TestSessionLogItemLLMResponse:
         expected = "💬 LLM Response from gpt-4\nResponse without usage"
         assert item.to_log_full() == expected
 
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-        content = "This is a response that should be truncated after 50 characters"
-
-        item = SessionLogItemLLMResponse(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            model="gpt-4",
-            content=content,
-        )
-
-        result = item.to_log_compact()
-        assert result.startswith("💬 ")
-        assert result.endswith("...")
-        assert len(result) <= 60  # "💬 " + 50 chars + "..."
-
-    def test_to_log_compact_with_newlines(self):
-        """Test compact log format with newlines (should be replaced with spaces)."""
-        timestamp = datetime.now()
-        content = "Line 1\nLine 2\nLine 3"
-
-        item = SessionLogItemLLMResponse(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            model="gpt-4",
-            content=content,
-        )
-
-        result = item.to_log_compact()
-        assert "\n" not in result
-        assert "Line 1 Line 2 Line 3" in result
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-        item = SessionLogItemLLMResponse(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            model="gpt-4",
-            content="Any content",
-        )
-
-        assert item.to_log_minimal() == "💬"
-
     def test_to_metadata(self):
         """Test metadata conversion."""
         timestamp = datetime(2024, 1, 15, 10, 30, 45)
@@ -697,38 +527,6 @@ class TestSessionLogItemStepExecution:
 
         expected = "→ Trigger: Process Data - When data is received, process it"
         assert item.to_log_full() == expected
-
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-
-        item = SessionLogItemStepExecution(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            step_name="Validate Input",
-            step_type="condition",
-            step_content="Check if input is valid",
-            playbook_name="validator",
-        )
-
-        assert item.to_log_compact() == "→ Validate Input"
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-
-        item = SessionLogItemStepExecution(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            step_name="Test Step",
-            step_type="step",
-            step_content="Do something",
-            playbook_name="test",
-        )
-
-        assert item.to_log_minimal() == "→"
 
     def test_to_metadata(self):
         """Test metadata conversion."""
@@ -812,59 +610,6 @@ class TestSessionLogItemVariableUpdate:
         expected = "📝 status = completed (was: pending)"
         assert item.to_log_full() == expected
 
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-        long_value = "A" * 50  # Exactly 50 characters
-
-        item = SessionLogItemVariableUpdate(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            variable_name="data",
-            old_value="old",
-            new_value=long_value,
-            scope="local",
-        )
-
-        result = item.to_log_compact()
-        assert result.startswith("📝 data = ")
-        assert result.endswith("...")
-        assert len(result) <= 35  # Should be truncated with "..."
-
-    def test_to_log_compact_short_value(self):
-        """Test compact log format with short value."""
-        timestamp = datetime.now()
-
-        item = SessionLogItemVariableUpdate(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            variable_name="flag",
-            old_value=False,
-            new_value=True,
-            scope="local",
-        )
-
-        result = item.to_log_compact()
-        assert result == "📝 flag = True..."
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-
-        item = SessionLogItemVariableUpdate(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            variable_name="test",
-            old_value=1,
-            new_value=2,
-            scope="local",
-        )
-
-        assert item.to_log_minimal() == "📝"
-
     def test_to_metadata(self):
         """Test metadata conversion."""
         timestamp = datetime(2024, 1, 15, 10, 30, 45)
@@ -932,67 +677,6 @@ class TestSessionLogItemAgentMessage:
 
         expected = "📨 HumanAgent(user-123) → AIAgent(ai-456): Please process this data"
         assert item.to_log_full() == expected
-
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-        long_message = "This is a very long message that should be truncated after 50 characters to fit compact format"
-
-        item = SessionLogItemAgentMessage(
-            timestamp=timestamp,
-            agent_id="receiver-1",
-            agent_klass="AIAgent",
-            sender_id="sender-1",
-            sender_klass="HumanAgent",
-            recipient_id="receiver-1",
-            recipient_klass="AIAgent",
-            message=long_message,
-            message_type="info",
-        )
-
-        result = item.to_log_compact()
-        assert result.startswith("📨 HumanAgent → AIAgent: ")
-        assert result.endswith("...")
-        assert len(result) <= 80  # Reasonable limit for compact format
-
-    def test_to_log_compact_with_newlines(self):
-        """Test compact log format with newlines."""
-        timestamp = datetime.now()
-        message_with_newlines = "Line 1\nLine 2\nLine 3"
-
-        item = SessionLogItemAgentMessage(
-            timestamp=timestamp,
-            agent_id="receiver-1",
-            agent_klass="AIAgent",
-            sender_id="sender-1",
-            sender_klass="TestAgent",
-            recipient_id="receiver-1",
-            recipient_klass="AIAgent",
-            message=message_with_newlines,
-            message_type="multiline",
-        )
-
-        result = item.to_log_compact()
-        assert "\n" not in result
-        assert "Line 1 Line 2 Line 3" in result
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-
-        item = SessionLogItemAgentMessage(
-            timestamp=timestamp,
-            agent_id="receiver-1",
-            agent_klass="AIAgent",
-            sender_id="sender-1",
-            sender_klass="HumanAgent",
-            recipient_id="receiver-1",
-            recipient_klass="AIAgent",
-            message="Test message",
-            message_type="test",
-        )
-
-        assert item.to_log_minimal() == "📨"
 
     def test_to_metadata(self):
         """Test metadata conversion."""
@@ -1092,38 +776,6 @@ class TestSessionLogItemError:
         expected = f"❌ ZeroDivisionError: division by zero\n{stack_trace}"
         assert item.to_log_full() == expected
 
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-        long_message = "This is a very long error message that should be truncated after 50 characters"
-
-        item = SessionLogItemError(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            error_type="CustomError",
-            error_message=long_message,
-        )
-
-        result = item.to_log_compact()
-        assert result.startswith("❌ CustomError: ")
-        assert result.endswith("...")
-        assert len(result) <= 70  # Should be truncated
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-
-        item = SessionLogItemError(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            error_type="Error",
-            error_message="Something went wrong",
-        )
-
-        assert item.to_log_minimal() == "❌"
-
     def test_to_metadata(self):
         """Test metadata conversion."""
         timestamp = datetime(2024, 1, 15, 10, 30, 45)
@@ -1210,36 +862,6 @@ class TestSessionLogItemDebug:
 
         expected = "🐛 State check - {'counter': 5, 'status': 'active'}"
         assert item.to_log_full() == expected
-
-    def test_to_log_compact(self):
-        """Test compact log format."""
-        timestamp = datetime.now()
-        long_message = "This is a very long debug message that should be truncated after 50 characters"
-
-        item = SessionLogItemDebug(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            message=long_message,
-        )
-
-        result = item.to_log_compact()
-        assert result.startswith("🐛 ")
-        assert result.endswith("...")
-        assert len(result) <= 60  # Should be truncated
-
-    def test_to_log_minimal(self):
-        """Test minimal log format."""
-        timestamp = datetime.now()
-
-        item = SessionLogItemDebug(
-            timestamp=timestamp,
-            agent_id="agent-1",
-            agent_klass="AIAgent",
-            message="Debug info",
-        )
-
-        assert item.to_log_minimal() == "🐛"
 
     def test_to_metadata(self):
         """Test metadata conversion."""

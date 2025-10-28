@@ -1,12 +1,38 @@
+import logging
 import re
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Optional
 
 from playbooks.event_bus import EventBus
-from playbooks.llm_response_line import LLMResponseLine
+from playbooks.python_executor import ExecutionResult, PythonExecutor
 from playbooks.utils.async_init_mixin import AsyncInitMixin
+from playbooks.utils.expression_engine import preprocess_program
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
+
+logger = logging.getLogger(__name__)
+
+
+def _strip_code_block_markers(code: str) -> str:
+    """Strip markdown code block markers from code.
+
+    Removes markers like ``` or ```python from the beginning and end of code.
+
+    Args:
+        code: Code potentially wrapped in markdown code block markers
+
+    Returns:
+        Code with markers removed
+    """
+    code = code.strip()
+
+    # Remove opening marker: ``` or ```python or ```python3, etc.
+    code = re.sub(r"^```(?:[a-z0-9_-]*)\n?", "", code)
+
+    # Remove closing marker: ```
+    code = re.sub(r"\n?```$", "", code)
+
+    return code.strip()
 
 
 class LLMResponse(AsyncInitMixin):
@@ -15,73 +41,54 @@ class LLMResponse(AsyncInitMixin):
         self.response = response
         self.event_bus = event_bus
         self.agent = agent
-        self.lines: List[LLMResponseLine] = []
         self.agent.state.last_llm_response = self.response
+        self.preprocessed_code = None
+        self.execution_result: ExecutionResult = None
+
+        # Metadata parsed from comments
+        self.execution_id: Optional[int] = None
+        self.recap = None
+        self.plan = None
 
     async def _async_init(self):
-        await self.parse_response()
+        # Strip code block markers if present
+        self.preprocessed_code = _strip_code_block_markers(self.response)
 
-    async def parse_response(self):
-        # Handle multi-line blocks (artifacts, vars, and playbook calls) by keeping lines together
+        # Extract execution_id from first line
+        self._extract_metadata_from_code(self.preprocessed_code)
 
-        # Find all artifact blocks with triple quotes (can span multiple lines)
-        artifact_pattern = r'`Artifact\[\$[^,\]]+,\s*"[^"]+",\s*""".*?"""\]`'
+        # Preprocess to convert $var syntax to valid Python
+        self.preprocessed_code = preprocess_program(self.preprocessed_code)
 
-        # Find all Var blocks (can span multiple lines)
-        # Matches from `Var[ to ]` allowing any content including newlines
-        var_multiline_pattern = r"`Var\[[^\`]+\]`"
+    def _extract_metadata_from_code(self, code: str) -> None:
+        """Extract execution_id from first line comment in code.
 
-        # Find all playbook calls with triple quotes (can span multiple lines)
-        # Matches: `PlaybookName("""...""")` or `$var = PlaybookName("""...""")`
-        playbook_call_pattern = r'`(?:\$[a-zA-Z_][a-zA-Z0-9_]*(?::[a-zA-Z_][a-zA-Z0-9_]*)?\s*=\s*)?[A-Za-z0-9_]+(?:\.[A-Za-z0-9_]+)*\([^`]*?""".*?"""[^`]*?\)`'
+        Expected format: # execution_id: N
+        """
+        lines = code.strip().split("\n")
 
-        # Check if there are any multi-line blocks in the response
-        has_artifacts = re.search(artifact_pattern, self.response, re.DOTALL)
-        has_var_multiline = re.search(var_multiline_pattern, self.response, re.DOTALL)
-        has_playbook_calls = re.search(playbook_call_pattern, self.response, re.DOTALL)
-
-        if has_artifacts or has_var_multiline or has_playbook_calls:
-            # Replace newlines within blocks with placeholders
-            # so they don't get split when we split by \n
-            def replace_newlines(match):
-                return match.group(0).replace("\n", "<<<MULTILINE_NEWLINE>>>")
-
-            modified_text = self.response
-
-            # Replace newlines in artifact blocks
-            if has_artifacts:
-                modified_text = re.sub(
-                    artifact_pattern, replace_newlines, modified_text, flags=re.DOTALL
-                )
-
-            # Replace newlines in Var multiline blocks
-            if has_var_multiline:
-                modified_text = re.sub(
-                    var_multiline_pattern,
-                    replace_newlines,
-                    modified_text,
-                    flags=re.DOTALL,
-                )
-
-            # Replace newlines in playbook call blocks
-            if has_playbook_calls:
-                modified_text = re.sub(
-                    playbook_call_pattern,
-                    replace_newlines,
-                    modified_text,
-                    flags=re.DOTALL,
-                )
-
-            # Now split by actual newlines
-            lines = modified_text.split("\n")
-
-            # Restore the newlines in blocks
-            lines = [line.replace("<<<MULTILINE_NEWLINE>>>", "\n") for line in lines]
+        prefix = "# execution_id:"
+        first_line = lines[0].strip()
+        if first_line.startswith(prefix):
+            self.execution_id = int(first_line[len(prefix) :].strip())
         else:
-            # No multi-line blocks, just split by lines normally
-            lines = self.response.split("\n")
+            raise ValueError(f"First line is not a comment: {first_line}")
 
-        for line in lines:
-            self.lines.append(
-                await LLMResponseLine.create(line, self.event_bus, self.agent)
-            )
+        prefix = "# recap:"
+        second_line = lines[1].strip()
+        if second_line.startswith(prefix):
+            self.recap = second_line[len(prefix) :].strip()
+        else:
+            raise ValueError(f"Second line is not a comment: {second_line}")
+
+        prefix = "# plan:"
+        third_line = lines[2].strip()
+        if third_line.startswith(prefix):
+            self.plan = third_line[len(prefix) :].strip()
+        else:
+            raise ValueError(f"Third line is not a comment: {third_line}")
+
+    async def execute_generated_code(self):
+        """Execute the generated code."""
+        executor = PythonExecutor(self.agent)
+        self.execution_result = await executor.execute(self.preprocessed_code)

@@ -25,9 +25,9 @@ async def test_begin(playbooks):
     await playbooks.program.run_till_exit()
     agent1_session_log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert "python_a1p2() finished" in agent1_session_log
-    assert 'Say("user", "A1P2")' in agent1_session_log
-    assert 'Say("user", "A1P3")' in agent1_session_log
+    assert "Say(user, A1P2)" in agent1_session_log
+    assert "Say(user, A1P3)" in agent1_session_log
 
     agent2_session_log = playbooks.program.agents[1].state.session_log.to_log_full()
-    assert 'Say("user", "A2P1")' in agent2_session_log
-    assert 'Say("user", "A2P2")' in agent2_session_log
+    assert "Say(user, A2P1)" in agent2_session_log
+    assert "Say(user, A2P2)" in agent2_session_log
