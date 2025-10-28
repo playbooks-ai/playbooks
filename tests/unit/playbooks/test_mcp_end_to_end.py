@@ -1,6 +1,7 @@
 """Comprehensive end-to-end tests for MCP agent functionality."""
 
 import json
+import traceback
 
 import pytest
 from fastmcp import Client
@@ -253,11 +254,7 @@ This agent manages tasks using MCP tools.
         await program.initialize()
 
         # Find the task manager agent
-        task_agent = None
-        for agent in program.agents:
-            if agent.klass == "TaskManagerAgent":
-                task_agent = agent
-                break
+        task_agent = program.agents_by_klass["TaskManagerAgent"][0]
 
         assert task_agent is not None
         assert isinstance(task_agent, MCPAgent)
@@ -304,6 +301,10 @@ This agent manages tasks using MCP tools.
             assert success
             assert result == "0"
 
+        except Exception as e:
+            print(e)
+            print(traceback.format_exc())
+            raise e
         finally:
             await task_agent.disconnect()
 

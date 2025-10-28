@@ -85,6 +85,7 @@ class PlaybooksConfig(BaseModel):
     artifact_result_threshold: int = Field(
         200, gt=0
     )  # Min chars to auto-create artifact
+    max_llm_calls: int = Field(100)
     model: ModelsConfig = ModelsConfig()
     llm_cache: LLMCacheConfig = LLMCacheConfig()
     langfuse: LangfuseConfig = LangfuseConfig()

@@ -86,14 +86,14 @@ class TestPublicVariables:
     def test_public_variables_with_artifacts(self, variables):
         """Test that public_variables() works with artifact variables."""
         # Create an artifact
-        artifact = Artifact(name="result", summary="Test result", value="content")
+        artifact = Artifact(name="$result", summary="Test result", value="content")
         variables["$result"] = artifact
 
         public_vars = variables.public_variables()
 
         assert "$result" in public_vars
-        assert isinstance(public_vars["$result"].value, Artifact)
-        assert public_vars["$result"].value.summary == "Test result"
+        assert isinstance(public_vars["$result"], Artifact)
+        assert public_vars["$result"].summary == "Test result"
 
     def test_public_variables_excludes_dollar_underscore(self, variables):
         """Test that $_ is correctly excluded as a private variable."""

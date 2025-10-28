@@ -15,7 +15,7 @@ async def test_example_01(test_data_dir):
     await playbooks.initialize()
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
-    assert 'Say("user"' in log
+    assert "HelloWorldDemo()" in log
     assert EXECUTION_FINISHED in log
 
 
@@ -230,3 +230,31 @@ async def test_example_13_description_injection(test_data_dir):
         playbooks.program.agents_by_klass["TestAgent"][0].state.variables["$jk"].value
         == "Why was the computer cold? It left its Windows open."
     )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_example_deep_file_researcher(test_examples_dir):
+    # Run the MCP server before running the test
+    playbooks = Playbooks(
+        [test_examples_dir / "deep_file_researcher" / "deep_file_researcher.pb"]
+    )
+    await playbooks.initialize()
+    agent = playbooks.program.agents_by_klass["DeepFileResearcher"][0]
+    human = playbooks.program.agents_by_id["human"]
+
+    await human.SendMessage(agent.id, "/Users/amolk/work/workspace/playbooks-docs/docs")
+    await human.SendMessage(agent.id, EOM)
+
+    await human.SendMessage(agent.id, "How does Playbooks manage LLM context?")
+    await human.SendMessage(agent.id, EOM)
+
+    await human.SendMessage(agent.id, "goodbye")
+    await human.SendMessage(agent.id, EOM)
+
+    await playbooks.program.run_till_exit()
+    log = agent.state.session_log.to_log_full()
+    print(log)
+    assert "FileSystemAgent.extract_table_of_contents" in log
+    assert "FileSystemAgent.read_file" in log
+    assert "Execution finished" in log

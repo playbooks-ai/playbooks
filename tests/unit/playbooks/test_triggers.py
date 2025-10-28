@@ -28,6 +28,10 @@ async def test_triggers(test_data_dir):
     await human.SendMessage(ai.id, "test@playbooks.com")
     await human.SendMessage(ai.id, EOM)
 
+    # Then user will provide a valid email
+    await human.SendMessage(ai.id, "exit")
+    await human.SendMessage(ai.id, EOM)
+
     await playbooks.program.run_till_exit()
     log = ai.state.session_log.to_log_full()
 
@@ -40,7 +44,7 @@ async def test_triggers(test_data_dir):
     assert " → test@playbooks.com" in log
 
     # Trigger on variable set
-    assert "TooBig() finished" in log
+    assert "TooBig() → Execution finished" in log
 
     # Make sure the program completed its task
     assert "LoadAccount" in log

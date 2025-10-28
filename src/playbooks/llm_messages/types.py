@@ -49,26 +49,10 @@ class AssistantResponseLLMMessage(LLMMessage):
         )
 
     def to_compact_message(self) -> Dict[str, Any]:
-        """Use first line that begins with 'recap -' for compaction."""
-        lines = self.content.split("\n")
-
-        # We don't want to confuse LLM with a partial assistant response
-        # so we use the user role for the compacted message
-        compact_message_role = LLMMessageRole.USER
-
-        # Find line that begins with 'recap -'
-        recap_line = next(
-            (line.strip() for line in lines if line.strip().startswith("recap -")), None
-        )
-        if recap_line:
-            return {
-                "role": compact_message_role,
-                "content": recap_line.replace("recap -", "").strip(),
-            }
-
-        # If no recap line found, use first line
-        first_line = lines[0].strip() if lines else ""
-        return {"role": compact_message_role, "content": first_line}
+        """Use first two lines (execution_id and recap) for compaction."""
+        lines = self.content.strip().split("\n")
+        lines = lines[:2]
+        return {"role": self.role.value, "content": "\n".join(lines)}
 
 
 class PlaybookImplementationLLMMessage(LLMMessage):
@@ -340,7 +324,7 @@ class ArtifactLLMMessage(LLMMessage):
         self.artifact = artifact
 
         super().__init__(
-            content=f"Artifact ${artifact.name}\n\nSummary: {artifact.summary}\n\n{artifact.value}\n\n",
+            content=f"**Artifact ${artifact.name}**\n\n*Summary:*\n{artifact.summary}\n\n*Contents:*\n{artifact.value}\n\n",
             role=LLMMessageRole.USER,
             type=LLMMessageType.ARTIFACT,
             cached=True,

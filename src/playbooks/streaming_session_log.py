@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime
 from typing import Callable, Optional
 
-from playbooks.session_log import SessionLog, SessionLogItem, SessionLogItemLevel
+from playbooks.session_log import SessionLog, SessionLogItem
 from playbooks.session_log_items import SessionLogItemBase
 
 
@@ -29,11 +29,10 @@ class StreamingSessionLog(SessionLog):
     def append(
         self,
         item: SessionLogItem | str,
-        level: SessionLogItemLevel = SessionLogItemLevel.MEDIUM,
     ):
         """Override append to stream entries to callback."""
         # Call parent append first
-        super().append(item, level)
+        super().append(item)
 
         # Stream the entry if we have a callback
         if self.stream_callback and self.log:
@@ -46,7 +45,7 @@ class StreamingSessionLog(SessionLog):
                 "timestamp": datetime.now().isoformat(),
                 "agent_id": self.agent_id,
                 "agent_klass": self.klass,
-                "level": level.name,
+                "level": "INFO",
                 "content": str(item),
             }
 
@@ -60,13 +59,9 @@ class StreamingSessionLog(SessionLog):
             else:
                 event_data["item_type"] = "message"
 
-            # Add different log representations
+            # Add full log representation
             if hasattr(item, "to_log_full"):
                 event_data["log_full"] = item.to_log_full()
-            if hasattr(item, "to_log_compact"):
-                event_data["log_compact"] = item.to_log_compact()
-            if hasattr(item, "to_log_minimal"):
-                event_data["log_minimal"] = item.to_log_minimal()
 
             # Call the callback
             if asyncio.iscoroutinefunction(self.stream_callback):

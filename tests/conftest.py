@@ -23,6 +23,12 @@ def test_data_dir():
 
 
 @pytest.fixture
+def test_examples_dir():
+    """Fixture to provide path to test examples directory"""
+    return Path(__file__).parent.parent / "examples"
+
+
+@pytest.fixture
 def md_path(test_data_dir, md_file_name):
     md_path = test_data_dir / md_file_name
 
