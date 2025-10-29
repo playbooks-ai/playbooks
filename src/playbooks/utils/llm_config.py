@@ -23,12 +23,14 @@ class LLMConfig:
         model: The language model to use. If None, loaded from config system.
         provider: The model provider. If None, loaded from config system.
         temperature: The model temperature. If None, loaded from config system.
+        max_completion_tokens: Maximum completion tokens. If None, loaded from config system.
         api_key: API key for the model provider. If None, determined by model type.
     """
 
     model: Optional[str] = None
     provider: Optional[str] = None
     temperature: Optional[float] = None
+    max_completion_tokens: Optional[int] = None
     api_key: Optional[str] = None
 
     def __post_init__(self):
@@ -47,6 +49,10 @@ class LLMConfig:
             if self.temperature is None:
                 self.temperature = config.model.default.temperature
 
+            # Set max_completion_tokens if not explicitly provided
+            if self.max_completion_tokens is None:
+                self.max_completion_tokens = config.model.default.max_completion_tokens
+
         except Exception:
             # Fallback to constants/defaults if config loading fails
             if self.model is None:
@@ -57,6 +63,8 @@ class LLMConfig:
                 self.provider = "openai"  # Default provider
             if self.temperature is None:
                 self.temperature = 0.2  # Default temperature
+            if self.max_completion_tokens is None:
+                self.max_completion_tokens = 7500  # Default max completion tokens
 
         # Set appropriate API key based on model provider if none was provided
         if not self.api_key:
@@ -90,6 +98,7 @@ class LLMConfig:
             "model": self.model,
             "provider": self.provider,
             "temperature": self.temperature,
+            "max_completion_tokens": self.max_completion_tokens,
             "api_key": self.api_key,
         }
 
@@ -99,5 +108,6 @@ class LLMConfig:
             model=self.model,
             provider=self.provider,
             temperature=self.temperature,
+            max_completion_tokens=self.max_completion_tokens,
             api_key=self.api_key,
         )

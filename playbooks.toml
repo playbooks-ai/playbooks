@@ -7,6 +7,7 @@ max_llm_calls = 50
 provider = "anthropic"
 name = "claude-sonnet-4-20250514"
 temperature = 0.2
+max_completion_tokens=15000
 
 # Specific model overrides can be added
 # [model.execution]

@@ -59,6 +59,12 @@ async def LoadArtifact(artifact_name: str):
         agent.state.call_stack.frames[-2].llm_messages.append(artifact_msg)
 
 @playbook
+async def SaveArtifact(name: str, summary: str, value: str):
+    artifact = Artifact(name, summary, value)
+    agent.state.variables[name] = artifact
+    return artifact.name
+
+@playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
     return await agent.meeting_manager.InviteToMeeting(meeting_id, attendees)
