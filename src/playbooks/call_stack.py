@@ -241,3 +241,25 @@ class CallStack:
         current_frame = self.frames[-2]
         if current_frame is not None:
             current_frame.add_llm_message(message)
+
+    def is_artifact_loaded(self, artifact_name: str) -> bool:
+        """Check if an artifact is loaded in any frame.
+
+        Args:
+            artifact_name: The name of the artifact (with or without $ prefix).
+
+        Returns:
+            True if the artifact is loaded in any frame, False otherwise.
+        """
+        from .llm_messages.types import ArtifactLLMMessage
+
+        # Normalize artifact name to include $ prefix
+        if not artifact_name.startswith("$"):
+            artifact_name = f"${artifact_name}"
+
+        for frame in self.frames:
+            for msg in frame.llm_messages:
+                if isinstance(msg, ArtifactLLMMessage):
+                    if msg.artifact.name == artifact_name:
+                        return True
+        return False

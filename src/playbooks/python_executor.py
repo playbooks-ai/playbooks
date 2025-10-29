@@ -15,6 +15,7 @@ from playbooks.call_stack import InstructionPointer
 from playbooks.constants import EXECUTION_FINISHED
 from playbooks.debug.debug_handler import NoOpDebugHandler
 from playbooks.exceptions import ExecutionFinished
+from playbooks.llm_messages.types import ArtifactLLMMessage
 from playbooks.playbook_call import PlaybookCall
 from playbooks.utils.auto_async_calls import await_async_calls
 from playbooks.utils.inject_setvar import inject_setvar
@@ -80,6 +81,17 @@ class LLMNamespace(dict):
                 from .variables import Variable
 
                 if isinstance(var, Artifact):
+                    # Auto-load artifact if not already loaded in any frame
+                    if hasattr(
+                        self.executor.agent.state, "call_stack"
+                    ) and not self.executor.agent.state.call_stack.is_artifact_loaded(
+                        state_key
+                    ):
+
+                        artifact_msg = ArtifactLLMMessage(var)
+                        self.executor.agent.state.call_stack.add_llm_message(
+                            artifact_msg
+                        )
                     return var
                 elif isinstance(var, Variable):
                     return var.value

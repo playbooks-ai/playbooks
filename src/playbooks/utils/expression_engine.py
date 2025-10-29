@@ -11,6 +11,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
+from ..llm_messages.types import ArtifactLLMMessage
 from ..variables import Artifact
 
 if TYPE_CHECKING:
@@ -217,6 +218,13 @@ class ExpressionContext:
                     # Otherwise, return its value
                     if isinstance(variable, Artifact):
                         value = variable
+                        # Auto-load artifact if not already loaded in any frame
+                        if hasattr(
+                            self.state, "call_stack"
+                        ) and not self.state.call_stack.is_artifact_loaded(var_key):
+
+                            artifact_msg = ArtifactLLMMessage(variable)
+                            self.state.call_stack.add_llm_message(artifact_msg)
                     else:
                         value = variable.value
                     self._cache[name] = value
