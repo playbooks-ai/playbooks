@@ -36,7 +36,9 @@ line
 string"""
 Say("user", "…")
 # trig? <no | Trigger code>
-# think: Handle unexpected situations intelligently and within the bounds of specified playbooks instructions
+# think: Handle unexpected situations intelligently and 
+# within the bounds of specified playbooks instructions. think
+# can span multiple commented lines
 # yld? <no | yes>, reason
 Step("Playbook:Ln:Code")
 Return(<value>)
@@ -159,7 +161,8 @@ Say("Goodbye!")
 # yld? no, "Main:01.03:JMP" can execute without first showing message to user
 
 Step("Main:01:CND")
-# think: The user said goodbye and I replied with goodbye so conversation is over, so condition not satisfied
+# think: The user said goodbye and I replied with goodbye,
+# so conversation is over. Condition is not satisfied.
 # trig? no
 # yld? yes, "Main:02:YLD" will yield
 
