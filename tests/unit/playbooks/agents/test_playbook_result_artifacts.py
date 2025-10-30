@@ -1,4 +1,4 @@
-"""Tests for automatic artifact creation when playbook results exceed 80 characters."""
+"""Tests for automatic artifact creation when playbook results exceed the threshold (80 chars in test config)."""
 
 from unittest.mock import Mock, patch
 

@@ -820,7 +820,15 @@ async def {self.bgn_playbook_name}() -> None:
             returned_artifact = result
 
         artifact_result = False
-        if success and len(str(result)) > config.artifact_result_threshold:
+        # Skip artifact conversion for hidden builtin playbooks that return structured data
+        # (like WaitForMessage which returns List[Message])
+        skip_artifact_conversion = call.playbook_klass in ["WaitForMessage"]
+
+        if (
+            success
+            and not skip_artifact_conversion
+            and len(str(result)) > config.artifact_result_threshold
+        ):
             # Create an artifact to store the result
             # Use user-specified variable name if provided, otherwise auto-generate
             if call.variable_to_assign:

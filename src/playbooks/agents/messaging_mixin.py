@@ -46,7 +46,7 @@ class MessagingMixin:
             wait_for_message_from: Message source - "*", "human", "agent 1234", or "meeting 123"
 
         Returns:
-            Collected messages as string
+            List of Message objects
         """
         while True:
             debug(f"{str(self)}: Waiting for message from {wait_for_message_from}")
@@ -144,17 +144,17 @@ class MessagingMixin:
         """Process and format collected messages.
 
         Args:
-            messages: List of message objects
+            num_messages_to_process: Number of messages to process from buffer
 
         Returns:
-            Formatted message string
+            List of Message objects
         """
         if not num_messages_to_process:
             num_messages_to_process = len(self._message_buffer)
 
         debug(f"{str(self)}: Processing {num_messages_to_process} messages")
         if not num_messages_to_process:
-            return ""
+            return []
 
         # Filter out EOM messages before processing
         messages = [
@@ -166,11 +166,7 @@ class MessagingMixin:
         # Remove processed messages from buffer
         self._message_buffer = self._message_buffer[num_messages_to_process:]
 
-        if self.state.call_stack.is_empty():
-            success, result = await self.execute_playbook(
-                "ProcessMessages", messages=messages
-            )
-        else:
+        if not self.state.call_stack.is_empty():
             messages_str = []
             for message in messages:
                 messages_str.append(

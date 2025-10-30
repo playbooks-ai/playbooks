@@ -27,7 +27,7 @@ class TestCreatePlaybookWrapper:
         """Test that wrapper calls execute_playbook on the current agent."""
         # Setup
         current_agent = AsyncMock()
-        current_agent.execute_playbook = AsyncMock()
+        current_agent.execute_playbook = AsyncMock(return_value=(True, "result"))
         namespace = Mock()
 
         # Execute
@@ -43,7 +43,7 @@ class TestCreatePlaybookWrapper:
     async def test_wrapper_with_no_args(self):
         """Test wrapper execution with no arguments."""
         current_agent = AsyncMock()
-        current_agent.execute_playbook = AsyncMock()
+        current_agent.execute_playbook = AsyncMock(return_value=(True, "result"))
         namespace = Mock()
 
         wrapper = create_playbook_wrapper("SimplePlaybook", current_agent, namespace)
@@ -55,7 +55,7 @@ class TestCreatePlaybookWrapper:
     async def test_wrapper_with_only_kwargs(self):
         """Test wrapper execution with keyword arguments only."""
         current_agent = AsyncMock()
-        current_agent.execute_playbook = AsyncMock()
+        current_agent.execute_playbook = AsyncMock(return_value=(True, "result"))
         namespace = Mock()
 
         wrapper = create_playbook_wrapper("ConfigPlaybook", current_agent, namespace)
@@ -82,7 +82,7 @@ class TestCreatePlaybookWrapper:
     async def test_wrapper_with_mixed_args_and_kwargs(self):
         """Test wrapper with both positional and keyword arguments."""
         current_agent = AsyncMock()
-        current_agent.execute_playbook = AsyncMock()
+        current_agent.execute_playbook = AsyncMock(return_value=(True, "result"))
         namespace = Mock()
 
         wrapper = create_playbook_wrapper("MixedArgsPlaybook", current_agent, namespace)
@@ -96,7 +96,7 @@ class TestCreatePlaybookWrapper:
     async def test_wrapper_preserves_playbook_name(self):
         """Test that wrapper preserves the correct playbook name."""
         current_agent = AsyncMock()
-        current_agent.execute_playbook = AsyncMock()
+        current_agent.execute_playbook = AsyncMock(return_value=(True, "result"))
         namespace = Mock()
 
         playbook_name = "FileSystemAgent.validate_directory"
@@ -596,7 +596,7 @@ class TestPlaybookWrapperEdgeCases:
     async def test_wrapper_with_complex_argument_types(self):
         """Test wrapper handles complex argument types correctly."""
         current_agent = AsyncMock()
-        current_agent.execute_playbook = AsyncMock()
+        current_agent.execute_playbook = AsyncMock(return_value=(True, "result"))
         namespace = Mock()
 
         wrapper = create_playbook_wrapper("ComplexPlaybook", current_agent, namespace)
@@ -636,7 +636,7 @@ class TestPlaybookWrapperEdgeCases:
     async def test_wrapper_with_none_arguments(self):
         """Test wrapper handles None arguments correctly."""
         current_agent = AsyncMock()
-        current_agent.execute_playbook = AsyncMock()
+        current_agent.execute_playbook = AsyncMock(return_value=(True, "result"))
         namespace = Mock()
 
         wrapper = create_playbook_wrapper("NullPlaybook", current_agent, namespace)

@@ -35,7 +35,7 @@ async def SendMessage(target_agent_id: str, message: str):
     await agent.SendMessage(target_agent_id, message)
 
 @playbook(hidden=True)
-async def WaitForMessage(source_agent_id: str) -> str | None:
+async def WaitForMessage(source_agent_id: str) -> list:
     return await agent.WaitForMessage(source_agent_id)
 
 @playbook

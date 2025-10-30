@@ -169,7 +169,13 @@ class TestMCPEndToEnd:
                 },
             )
             assert success
-            task_data = json.loads(result)
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            task_data = json.loads(result_str)
             assert task_data["title"] == "Test Task"
             assert task_data["priority"] == "high"
 
@@ -178,7 +184,13 @@ class TestMCPEndToEnd:
                 "list_users", [], {"active_only": True}
             )
             assert success
-            users_data = json.loads(result)
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            users_data = json.loads(result_str)
             assert len(users_data) >= 2  # Should have active users
 
         finally:
@@ -279,13 +291,25 @@ This agent manages tasks using MCP tools.
                 },
             )
             assert success
-            task_data = json.loads(result)
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            task_data = json.loads(result_str)
             assert task_data["title"] == "Integration Test Task"
 
             # List tasks
             success, result = await task_agent.execute_playbook("list_tasks")
             assert success
-            tasks_data = json.loads(result)
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            tasks_data = json.loads(result_str)
             assert len(tasks_data) >= 1
 
             # Test counter operations
