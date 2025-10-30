@@ -368,20 +368,24 @@ async def {self.bgn_playbook_name}() -> None:
     @classmethod
     def get_compact_information(cls) -> str:
         info_parts = []
-        info_parts.append(f"# {cls.klass}")
+        info_parts.append(f"class {cls.klass}:")
         if cls.description:
-            info_parts.append(f"{cls.description}")
+            info_parts.append(f'"""{cls.description}"""\n')
 
         if cls.playbooks:
             for playbook in cls.playbooks.values():
                 if not playbook.hidden:
-                    info_parts.append(f"## {playbook.signature}")
+                    info_parts.append("  @playbook")
+                    info_parts.append(f"  async def {playbook.signature}:")
                     if playbook.description:
                         info_parts.append(
-                            playbook.description[:100]
-                            + ("..." if len(playbook.description) > 100 else "")
+                            '    """'
+                            + playbook.description[:200]
+                            + ("..." if len(playbook.description) > 200 else "")
+                            + '"""'
                         )
-                    info_parts.append("\n")
+                    info_parts.append("    pass")
+                    info_parts.append("")
 
         return "\n".join(info_parts)
 
@@ -400,7 +404,7 @@ async def {self.bgn_playbook_name}() -> None:
         if cls.playbooks:
             for playbook in cls.playbooks.values():
                 if playbook.public:
-                    info_parts.append(f"## {cls.klass}.{playbook.name}")
+                    info_parts.append(f"async def {cls.klass}.{playbook.name}(...):")
                     info_parts.append(playbook.description)
 
         return "\n".join(info_parts)
