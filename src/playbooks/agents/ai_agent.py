@@ -753,8 +753,10 @@ async def {self.bgn_playbook_name}() -> None:
                     return (False, EXECUTION_FINISHED)
 
                 result = await playbook.execute(*args, **kwargs)
-                await self._post_execute(call, True, result, langfuse_span)
-                return (True, result)
+                success, result = await self._post_execute(
+                    call, True, result, langfuse_span
+                )
+                return (success, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
                 self.program.set_execution_finished(reason="normal", exit_code=0)
@@ -895,8 +897,10 @@ async def {self.bgn_playbook_name}() -> None:
 
         if artifact_result:
             langfuse_span.update(output=artifact_obj.value)
+            return success, artifact_obj
         else:
             langfuse_span.update(output=result)
+            return success, result
 
     def __str__(self):
         if self.kwargs:

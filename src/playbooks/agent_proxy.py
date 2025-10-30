@@ -17,7 +17,12 @@ def create_playbook_wrapper(
     playbook_name: str, current_agent: "AIAgent", namespace: "LLMNamespace"
 ) -> Callable:
     async def wrapper(*args, **kwargs):
-        await current_agent.execute_playbook(playbook_name, args, kwargs)
+        success, result = await current_agent.execute_playbook(
+            playbook_name, args, kwargs
+        )
+        if not success:
+            return "ERROR: " + result
+        return result
 
     return wrapper
 
