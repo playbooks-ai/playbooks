@@ -258,3 +258,47 @@ async def test_example_deep_file_researcher(test_examples_dir):
     assert "FileSystemAgent.extract_table_of_contents" in log
     assert "FileSystemAgent.read_file" in log
     assert "Execution finished" in log
+
+
+@pytest.mark.asyncio
+async def test_example_14_python_only(test_data_dir, monkeypatch):
+    """Test that python-only playbook executes without any LLM calls."""
+    # Track LLM calls
+    llm_call_count = 0
+
+    def mock_get_completion(*args, **kwargs):
+        nonlocal llm_call_count
+        llm_call_count += 1
+        pytest.fail(f"LLM call made when none expected. Call count: {llm_call_count}")
+
+    # Import and patch the LLM helper
+    from playbooks.utils import llm_helper
+
+    monkeypatch.setattr(llm_helper, "get_completion", mock_get_completion)
+
+    playbooks = Playbooks([test_data_dir / "14-python-only.pb"])
+    await playbooks.initialize()
+    ai_agent = playbooks.program.agents[0]
+
+    # Send response to WaitForMessage
+    await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, "Alice")
+    await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
+
+    await playbooks.program.run_till_exit()
+
+    log = ai_agent.state.session_log.to_log_full()
+
+    print("=== Session Log ===")
+    print(log)
+    print("===================")
+
+    # Verify expected output
+    assert "What's your name?" in log
+    assert "Received messages" in log
+    assert "Alice" in log
+    assert "Secret code: OhSoSecret!" in log
+    assert "GetSecret()" in log
+    assert "Exit()" in log  # Verify Exit was called
+
+    # Verify no LLM calls were made
+    assert llm_call_count == 0, f"Expected 0 LLM calls, but got {llm_call_count}"

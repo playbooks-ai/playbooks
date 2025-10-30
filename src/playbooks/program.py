@@ -69,10 +69,16 @@ class AsyncAgentRuntime:
             task = self.agent_tasks[agent_id]
             if not task.done():
                 task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            # Always await to ensure cleanup, even if task is already done
+            try:
+                await task
+            except (asyncio.CancelledError, RuntimeError):
+                # CancelledError: normal cancellation
+                # RuntimeError: can occur if task is in an invalid state ("await wasn't used with future")
+                pass
+            except Exception:
+                # Catch any other exceptions during task cleanup to prevent shutdown failures
+                pass
 
         # Notify debug server of agent termination
         if self.program._debug_server:

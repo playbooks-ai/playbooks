@@ -176,7 +176,8 @@ original_create_agent = None  # Will be set after Program is loaded
 async def patched_wait_for_message(self, source_agent_id: str):
     """Patched version of WaitForMessage that shows a prompt when waiting for human input."""
     # For human input, show a prompt before calling the normal WaitForMessage
-    if source_agent_id == "human":
+    # Accept both "human" and "user" as identifiers for human input
+    if source_agent_id in ("human", "user"):
         # Check if there are already messages waiting
         messages = self._message_buffer
         human_messages = [msg for msg in messages if msg.sender_id == "human"]

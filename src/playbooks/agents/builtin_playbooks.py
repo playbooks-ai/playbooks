@@ -80,6 +80,15 @@ async def SetVar(name: str, value):
     agent.state.variables[name] = value
     return value
 
+@playbook
+async def Exit():
+    await agent.program.shutdown()
+
+@playbook(hidden=True)
+async def MessageProcessingEventLoop():
+    """Main message processing loop for agents. Delegates to agent's message_processing_event_loop method."""
+    await agent.message_processing_event_loop()
+
 ```        
 '''
 
@@ -100,22 +109,27 @@ hidden: true
     - Attempt to convert it to valid Python syntax. If ambiguous or not known how to convert, leave it as is.
 - Return description with any converted placeholders. No other changes to description allowed.
 
-## MessageProcessingEventLoop
+## ProcessMessages($messages: list)
 hidden: true
 
 ### Steps
-- Loop forever
-  - Set $_busy = False
-  - WaitForMessage("*")
-  - If you received a MEETING INVITATION
-    - Find a suitable meeting playbook
-    - If meeting playbook is found
-      - Set $_busy = True
-      - AcceptMeetingInvitation(meeting_id, inviter_id, topic, meeting_playbook_name)
-      - Continue
-  - Here we will decide if any playbook should be triggered. Carefully consider recent messages received and the current state. Now go through available triggers listed above, and think deeply about whether any should be triggered. 
-  - If any playbook should be triggered, set $_busy = True and output an appropriate trig? line.
-  - If a playbook was executed, look at the message that was received and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
+- For each $message in $messages
+    - If $message is a MEETING INVITATION
+        - Find a suitable meeting playbook
+        - If meeting playbook is found
+            - AcceptMeetingInvitation(meeting_id, inviter_id, topic, meeting_playbook_name)
+            - Continue
+        - Otherwise
+            - Return "No suitable meeting playbook found"
+    - Analyze message content and current state and check available triggers to determine if any playbook should be triggered based on
+    - If any playbook should be triggered
+        - Set $_busy = True, output an appropriate trig? line and execute the playbook
+        - Look at $message and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
+        - If the message sender is expecting a response
+        - Enqueue a Say(message sender, result of the playbook execution) call
+    - If no playbook is triggered but the message requires a response
+        - Formulate an appropriate response based on agent's role and description
+        - Enqueue a Say(message sender, response) call
 """
 
     @staticmethod

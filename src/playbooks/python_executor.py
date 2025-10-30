@@ -12,9 +12,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from playbooks.agent_proxy import create_agent_proxies, create_playbook_wrapper
 from playbooks.call_stack import InstructionPointer
-from playbooks.constants import EXECUTION_FINISHED
 from playbooks.debug.debug_handler import NoOpDebugHandler
-from playbooks.exceptions import ExecutionFinished
 from playbooks.llm_messages.types import ArtifactLLMMessage
 from playbooks.playbook_call import PlaybookCall
 from playbooks.utils.inject_setvar import inject_setvar
@@ -385,7 +383,6 @@ class PythonExecutor:
             await self.agent.WaitForMessage("human")
         elif target_lower == "exit":
             self.result.exit_program = True
-            raise ExecutionFinished(EXECUTION_FINISHED)
         elif target_lower == "return":
             self.result.playbook_finished = True
         else:

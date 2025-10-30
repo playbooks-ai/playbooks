@@ -977,3 +977,24 @@ async def {self.bgn_playbook_name}() -> None:
             return f"Artifact {artifact_name} is now loaded"
         else:
             return f"Artifact {artifact_name} is already loaded"
+
+    async def message_processing_event_loop(self):
+        """Main message processing loop for agents. Waits for messages and delegates all processing to ProcessMessages."""
+        while True:
+            if self.program and self.program.execution_finished:
+                break
+
+            self.state.variables["$_busy"] = False
+
+            # Wait for messages
+            messages = await self.execute_playbook("WaitForMessage", ["*"])
+
+            if not messages:
+                continue
+
+            self.state.variables["$_busy"] = True
+
+            # Delegate all message processing to ProcessMessages LLM playbook
+            # This includes meeting invitations (which require LLM to determine suitable playbook),
+            # trigger matching, and natural language handling
+            await self.execute_playbook("ProcessMessages", [messages])
