@@ -27,11 +27,11 @@ class Playbook(ABC):
             metadata: Additional metadata for the playbook
         """
         self.name = name
-        self.description = description
-        self.resolved_description = description
+        self.description = description or metadata.get("description", None)
         self.agent_name = agent_name
         self.metadata = metadata or {}
         self.triggers: Optional[PlaybookTriggers] = None
+        self.resolved_description = self.description
 
     @property
     def public(self) -> bool:

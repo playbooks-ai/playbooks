@@ -213,9 +213,9 @@ class Variables:
 
             # If value is an Artifact, use its string representation
             if isinstance(variable, Artifact):
-                result[name] = variable.summary
+                result[name] = "Artifact: " + variable.summary
             elif isinstance(variable.value, Artifact):
-                result[name] = str(variable.value.summary)
+                result[name] = "Artifact: " + str(variable.value.summary)
             else:
                 result[name] = variable.value
 

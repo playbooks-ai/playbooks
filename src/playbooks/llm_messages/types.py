@@ -324,7 +324,7 @@ class ArtifactLLMMessage(LLMMessage):
         self.artifact = artifact
 
         super().__init__(
-            content=f"**Artifact ${artifact.name}**\n\n*Summary:*\n{artifact.summary}\n\n*Contents:*\n{artifact.value}\n\n",
+            content=f"**Artifact {('$' + artifact.name) if not artifact.name.startswith('$') else artifact.name}**\n\n*Summary:*\n{artifact.summary}\n\n*Contents:*\n{artifact.value}\n\n",
             role=LLMMessageRole.USER,
             type=LLMMessageType.ARTIFACT,
             cached=True,
