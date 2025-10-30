@@ -84,7 +84,7 @@ class PlaybooksConfig(BaseModel):
     timeout_s: int = 60
     debug: bool = False
     artifact_result_threshold: int = Field(
-        280, gt=0
+        500, gt=0
     )  # Min chars to auto-create artifact
     max_llm_calls: int = Field(100)
     model: ModelsConfig = ModelsConfig()

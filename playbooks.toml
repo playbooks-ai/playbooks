@@ -1,6 +1,6 @@
 debug = true
 timeout_s = 60
-artifact_result_threshold = 280  # Auto-create artifact for playbook results longer than this (# of chars)
+artifact_result_threshold = 500  # Auto-create artifact for playbook results longer than this (# of chars)
 max_llm_calls = 50
 
 [model]
