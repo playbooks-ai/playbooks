@@ -17,7 +17,6 @@ from playbooks.debug.debug_handler import NoOpDebugHandler
 from playbooks.exceptions import ExecutionFinished
 from playbooks.llm_messages.types import ArtifactLLMMessage
 from playbooks.playbook_call import PlaybookCall
-from playbooks.utils.auto_async_calls import await_async_calls
 from playbooks.utils.inject_setvar import inject_setvar
 from playbooks.utils.spec_utils import SpecUtils
 from playbooks.variables import Artifact
@@ -225,10 +224,16 @@ class PythonExecutor:
             # Build namespace with capture functions
             namespace = self.build_namespace()
 
-            # Add await for async function calls and inject Var() calls
+            # Wrap in async function, then inject Var() calls
             # These can raise SyntaxError if the code has syntax issues
             try:
-                code = await_async_calls(code, namespace)
+                # Wrap code in async function for execution first
+                indented_lines = [f"    {line}" for line in code.splitlines()]
+                indented_code = "\n".join(indented_lines)
+                code = f"""async def __async_exec__():
+{indented_code}
+"""
+                # Now inject SetVar calls (works on function bodies)
                 code = inject_setvar(code)
             except SyntaxError as e:
                 self.result.syntax_error = e
@@ -247,7 +252,7 @@ class PythonExecutor:
 
             # Execute the compiled code in the controlled namespace
             # This populates namespace with function definitions and executes statements
-            # We first wrap the code in an async function (done above using AutoAsyncCalls),
+            # We wrap the code in an async function (done above),
             # then get the function pointer and execute the function with the namespace.
             temp_namespace = {}
             exec(compiled_code, temp_namespace)
@@ -309,7 +314,7 @@ class PythonExecutor:
         """
         self.result.messages.append((target, message))
 
-    def _capture_var(self, name: str, value: Any) -> None:
+    async def _capture_var(self, name: str, value: Any) -> None:
         """Capture variable and update state.
 
         This is called both for explicit Var() calls and for variable

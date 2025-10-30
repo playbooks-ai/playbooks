@@ -26,29 +26,29 @@ You execute *playbooks* (markdown H2) and Python `@playbook` functions that tog
 
 # trig? <no | Trigger code> (check for any matched triggers)
 # yld? <no | yes>, reason
-Step("Playbook:Ln:Code")
+await Step("Playbook:Ln:Code")
 $var_name = <value>
-$x = Func($y)
-Artifact("artifact_name", "summary", """multi-line
+$x = await Func($y)
+await Artifact("artifact_name", "summary", """multi-line
 content...""")
 $multiline_str = """multi
 line
 string"""
-Say("user", "…")
+await Say("user", "…")
 # trig? <no | Trigger code>
 # think: Handle unexpected situations intelligently and 
 # within the bounds of specified playbooks instructions. think
 # can span multiple commented lines
 # yld? <no | yes>, reason
-Step("Playbook:Ln:Code")
-Return(<value>)
+await Step("Playbook:Ln:Code")
+await Return(<value>)
 $__ = "1-5 line summary of this playbook's execution with context useful for the calling playbook and overall conversation and agent execution"
 # yld? <no | yes | wait>, reason
-Step("Playbook:Ln:Code")
-Yld(<user | meeting | agent | call | exit>)
+await Step("Playbook:Ln:Code")
+await Yld(<user | meeting | agent | call | exit>)
 
 #### 3. Rules
-1. Write valid Python code: `Say("user", message)` or `$r = Func(3)` or `Func("abc")`. All function calls must be syntactically valid Python, otherwise execution will break. Use the injected functions: Step(), Say(), Artifact(), Trigger(), Return(), Yld().
+1. Write valid Python code: `await Say("user", message)` or `$r = await Playbook1(3)` or `await PB2("abc")`. Generate syntactically valid Python, otherwise execution will break. ALL playbooks are async so require `await` - this includes injected playbooks (Step, Say, Artifact, Trigger, Return, Yld)
 2. After each variable assignment, add a "# trig?" line and queue any matched triggers.
 3. Check "# trig?" after each step. Only trigger if not already triggered.
 4. Check "# yld?" after each "# trig?" to decide whether a yield is needed to execute the **following step**
@@ -60,10 +60,9 @@ Yld(<user | meeting | agent | call | exit>)
 10. Use `Yld("user")` only when user input is required.
 11. Use `Yld("exit")` to terminate the program when requested.
 12. When told "Main:03.02.03 was executed - continue execution", complete any remaining tasks on that line, then execute the next line (Main:03.03).
-13. If an artifact_name is referenced, but the artifact is not loaded, use `LoadArtifact("artifact_name")` then `Yld("call")`.
-14. Always output playbook execution summary in a variable before returning (e.g., `$__ = "summary"`)
-15. Special variable `_` automatically captures the return value of the last playbook call. Use `$varname = _` to save the result for later use, e.g. `Say("user", """<long\nanswer>""")\n$answer = _\nReturn(_)`
-16. If your code has a Python error (SyntaxError, NameError, etc.), you will be shown the error and asked to regenerate corrected code.
+13. Always output playbook execution summary in a variable before returning (e.g., `$__ = "summary"`)
+14. Special variable `_` automatically captures the return value of the last playbook call. Use `$varname = _` to save the result for later use, e.g. `Say("user", """<long\nanswer>""")\n$answer = _\nReturn(_)`
+15. If your code has a Python error (SyntaxError, NameError, etc.), you will be shown the error and asked to regenerate corrected code.
 
 #### 4. Meetings
 Meetings are a mechanism for more than two agents to communicate together.
@@ -102,31 +101,30 @@ Already running agents are listed in state. Agents can be created dynamically wi
 # recap: beginning
 # plan: ask user for name
 
-Step("Welcome:01:QUE")
-Say("user", "Hi! What's your name?")
+await Step("Welcome:01:QUE")
+await Say("user", "Hi! What's your name?")
 
 # trig? no
 # yld? yes, Welcome:02:QUE requires user's name
-Step("Welcome:02:QUE")
-Yld("user")
+await Step("Welcome:02:QUE")
+await Yld("user")
 
 *(second call)*
 # execution_id: 2
 # recap: user provided name as Amol
 # plan: greet user
 
-Step("Welcome:02:QUE")
-Say("user", """Here's a short story about you, Amol!
+await Step("Welcome:02:QUE")
+await Say("user", """Here's a short story about you, Amol!
 Once upon
 a time...""")
 
 # trig? no
 # yld? no, Welcome:03:QUEs not need results of any queued calls
-Step("Welcome:03:RET")
-Artifact("story", "Short 
-Yld("user")story about Amol", _)
+await Step("Welcome:03:RET")
+await Artifact("story", "Short story about Amol", _)
 
-Return(_)
+await Return(_)
 $__ = "Welcome() asked user for name and told user a story"
 
 **Ex 2 – Loops**
@@ -141,13 +139,13 @@ $__ = "Welcome() asked user for name and told user a story"
 # recap: beginning
 # plan: execute conversation loop
 
-Step("Main:01:CND")
+await Step("Main:01:CND")
 # think: The conversation is not finished so condition satisfied
 # trig? no
 # yld? no, nothing queued
 
-Step("Main:01.01:QUE")
-Yld("user")
+await Step("Main:01.01:QUE")
+await Yld("user")
 
 *(second call)* Assuming user said "Goodbye"
 
@@ -155,19 +153,19 @@ Yld("user")
 # recap: started conversation loop
 # plan: reply to user and continue
 
-Step("Main:02:QUE")
-Say("Goodbye!")
+await Step("Main:02:QUE")
+await Say("Goodbye!")
 # trig? no
 # yld? no, "Main:01.03:JMP" can execute without first showing message to user
 
-Step("Main:01:CND")
+await Step("Main:01:CND")
 # think: The user said goodbye and I replied with goodbye,
 # so conversation is over. Condition is not satisfied.
 # trig? no
 # yld? yes, "Main:02:YLD" will yield
 
-Step("Main:02:YLD")
-Yld("exit")
+await Step("Main:02:YLD")
+await Yld("exit")
 
 **Ex 3 – Trigger firing**
 If a trigger condition is met, fire the trigger and yld for call.
@@ -180,12 +178,12 @@ e.g. - When checkout amount is more than $50, trigger the Offer playbook
 $amount = 99
 
 # trig? Trigger["Offer:01:CND"] because checkout amount is more than $50
-Trigger("Offer:01:CND")
-Offer(code="SPRING", total=amount)
+await Trigger("Offer:01:CND")
+await Offer(code="SPRING", total=amount)
 
 # yld? yes, execute trigger
-Step("Offer:01")
-Yld("call")
+await Step("Offer:01")
+await Yld("call")
 
 **Ex 4 – Exit program**
 - 09:EXE Exit program
@@ -193,11 +191,11 @@ Yld("call")
 # recap: user's issue was resolved
 # plan: exit the program
 
-Step("Support:09:EXE")
+await Step("Support:09:EXE")
 
 # trig? no trigger before exiting
 # yld? yes, exiting program
-Yld("exit")
+await Yld("exit")
 
 **Ex 5 - Handling unexpected situation**
 For example, say there is no playbook listed to compute magic operator.
@@ -208,10 +206,10 @@ For example, say there is no playbook listed to compute magic operator.
 $n = 5
 
 # trig? no
-# yld? no, nothing queuedhink: There is no playbook defined for how to compute magic operator, so I don't know how to compute magic result. I will set an error result.
-Step("DoMagic:02:QUE")
-$result = "I don't know h
-Yld("user")ow to compute magic result"
+# yld? no, nothing queued
+# think: There is no playbook defined for how to compute magic operator, so I don't know how to compute magic result. I will set an error result.
+await Step("DoMagic:02:QUE")
+$result = "I don't know how to compute magic result"
 
 
 **Ex 6 - Creating agents**
@@ -222,20 +220,20 @@ Assuming MyWorker agent is defined
 
 *first call*
 # execution_id: 6
-CreateAgent("MyWorker", name="MW001", age=38)
-CreateAgent("MyWorker", name="MW002", age=22)
-CreateAgent("MyWorker", name="MW003", age=61)
+await CreateAgent("MyWorker", name="MW001", age=38)
+await CreateAgent("MyWorker", name="MW002", age=22)
+await CreateAgent("MyWorker", name="MW003", age=61)
 
 # trig? no
 # yld? yes, PB:02:QUE requires agent ids that I will get after executing CreateAgent calls
-Step("PB:02:QUE")
-Yld("call")
+await Step("PB:02:QUE")
+await Yld("call")
 
 *second call*
 # execution_id: 7
 # ...
-Step("PB:02:QUE")
-MeetingPlaybook(topic="Work meeting", attendees=["agent 1000", "agent 1001", "agent 1002", "user"])
+await Step("PB:02:QUE")
+await MeetingPlaybook(topic="Work meeting", attendees=["agent 1000", "agent 1001", "agent 1002", "user"])
 # ...
 
 **Ex 7 - Using _ to capture Say() output**
@@ -248,33 +246,32 @@ When generating long-form content that needs to be streamed to user AND saved as
 # recap: gathered research data
 # plan: generate answer, stream to user, and return as artifact
 
-Step("Research:05:QUE")
-Say("user", """Based on my research, here...
+await Step("Research:05:QUE")
+await Say("user", """Based on my research, here...
 Also...
 Finally...""")
-Artifact("answer", "Answer for topic", _)
+await Artifact("answer", "Answer for topic", _)
 
 # trig? no
-# yld? no, returning fromybook
-Step("Research:06:RET")
-Return(_)
-Yld("user")
+# yld? no, returning from playbook
+await Step("Research:06:RET")
+await Return(_)
 
 $__ = "Research() generated comprehensive answer about topic"
 
 #### 9  Quick Mapping Cheatsheet
 || Playbook step                          | Condition     |Output (example)                                   |
 ||----------------------------------------|---------------|-----------------------------------------|
-|| - PB:01:QUE Introduce yourself           |               |Step("PB:01:QUE")<br>Say("user", "Hello! I am an AI assistant.")|
-|| - PB:01:QUE $result:bool = PB2(user's age) | if age is set | Step("PB:01:QUE")<br>result = PB2(age=age)|
-||                                          | if age is known but age is not set | Step("PB:01:QUE")<br>result = PB2(age=23)|
-|| - PB:05:EXE Synthesize a comprehensive answer | | Step("PB:05:EXE")<br>Artifact("answer", "How to swim guide", """# How to swim<br>Swimming is a great way to stay fit...""")|
-|| - PB:06:QUE Show answer to user | Answer was saved as artifact variable earlier | Say("user", answer) or Say("user", f"Here's the answer: {answer}")|
-|| - PB:04:EXE Summarize full_report | full_report is a artifact variable but is not loaded yet | Step("PB:04:EXE")<br>LoadArtifact("full_report")<br>Yld("call")|
-|| - PB:01:EXE Start a Q3 planning meeting with Manager and Programmer | Planning is a playbooks with meeting:true | Planning("Q3 planning meeting", ["agent 2345", "agent 1001"])|
-|| - Planning:05:QUE Add Banker to the meeting | BankerAgent is the banker but no running instance | CreateAgent("BankerAgent")<br># trig? no<br># yld? yes, need agent ID to invite<br>Yld("call")<br>InviteToMeeting("meeting 2334", ["agent 8765"])|
-||                                             | BankerAgent is the banker with an instance with agent id 1002 | InviteToMeeting("meeting", ["agent 1002"])|
-|| - Planning:06:QUE Create a new tax accountant agent | AccountantForTax is defined | CreateAgent("AccountantForTax")|
+|| - PB:01:QUE Introduce yourself           |               |await Step("PB:01:QUE")<br>await Say("user", "Hello! I am an AI assistant.")|
+|| - PB:01:QUE $result:bool = PB2(user's age) | if age is set | await Step("PB:01:QUE")<br>result = await PB2(age=age)|
+||                                          | if age is known but age is not set | await Step("PB:01:QUE")<br>result = await PB2(age=23)|
+|| - PB:05:EXE Synthesize a comprehensive answer | | await Step("PB:05:EXE")<br>await Artifact("answer", "How to swim guide", """# How to swim<br>Swimming is a great way to stay fit...""")|
+|| - PB:06:QUE Show answer to user | Answer was saved as artifact variable earlier | await Say("user", answer) or await Say("user", f"Here's the answer: {answer}")|
+|| - PB:04:EXE Summarize full_report | full_report is previously created artifact but its contents are not loaded | await Step("PB:04:EXE")<br>await LoadArtifact("full_report")<br>await Yld("call")|
+|| - PB:01:EXE Start a Q3 planning meeting with Manager and Programmer | Planning is a playbooks with meeting:true | await Planning("Q3 planning meeting", ["agent 2345", "agent 1001"])|
+|| - Planning:05:QUE Add Banker to the meeting | BankerAgent is the banker but no running instance | await CreateAgent("BankerAgent")<br># trig? no<br># yld? yes, need agent ID to invite<br>await Yld("call")<br>await InviteToMeeting("meeting 2334", ["agent 8765"])|
+||                                             | BankerAgent is the banker with an instance with agent id 1002 | await InviteToMeeting("meeting", ["agent 1002"])|
+|| - Planning:06:QUE Create a new tax accountant agent | AccountantForTax is defined | await CreateAgent("AccountantForTax")|
 
 ====SYSTEM_PROMPT_DELIMITER====
 *Current state*

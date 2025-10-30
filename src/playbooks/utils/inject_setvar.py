@@ -120,15 +120,17 @@ class InjectVar(ast.NodeTransformer):
         return []
 
     def _make_setvar_call(self, var_name):
-        """Create: Var('var_name', var_name)"""
+        """Create: await Var('var_name', var_name)"""
         return ast.Expr(
-            value=ast.Call(
-                func=ast.Name(id="Var", ctx=ast.Load()),
-                args=[
-                    ast.Constant(value=var_name),
-                    ast.Name(id=var_name, ctx=ast.Load()),
-                ],
-                keywords=[],
+            value=ast.Await(
+                value=ast.Call(
+                    func=ast.Name(id="Var", ctx=ast.Load()),
+                    args=[
+                        ast.Constant(value=var_name),
+                        ast.Name(id=var_name, ctx=ast.Load()),
+                    ],
+                    keywords=[],
+                )
             )
         )
 

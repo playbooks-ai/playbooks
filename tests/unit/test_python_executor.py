@@ -86,7 +86,7 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_step(self, executor):
         """Test capturing Step() calls."""
-        code = 'Step("Welcome:01:QUE")'
+        code = 'await Step("Welcome:01:QUE")'
         result = await executor.execute(code)
         assert len(result.steps) == 1
         assert result.steps[0].playbook == "Welcome"
@@ -95,14 +95,14 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_step_thinking(self, executor):
         """Test capturing thinking step (TNK)."""
-        code = 'Step("Analysis:02:TNK")'
+        code = 'await Step("Analysis:02:TNK")'
         result = await executor.execute(code)
         assert result.is_thinking is True
 
     @pytest.mark.asyncio
     async def test_capture_say(self, executor):
         """Test capturing Say() calls."""
-        code = 'Say("user", "Hello, how are you?")'
+        code = 'await Say("user", "Hello, how are you?")'
         result = await executor.execute(code)
         assert len(result.messages) == 1
         assert result.messages[0] == ("user", "Hello, how are you?")
@@ -125,7 +125,7 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_artifact(self, executor):
         """Test capturing Artifact() calls."""
-        code = 'Artifact("report", "Summary", "Long content here")'
+        code = 'await Artifact("report", "Summary", "Long content here")'
         result = await executor.execute(code)
         assert len(result.artifacts) == 1
         assert result.artifacts["report"].name == "report"
@@ -134,7 +134,7 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_trigger(self, executor):
         """Test capturing Trigger() calls."""
-        code = 'Trigger("UserAuth:01:CND")'
+        code = 'await Trigger("UserAuth:01:CND")'
         result = await executor.execute(code)
         assert len(result.triggers) == 1
         assert result.triggers[0] == "UserAuth:01:CND"
@@ -142,7 +142,7 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_return(self, executor):
         """Test capturing Return() calls."""
-        code = 'Return("success")'
+        code = 'await Return("success")'
         result = await executor.execute(code)
         assert result.return_value == "success"
         assert result.playbook_finished is True
@@ -150,7 +150,7 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_yld_user(self, executor):
         """Test capturing Yld() for user."""
-        code = 'Yld("user")'
+        code = 'await Yld("user")'
         result = await executor.execute(code)
         assert result.wait_for_user_input is True
 
@@ -159,14 +159,14 @@ class TestPythonExecutor:
         """Test capturing Yld() for exit."""
         from playbooks.exceptions import ExecutionFinished
 
-        code = 'Yld("exit")'
+        code = 'await Yld("exit")'
         with pytest.raises(ExecutionFinished):
             await executor.execute(code)
 
     @pytest.mark.asyncio
     async def test_capture_yld_agent(self, executor):
         """Test capturing Yld() for specific agent."""
-        code = 'Yld("agent_123")'
+        code = 'await Yld("agent_123")'
         result = await executor.execute(code)
         assert result.wait_for_agent_input is True
         assert result.wait_for_agent_target == "agent_123"
@@ -175,8 +175,8 @@ class TestPythonExecutor:
     async def test_multiple_statements(self, executor):
         """Test executing multiple statements."""
         code = """
-Step("Welcome:01:QUE")
-Say("user", "Hello!")
+await Step("Welcome:01:QUE")
+await Say("user", "Hello!")
 $name = "Alice"
 """
         result = await executor.execute(code)
@@ -201,7 +201,7 @@ $name = "Alice"
     @pytest.mark.asyncio
     async def test_multiline_say(self, executor):
         """Test Say() with multiline strings."""
-        code = '''Say("user", """This is
+        code = '''await Say("user", """This is
 a multiline
 message""")'''
         result = await executor.execute(code)
@@ -215,7 +215,7 @@ message""")'''
         executor.agent.state.variables["$count"] = 5
 
         # Then use it
-        code = 'Step("Test:01:QUE")\n$result = count * 2'
+        code = 'await Step("Test:01:QUE")\n$result = count * 2'
         result = await executor.execute(code)
         assert result.vars["result"] == 10
 
@@ -230,11 +230,11 @@ message""")'''
     async def test_execution_result_structure(self, executor):
         """Test ExecutionResult structure."""
         code = """
-Step("Step1:01:QUE")
-Say("user", "hello")
+await Step("Step1:01:QUE")
+await Say("user", "hello")
 $x = 1
-Trigger("T1")
-Return(True)
+await Trigger("T1")
+await Return(True)
 """
         result = await executor.execute(code)
 

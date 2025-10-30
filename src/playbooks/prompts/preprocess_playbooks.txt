@@ -20,7 +20,7 @@ The PBAsm runtime is LLM-based with these features:
 
 Input is in markdown format. It contains:
 - One agent H1 section starting with `#` 
-- Python playbooks, i.e. functions, with `@playbook` decorator
+- Python playbooks, i.e. functions, with `@playbook` decorator (all must be `async def` and use `await` for playbook calls)
 - Markdown playbooks, i.e. functions, H2 sections with `##`
 - Triggers, Steps, and Notes H3 subsections with `###`
 
@@ -291,7 +291,7 @@ MCP server for weather tools
 [One paragraph description - copy if provided, else generate brief description]
 
 ```python
-[Copy all @playbook function implementations EXACTLY, annotated with trigger type, docstring, return type, etc. Don't make up any functions.]
+[Copy all @playbook function implementations EXACTLY, annotated with trigger type, docstring, return type, etc. Don't make up any functions. All @playbook decorated functions MUST be async def and MUST use await when calling other playbooks.]
 ```
 
 ## PlaybookName($param1, $param2) -> returnType
