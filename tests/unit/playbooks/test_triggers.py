@@ -44,8 +44,10 @@ async def test_triggers(test_data_dir):
     assert " → test@playbooks.com" in log
 
     # Trigger on variable set
-    assert "TooBig() → Execution finished" in log
+    assert "TooBig()" in log
 
     # Make sure the program completed its task
     assert "LoadAccount" in log
     assert "8999" in log
+
+    assert "Main() → Execution finished" in log
