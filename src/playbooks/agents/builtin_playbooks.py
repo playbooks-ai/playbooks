@@ -48,15 +48,10 @@ async def CreateAgent(agent_klass: str, **kwargs):
     await agent.program.runtime.start_agent(new_agent)
     return new_agent
     
-@playbook
+@playbook(description="If an artifact was previously created, but is no longer available, use this Playbook to load its contents")
 async def LoadArtifact(artifact_name: str):
     # Load artifact from variables
-    artifact = agent.state.variables[artifact_name].value
-    
-    # Add ArtifactLLMMessage to stack[-2] frame
-    if len(agent.state.call_stack.frames) >= 2:
-        artifact_msg = ArtifactLLMMessage(artifact)
-        agent.state.call_stack.frames[-2].llm_messages.append(artifact_msg)
+    agent.load_artifact(artifact_name)
 
 @playbook
 async def SaveArtifact(name: str, summary: str, value: str):

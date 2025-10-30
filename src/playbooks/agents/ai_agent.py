@@ -942,3 +942,26 @@ async def {self.bgn_playbook_name}() -> None:
             else:
                 # Not enough frames in call stack, just return the content
                 return f"Loaded file {file_path}"
+
+    def load_artifact(self, artifact_name: str):
+        if artifact_name[0] != "$":
+            artifact_name = f"${artifact_name}"
+        if artifact_name not in self.state.variables:
+            raise ValueError(f"Artifact {artifact_name} not found")
+
+        artifact = self.state.variables[artifact_name]
+        if not isinstance(artifact, Artifact):
+            if isinstance(artifact.value, Artifact):
+                artifact = artifact.value
+
+                # impersonate as the requested artifact name
+                artifact = Artifact(artifact_name, artifact.summary, artifact.value)
+            else:
+                raise ValueError(f"{artifact_name} is not an artifact")
+
+        if not self.state.call_stack.is_artifact_loaded(artifact_name):
+            artifact_msg = ArtifactLLMMessage(artifact)
+            self.state.call_stack.add_llm_message_on_caller(artifact_msg)
+            return f"Artifact {artifact_name} is now loaded"
+        else:
+            return f"Artifact {artifact_name} is already loaded"
