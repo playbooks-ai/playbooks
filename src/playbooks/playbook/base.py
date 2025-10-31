@@ -27,11 +27,11 @@ class Playbook(ABC):
             metadata: Additional metadata for the playbook
         """
         self.name = name
-        self.description = description
-        self.resolved_description = description
+        self.description = description or metadata.get("description", None)
         self.agent_name = agent_name
         self.metadata = metadata or {}
         self.triggers: Optional[PlaybookTriggers] = None
+        self.resolved_description = self.description
 
     @property
     def public(self) -> bool:
@@ -163,7 +163,8 @@ class Playbook(ABC):
             Callable: A function that routes calls to agent.execute_playbook()
         """
 
-        def call_through_agent(*args, _agent=agent, **kwargs):
-            return _agent.execute_playbook(self.name, args, kwargs)
+        async def call_through_agent(*args, _agent=agent, **kwargs):
+            success, result = await _agent.execute_playbook(self.name, args, kwargs)
+            return result
 
         return call_through_agent

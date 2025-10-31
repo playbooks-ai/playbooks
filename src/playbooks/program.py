@@ -7,23 +7,23 @@ from pathlib import Path
 # Removed threading import - using asyncio only
 from typing import Any, Dict, List, Type, Union
 
-from playbooks.agents.base_agent import BaseAgent
-from playbooks.constants import HUMAN_AGENT_KLASS
-from playbooks.debug_logger import debug
-from playbooks.utils import file_utils
-
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
+from .agents.base_agent import BaseAgent
+from .constants import HUMAN_AGENT_KLASS
 from .debug.server import (
     DebugServer,  # Note: Actually a debug client that connects to VSCode
 )
+from .debug_logger import debug
 from .event_bus import EventBus
 from .events import ProgramTerminatedEvent
 from .exceptions import ExecutionFinished, KlassNotFoundError
 from .meetings import MeetingRegistry
 from .message import Message, MessageType
+from .utils import file_utils
 from .utils.markdown_to_ast import markdown_to_ast
 from .utils.spec_utils import SpecUtils
+from .variables import Artifact
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +69,16 @@ class AsyncAgentRuntime:
             task = self.agent_tasks[agent_id]
             if not task.done():
                 task.cancel()
-                try:
-                    await task
-                except asyncio.CancelledError:
-                    pass
+            # Always await to ensure cleanup, even if task is already done
+            try:
+                await task
+            except (asyncio.CancelledError, RuntimeError):
+                # CancelledError: normal cancellation
+                # RuntimeError: can occur if task is in an invalid state ("await wasn't used with future")
+                pass
+            except Exception:
+                # Catch any other exceptions during task cleanup to prevent shutdown failures
+                pass
 
         # Notify debug server of agent termination
         if self.program._debug_server:
@@ -176,12 +182,19 @@ class ProgramAgentsCommunicationMixin:
         meeting_id: str = None,
     ):
         """Routes a message to receiver agent(s) via the runtime."""
+        # Handle Artifact objects - use content for actual message delivery
+
+        message_str = message
+        if isinstance(message, Artifact):
+            # Use the artifact's content for the actual message
+            message_str = str(message.content)
+
         debug(
             "Routing message",
             sender_id=sender_id,
             receiver_spec=receiver_spec,
             message_type=message_type.value if message_type else None,
-            message_length=len(message) if message else 0,
+            message_length=len(message_str) if message_str else 0,
         )
         recipient_id = SpecUtils.extract_agent_id(receiver_spec)
         recipient = self.agents_by_id.get(recipient_id)
@@ -190,7 +203,7 @@ class ProgramAgentsCommunicationMixin:
         message = Message(
             sender_id=sender_id,
             sender_klass=sender_klass,
-            content=message,
+            content=message_str,  # Use string representation for Artifacts
             recipient_klass=recipient_klass,
             recipient_id=recipient_id,
             message_type=message_type,

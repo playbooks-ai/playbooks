@@ -39,6 +39,7 @@ class ModelConfig(BaseModel):
     provider: str = "anthropic"
     name: str = "claude-sonnet-4-20250514"
     temperature: float = Field(0.2, ge=0, le=2.0)
+    max_completion_tokens: int = Field(7500, gt=0)
 
 
 class ModelsConfig(BaseModel):
@@ -82,6 +83,10 @@ class PlaybooksConfig(BaseModel):
 
     timeout_s: int = 60
     debug: bool = False
+    artifact_result_threshold: int = Field(
+        500, gt=0
+    )  # Min chars to auto-create artifact
+    max_llm_calls: int = Field(100)
     model: ModelsConfig = ModelsConfig()
     llm_cache: LLMCacheConfig = LLMCacheConfig()
     langfuse: LangfuseConfig = LangfuseConfig()
@@ -269,7 +274,8 @@ def load_config(
             default_model = {
                 k: v
                 for k, v in model_section.items()
-                if k in ["provider", "name", "temperature"] and not isinstance(v, dict)
+                if k in ["provider", "name", "temperature", "max_completion_tokens"]
+                and not isinstance(v, dict)
             }
             merged["model"]["default"] = default_model
 

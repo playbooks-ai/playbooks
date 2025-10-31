@@ -225,9 +225,7 @@ def refresh_markdown_attributes(node: Dict[str, Any]) -> None:
         if level <= 3:
             markdown_prefix = "\n"
         if level == 2:
-            markdown_suffix = (
-                "\n\n<!-- ============================================ -->"
-            )
+            markdown_suffix = "\n\n"
         current_markdown = "#" * level + " " + node["text"]
     elif node["type"] == "paragraph":
         current_markdown = node["text"]

@@ -1,9 +1,13 @@
 import copy
+import hashlib
 import tempfile
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List
 
+from ..argument_types import LiteralValue, VariableReference
 from ..call_stack import CallStackFrame, InstructionPointer
+from ..config import config
 from ..constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 from ..debug_logger import debug
 from ..enums import StartupMode
@@ -15,15 +19,18 @@ from ..llm_messages import (
     FileLoadLLMMessage,
     MeetingLLMMessage,
 )
+from ..llm_messages.types import ArtifactLLMMessage
 from ..meetings import MeetingManager
 from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.expression_engine import (
     ExpressionContext,
+    resolve_description_placeholders,
 )
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.misc import copy_func
 from ..utils.spec_utils import SpecUtils
+from ..variables import Artifact
 from .base_agent import BaseAgent, BaseAgentMeta
 from .namespace_manager import AgentNamespaceManager
 
@@ -261,14 +268,10 @@ async def {self.bgn_playbook_name}() -> None:
 """
 
         # Save to tmp file
-        prefix = f"{self.klass}_{self.bgn_playbook_name}"
-        file_path = None
-        with tempfile.NamedTemporaryFile(
-            mode="w", prefix=prefix, suffix=".pb", delete=False
-        ) as f:
+        filename = f"{self.klass}_{self.bgn_playbook_name}_{hashlib.sha256(code_block.encode()).hexdigest()[:16]}.pb"
+        file_path = Path(tempfile.gettempdir()) / filename
+        with open(file_path, "w") as f:
             f.write(code_block)
-            f.flush()
-            file_path = f.name
 
         # debug("BGN Playbook Code Block: " + code_block)
         new_playbook = PythonPlaybook.create_playbooks_from_code_block(
@@ -283,7 +286,7 @@ async def {self.bgn_playbook_name}() -> None:
         self.playbooks.update(new_playbook)
 
     async def begin(self):
-        await self.execute_playbook(self.bgn_playbook_name)
+        success, result = await self.execute_playbook(self.bgn_playbook_name)
         return
 
     async def cleanup(self):
@@ -365,20 +368,24 @@ async def {self.bgn_playbook_name}() -> None:
     @classmethod
     def get_compact_information(cls) -> str:
         info_parts = []
-        info_parts.append(f"# {cls.klass}")
+        info_parts.append(f"class {cls.klass}:")
         if cls.description:
-            info_parts.append(f"{cls.description}")
+            info_parts.append(f'"""{cls.description}"""\n')
 
         if cls.playbooks:
             for playbook in cls.playbooks.values():
                 if not playbook.hidden:
-                    info_parts.append(f"## {playbook.signature}")
+                    info_parts.append("  @playbook")
+                    info_parts.append(f"  async def {playbook.signature}:")
                     if playbook.description:
                         info_parts.append(
-                            playbook.description[:100]
-                            + ("..." if len(playbook.description) > 100 else "")
+                            '    """'
+                            + playbook.description[:200]
+                            + ("..." if len(playbook.description) > 200 else "")
+                            + '"""'
                         )
-                    info_parts.append("\n")
+                    info_parts.append("    pass")
+                    info_parts.append("")
 
         return "\n".join(info_parts)
 
@@ -397,7 +404,7 @@ async def {self.bgn_playbook_name}() -> None:
         if cls.playbooks:
             for playbook in cls.playbooks.values():
                 if playbook.public:
-                    info_parts.append(f"## {cls.klass}.{playbook.name}")
+                    info_parts.append(f"async def {cls.klass}.{playbook.name}(...):")
                     info_parts.append(playbook.description)
 
         return "\n".join(info_parts)
@@ -599,36 +606,114 @@ async def {self.bgn_playbook_name}() -> None:
 
         return playbook, call, langfuse_span
 
+    def _is_external_playbook(self, playbook_name: str, playbook: Any) -> bool:
+        """Determine if playbook is external (cross-agent communication).
+
+        External playbooks include:
+        - Say (all targets: user, agent, meeting)
+        - SendMessage (always cross-agent)
+        - RemotePlaybook (MCP tools)
+        - Cross-agent calls (OtherAgent.PlaybookName)
+        """
+        from playbooks.playbook import RemotePlaybook
+
+        # Say to any target (user, agent, meeting)
+        if playbook_name == "Say":
+            return True
+        # SendMessage is always cross-agent
+        if playbook_name == "SendMessage":
+            return True
+        # RemotePlaybook (MCP tools)
+        if playbook and isinstance(playbook, RemotePlaybook):
+            return True
+        # Cross-agent calls (OtherAgent.PlaybookName)
+        if "." in playbook_name:
+            return True
+        return False
+
+    async def _resolve_argument(
+        self,
+        arg: Any,
+        is_external: bool,
+        is_python: bool,
+        is_llm: bool,
+        context: "ExpressionContext",
+    ) -> Any:
+        """Resolve argument based on playbook type.
+
+        Args:
+            arg: Argument to resolve (may be LiteralValue, VariableReference, or raw value)
+            is_external: Whether playbook is external (Say, SendMessage, RemotePlaybook, etc.)
+            is_python: Whether playbook is a PythonPlaybook
+            is_llm: Whether playbook is an LLMPlaybook
+            context: Expression context for variable resolution
+
+        Returns:
+            Resolved argument value appropriate for the playbook type
+        """
+
+        if isinstance(arg, LiteralValue):
+            # Handle string interpolation {$var}
+            if isinstance(arg.value, str) and "{" in arg.value:
+                return await resolve_description_placeholders(arg.value, context)
+            return arg.value
+
+        elif isinstance(arg, VariableReference):
+            # Evaluate the reference
+            resolved = context.evaluate_expression(arg.reference)
+
+            # Handle Artifact based on playbook type
+            if isinstance(resolved, Artifact):
+                if is_llm:
+                    return arg.reference  # LLM: keep as "$var" string
+                elif is_python:
+                    return resolved  # Python: keep Artifact object
+                else:  # is_external or unknown (default to external behavior)
+                    return resolved.value  # External: resolve to value
+            else:
+                if is_llm:
+                    return arg.reference  # LLM: keep as "$var" for non-artifacts too
+                return resolved  # External/Python/Unknown: use resolved value
+
+        else:
+            # Not a typed argument (shouldn't happen, but fallback)
+            return arg
+
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
-    ) -> Any:
+    ) -> tuple[bool, Any]:
         if self.program and self.program.execution_finished:
-            return EXECUTION_FINISHED
+            return (True, EXECUTION_FINISHED)
 
         playbook, call, langfuse_span = await self._pre_execute(
             playbook_name, args, kwargs
         )
 
-        # Replace variable names with actual values
+        # Type-based argument resolution
+        # Use call.args and call.kwargs which contain typed arguments from _pre_execute
+        args = call.args if hasattr(call, "args") else args
+        kwargs = call.kwargs if hasattr(call, "kwargs") else kwargs
+
+        # Ensure args is a list (not tuple) so we can modify it
+        args = list(args) if not isinstance(args, list) else args
+
         context = ExpressionContext(agent=self, state=self.state, call=call)
 
-        # Resolve args
-        for i, arg in enumerate(args):
-            if isinstance(arg, str) and arg.startswith("$"):
-                try:
-                    args[i] = context.evaluate_expression(arg)
-                except Exception:
-                    # If resolution fails, keep the original value
-                    pass
+        # Determine playbook type
+        is_external = self._is_external_playbook(playbook_name, playbook)
+        is_python = isinstance(playbook, PythonPlaybook) if playbook else False
+        is_llm = isinstance(playbook, LLMPlaybook) if playbook else False
 
-        # Resolve kwargs
+        # Resolve arguments based on playbook type
+        for i, arg in enumerate(args):
+            args[i] = await self._resolve_argument(
+                arg, is_external, is_python, is_llm, context
+            )
+
         for key, value in kwargs.items():
-            if isinstance(value, str) and value.startswith("$"):
-                try:
-                    kwargs[key] = context.evaluate_expression(value)
-                except Exception:
-                    # If resolution fails, keep the original value
-                    pass
+            kwargs[key] = await self._resolve_argument(
+                value, is_external, is_python, is_llm, context
+            )
 
         try:
             # Handle meeting playbook initialization (only for new meetings, not when joining existing ones)
@@ -658,27 +743,29 @@ async def {self.bgn_playbook_name}() -> None:
                 self.state.call_stack.add_llm_message(meeting_msg)
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
-            await self._post_execute(call, error_msg, langfuse_span)
-            return error_msg
+            await self._post_execute(call, False, error_msg, langfuse_span)
+            return (False, error_msg)
 
         # Execute local playbook in this agent
         if playbook:
             try:
                 if self.program and self.program.execution_finished:
-                    return EXECUTION_FINISHED
+                    return (False, EXECUTION_FINISHED)
 
                 result = await playbook.execute(*args, **kwargs)
-                await self._post_execute(call, result, langfuse_span)
-                return result
+                success, result = await self._post_execute(
+                    call, True, result, langfuse_span
+                )
+                return (success, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
                 self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
-                await self._post_execute(call, message, langfuse_span)
-                return message
+                await self._post_execute(call, False, message, langfuse_span)
+                return (False, message)
             except Exception as e:
                 message = f"Error: {str(e)}"
-                await self._post_execute(call, message, langfuse_span)
+                await self._post_execute(call, False, message, langfuse_span)
                 raise
         else:
             # Handle cross-agent playbook calls (AgentName.PlaybookName format)
@@ -695,11 +782,11 @@ async def {self.bgn_playbook_name}() -> None:
                     and actual_playbook_name in target_agent.playbooks
                     and target_agent.playbooks[actual_playbook_name].public
                 ):
-                    result = await target_agent.execute_playbook(
+                    success, result = await target_agent.execute_playbook(
                         actual_playbook_name, args, kwargs
                     )
-                    await self._post_execute(call, result, langfuse_span)
-                    return result
+                    await self._post_execute(call, success, result, langfuse_span)
+                    return (success, result)
 
             # Try to execute playbook in other agents (fallback)
             for agent in self.other_agents:
@@ -707,30 +794,121 @@ async def {self.bgn_playbook_name}() -> None:
                     playbook_name in agent.playbooks
                     and agent.playbooks[playbook_name].public
                 ):
-                    result = await agent.execute_playbook(playbook_name, args, kwargs)
-                    await self._post_execute(call, result, langfuse_span)
-                    return result
+                    success, result = await agent.execute_playbook(
+                        playbook_name, args, kwargs
+                    )
+                    await self._post_execute(call, success, result, langfuse_span)
+                    return (success, result)
 
             # Playbook not found
             error_msg = f"Playbook '{playbook_name}' not found in agent '{self.klass}' or any registered agents"
-            await self._post_execute(call, error_msg, langfuse_span)
-            return error_msg
+            await self._post_execute(call, False, error_msg, langfuse_span)
+            return (False, error_msg)
 
     async def _post_execute(
-        self, call: PlaybookCall, result: Any, langfuse_span: Any
+        self, call: PlaybookCall, success: bool, result: Any, langfuse_span: Any
     ) -> None:
-        execution_summary = self.state.variables.variables["$__"].value
+
+        if "$__" in self.state.variables:
+            execution_summary = self.state.variables.variables["$__"].value
+        else:
+            execution_summary = None
+
+        # Check if result is already an Artifact object (before it gets modified)
+        returned_artifact = None
+        if success and isinstance(result, Artifact):
+            returned_artifact = result
+
+        artifact_result = False
+        # Skip artifact conversion for hidden builtin playbooks that return structured data
+        # (like WaitForMessage which returns List[Message])
+        skip_artifact_conversion = call.playbook_klass in ["WaitForMessage"]
+
+        if (
+            success
+            and not skip_artifact_conversion
+            and len(str(result)) > config.artifact_result_threshold
+        ):
+            # Create an artifact to store the result
+            # Use user-specified variable name if provided, otherwise auto-generate
+            if call.variable_to_assign:
+                artifact_var_name = call.variable_to_assign
+                artifact_var_name = (
+                    artifact_var_name[1:]
+                    if artifact_var_name.startswith("$")
+                    else artifact_var_name
+                )
+            else:
+                # Generate a hash of the content to use as the artifact name
+                # This ensures stable artifact names across runs
+                content_hash = hashlib.sha256(str(result).encode()).hexdigest()[:8]
+                artifact_var_name = f"a_{content_hash}"
+
+            artifact_summary = f"Output from {call.to_log_full()}"
+            artifact_contents = str(result)
+
+            # Create artifact and store in variables
+            artifact = Artifact(
+                name=f"${artifact_var_name}",
+                summary=artifact_summary,
+                value=artifact_contents,
+            )
+            # Store with $ prefix to follow variable naming convention
+            self.state.variables[f"${artifact_var_name}"] = artifact
+            artifact_result = True
+            result = f"${artifact_var_name}"
+
+        # Set $_ to capture the return value for next operation
+        # If artifact was created, result is now the artifact var reference
+        # Otherwise it's the plain result value
+        if artifact_result:
+            # result is now a string like "$a_uuid", retrieve the artifact
+            if isinstance(self.state.variables[result], Artifact):
+                artifact_obj = self.state.variables[result]
+            elif isinstance(self.state.variables[result].value, Artifact):
+                artifact_obj = self.state.variables[result].value
+            else:
+                raise ValueError(
+                    f"Invalid artifact object: {self.state.variables[result]}"
+                )
+            # Store in $_ for chaining operations
+            # Create with the $ prefix key to match dictionary key for proper filtering
+            self.state.variables["$_"] = artifact_obj
+            # Note: result stays as $a_... (the artifact variable reference)
+        elif returned_artifact:
+            # Playbook returned an artifact object directly
+            self.state.variables["$_"] = returned_artifact
+            artifact_var_name = returned_artifact.name
+            result = f"Artifact: {artifact_var_name}"
+        else:
+            # Plain result value
+            self.state.variables["$_"] = result
+
         call_result = PlaybookCallResult(call, result, execution_summary)
         self.state.session_log.append(call_result)
 
         self.state.call_stack.pop()
 
+        if artifact_result:
+            artifact_msg = ArtifactLLMMessage(artifact_obj)
+            self.state.call_stack.add_llm_message(artifact_msg)
+        elif returned_artifact:
+            artifact_msg = ArtifactLLMMessage(returned_artifact)
+            self.state.call_stack.add_llm_message(artifact_msg)
+
         result_msg = ExecutionResultLLMMessage(
-            call_result.to_log_full(), playbook_name=call.playbook_klass, success=True
+            call_result.to_log_full(),
+            playbook_name=call.playbook_klass,
+            success=success,
         )
         self.state.call_stack.add_llm_message(result_msg)
 
-        langfuse_span.update(output=result)
+        if artifact_result:
+            langfuse_span.update(output=artifact_obj.value)
+            return success, artifact_obj
+        else:
+            langfuse_span.update(output=result)
+            return success, result
 
     def __str__(self):
         if self.kwargs:
@@ -776,3 +954,47 @@ async def {self.bgn_playbook_name}() -> None:
             else:
                 # Not enough frames in call stack, just return the content
                 return f"Loaded file {file_path}"
+
+    def load_artifact(self, artifact_name: str):
+        if artifact_name[0] != "$":
+            artifact_name = f"${artifact_name}"
+        if artifact_name not in self.state.variables:
+            raise ValueError(f"Artifact {artifact_name} not found")
+
+        artifact = self.state.variables[artifact_name]
+        if not isinstance(artifact, Artifact):
+            if isinstance(artifact.value, Artifact):
+                artifact = artifact.value
+
+                # impersonate as the requested artifact name
+                artifact = Artifact(artifact_name, artifact.summary, artifact.value)
+            else:
+                raise ValueError(f"{artifact_name} is not an artifact")
+
+        if not self.state.call_stack.is_artifact_loaded(artifact_name):
+            artifact_msg = ArtifactLLMMessage(artifact)
+            self.state.call_stack.add_llm_message_on_caller(artifact_msg)
+            return f"Artifact {artifact_name} is now loaded"
+        else:
+            return f"Artifact {artifact_name} is already loaded"
+
+    async def message_processing_event_loop(self):
+        """Main message processing loop for agents. Waits for messages and delegates all processing to ProcessMessages."""
+        while True:
+            if self.program and self.program.execution_finished:
+                break
+
+            self.state.variables["$_busy"] = False
+
+            # Wait for messages
+            messages = await self.execute_playbook("WaitForMessage", ["*"])
+
+            if not messages:
+                continue
+
+            self.state.variables["$_busy"] = True
+
+            # Delegate all message processing to ProcessMessages LLM playbook
+            # This includes meeting invitations (which require LLM to determine suitable playbook),
+            # trigger matching, and natural language handling
+            await self.execute_playbook("ProcessMessages", [messages])

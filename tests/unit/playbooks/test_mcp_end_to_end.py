@@ -1,6 +1,7 @@
 """Comprehensive end-to-end tests for MCP agent functionality."""
 
 import json
+import traceback
 
 import pytest
 from fastmcp import Client
@@ -137,21 +138,28 @@ class TestMCPEndToEnd:
                 assert tool_name in agent.playbooks
 
             # Test simple tool execution
-            result = await agent.execute_playbook("add_numbers", [], {"a": 10, "b": 20})
+            success, result = await agent.execute_playbook(
+                "add_numbers", [], {"a": 10, "b": 20}
+            )
+            assert success
             assert result == "30"
 
             # Test tool with string parameters
-            result = await agent.execute_playbook(
+            success, result = await agent.execute_playbook(
                 "greet", [], {"name": "World", "greeting": "Hi"}
             )
+            assert success
             assert result == "Hi, World!"
 
             # Test tool with default parameters
-            result = await agent.execute_playbook("greet", [], {"name": "Test"})
+            success, result = await agent.execute_playbook(
+                "greet", [], {"name": "Test"}
+            )
+            assert success
             assert result == "Hello, Test!"
 
             # Test complex tool execution
-            result = await agent.execute_playbook(
+            success, result = await agent.execute_playbook(
                 "create_task",
                 [],
                 {
@@ -160,15 +168,29 @@ class TestMCPEndToEnd:
                     "priority": "high",
                 },
             )
-            task_data = json.loads(result)
+            assert success
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            task_data = json.loads(result_str)
             assert task_data["title"] == "Test Task"
             assert task_data["priority"] == "high"
 
             # Test list operation
-            result = await agent.execute_playbook(
+            success, result = await agent.execute_playbook(
                 "list_users", [], {"active_only": True}
             )
-            users_data = json.loads(result)
+            assert success
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            users_data = json.loads(result_str)
             assert len(users_data) >= 2  # Should have active users
 
         finally:
@@ -206,7 +228,8 @@ class TestMCPEndToEnd:
                 )
 
             # Test calling non-existent tool
-            response = await agent.execute_playbook("non_existent_tool")
+            success, response = await agent.execute_playbook("non_existent_tool")
+            assert not success
             assert "Playbook 'non_existent_tool' not found" in response
 
             # Test tool with invalid user ID
@@ -243,11 +266,7 @@ This agent manages tasks using MCP tools.
         await program.initialize()
 
         # Find the task manager agent
-        task_agent = None
-        for agent in program.agents:
-            if agent.klass == "TaskManagerAgent":
-                task_agent = agent
-                break
+        task_agent = program.agents_by_klass["TaskManagerAgent"][0]
 
         assert task_agent is not None
         assert isinstance(task_agent, MCPAgent)
@@ -262,7 +281,7 @@ This agent manages tasks using MCP tools.
 
             # Test task management workflow
             # Create a task
-            result = await task_agent.execute_playbook(
+            success, result = await task_agent.execute_playbook(
                 "create_task",
                 [],
                 {
@@ -271,24 +290,45 @@ This agent manages tasks using MCP tools.
                     "priority": "medium",
                 },
             )
-            task_data = json.loads(result)
+            assert success
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            task_data = json.loads(result_str)
             assert task_data["title"] == "Integration Test Task"
 
             # List tasks
-            result = await task_agent.execute_playbook("list_tasks")
-            tasks_data = json.loads(result)
+            success, result = await task_agent.execute_playbook("list_tasks")
+            assert success
+            # Handle both string and Artifact results
+            if hasattr(result, "value") and hasattr(result, "summary"):
+                # It's an Artifact - extract the value
+                result_str = str(result.value)
+            else:
+                result_str = result
+            tasks_data = json.loads(result_str)
             assert len(tasks_data) >= 1
 
             # Test counter operations
-            result = await task_agent.execute_playbook("increment_counter")
+            success, result = await task_agent.execute_playbook("increment_counter")
+            assert success
             assert result == "1"
 
-            result = await task_agent.execute_playbook("get_counter")
+            success, result = await task_agent.execute_playbook("get_counter")
+            assert success
             assert result == "1"
 
-            result = await task_agent.execute_playbook("reset_counter")
+            success, result = await task_agent.execute_playbook("reset_counter")
+            assert success
             assert result == "0"
 
+        except Exception as e:
+            print(e)
+            print(traceback.format_exc())
+            raise e
         finally:
             await task_agent.disconnect()
 
@@ -350,18 +390,20 @@ This is a remote task management agent.
 
             # Test cross-agent communication
             # Local agent should be able to call remote agent
-            result = await local_agent.execute_playbook(
+            success, result = await local_agent.execute_playbook(
                 "RemoteTaskManager.add_numbers", [], {"a": 15, "b": 25}
             )
+            assert success
             assert result == "40"
 
             # Remote agent should be able to call local agent
             # First verify the local agent has the playbook
             assert "calculate_sum" in local_agent.playbooks
 
-            result = await remote_agent.execute_playbook(
+            success, result = await remote_agent.execute_playbook(
                 "LocalCalculator.calculate_sum", [], {"a": 10, "b": 5}
             )
+            assert success
             assert result == 15
 
         finally:
@@ -531,9 +573,10 @@ This is a comprehensive MCP agent configuration test.
             await agent.discover_playbooks()
             assert len(agent.playbooks) > 0
 
-            result = await agent.execute_playbook(
+            success, result = await agent.execute_playbook(
                 "add_numbers", [], {"a": 100, "b": 200}
             )
+            assert success
             assert result == "300"
 
         # Should be disconnected after context
@@ -565,11 +608,13 @@ This is a comprehensive MCP agent configuration test.
 
             # Test multiple tool calls
             for i in range(5):
-                result = await agent.execute_playbook("increment_counter")
+                success, result = await agent.execute_playbook("increment_counter")
+                assert success
                 assert result == str(i + 1)
 
             # Verify counter state
-            result = await agent.execute_playbook("get_counter")
+            success, result = await agent.execute_playbook("get_counter")
+            assert success
             assert result == "5"
 
         finally:

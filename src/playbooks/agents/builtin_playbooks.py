@@ -1,7 +1,6 @@
-from playbooks.utils.markdown_to_ast import markdown_to_ast
-
 from ..compiler import Compiler
 from ..utils.llm_config import LLMConfig
+from ..utils.markdown_to_ast import markdown_to_ast
 
 
 class BuiltinPlaybooks:
@@ -29,13 +28,14 @@ class BuiltinPlaybooks:
         code_block = '''
 ```python
 from playbooks.utils.spec_utils import SpecUtils
+from playbooks.llm_messages.types import ArtifactLLMMessage
 
 @playbook(hidden=True)
 async def SendMessage(target_agent_id: str, message: str):
     await agent.SendMessage(target_agent_id, message)
 
 @playbook(hidden=True)
-async def WaitForMessage(source_agent_id: str) -> str | None:
+async def WaitForMessage(source_agent_id: str) -> list:
     return await agent.WaitForMessage(source_agent_id)
 
 @playbook
@@ -48,13 +48,16 @@ async def CreateAgent(agent_klass: str, **kwargs):
     await agent.program.runtime.start_agent(new_agent)
     return new_agent
     
-@playbook
-async def SaveArtifact(artifact_name: str, artifact_summary: str, artifact_content: str):
-    agent.state.artifacts.set(artifact_name, artifact_summary, artifact_content)
+@playbook(description="If an artifact was previously created, but is no longer available, use this Playbook to load its contents")
+async def LoadArtifact(artifact_name: str):
+    # Load artifact from variables
+    agent.load_artifact(artifact_name)
 
 @playbook
-async def LoadArtifact(artifact_name: str):
-    return agent.state.artifacts[artifact_name]
+async def SaveArtifact(name: str, summary: str, value: str):
+    artifact = Artifact(name, summary, value)
+    agent.state.variables[name] = artifact
+    return artifact.name
 
 @playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):
@@ -77,6 +80,15 @@ async def SetVar(name: str, value):
     agent.state.variables[name] = value
     return value
 
+@playbook
+async def Exit():
+    await agent.program.shutdown()
+
+@playbook(hidden=True)
+async def MessageProcessingEventLoop():
+    """Main message processing loop for agents. Delegates to agent's message_processing_event_loop method."""
+    await agent.message_processing_event_loop()
+
 ```        
 '''
 
@@ -97,22 +109,27 @@ hidden: true
     - Attempt to convert it to valid Python syntax. If ambiguous or not known how to convert, leave it as is.
 - Return description with any converted placeholders. No other changes to description allowed.
 
-## MessageProcessingEventLoop
+## ProcessMessages($messages: list)
 hidden: true
 
 ### Steps
-- Loop forever
-  - Set $_busy = False
-  - WaitForMessage("*")
-  - If you received a MEETING INVITATION
-    - Find a suitable meeting playbook
-    - If meeting playbook is found
-      - Set $_busy = True
-      - AcceptMeetingInvitation(meeting_id, inviter_id, topic, meeting_playbook_name)
-      - Continue
-  - Here we will decide if any playbook should be triggered. Carefully consider recent messages received and the current state. Now go through available triggers listed above, and think deeply about whether any should be triggered. 
-  - If any playbook should be triggered, set $_busy = True and output an appropriate trig? line.
-  - If a playbook was executed, look at the message that was received and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
+- For each $message in $messages
+    - If $message is a MEETING INVITATION
+        - Find a suitable meeting playbook
+        - If meeting playbook is found
+            - AcceptMeetingInvitation(meeting_id, inviter_id, topic, meeting_playbook_name)
+            - Continue
+        - Otherwise
+            - Return "No suitable meeting playbook found"
+    - Analyze message content and current state and check available triggers to determine if any playbook should be triggered based on
+    - If any playbook should be triggered
+        - Set $_busy = True, output an appropriate trig? line and execute the playbook
+        - Look at $message and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
+        - If the message sender is expecting a response
+        - Enqueue a Say(message sender, result of the playbook execution) call
+    - If no playbook is triggered but the message requires a response
+        - Formulate an appropriate response based on agent's role and description
+        - Enqueue a Say(message sender, response) call
 """
 
     @staticmethod

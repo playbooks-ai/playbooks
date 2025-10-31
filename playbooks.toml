@@ -1,10 +1,13 @@
 debug = true
 timeout_s = 60
+artifact_result_threshold = 500  # Auto-create artifact for playbook results longer than this (# of chars)
+max_llm_calls = 50
 
 [model]
 provider = "anthropic"
 name = "claude-sonnet-4-20250514"
 temperature = 0.2
+max_completion_tokens=15000
 
 # Specific model overrides can be added
 # [model.execution]
@@ -16,4 +19,4 @@ type = "disk"
 path = ".llm_cache"
 
 [langfuse]
-enabled = false
+enabled = true

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "playbooks"
-version = "0.6.1"
+version = "0.6.2"
 description = "A framework for creating AI applications and agents using natural language programming"
 authors = ["Amol Kelkar <kelkar.amol@gmail.com>"]
 license = "MIT"
@@ -30,6 +30,7 @@ websockets = "^15.0.1"
 bidict = "^0.23.1"
 pydantic = "^2.11.7"
 platformdirs = "^4.4.0"
+simpleeval = "^1.0.3"
 
 
 [tool.poetry.group.dev.dependencies]

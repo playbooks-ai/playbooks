@@ -1,12 +1,12 @@
 import json
 import os
+import types
 from typing import TYPE_CHECKING, Dict, List, Optional
 
 from playbooks.debug_logger import debug
 from playbooks.llm_context_compactor import LLMContextCompactor
 from playbooks.llm_messages import (
     AgentInfoLLMMessage,
-    AssistantResponseLLMMessage,
     OtherAgentInfoLLMMessage,
     TriggerInstructionsLLMMessage,
     UserInputLLMMessage,
@@ -14,9 +14,30 @@ from playbooks.llm_messages import (
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import get_messages_for_prompt
 from playbooks.utils.token_counter import get_messages_token_count
+from playbooks.variables import Variable
 
 if TYPE_CHECKING:
     from playbooks.execution_state import ExecutionState
+
+
+class SetEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, set):
+            return list(obj)
+        if obj is Ellipsis:
+            return "..."
+        if isinstance(obj, Variable):
+            return json.JSONEncoder.default(self, obj.value)
+        # Handle module objects and other non-serializable types
+        if isinstance(obj, types.ModuleType):
+            return f"<module: {obj.__name__}>"
+        if isinstance(obj, type):
+            return f"<class: {obj.__name__}>"
+        # For any other non-serializable object, convert to string
+        try:
+            return super().default(obj)
+        except TypeError:
+            return f"<{type(obj).__name__}: {str(obj)[:50]}>"
 
 
 class InterpreterPrompt:
@@ -33,6 +54,7 @@ class InterpreterPrompt:
         trigger_instructions: List[str],
         agent_information: str,
         other_agent_klasses_information: List[str],
+        execution_id: Optional[int] = None,  # NEW: Track execution sequence
     ):
         """
         Initializes the InterpreterPrompt.
@@ -44,6 +66,7 @@ class InterpreterPrompt:
             instruction: The user's latest instruction.
             agent_instructions: General instructions for the agent.
             artifacts_to_load: List of artifact names to load.
+            execution_id: Sequential execution counter for this LLM call.
         """
         self.execution_state = execution_state
         self.playbooks = playbooks
@@ -54,6 +77,7 @@ class InterpreterPrompt:
         self.trigger_instructions = trigger_instructions
         self.agent_information = agent_information
         self.other_agent_klasses_information = other_agent_klasses_information
+        self.execution_id = execution_id  # NEW: Store execution_id
         self.compactor = LLMContextCompactor()
 
     def _get_trigger_instructions_message(self) -> str:
@@ -117,7 +141,9 @@ class InterpreterPrompt:
             debug("Error: Prompt template file not found")
             return "Error: Prompt template missing."
 
-        initial_state = json.dumps(self.execution_state.to_dict(), indent=2)
+        initial_state = json.dumps(
+            self.execution_state.to_dict(), indent=2, cls=SetEncoder
+        )
 
         # session_log_str = str(self.execution_state.session_log)
 
@@ -184,18 +210,5 @@ class InterpreterPrompt:
         )
 
         messages.extend(compacted_dict_messages)
-        # messages.extend(self._get_artifact_messages())
-        # messages.append(prompt_messages[1])
 
         return messages
-
-    def _get_artifact_messages(self) -> List[Dict[str, str]]:
-        """Generates messages for the artifacts to load."""
-        artifact_messages = []
-        for artifact in self.artifacts_to_load:
-            artifact = self.execution_state.artifacts[artifact]
-            artifact_message = f"Artifact[{artifact.name}]\n\nSummary: {artifact.summary}\n\nContent: {artifact.content}"
-            artifact_messages.append(
-                AssistantResponseLLMMessage(artifact_message).to_full_message()
-            )
-        return artifact_messages

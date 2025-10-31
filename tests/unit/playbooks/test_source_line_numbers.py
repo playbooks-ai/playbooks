@@ -119,7 +119,6 @@ This is a test playbook.
         "SendMessage",
         "WaitForMessage",
         "Say",
-        "SaveArtifact",
         "LoadArtifact",
     ]
 

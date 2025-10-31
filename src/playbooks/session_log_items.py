@@ -41,12 +41,6 @@ class SessionLogItemPlaybookStart(SessionLogItemBase):
     def to_log_full(self) -> str:
         return f"▶ Starting playbook: {self.playbook_name}"
 
-    def to_log_compact(self) -> str:
-        return f"▶ {self.playbook_name}"
-
-    def to_log_minimal(self) -> str:
-        return "▶"
-
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
         meta.update(
@@ -81,13 +75,6 @@ class SessionLogItemPlaybookEnd(SessionLogItemBase):
             msg += f" → {self.return_value}"
         return msg
 
-    def to_log_compact(self) -> str:
-        status = "✓" if self.success else "✗"
-        return f"{status} {self.playbook_name}"
-
-    def to_log_minimal(self) -> str:
-        return "✓" if self.success else "✗"
-
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
         meta.update(
@@ -115,12 +102,6 @@ class SessionLogItemLLMRequest(SessionLogItemBase):
     def to_log_full(self) -> str:
         msg_count = len(self.messages)
         return f"🤖 LLM Request to {self.model} ({msg_count} messages)"
-
-    def to_log_compact(self) -> str:
-        return f"🤖 {self.model}"
-
-    def to_log_minimal(self) -> str:
-        return "🤖"
 
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
@@ -157,13 +138,6 @@ class SessionLogItemLLMResponse(SessionLogItemBase):
         )
         return msg
 
-    def to_log_compact(self) -> str:
-        preview = self.content[:50].replace("\n", " ")
-        return f"💬 {preview}..."
-
-    def to_log_minimal(self) -> str:
-        return "💬"
-
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
         meta.update(
@@ -191,12 +165,6 @@ class SessionLogItemStepExecution(SessionLogItemBase):
             f"→ {self.step_type.capitalize()}: {self.step_name} - {self.step_content}"
         )
 
-    def to_log_compact(self) -> str:
-        return f"→ {self.step_name}"
-
-    def to_log_minimal(self) -> str:
-        return "→"
-
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
         meta.update(
@@ -221,12 +189,6 @@ class SessionLogItemVariableUpdate(SessionLogItemBase):
 
     def to_log_full(self) -> str:
         return f"📝 {self.variable_name} = {self.new_value} (was: {self.old_value})"
-
-    def to_log_compact(self) -> str:
-        return f"📝 {self.variable_name} = {str(self.new_value)[:20]}..."
-
-    def to_log_minimal(self) -> str:
-        return "📝"
 
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
@@ -254,13 +216,6 @@ class SessionLogItemAgentMessage(SessionLogItemBase):
 
     def to_log_full(self) -> str:
         return f"📨 {self.sender_klass}({self.sender_id}) → {self.recipient_klass}({self.recipient_id}): {self.message}"
-
-    def to_log_compact(self) -> str:
-        preview = self.message[:50].replace("\n", " ")
-        return f"📨 {self.sender_klass} → {self.recipient_klass}: {preview}..."
-
-    def to_log_minimal(self) -> str:
-        return "📨"
 
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
@@ -292,12 +247,6 @@ class SessionLogItemError(SessionLogItemBase):
             msg += f"\n{self.stack_trace}"
         return msg
 
-    def to_log_compact(self) -> str:
-        return f"❌ {self.error_type}: {self.error_message[:50]}..."
-
-    def to_log_minimal(self) -> str:
-        return "❌"
-
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()
         meta.update(
@@ -323,12 +272,6 @@ class SessionLogItemDebug(SessionLogItemBase):
         if self.data:
             msg += f" - {self.data}"
         return msg
-
-    def to_log_compact(self) -> str:
-        return f"🐛 {self.message[:50]}..."
-
-    def to_log_minimal(self) -> str:
-        return "🐛"
 
     def to_metadata(self) -> Dict[str, Any]:
         meta = super().to_metadata()

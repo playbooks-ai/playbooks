@@ -65,7 +65,8 @@ class PlaybooksLMHandler:
             processed.append(message.copy())
 
         # 5. Merge consecutive messages from the same role
-        merged = self._merge_consecutive_messages(processed)
+        # Merging is disabled - messages are kept separate
+        merged = processed
 
         # 6. Ensure the last message is from "user" (for inference)
         if merged and merged[-1]["role"] == "assistant":
@@ -77,13 +78,13 @@ class PlaybooksLMHandler:
         return merged
 
     def _get_system_prompt(self) -> str:
-        """Get the shorter system prompt used in training."""
+        """Get the shorter system prompt used in training PlaybooksLM."""
         return """You are an interpreter that executes markdown playbooks (H2s) step-by-step.
 Output Contract — **WRITE NOTHING ELSE**
 
 ```
-recap – one‑sentence summary
-plan  – one‑sentence immediate goal
+# recap: one‑sentence summary
+# plan: one‑sentence immediate goal
 `Var[$name, <value>]`
 `SaveArtifact($name, "one line summary", "long form content...")`
 trig? <no | `Trigger["PB:Ln:Code"]` \n yld for call>

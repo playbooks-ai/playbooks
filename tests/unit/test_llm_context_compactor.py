@@ -39,13 +39,15 @@ class TestCompactionConfig:
 
 
 def get_assistant_contents_compacted(index):
-    return f"""This is step {index}"""
+    return f"""# execution_id: {index}
+# recap: This is step {index}"""
 
 
 def get_assistant_contents(index):
-    return f"""recap - This is step {index}
-    plan - This is the plan {index}
-    some execution logs
+    return f"""# execution_id: {index}
+# recap: This is step {index}
+# plan: This is the plan {index}
+some execution logs
 """
 
 

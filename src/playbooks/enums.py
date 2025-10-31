@@ -39,6 +39,7 @@ class LLMMessageType(str, Enum):
     # Data types
     FILE_LOAD = "file_load"
     SESSION_LOG = "session_log"
+    ARTIFACT = "artifact"
 
 
 class StartupMode(str, Enum):

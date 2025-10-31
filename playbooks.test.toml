@@ -1,5 +1,6 @@
 # Test environment overrides
 debug = false
+artifact_result_threshold = 80  # Lower threshold for testing
 
 [model]
 name = "claude-sonnet-4-20250514"

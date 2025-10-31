@@ -13,9 +13,9 @@ from typing import Dict, List, Optional, Set
 import websockets
 
 from playbooks import Playbooks
-from playbooks.debug_logger import debug
 from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.constants import EOM
+from playbooks.debug_logger import debug
 from playbooks.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.message import MessageType
@@ -263,8 +263,6 @@ class PlaybookRun:
                     item_type=event_data["item_type"],
                     metadata=event_data.get("metadata"),
                     log_full=event_data.get("log_full"),
-                    log_compact=event_data.get("log_compact"),
-                    log_minimal=event_data.get("log_minimal"),
                 )
                 await self._broadcast_event(event)
 
@@ -347,8 +345,6 @@ class PlaybookRun:
                         item_type=event_data["item_type"],
                         metadata=event_data.get("metadata"),
                         log_full=event_data.get("log_full"),
-                        log_compact=event_data.get("log_compact"),
-                        log_minimal=event_data.get("log_minimal"),
                     )
                     await self._broadcast_event(event)
 
@@ -579,13 +575,9 @@ class PlaybookRun:
                     else:
                         event_data["item_type"] = "message"
 
-                    # Add different log representations
+                    # Add full log representation
                     if hasattr(item, "to_log_full"):
                         event_data["log_full"] = item.to_log_full()
-                    if hasattr(item, "to_log_compact"):
-                        event_data["log_compact"] = item.to_log_compact()
-                    if hasattr(item, "to_log_minimal"):
-                        event_data["log_minimal"] = item.to_log_minimal()
 
                     # Create SessionLogEvent
                     event = SessionLogEvent(
@@ -599,8 +591,6 @@ class PlaybookRun:
                         item_type=event_data["item_type"],
                         metadata=event_data.get("metadata"),
                         log_full=event_data.get("log_full"),
-                        log_compact=event_data.get("log_compact"),
-                        log_minimal=event_data.get("log_minimal"),
                     )
 
                     # Send to client

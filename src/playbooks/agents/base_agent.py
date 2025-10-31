@@ -1,15 +1,14 @@
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict
 
-from playbooks.debug_logger import debug
-from playbooks.events import AgentPausedEvent
-from playbooks.utils.spec_utils import SpecUtils
-
+from ..debug_logger import debug
+from ..events import AgentPausedEvent, AgentResumedEvent
 from ..llm_messages import AgentCommunicationLLMMessage
+from ..utils.spec_utils import SpecUtils
 from .messaging_mixin import MessagingMixin
 
 if TYPE_CHECKING:
-    from src.playbooks.program import Program
+    from ..program import Program
 
 
 class BaseAgentMeta(ABCMeta):
@@ -69,6 +68,9 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
     async def Say(self, target: str, message: str, already_streamed: bool = False):
         resolved_target = self.resolve_target(target, allow_fallback=True)
 
+        # Message is already resolved by execute_playbook()
+        # No need to evaluate it again here
+
         # Handle meeting targets with broadcasting
         if SpecUtils.is_meeting_spec(resolved_target):
             meeting_id = SpecUtils.extract_meeting_id(resolved_target)
@@ -83,6 +85,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
                 await self.meeting_manager.broadcast_to_meeting_as_owner(
                     meeting_id, message
                 )
+                return message
             elif (
                 hasattr(self, "state")
                 and hasattr(self.state, "joined_meetings")
@@ -94,6 +97,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
                 await self.meeting_manager.broadcast_to_meeting_as_participant(
                     meeting_id, message
                 )
+                return message
             else:
                 # Error: not in this meeting
                 debug(f"{str(self)}: state {self.state.joined_meetings}")
@@ -103,7 +107,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
                 self.state.session_log.append(
                     f"Cannot broadcast to meeting {meeting_id} - not a participant"
                 )
-            return
+                return message
 
         # Track last message target (only for 1:1 messages, not meetings)
         if not (
@@ -117,6 +121,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             await self.complete_streaming_say()
 
         await self.SendMessage(resolved_target, message)
+        return message
 
     async def SendMessage(self, target_agent_id: str, message: str):
         """Send a message to another agent."""
@@ -196,8 +201,6 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             and hasattr(self.program, "event_bus")
             and self.program.event_bus
         ):
-            from playbooks.events import AgentResumedEvent
-
             event = AgentResumedEvent(
                 session_id="",
                 agent_id=self.id,

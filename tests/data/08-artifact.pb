@@ -2,40 +2,27 @@
 
 ```python
 @playbook
-async def Playbook3():
-    await SaveArtifact("another_artifact", "Another artifact", "Secret message 54345.")
-    return "Artifact[another_artifact]"
-
-@playbook
-async def Playbook4():
-    artifact = await LoadArtifact("artifact1.txt")
-    await Say("Artifact[artifact1.txt]")
-    await Say(artifact.content)
+def GenerateRandomString():
+  import random
+  import string
+  return ''.join(random.choices(string.ascii_letters, k=1000))
 ```
 
-## Playbook1
-
-### Steps
-- Create an artifact with the name "my_artifact" and the content "This is a test artifact."
-- Return the artifact
-
-## Playbook2
-
-### Steps
-- Load the artifact "my_artifact" and "another_artifact"
-- Show my_artifact to user
-- Say the content of my_artifact
-- Show another_artifact to user
-- Say the content of another_artifact
-
 ## Main
-
-### Trigger
-- At the start
-
+### Triggers
+- At the beginning
 ### Steps
-- Run Playbook1
-- SaveArtifact("artifact1.txt", "Artifact1", "This is artifact1.")
-- Run Playbook3
-- Run Playbook2
-- Run Playbook4
+- Get $first_four from PB1
+- Tell user the $first_four
+- Get $last_four from PB2
+- Tell user the $last_four
+- Exit program
+
+## PB1
+### Steps
+- Generate $random_string
+- Return first 4 letters from the string
+
+## PB2
+### Steps
+- Return one dictionary word you see in the already generated random string, otherwise 'None'

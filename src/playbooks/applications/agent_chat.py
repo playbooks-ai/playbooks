@@ -21,7 +21,10 @@ except ImportError:
     termios = None
 
 try:
-    import msvcrt
+    if os.name == "nt":
+        import msvcrt
+    else:
+        msvcrt = None
 except ImportError:
     msvcrt = None
 
@@ -37,7 +40,6 @@ from playbooks.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.message import MessageType
 from playbooks.program import Program
-from playbooks.session_log import SessionLogItemLevel
 from playbooks.user_output import user_output
 from playbooks.utils.error_utils import check_playbooks_health
 
@@ -113,9 +115,9 @@ class SessionLogWrapper:
         self.streaming_content = ""
         self.is_streaming = False
 
-    def append(self, msg, level=SessionLogItemLevel.MEDIUM):
+    def append(self, msg):
         """Append a message to the session log and publish it."""
-        self._session_log.append(msg, level)
+        self._session_log.append(msg)
         # Skip traditional display entirely - streaming handles all output now
         # Traditional panels are disabled in favor of streaming output
 
@@ -174,7 +176,8 @@ original_create_agent = None  # Will be set after Program is loaded
 async def patched_wait_for_message(self, source_agent_id: str):
     """Patched version of WaitForMessage that shows a prompt when waiting for human input."""
     # For human input, show a prompt before calling the normal WaitForMessage
-    if source_agent_id == "human":
+    # Accept both "human" and "user" as identifiers for human input
+    if source_agent_id in ("human", "user"):
         # Check if there are already messages waiting
         messages = self._message_buffer
         human_messages = [msg for msg in messages if msg.sender_id == "human"]

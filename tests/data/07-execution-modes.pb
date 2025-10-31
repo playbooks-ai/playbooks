@@ -3,7 +3,7 @@
 ```python
 @playbook
 import math
-async def Factorial(a: float):
+async def Factorial(a: int):
     return math.factorial(a)
 
 @playbook
