@@ -4,6 +4,50 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [v0.6.2] - 2025-10-30
+
+### Added
+
+- Python code execution model - LLMs generate Python with capture functions (Step, Say, Var, Artifact, Trigger, Return, Yld) instead of backtick directives
+- Python-only agents (Fixes #43)
+- `python_executor.py` with PythonExecutor and capture functions
+- `agent_proxy.py` for cross-agent communication
+- Type-aware argument resolution system (Fixes #51)
+  - `LiteralValue` and `VariableReference` typed wrappers
+  - Playbook-type-specific resolution (external, Python, LLM)
+- Variable assignment support: `$x = Func($y)` (Fixes #47)
+- `$_` variable for automatic last-result capture (Fixes #52)
+- Variable chaining: `Say(...) Var[$answer, $_] Return[$answer]` (Fixes #48)
+- Multi-line string support with triple quotes (Fixes #55)
+- String operations for artifacts (comparison, concatenation, indexing, slicing)
+- Auto-load for unloaded artifacts when referenced (Fixes #59)
+- Stable artifact names (Fixes #57)
+- Automatic artifact creation for large results (>500 chars threshold)
+- `maxTokens` and `max_llm_calls` configuration options
+- Public vs private variables (underscore prefix for private)
+- Type annotations in variable assignments
+- Utility to compare Langfuse traces
+
+### Changed
+
+- Moved `Artifact` class to `variables.py` as `Variable` subclass (Fixes #50)
+- Removed `llm_response_line.py` (~350 lines of regex eliminated)
+- Updated `interpreter_run.txt` prompt to Python format
+- Artifact threshold changed from 280 to 500 characters
+- Improved streaming with placeholder resolution
+
+### Fixed
+
+- LoadArtifact functionality
+- Parsing `true` keyword argument values
+- Tests for updated `post_execute` return values
+
+### Removed
+
+- Backtick-based directive parsing
+- `src/playbooks/artifacts.py` (consolidated into variables.py)
+- Dead code cleanup
+
 ## [0.6.1] - 2025-10-11
 
 ### Added
