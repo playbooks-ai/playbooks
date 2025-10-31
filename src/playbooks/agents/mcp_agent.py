@@ -300,15 +300,16 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                 def create_execute_fn(tool_name, schema):
                     async def execute_fn(*args, **kwargs):
                         # Convert positional args to kwargs if needed
-                        if args and not kwargs:
-                            # If only positional args, try to map them to the first parameter
+                        if args:
                             properties = schema.get("properties", {})
-                            if len(args) == 1 and len(properties) == 1:
-                                param_name = list(properties.keys())[0]
-                                kwargs = {param_name: args[0]}
-                            else:
-                                # Multiple args - create numbered parameters
-                                kwargs = {f"arg_{i}": arg for i, arg in enumerate(args)}
+                            param_names = list(properties.keys())
+                            # Map positional args to parameter names from schema in order
+                            for i, arg in enumerate(args):
+                                if i < len(param_names):
+                                    param_name = param_names[i]
+                                    # Only set if not already in kwargs (kwargs take precedence)
+                                    if param_name not in kwargs:
+                                        kwargs[param_name] = arg
 
                         result = await self.transport.call_tool(tool_name, kwargs)
                         result_str = str(result.content[0].text)

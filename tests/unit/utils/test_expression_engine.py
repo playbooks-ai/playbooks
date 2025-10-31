@@ -10,6 +10,9 @@ from playbooks.argument_types import LiteralValue, VariableReference
 from playbooks.utils.expression_engine import (
     ExpressionContext,
     ExpressionError,
+    bind_call_parameters,
+    extract_parameter_defaults_from_signature,
+    extract_parameter_names_from_signature,
     extract_playbook_calls,
     extract_variables,
     format_value,
@@ -665,6 +668,375 @@ class TestIntegration:
 
         # $order['id'] should return the 'id' value from the order dict
         assert result1 == result2 == result3 == "12345"
+
+
+class TestExtractParameterNamesFromSignature:
+    """Test the extract_parameter_names_from_signature function."""
+
+    def test_simple_parameters(self):
+        """Test extracting simple parameter names."""
+        sig = "MyPlaybook($arg1:str, $arg2:int)"
+        params = extract_parameter_names_from_signature(sig)
+        assert params == ["arg1", "arg2"]
+
+    def test_parameters_without_types(self):
+        """Test extracting parameters without type annotations."""
+        sig = "MyPlaybook($name, $value)"
+        params = extract_parameter_names_from_signature(sig)
+        assert params == ["name", "value"]
+
+    def test_parameters_without_dollar_prefix(self):
+        """Test extracting parameters without $ prefix."""
+        sig = "MyPlaybook(arg1:str, arg2:int)"
+        params = extract_parameter_names_from_signature(sig)
+        assert params == ["arg1", "arg2"]
+
+    def test_no_parameters(self):
+        """Test extracting from signature with no parameters."""
+        sig = "MyPlaybook()"
+        params = extract_parameter_names_from_signature(sig)
+        assert params == []
+
+    def test_empty_signature(self):
+        """Test handling of empty signature."""
+        params = extract_parameter_names_from_signature("")
+        assert params == []
+
+    def test_complex_signature(self):
+        """Test extracting from complex signature with return type."""
+        sig = "LoadRelevantContext($question:str, $current_reasoning:str) -> dict"
+        params = extract_parameter_names_from_signature(sig)
+        assert params == ["question", "current_reasoning"]
+
+    def test_invalid_signature_graceful_failure(self):
+        """Test that invalid signatures fail gracefully."""
+        sig = "InvalidSignature(unclosed"
+        params = extract_parameter_names_from_signature(sig)
+        assert params == []  # Should return empty list instead of crashing
+
+
+class TestExtractParameterDefaultsFromSignature:
+    """Test the extract_parameter_defaults_from_signature function."""
+
+    def test_simple_defaults(self):
+        """Test extracting simple default values."""
+        sig = "Func($a:str, $b:int=10)"
+        defaults = extract_parameter_defaults_from_signature(sig)
+        assert defaults == {"b": 10}
+
+    def test_multiple_defaults(self):
+        """Test extracting multiple default values."""
+        sig = "Func($a:str, $b:int=10, $c:bool=True)"
+        defaults = extract_parameter_defaults_from_signature(sig)
+        assert defaults == {"b": 10, "c": True}
+
+    def test_string_defaults(self):
+        """Test extracting string default values."""
+        sig = "Func($a:str, $b:str='hello')"
+        defaults = extract_parameter_defaults_from_signature(sig)
+        assert defaults == {"b": "hello"}
+
+    def test_no_defaults(self):
+        """Test signature with no defaults."""
+        sig = "Func($a:str, $b:int)"
+        defaults = extract_parameter_defaults_from_signature(sig)
+        assert defaults == {}
+
+    def test_mixed_defaults(self):
+        """Test signature with some params having defaults."""
+        sig = "PB1($a:str, $b:int=10) -> None"
+        defaults = extract_parameter_defaults_from_signature(sig)
+        assert defaults == {"b": 10}
+
+    def test_none_default(self):
+        """Test None as default value."""
+        sig = "Func($a:str, $b:int=None)"
+        defaults = extract_parameter_defaults_from_signature(sig)
+        assert defaults == {"b": None}
+
+
+class TestBindCallParameters:
+    """Test the bind_call_parameters function."""
+
+    def test_positional_args_only(self):
+        """Test binding with only positional arguments."""
+        sig = "Func($a:str, $b:int)"
+        args = ["hello", 42]
+        kwargs = {}
+        result = bind_call_parameters(sig, args, kwargs)
+        assert result == {"a": "hello", "b": 42}
+
+    def test_keyword_args_only(self):
+        """Test binding with only keyword arguments."""
+        sig = "Func($a:str, $b:int)"
+        args = []
+        kwargs = {"a": "hello", "b": 42}
+        result = bind_call_parameters(sig, args, kwargs)
+        assert result == {"a": "hello", "b": 42}
+
+    def test_mixed_args(self):
+        """Test binding with mixed positional and keyword arguments."""
+        sig = "Func($a:str, $b:int, $c:bool)"
+        args = ["hello"]
+        kwargs = {"b": 42, "c": True}
+        result = bind_call_parameters(sig, args, kwargs)
+        assert result == {"a": "hello", "b": 42, "c": True}
+
+    def test_kwargs_override_positional(self):
+        """Test that keyword arguments override positional arguments."""
+        sig = "Func($a:str, $b:int)"
+        args = ["hello", 42]
+        kwargs = {"b": 99}
+        result = bind_call_parameters(sig, args, kwargs)
+        assert result == {"a": "hello", "b": 99}
+
+    def test_partial_arguments(self):
+        """Test binding with only some arguments provided (for optional params)."""
+        sig = "Func($a:str, $b:int, $c:bool)"
+        args = ["hello"]
+        kwargs = {}
+        result = bind_call_parameters(sig, args, kwargs)
+        # Should only return what was provided
+        assert result == {"a": "hello"}
+
+    def test_default_values_filled(self):
+        """Test that default values are filled in when not provided."""
+        sig = "Func($a:str, $b:int=10)"
+        args = ["hello"]
+        kwargs = {}
+        result = bind_call_parameters(sig, args, kwargs)
+        assert result == {"a": "hello", "b": 10}
+
+    def test_default_values_overridden(self):
+        """Test that provided values override defaults."""
+        sig = "Func($a:str, $b:int=10)"
+        args = ["hello", 99]
+        kwargs = {}
+        result = bind_call_parameters(sig, args, kwargs)
+        assert result == {"a": "hello", "b": 99}
+
+    def test_multiple_defaults_partial_override(self):
+        """Test multiple defaults with partial override."""
+        sig = "Func($a:str, $b:int=10, $c:bool=True)"
+        args = ["hello"]
+        kwargs = {"b": 99}
+        result = bind_call_parameters(sig, args, kwargs)
+        assert result == {"a": "hello", "b": 99, "c": True}
+
+
+class TestParameterResolution:
+    """Test parameter resolution in ExpressionContext."""
+
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.agent = Mock()
+        self.state = Mock()
+        self.call = Mock()
+
+        # Mock a playbook with signature
+        self.playbook = Mock()
+        self.playbook.signature = (
+            "LoadRelevantContext($question:str, $current_reasoning:str)"
+        )
+
+        # Set up call with arguments
+        self.call.playbook_klass = "LoadRelevantContext"
+        self.call.args = [LiteralValue("How are you?"), LiteralValue("Starting")]
+        self.call.kwargs = {}
+
+        # Mock agent playbooks
+        self.agent.playbooks = {"LoadRelevantContext": self.playbook}
+
+        # Mock state variables (empty for this test)
+        class VariablesHolder:
+            def __init__(self):
+                self.variables = {}
+
+        self.state.variables = VariablesHolder()
+
+        # Mock namespace manager
+        self.agent.namespace_manager = Mock(namespace={})
+
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.state, call=self.call
+        )
+
+    def test_resolve_positional_parameters(self):
+        """Test resolving positional parameters."""
+        # First parameter
+        result = self.context.resolve_variable("question")
+        assert result == "How are you?"
+
+        # Second parameter
+        result = self.context.resolve_variable("current_reasoning")
+        assert result == "Starting"
+
+    def test_resolve_keyword_parameters(self):
+        """Test resolving keyword parameters."""
+        # Set up with keyword arguments
+        self.call.args = []
+        self.call.kwargs = {
+            "question": LiteralValue("What is AI?"),
+            "current_reasoning": LiteralValue("Exploring"),
+        }
+
+        # Reset context
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.state, call=self.call
+        )
+
+        result = self.context.resolve_variable("question")
+        assert result == "What is AI?"
+
+        result = self.context.resolve_variable("current_reasoning")
+        assert result == "Exploring"
+
+    def test_parameters_shadow_state_variables(self):
+        """Test that parameters shadow state variables with the same name."""
+        # Add a state variable with the same name as a parameter
+        mock_var = Mock()
+        mock_var.value = "global_question"
+        self.state.variables.variables["$question"] = mock_var
+
+        # Reset context to pick up the new state
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.state, call=self.call
+        )
+
+        # Parameter should take precedence over state variable
+        result = self.context.resolve_variable("question")
+        assert result == "How are you?"  # From parameter, not "global_question"
+
+    def test_state_variables_accessible_when_no_parameter_match(self):
+        """Test that state variables are accessible when there's no matching parameter."""
+        # Add a state variable that doesn't match any parameter
+        mock_var = Mock()
+        mock_var.value = "some_global_value"
+        self.state.variables.variables["$other_var"] = mock_var
+
+        # Reset context
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.state, call=self.call
+        )
+
+        # Should resolve from state since no parameter named "other_var"
+        result = self.context.resolve_variable("other_var")
+        assert result == "some_global_value"
+
+    def test_parameter_caching(self):
+        """Test that parameter binding is cached."""
+        # First access
+        result1 = self.context.resolve_variable("question")
+
+        # Change the underlying call args (simulating mutation)
+        self.call.args[0] = LiteralValue("Changed question")
+
+        # Second access should return cached parameter binding
+        result2 = self.context.resolve_variable("question")
+
+        # Both should be the original value due to caching
+        assert result1 == result2 == "How are you?"
+
+    def test_variable_reference_parameters_resolved(self):
+        """Test that VariableReference parameters are resolved to actual values."""
+        # Add a state variable
+        mock_var = Mock()
+        mock_var.value = "resolved_value"
+        self.state.variables.variables["$source_var"] = mock_var
+
+        # Set up call with VariableReference
+        self.call.args = [VariableReference("$source_var"), LiteralValue("Starting")]
+
+        # Reset context
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.state, call=self.call
+        )
+
+        # Parameter should be resolved to the value from state
+        result = self.context.resolve_variable("question")
+        assert result == "resolved_value"
+
+    def test_no_playbook_signature_graceful(self):
+        """Test graceful handling when playbook has no signature."""
+        # Remove signature
+        self.playbook.signature = None
+
+        # Reset context
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.state, call=self.call
+        )
+
+        # Should not crash, just not find the parameter
+        with pytest.raises(KeyError):
+            self.context.resolve_variable("question")
+
+    @pytest.mark.asyncio
+    async def test_parameters_in_description_placeholders(self):
+        """Test that parameters work in description placeholder resolution."""
+        description = (
+            "Find context for: {$question}\nCurrent reasoning: {$current_reasoning}"
+        )
+        result = await resolve_description_placeholders(description, self.context)
+        assert result == "Find context for: How are you?\nCurrent reasoning: Starting"
+
+    def test_default_parameter_values(self):
+        """Test that default parameter values work correctly."""
+        # Set up playbook with default parameter
+        self.playbook.signature = "PB1($a:str, $b:int=10) -> None"
+
+        # Call with only first argument
+        self.call.args = [LiteralValue("World")]
+        self.call.kwargs = {}
+
+        # Add a state variable
+        mock_var = Mock()
+        mock_var.value = "hello"
+        self.state.variables.variables["$var1"] = mock_var
+
+        # Reset context
+        self.context = ExpressionContext(
+            agent=self.agent, state=self.state, call=self.call
+        )
+
+        # Test parameter with default
+        result_b = self.context.resolve_variable("b")
+        assert result_b == 10
+
+        # Test provided parameter
+        result_a = self.context.resolve_variable("a")
+        assert result_a == "World"
+
+        # Test state variable
+        result_var1 = self.context.resolve_variable("var1")
+        assert result_var1 == "hello"
+
+    @pytest.mark.asyncio
+    async def test_default_parameters_in_description(self):
+        """Test the full user scenario with defaults in description placeholders."""
+        # Create a new playbook with default parameter
+        playbook_with_defaults = Mock()
+        playbook_with_defaults.signature = "PB1($a:str, $b:int=10) -> None"
+
+        # Update agent playbooks
+        self.agent.playbooks["PB1"] = playbook_with_defaults
+
+        # Call with only first argument
+        self.call.playbook_klass = "PB1"
+        self.call.args = [LiteralValue("World")]
+        self.call.kwargs = {}
+
+        # Add a state variable
+        mock_var = Mock()
+        mock_var.value = "hello"
+        self.state.variables.variables["$var1"] = mock_var
+
+        # Create fresh context with new configuration
+        context = ExpressionContext(agent=self.agent, state=self.state, call=self.call)
+
+        # Test description with mixed variables (state, parameter, default parameter)
+        description = "This playbook says {$var1}, {$a} {$b} times"
+        result = await resolve_description_placeholders(description, context)
+        assert result == "This playbook says hello, World 10 times"
 
 
 if __name__ == "__main__":

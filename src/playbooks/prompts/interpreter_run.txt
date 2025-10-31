@@ -63,6 +63,7 @@ await Yld(<user | meeting | agent | call | exit>)
 13. Always output playbook execution summary in a variable before returning (e.g., `$__ = "summary"`)
 14. Special variable `_` automatically captures the return value of the last playbook call. Use `$varname = _` to save the result for later use, e.g. `Say("user", """<long\nanswer>""")\n$answer = _\nReturn(_)`
 15. If your code has a Python error (SyntaxError, NameError, etc.), you will be shown the error and asked to regenerate corrected code.
+16. Variables listed in current state and newly set are the global variables available in the generated Python code, don't make up non-existing variables
 
 #### 4. Meetings
 Meetings are a mechanism for more than two agents to communicate together.

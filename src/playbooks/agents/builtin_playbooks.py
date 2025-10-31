@@ -68,6 +68,10 @@ async def InviteToMeeting(meeting_id: str, attendees: list):
 async def AcceptMeetingInvitation(meeting_id: str, inviter_id: str, topic: str, meeting_playbook_name: str):
     return await agent.meeting_manager._accept_meeting_invitation(meeting_id, inviter_id, topic, meeting_playbook_name)
 
+@playbook(hidden=True)
+async def ExecuteMeetingPlaybook(meeting_id: str, playbook_name: str):
+    return await agent.meeting_manager._execute_meeting_playbook(meeting_id, playbook_name)
+
 @playbook
 async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
     return await agent.load_file(file_path, inline, silent)
@@ -114,10 +118,10 @@ hidden: true
 
 ### Steps
 - For each $message in $messages
-    - If $message is a MEETING INVITATION
+    - If $message sent to a meeting we have joined
         - Find a suitable meeting playbook
         - If meeting playbook is found
-            - AcceptMeetingInvitation(meeting_id, inviter_id, topic, meeting_playbook_name)
+            - ExecuteMeetingPlaybook(meeting_id, meeting_playbook_name)
             - Continue
         - Otherwise
             - Return "No suitable meeting playbook found"

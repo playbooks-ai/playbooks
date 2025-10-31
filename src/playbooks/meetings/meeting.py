@@ -110,3 +110,4 @@ class JoinedMeeting:
     id: str
     owner_id: str
     joined_at: datetime
+    topic: Optional[str] = None

@@ -21,6 +21,7 @@ from ..llm_messages import (
 )
 from ..llm_messages.types import ArtifactLLMMessage
 from ..meetings import MeetingManager
+from ..message import MessageType
 from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.expression_engine import (
@@ -30,6 +31,7 @@ from ..utils.expression_engine import (
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.misc import copy_func
 from ..utils.spec_utils import SpecUtils
+from ..utils.text_utils import indent, simple_shorten
 from ..variables import Artifact
 from .base_agent import BaseAgent, BaseAgentMeta
 from .namespace_manager import AgentNamespaceManager
@@ -366,25 +368,35 @@ async def {self.bgn_playbook_name}() -> None:
         return instructions
 
     @classmethod
-    def get_compact_information(cls) -> str:
+    def get_compact_information(cls, public_only: bool = False) -> str:
         info_parts = []
         info_parts.append(f"class {cls.klass}:")
         if cls.description:
-            info_parts.append(f'"""{cls.description}"""\n')
+            if public_only:
+                description_first_paragraph = cls.description.split("\n\n")[0]
+                description_first_paragraph = f'"""{description_first_paragraph}"""'
+                info_parts.append(indent(description_first_paragraph, indent_size=2))
+            else:
+                description = f'"""{cls.description}"""'
+                info_parts.append(indent(description, indent_size=2))
 
         if cls.playbooks:
             for playbook in cls.playbooks.values():
-                if not playbook.hidden:
-                    info_parts.append("  @playbook")
-                    info_parts.append(f"  async def {playbook.signature}:")
+                if not playbook.hidden and (not public_only or playbook.public):
+                    info_parts.append(indent("@playbook", indent_size=2))
+                    info_parts.append(
+                        indent(f"async def {playbook.signature}:", indent_size=2)
+                    )
                     if playbook.description:
                         info_parts.append(
-                            '    """'
-                            + playbook.description[:200]
-                            + ("..." if len(playbook.description) > 200 else "")
-                            + '"""'
+                            indent('"""', indent_size=4)
+                            + indent(
+                                simple_shorten(playbook.description, width=200),
+                                indent_size=4,
+                            )
+                            + indent('"""', indent_size=4)
                         )
-                    info_parts.append("    pass")
+                    info_parts.append(indent("pass", indent_size=4))
                     info_parts.append("")
 
         return "\n".join(info_parts)
@@ -396,18 +408,7 @@ async def {self.bgn_playbook_name}() -> None:
         Returns:
             String containing public agent information
         """
-        info_parts = []
-        info_parts.append(f"# {cls.klass}")
-        if cls.description:
-            info_parts.append(f"{cls.description}")
-
-        if cls.playbooks:
-            for playbook in cls.playbooks.values():
-                if playbook.public:
-                    info_parts.append(f"async def {cls.klass}.{playbook.name}(...):")
-                    info_parts.append(playbook.description)
-
-        return "\n".join(info_parts)
+        return cls.get_compact_information(public_only=True)
 
     def other_agent_klasses_information(self) -> List[str]:
         """Get information about other registered agents.
@@ -987,14 +988,29 @@ async def {self.bgn_playbook_name}() -> None:
             self.state.variables["$_busy"] = False
 
             # Wait for messages
-            messages = await self.execute_playbook("WaitForMessage", ["*"])
+            _, messages = await self.execute_playbook("WaitForMessage", ["*"])
 
             if not messages:
                 continue
 
             self.state.variables["$_busy"] = True
 
+            # If this is a MEETING INVITATION, accept it immediately. We will handle meeting
+            # playbook lookup during the first message to the meeting.
+            for message in messages:
+                if message.message_type == MessageType.MEETING_INVITATION:
+                    await self.execute_playbook(
+                        "AcceptMeetingInvitation",
+                        [],
+                        {
+                            "meeting_id": message.meeting_id,
+                            "inviter_id": message.sender_id,
+                            "topic": message.content,
+                            "meeting_playbook_name": None,
+                        },
+                    )
+                    break
+
             # Delegate all message processing to ProcessMessages LLM playbook
-            # This includes meeting invitations (which require LLM to determine suitable playbook),
-            # trigger matching, and natural language handling
+            # This includes trigger matching, and natural language handling
             await self.execute_playbook("ProcessMessages", [messages])

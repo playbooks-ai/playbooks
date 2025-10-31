@@ -208,6 +208,31 @@ class PythonExecutor:
 
         dict.__setitem__(namespace, "asyncio", asyncio)
 
+        # Add builtins with dangerous ones removed
+        # Start with all builtins, then remove the most dangerous operations
+        # This gives LLMs flexibility while maintaining some safety guardrails
+        import builtins
+
+        blocked_builtins = {
+            "eval",  # Can execute arbitrary code
+            "exec",  # Can execute arbitrary code
+            "compile",  # Can compile arbitrary code
+            "__import__",  # Can import arbitrary modules
+            "open",  # Can read/write arbitrary files
+            "input",  # Can block execution waiting for stdin
+            "breakpoint",  # Debugger access
+            "exit",  # Can terminate the process
+            "quit",  # Can terminate the process
+            "help",  # Interactive help system
+            "license",  # Not needed
+            "copyright",  # Not needed
+            "credits",  # Not needed
+        }
+
+        for name in dir(builtins):
+            if not name.startswith("_") and name not in blocked_builtins:
+                dict.__setitem__(namespace, name, getattr(builtins, name))
+
         return namespace
 
     async def execute(self, code: str) -> ExecutionResult:

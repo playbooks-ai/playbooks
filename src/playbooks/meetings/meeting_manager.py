@@ -530,6 +530,7 @@ class MeetingManager:
         self.agent.state.joined_meetings[meeting_id] = JoinedMeeting(
             id=meeting_id,
             owner_id=inviter_id,
+            topic=topic,
             joined_at=datetime.now(),
         )
         debug(f"{str(self.agent)}: joined_meetings {self.agent.state.joined_meetings}")
@@ -548,11 +549,13 @@ class MeetingManager:
         # The initiator will add us as a participant when they receive our JOINED message
         # We don't directly access the meeting object here to support remote agents
 
-        # Execute the first available meeting playbook
-        # In a more sophisticated implementation, we could match playbook by topic/type
-        meeting_playbook = self.agent.playbooks[playbook_name]
-
+    async def _execute_meeting_playbook(self, meeting_id: str, playbook_name: str):
         try:
+            meeting_playbook = self.agent.playbooks[playbook_name]
+
+            meeting = self.agent.state.joined_meetings[meeting_id]
+            topic = meeting.topic
+
             log = f"Starting meeting playbook '{meeting_playbook.name}' for meeting {meeting_id}"
             debug(f"{str(self.agent)}: {log}")
             self.agent.state.session_log.append(log)
@@ -591,7 +594,7 @@ class MeetingManager:
                 await self.agent.program.route_message(
                     sender_id=self.agent.id,
                     sender_klass=self.agent.klass,
-                    receiver_spec=SpecUtils.to_agent_spec(inviter_id),
+                    receiver_spec=SpecUtils.to_agent_spec(meeting.owner_id),
                     message=f"Meeting {meeting_id}: Error in playbook execution - {str(e)}",
                     message_type=MessageType.MEETING_INVITATION_RESPONSE,
                     meeting_id=meeting_id,

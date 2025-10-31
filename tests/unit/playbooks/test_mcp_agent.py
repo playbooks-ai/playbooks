@@ -47,11 +47,15 @@ def mock_program():
 class MCPTestAgent(MCPAgent):
     klass = "MCPTestAgent"
     description = "Test MCP agent"
-    playbooks = {}
     metadata = {}
 
+    def __init__(self, **kwargs):
+        # Initialize with empty playbooks to avoid deep copy issues
+        self.__class__.playbooks = {}
+        super().__init__(**kwargs)
 
-class MCPTestAgentAll:
+
+class TestMCPAgent:
     """Test cases for MCPAgent."""
 
     def test_mcp_agent_initialization(self, event_bus, mcp_config, mock_program):
@@ -242,3 +246,283 @@ class MCPTestAgentAll:
 
         assert not agent._connected
         mock_transport.disconnect.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_positional_args_mapping_multiple_params(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
+        """Test that multiple positional args are correctly mapped to parameter names."""
+        # Mock the tool call result
+        mock_result = AsyncMock()
+        mock_result.content = [AsyncMock(text="Search results")]
+        mock_result.is_error = False
+        mock_transport.call_tool.return_value = mock_result
+
+        # Mock tool with multiple parameters
+        mock_tools = [
+            {
+                "name": "search_in_file",
+                "description": "Search for a query in a file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "query": {"type": "string"},
+                    },
+                },
+            }
+        ]
+        mock_transport.list_tools.return_value = mock_tools
+
+        agent = MCPTestAgent(
+            event_bus=event_bus,
+            remote_config=mcp_config,
+            program=mock_program,
+        )
+        agent.transport = mock_transport
+        agent._connected = True
+
+        # Discover playbooks
+        await agent.discover_playbooks()
+
+        # Execute with positional arguments
+        playbook = agent.playbooks["search_in_file"]
+        result = await playbook.execute_fn("world_model.md", "life")
+
+        # Verify the transport was called with correctly mapped parameters
+        mock_transport.call_tool.assert_called_once_with(
+            "search_in_file", {"path": "world_model.md", "query": "life"}
+        )
+        assert result == "Search results"
+
+    @pytest.mark.asyncio
+    async def test_positional_args_mapping_single_param(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
+        """Test that single positional arg is correctly mapped to parameter name."""
+        # Mock the tool call result
+        mock_result = AsyncMock()
+        mock_result.content = [AsyncMock(text="Weather data")]
+        mock_result.is_error = False
+        mock_transport.call_tool.return_value = mock_result
+
+        # Mock tool with single parameter
+        mock_tools = [
+            {
+                "name": "get_weather",
+                "description": "Get weather information",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"location": {"type": "string"}},
+                },
+            }
+        ]
+        mock_transport.list_tools.return_value = mock_tools
+
+        agent = MCPTestAgent(
+            event_bus=event_bus,
+            remote_config=mcp_config,
+            program=mock_program,
+        )
+        agent.transport = mock_transport
+        agent._connected = True
+
+        # Discover playbooks
+        await agent.discover_playbooks()
+
+        # Execute with positional argument
+        playbook = agent.playbooks["get_weather"]
+        result = await playbook.execute_fn("San Francisco")
+
+        # Verify the transport was called with correctly mapped parameter
+        mock_transport.call_tool.assert_called_once_with(
+            "get_weather", {"location": "San Francisco"}
+        )
+        assert result == "Weather data"
+
+    @pytest.mark.asyncio
+    async def test_keyword_args_mapping(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
+        """Test that keyword args work correctly."""
+        # Mock the tool call result
+        mock_result = AsyncMock()
+        mock_result.content = [AsyncMock(text="Search results")]
+        mock_result.is_error = False
+        mock_transport.call_tool.return_value = mock_result
+
+        # Mock tool with multiple parameters
+        mock_tools = [
+            {
+                "name": "search_in_file",
+                "description": "Search for a query in a file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "query": {"type": "string"},
+                    },
+                },
+            }
+        ]
+        mock_transport.list_tools.return_value = mock_tools
+
+        agent = MCPTestAgent(
+            event_bus=event_bus,
+            remote_config=mcp_config,
+            program=mock_program,
+        )
+        agent.transport = mock_transport
+        agent._connected = True
+
+        # Discover playbooks
+        await agent.discover_playbooks()
+
+        # Execute with keyword arguments
+        playbook = agent.playbooks["search_in_file"]
+        result = await playbook.execute_fn(path="world_model.md", query="life")
+
+        # Verify the transport was called with keyword arguments
+        mock_transport.call_tool.assert_called_once_with(
+            "search_in_file", {"path": "world_model.md", "query": "life"}
+        )
+        assert result == "Search results"
+
+    @pytest.mark.asyncio
+    async def test_mixed_args_kwargs(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
+        """Test that mixed positional and keyword args work correctly."""
+        # Mock the tool call result
+        mock_result = AsyncMock()
+        mock_result.content = [AsyncMock(text="Search results")]
+        mock_result.is_error = False
+        mock_transport.call_tool.return_value = mock_result
+
+        # Mock tool with three parameters
+        mock_tools = [
+            {
+                "name": "search_file",
+                "description": "Search for a query in a file with options",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string"},
+                        "query": {"type": "string"},
+                        "case_sensitive": {"type": "boolean"},
+                    },
+                },
+            }
+        ]
+        mock_transport.list_tools.return_value = mock_tools
+
+        agent = MCPTestAgent(
+            event_bus=event_bus,
+            remote_config=mcp_config,
+            program=mock_program,
+        )
+        agent.transport = mock_transport
+        agent._connected = True
+
+        # Discover playbooks
+        await agent.discover_playbooks()
+
+        # Execute with mixed positional and keyword arguments
+        playbook = agent.playbooks["search_file"]
+        result = await playbook.execute_fn(
+            "world_model.md", query="life", case_sensitive=True
+        )
+
+        # Verify the transport was called with mixed arguments
+        mock_transport.call_tool.assert_called_once_with(
+            "search_file",
+            {"path": "world_model.md", "query": "life", "case_sensitive": True},
+        )
+        assert result == "Search results"
+
+    @pytest.mark.asyncio
+    async def test_too_many_positional_args(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
+        """Test that extra positional args beyond schema parameters are ignored."""
+        # Mock the tool call result
+        mock_result = AsyncMock()
+        mock_result.content = [AsyncMock(text="Weather data")]
+        mock_result.is_error = False
+        mock_transport.call_tool.return_value = mock_result
+
+        # Mock tool with single parameter
+        mock_tools = [
+            {
+                "name": "get_weather",
+                "description": "Get weather information",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"location": {"type": "string"}},
+                },
+            }
+        ]
+        mock_transport.list_tools.return_value = mock_tools
+
+        agent = MCPTestAgent(
+            event_bus=event_bus,
+            remote_config=mcp_config,
+            program=mock_program,
+        )
+        agent.transport = mock_transport
+        agent._connected = True
+
+        # Discover playbooks
+        await agent.discover_playbooks()
+
+        # Execute with too many positional arguments
+        playbook = agent.playbooks["get_weather"]
+        result = await playbook.execute_fn("San Francisco", "extra_arg", "another_arg")
+
+        # Verify only the first parameter is used (extra args ignored)
+        mock_transport.call_tool.assert_called_once_with(
+            "get_weather", {"location": "San Francisco"}
+        )
+        assert result == "Weather data"
+
+    @pytest.mark.asyncio
+    async def test_error_response_handling(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
+        """Test that error responses are properly formatted."""
+        # Mock an error response
+        mock_result = AsyncMock()
+        mock_result.content = [AsyncMock(text="File not found")]
+        mock_result.is_error = True
+        mock_transport.call_tool.return_value = mock_result
+
+        # Mock tool
+        mock_tools = [
+            {
+                "name": "read_file",
+                "description": "Read a file",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {"path": {"type": "string"}},
+                },
+            }
+        ]
+        mock_transport.list_tools.return_value = mock_tools
+
+        agent = MCPTestAgent(
+            event_bus=event_bus,
+            remote_config=mcp_config,
+            program=mock_program,
+        )
+        agent.transport = mock_transport
+        agent._connected = True
+
+        # Discover playbooks
+        await agent.discover_playbooks()
+
+        # Execute with error result
+        playbook = agent.playbooks["read_file"]
+        result = await playbook.execute_fn("nonexistent.txt")
+
+        # Verify error prefix is added
+        assert result == "Error: File not found"

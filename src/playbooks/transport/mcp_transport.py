@@ -4,7 +4,11 @@ import logging
 from typing import Any, Dict, List, Optional
 
 from fastmcp import Client
-from fastmcp.client.transports import PythonStdioTransport, SSETransport
+from fastmcp.client.transports import (
+    PythonStdioTransport,
+    SSETransport,
+    StreamableHttpTransport,
+)
 
 from .protocol import TransportProtocol
 
@@ -51,7 +55,12 @@ class MCPTransport(TransportProtocol):
             )
 
             # Create the appropriate transport based on configuration
-            if self.transport_type.lower() == "sse":
+            if self.transport_type.lower() == "streamable-http":
+                # Use StreamableHttpTransport for streamable-http servers
+                transport = StreamableHttpTransport(self.url)
+                self.client = Client(transport)
+            elif self.transport_type.lower() == "sse":
+                # Use SSETransport for traditional SSE servers
                 transport = SSETransport(self.url)
                 self.client = Client(transport)
             elif self.transport_type.lower() == "stdio":

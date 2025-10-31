@@ -153,6 +153,150 @@ def validate_expression(expr: str) -> Tuple[bool, Optional[str]]:
     return True, None
 
 
+@lru_cache(maxsize=256)
+def extract_parameter_names_from_signature(signature: str) -> List[str]:
+    """Extract parameter names from playbook signature using AST.
+
+    Handles signatures with $ prefixes by preprocessing them first.
+
+    Args:
+        signature: Playbook signature, e.g., "LoadRelevantContext($question:str, $current_reasoning:str)"
+
+    Returns:
+        List of parameter names (without $) in order: ["question", "current_reasoning"]
+
+    Examples:
+        >>> extract_parameter_names_from_signature("MyPlaybook($arg1:str, $arg2:int)")
+        ['arg1', 'arg2']
+        >>> extract_parameter_names_from_signature("NoParams()")
+        []
+    """
+    if not isinstance(signature, str) or not signature or "(" not in signature:
+        return []
+
+    try:
+        # Preprocess to remove $ prefixes
+        preprocessed = preprocess_expression(signature)
+
+        # Convert signature to a valid function definition for AST parsing
+        func_def_str = f"def {preprocessed}: pass"
+        tree = ast.parse(func_def_str)
+        func_def = tree.body[0]
+
+        # Extract parameter names from the function definition
+        param_names = [arg.arg for arg in func_def.args.args]
+        return param_names
+    except Exception:
+        # If parsing fails, return empty list (fail gracefully)
+        return []
+
+
+@lru_cache(maxsize=256)
+def extract_parameter_defaults_from_signature(signature: str) -> Dict[str, Any]:
+    """Extract parameter default values from playbook signature using AST.
+
+    Args:
+        signature: Playbook signature, e.g., "PB1($a:str, $b:int=10)"
+
+    Returns:
+        Dict mapping parameter names to their default values: {"b": 10}
+
+    Examples:
+        >>> extract_parameter_defaults_from_signature("PB1($a:str, $b:int=10)")
+        {'b': 10}
+        >>> extract_parameter_defaults_from_signature("NoDefaults($a:str, $b:int)")
+        {}
+    """
+    if not isinstance(signature, str) or not signature or "(" not in signature:
+        return {}
+
+    try:
+        # Preprocess to remove $ prefixes
+        preprocessed = preprocess_expression(signature)
+
+        # Convert signature to a valid function definition for AST parsing
+        func_def_str = f"def {preprocessed}: pass"
+        tree = ast.parse(func_def_str)
+        func_def = tree.body[0]
+
+        # Extract defaults
+        defaults = {}
+        args = func_def.args.args
+        default_values = func_def.args.defaults
+
+        if not default_values:
+            return {}
+
+        # Defaults are aligned to the right - last N parameters have defaults
+        num_defaults = len(default_values)
+        for i, default_node in enumerate(default_values):
+            param_idx = len(args) - num_defaults + i
+            param_name = args[param_idx].arg
+
+            # Try to extract the literal value
+            try:
+                default_value = ast.literal_eval(default_node)
+                defaults[param_name] = default_value
+            except (ValueError, TypeError):
+                # If can't evaluate, skip this default
+                pass
+
+        return defaults
+    except Exception:
+        # If parsing fails, return empty dict (fail gracefully)
+        return {}
+
+
+def bind_call_parameters(
+    signature: str, args: List[Any], kwargs: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Bind positional and keyword arguments to parameter names from signature.
+
+    Maps call arguments to parameter names and fills in default values for
+    parameters that weren't provided.
+
+    Args:
+        signature: Playbook signature string
+        args: Positional arguments from the call
+        kwargs: Keyword arguments from the call
+
+    Returns:
+        Dict mapping parameter names to values (includes defaults)
+
+    Examples:
+        >>> bind_call_parameters("Func($a:str, $b:int=10)", ["hello"], {})
+        {'a': 'hello', 'b': 10}
+        >>> bind_call_parameters("Func($a:str, $b:int)", ["hello"], {"b": 42})
+        {'a': 'hello', 'b': 42}
+    """
+    param_names = extract_parameter_names_from_signature(signature)
+    param_defaults = extract_parameter_defaults_from_signature(signature)
+    result = {}
+
+    # Ensure args and kwargs are the right types (handle mocks gracefully)
+    if not isinstance(args, (list, tuple)):
+        args = []
+    if not isinstance(kwargs, dict):
+        kwargs = {}
+
+    # Map positional arguments to parameters
+    for i, value in enumerate(args):
+        if i < len(param_names):
+            result[param_names[i]] = value
+
+    # Add keyword arguments (overrides positional if duplicate)
+    for key, value in kwargs.items():
+        if key in param_names:
+            result[key] = value
+
+    # Fill in default values for parameters that weren't provided
+    for param_name in param_names:
+        if param_name not in result and param_name in param_defaults:
+            result[param_name] = param_defaults[param_name]
+
+    return result
+
+
 # ============================================================================
 # Context Resolution (Stateful, Per-Execution)
 # ============================================================================
@@ -174,6 +318,9 @@ class ExpressionContext:
         self.call = call
         self._cache: Dict[str, Any] = {}
         self._resolving: Set[str] = set()  # Circular reference detection
+        self._parameter_cache: Optional[Dict[str, Any]] = (
+            None  # Lazy binding of call parameters
+        )
 
         # Pre-populate built-in context
         self._cache.update({"agent": agent, "call": call, "timestamp": datetime.now()})
@@ -181,11 +328,12 @@ class ExpressionContext:
     def resolve_variable(self, name: str) -> Any:
         """Resolve single variable with caching.
 
-        Resolution order:
+        Resolution order (local-before-global):
         1. Built-in context (agent, call, timestamp)
-        2. State variables (state.variables["$" + name])
-        3. Namespace manager (agent.namespace_manager.namespace[name])
-        4. KeyError with suggestions
+        2. Local parameters from current playbook call
+        3. State variables (state.variables["$" + name]) - global scope
+        4. Namespace manager (agent.namespace_manager.namespace[name])
+        5. KeyError with suggestions
 
         Args:
             name: Variable name (without $ prefix)
@@ -207,6 +355,13 @@ class ExpressionContext:
 
         self._resolving.add(name)
         try:
+            # Try local parameters from current playbook call (shadows global variables)
+            bound_params = self._bind_call_parameters()
+            if name in bound_params:
+                value = bound_params[name]
+                self._cache[name] = value
+                return value
+
             # Try state variables (with or without $)
             var_key = f"${name}" if not name.startswith("$") else name
             if hasattr(self.state, "variables") and hasattr(
@@ -260,7 +415,15 @@ class ExpressionContext:
         # Built-in variables
         variables.extend(["agent", "call", "timestamp"])
 
-        # State variables
+        # Local parameters from current playbook call
+        try:
+            bound_params = self._bind_call_parameters()
+            variables.extend(bound_params.keys())
+        except Exception:
+            # If binding fails, skip parameters
+            pass
+
+        # State variables (global)
         if hasattr(self.state, "variables") and hasattr(
             self.state.variables, "variables"
         ):
@@ -297,6 +460,74 @@ class ExpressionContext:
                 suggestions.append(var)
 
         return suggestions[:3]  # Limit to 3 suggestions
+
+    def _bind_call_parameters(self) -> Dict[str, Any]:
+        """Bind call arguments to playbook parameter names with caching.
+
+        Resolves VariableReference and LiteralValue types to actual values.
+        Returns cached result on subsequent calls.
+
+        Returns:
+            Dict mapping parameter names to resolved values
+        """
+        # Return cached result if available
+        if self._parameter_cache is not None:
+            return self._parameter_cache
+
+        self._parameter_cache = {}
+
+        # Get playbook to extract signature
+        if not self.call or not hasattr(self.call, "playbook_klass"):
+            return self._parameter_cache
+
+        playbook_name = self.call.playbook_klass
+        if not hasattr(self.agent, "playbooks"):
+            return self._parameter_cache
+
+        try:
+            playbook = (
+                self.agent.playbooks.get(playbook_name)
+                if hasattr(self.agent.playbooks, "get")
+                else self.agent.playbooks[playbook_name]
+            )
+            if not playbook:
+                return self._parameter_cache
+        except (KeyError, TypeError):
+            return self._parameter_cache
+        if not hasattr(playbook, "signature") or not playbook.signature:
+            return self._parameter_cache
+
+        # Get args and kwargs from call
+        args = self.call.args if hasattr(self.call, "args") else []
+        kwargs = self.call.kwargs if hasattr(self.call, "kwargs") else {}
+
+        # Bind arguments to parameter names
+        bound_params = bind_call_parameters(playbook.signature, args, kwargs)
+
+        # Resolve VariableReference and LiteralValue types to actual values
+        from ..argument_types import LiteralValue, VariableReference
+
+        for param_name, value in bound_params.items():
+            if isinstance(value, LiteralValue):
+                self._parameter_cache[param_name] = value.value
+            elif isinstance(value, VariableReference):
+                # Resolve the variable reference
+                ref = value.reference
+                # Remove $ prefix if present
+                if ref.startswith("$"):
+                    ref = ref[1:]
+                try:
+                    # Recursively resolve through state variables
+                    resolved_value = self.resolve_variable(ref)
+                    self._parameter_cache[param_name] = resolved_value
+                except (KeyError, RecursionError):
+                    # If can't resolve, store the reference as-is
+                    self._parameter_cache[param_name] = value
+            else:
+                # Already a resolved value
+                self._parameter_cache[param_name] = value
+
+        return self._parameter_cache
 
     def evaluate_expression(self, expr: str) -> Any:
         """Evaluate expression in this context.
