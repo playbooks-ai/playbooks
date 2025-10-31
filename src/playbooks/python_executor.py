@@ -197,10 +197,14 @@ class PythonExecutor:
         for agent_name, proxy in agent_proxies.items():
             dict.__setitem__(namespace, agent_name, proxy)
 
-        # # Add existing variables from state
-        # # Use regular assignment so state variables can be captured/overridden
-        # if self.agent.state and hasattr(self.agent.state, "variables"):
-        #     namespace.update(self.agent.state.variables.to_dict())
+        # Add existing variables from state
+        # Use dict.__setitem__ to bypass interception so these don't get
+        # captured as new assignments
+        if self.agent.state and hasattr(self.agent.state, "variables"):
+            for var_name, var_value in self.agent.state.variables.to_dict().items():
+                # Strip $ prefix from variable names for the namespace
+                clean_name = var_name[1:] if var_name.startswith("$") else var_name
+                dict.__setitem__(namespace, clean_name, var_value)
 
         dict.__setitem__(namespace, "asyncio", asyncio)
 
@@ -310,29 +314,6 @@ class PythonExecutor:
             instruction_pointer=instruction_pointer,
             agent_id=self.agent.id,
         )
-
-    def _create_say_wrapper(self):
-        """Create a wrapper for Say() that checks if this code was just streamed.
-
-        If the agent has _currently_streaming flag set, it means we're executing
-        code that was just streamed, so Say() calls were already displayed and
-        should be marked as already_streamed=True to prevent duplicate output.
-        """
-
-        async def say_wrapper(target: str, message: str):
-            # Check if we're currently executing freshly-streamed code
-            # The _currently_streaming flag is set during streaming and cleared after execution
-            already_streamed = getattr(self.agent, "_currently_streaming", False)
-
-            # Execute the Say() playbook with the already_streamed flag
-            success, result = await self.agent.execute_playbook(
-                "Say", [target, message], {"already_streamed": already_streamed}
-            )
-            if not success:
-                return "ERROR: " + result
-            return result
-
-        return say_wrapper
 
     async def _capture_say(self, target: str, message: str) -> None:
         """Capture Say() call.
@@ -446,3 +427,26 @@ class PythonExecutor:
         # Use the unified target resolver with no fallback for YLD
         # (YLD should be explicit about what it's waiting for)
         return self.agent.resolve_target(target, allow_fallback=False)
+
+    def _create_say_wrapper(self):
+        """Create a wrapper for Say() that checks if this code was just streamed.
+
+        If the agent has _currently_streaming flag set, it means we're executing
+        code that was just streamed, so Say() calls were already displayed and
+        should be marked as already_streamed=True to prevent duplicate output.
+        """
+
+        async def say_wrapper(target: str, message: str):
+            # Check if we're currently executing freshly-streamed code
+            # The _currently_streaming flag is set during streaming and cleared after execution
+            already_streamed = getattr(self.agent, "_currently_streaming", False)
+
+            # Execute the Say() playbook with the already_streamed flag
+            success, result = await self.agent.execute_playbook(
+                "Say", [target, message], {"already_streamed": already_streamed}
+            )
+            if not success:
+                return "ERROR: " + result
+            return result
+
+        return say_wrapper

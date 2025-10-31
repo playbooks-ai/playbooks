@@ -4,15 +4,29 @@ import ast
 class InjectVar(ast.NodeTransformer):
     """Inject Var calls after all assignments."""
 
+    def __init__(self):
+        super().__init__()
+        self.assigned_vars = set()  # Track variables assigned in current scope
+
     def visit_AsyncFunctionDef(self, node):
         return self.visit_FunctionDef(node)
 
     def visit_FunctionDef(self, node):
-        # First, recursively visit child nodes
+        # Save the current assigned_vars set and start fresh for this function scope
+        saved_assigned_vars = self.assigned_vars
+        self.assigned_vars = set()
+
+        # First, collect all assigned variables in this function
+        self._collect_assigned_vars(node.body)
+
+        # Then recursively visit child nodes
         self.generic_visit(node)
 
         # Transform the function body
         node.body = self._transform_body(node.body)
+
+        # Restore the parent scope's assigned_vars
+        self.assigned_vars = saved_assigned_vars
         return node
 
     def visit_If(self, node):
@@ -83,25 +97,31 @@ class InjectVar(ast.NodeTransformer):
         new_body = []
 
         for stmt in body:
-            new_body.append(stmt)
-
-            # After each assignment, inject Var calls
+            # Transform assignments that read before write (e.g., x = x * 2)
             if isinstance(stmt, ast.Assign):
-                # Handle all targets (e.g., x = y = 10)
+                transformed_stmts = self._transform_assign_with_read_before_write(stmt)
+                new_body.extend(transformed_stmts)
+
+                # After the assignment, inject Var calls
                 for target in stmt.targets:
                     for var_name in self._get_target_names(target):
                         new_body.append(self._make_setvar_call(var_name))
 
             elif isinstance(stmt, ast.AnnAssign):
+                new_body.append(stmt)
                 # Handle annotated assignments (e.g., x: int = 10)
                 if stmt.value is not None:  # Only if there's an actual assignment
                     for var_name in self._get_target_names(stmt.target):
                         new_body.append(self._make_setvar_call(var_name))
 
             elif isinstance(stmt, ast.AugAssign):
+                new_body.append(stmt)
                 # Handle augmented assignments (e.g., x += 10)
                 for var_name in self._get_target_names(stmt.target):
                     new_body.append(self._make_setvar_call(var_name))
+
+            else:
+                new_body.append(stmt)
 
         return new_body
 
@@ -133,6 +153,129 @@ class InjectVar(ast.NodeTransformer):
                 )
             )
         )
+
+    def _collect_assigned_vars(self, body):
+        """Collect all variables that are assigned in this body."""
+
+        class AssignedVarCollector(ast.NodeVisitor):
+            def __init__(self):
+                self.assigned = set()
+
+            def visit_Assign(self, node):
+                for target in node.targets:
+                    self._add_target_names(target)
+                self.generic_visit(node)
+
+            def visit_AnnAssign(self, node):
+                if node.value is not None:
+                    self._add_target_names(node.target)
+                self.generic_visit(node)
+
+            def visit_AugAssign(self, node):
+                self._add_target_names(node.target)
+                self.generic_visit(node)
+
+            def visit_For(self, node):
+                self._add_target_names(node.target)
+                self.generic_visit(node)
+
+            def visit_With(self, node):
+                for item in node.items:
+                    if item.optional_vars:
+                        self._add_target_names(item.optional_vars)
+                self.generic_visit(node)
+
+            def _add_target_names(self, target):
+                if isinstance(target, ast.Name):
+                    self.assigned.add(target.id)
+                elif isinstance(target, (ast.Tuple, ast.List)):
+                    for elt in target.elts:
+                        self._add_target_names(elt)
+                elif isinstance(target, ast.Starred):
+                    self._add_target_names(target.value)
+
+        collector = AssignedVarCollector()
+        for stmt in body:
+            collector.visit(stmt)
+        return collector.assigned
+
+    def _transform_assign_with_read_before_write(self, node):
+        """Transform assignments that read from the same variable before writing.
+
+        Transforms:
+            x = x * 2
+        Into:
+            x = globals().get('x', x) if 'x' in locals() else globals()['x'] * 2
+
+        Actually, simpler approach - transform to:
+            x = (x if 'x' in locals() else globals()['x']) * 2
+
+        Even simpler - since we pre-populate namespace, just transform to:
+            if 'x' not in locals():
+                x = globals()['x']
+            x = x * 2
+        """
+
+        # Check if this assignment reads from any of the assigned variables
+        class VarUsageChecker(ast.NodeVisitor):
+            def __init__(self, assigned_vars):
+                self.assigned_vars = assigned_vars
+                self.uses_assigned_var = False
+
+            def visit_Name(self, node):
+                if isinstance(node.ctx, ast.Load) and node.id in self.assigned_vars:
+                    self.uses_assigned_var = True
+
+        assigned_names = []
+        for target in node.targets:
+            assigned_names.extend(self._get_target_names(target))
+
+        checker = VarUsageChecker(set(assigned_names))
+        checker.visit(node.value)
+
+        if not checker.uses_assigned_var:
+            return [node]
+
+        # Transform: for each assigned variable that's read in the value,
+        # add a statement before the assignment to load it from globals if not in locals
+        result = []
+        for var_name in assigned_names:
+            # Create: if 'var_name' not in locals(): var_name = globals()['var_name']
+            init_stmt = ast.If(
+                test=ast.UnaryOp(
+                    op=ast.Not(),
+                    operand=ast.Compare(
+                        left=ast.Constant(value=var_name),
+                        ops=[ast.In()],
+                        comparators=[
+                            ast.Call(
+                                func=ast.Name(id="locals", ctx=ast.Load()),
+                                args=[],
+                                keywords=[],
+                            )
+                        ],
+                    ),
+                ),
+                body=[
+                    ast.Assign(
+                        targets=[ast.Name(id=var_name, ctx=ast.Store())],
+                        value=ast.Subscript(
+                            value=ast.Call(
+                                func=ast.Name(id="globals", ctx=ast.Load()),
+                                args=[],
+                                keywords=[],
+                            ),
+                            slice=ast.Constant(value=var_name),
+                            ctx=ast.Load(),
+                        ),
+                    )
+                ],
+                orelse=[],
+            )
+            result.append(init_stmt)
+
+        result.append(node)
+        return result
 
 
 def inject_setvar(code):

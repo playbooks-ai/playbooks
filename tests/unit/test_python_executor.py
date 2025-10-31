@@ -157,11 +157,10 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_yld_exit(self, executor):
         """Test capturing Yld() for exit."""
-        from playbooks.exceptions import ExecutionFinished
 
         code = 'await Yld("exit")'
-        with pytest.raises(ExecutionFinished):
-            await executor.execute(code)
+        result = await executor.execute(code)
+        assert result.exit_program is True
 
     @pytest.mark.asyncio
     async def test_capture_yld_agent(self, executor):
