@@ -47,3 +47,11 @@ def is_camel_case(name):
     # Check if it has proper capitalization pattern
     # (optional check for strict CamelCase)
     return name.isalnum()
+
+
+def indent(text: str, indent_size: int = 4, indent_char: str = " ") -> str:
+    """Indent each line in a string with the given indent size."""
+    lines = text.split("\n")
+    indent_str = indent_char * indent_size
+    indented_lines = [indent_str + line if line.strip() else line for line in lines]
+    return "\n".join(indented_lines)

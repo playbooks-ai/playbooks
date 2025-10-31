@@ -1,9 +1,14 @@
 """Tests for utils.text_utils module."""
 
-from playbooks.utils.text_utils import simple_shorten, to_camel_case, is_camel_case
+from playbooks.utils.text_utils import (
+    indent,
+    is_camel_case,
+    simple_shorten,
+    to_camel_case,
+)
 
 
-class TestTextUtils:
+class TestTextUtilsShorten:
     """Test text utility functions."""
 
     def test_simple_shorten_short_text(self):
@@ -41,6 +46,8 @@ class TestTextUtils:
         assert result == "Hello Worl..."
         # This is a bug - the result is longer than the requested width!
 
+
+class TestTextUtilsCamelCase:
     def test_is_camel_case_valid(self):
         """Test is_camel_case with valid CamelCase strings."""
         assert is_camel_case("CamelCase") is True
@@ -108,3 +115,65 @@ class TestTextUtils:
         assert to_camel_case("test_123") == "Test123"
         assert to_camel_case("123_test") == "123Test"
         assert to_camel_case("test-123-case") == "Test123Case"
+
+
+class TestTextUtilsIndent:
+    def test_indent_basic(self):
+        """Test indent with basic text."""
+        text = "line1\nline2\nline3"
+        result = indent(text)
+        assert result == "    line1\n    line2\n    line3"
+
+    def test_indent_with_empty_lines(self):
+        """Test indent preserves empty lines without indenting them."""
+        text = "line1\n\nline3"
+        result = indent(text)
+        assert result == "    line1\n\n    line3"
+
+    def test_indent_with_whitespace_only_lines(self):
+        """Test indent preserves whitespace-only lines without adding indent."""
+        text = "line1\n   \nline3"
+        result = indent(text)
+        assert result == "    line1\n   \n    line3"
+
+    def test_indent_custom_size(self):
+        """Test indent with custom indent size."""
+        text = "line1\nline2"
+        result = indent(text, indent_size=2)
+        assert result == "  line1\n  line2"
+
+    def test_indent_custom_char(self):
+        """Test indent with custom indent character."""
+        text = "line1\nline2"
+        result = indent(text, indent_size=1, indent_char="\t")
+        assert result == "\tline1\n\tline2"
+
+    def test_indent_already_indented(self):
+        """Test indent with text that already has indentation."""
+        text = "line1\n    already_indented\nline3"
+        result = indent(text, indent_size=2)
+        assert result == "  line1\n      already_indented\n  line3"
+
+    def test_indent_single_line(self):
+        """Test indent with single line text."""
+        text = "single line"
+        result = indent(text)
+        assert result == "    single line"
+
+    def test_indent_empty_string(self):
+        """Test indent with empty string."""
+        text = ""
+        result = indent(text)
+        assert result == ""
+
+    def test_indent_multiple_empty_lines(self):
+        """Test indent with multiple consecutive empty lines."""
+        text = "line1\n\n\n\nline5"
+        result = indent(text)
+        assert result == "    line1\n\n\n\n    line5"
+
+    def test_indent_trailing_newline(self):
+        """Test indent with trailing newline."""
+        text = "line1\nline2\n"
+        result = indent(text)
+        assert result == "    line1\n    line2\n"
