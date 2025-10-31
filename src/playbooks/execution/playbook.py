@@ -139,6 +139,11 @@ class PlaybookLLMExecution(LLMExecution):
 
             await llm_response.execute_generated_code()
 
+            # Clear streaming flag after code execution
+            # This ensures next LLM call will properly stream its Say() calls
+            if hasattr(self.agent, "_currently_streaming"):
+                self.agent._currently_streaming = False
+
             # artifacts_to_load = []
 
             # all_steps = []
@@ -321,6 +326,10 @@ class PlaybookLLMExecution(LLMExecution):
         1. Pattern-based streaming (as tokens arrive) - detects Say("...") calls
         2. AST validation (after complete) - validates syntax of generated Python
         """
+        # Clear any previous streaming flag and set it for this streaming session
+        # This ensures each LLM call has its own streaming cycle
+        self.agent._currently_streaming = False
+
         buffer = ""
         in_say_call = False
         current_say_content = ""
@@ -366,6 +375,8 @@ class PlaybookLLMExecution(LLMExecution):
                             current_say_content = ""
                             say_has_placeholders = False  # Reset for new Say call
                             processed_up_to = say_start_pos
+                            # Set flag indicating we're actively streaming Say() calls
+                            self.agent._currently_streaming = True
                             await self.agent.start_streaming_say(say_recipient)
                         else:
                             # Not a user/human recipient, skip streaming for this Say call
