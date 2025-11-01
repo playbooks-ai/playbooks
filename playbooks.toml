@@ -5,7 +5,7 @@ max_llm_calls = 50
 
 [model]
 provider = "anthropic"
-name = "claude-sonnet-4-20250514"
+name = "claude-haiku-4-5-20251001"
 temperature = 0.2
 max_completion_tokens=15000
 
