@@ -50,7 +50,7 @@ class AssistantResponseLLMMessage(LLMMessage):
 
     def to_compact_message(self) -> Dict[str, Any]:
         """Use first two lines (execution_id and recap) for compaction."""
-        lines = self.content.strip().split("\n")
+        lines = self.content.strip("```python").strip("```").strip().split("\n")
         lines = lines[:2]
         return {"role": self.role.value, "content": "\n".join(lines)}
 
