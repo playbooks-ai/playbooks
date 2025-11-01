@@ -29,6 +29,7 @@ class BuiltinPlaybooks:
 ```python
 from playbooks.utils.spec_utils import SpecUtils
 from playbooks.llm_messages.types import ArtifactLLMMessage
+from playbooks.variables import Artifact
 
 @playbook(hidden=True)
 async def SendMessage(target_agent_id: str, message: str):
@@ -39,8 +40,8 @@ async def WaitForMessage(source_agent_id: str) -> list:
     return await agent.WaitForMessage(source_agent_id)
 
 @playbook
-async def Say(target: str, message: str, already_streamed: bool = False):
-    await agent.Say(target, message, already_streamed)
+async def Say(target: str, message: str):
+    await agent.Say(target, message)
 
 @playbook
 async def CreateAgent(agent_klass: str, **kwargs):
@@ -63,14 +64,6 @@ async def SaveArtifact(name: str, summary: str, value: str):
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
     return await agent.meeting_manager.InviteToMeeting(meeting_id, attendees)
-
-@playbook(hidden=True)
-async def AcceptMeetingInvitation(meeting_id: str, inviter_id: str, topic: str, meeting_playbook_name: str):
-    return await agent.meeting_manager._accept_meeting_invitation(meeting_id, inviter_id, topic, meeting_playbook_name)
-
-@playbook(hidden=True)
-async def ExecuteMeetingPlaybook(meeting_id: str, playbook_name: str):
-    return await agent.meeting_manager._execute_meeting_playbook(meeting_id, playbook_name)
 
 @playbook
 async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
@@ -118,10 +111,18 @@ hidden: true
 
 ### Steps
 - For each $message in $messages
+    - If $message is a MEETING_INVITATION
+        - Look at the topic and determine if there is a suitable meeting playbook to handle it
+        - If a suitable meeting playbook is found
+            - Call the meeting playbook directly: <MeetingPlaybookName>(meeting_id=$message.meeting_id, inviter_id=$message.sender_id, topic=$message.content)
+            - Continue to next message
+        - Otherwise
+            - Reject the invitation by saying to the inviter that no suitable meeting playbook was found
+            - Continue to next message
     - If $message sent to a meeting we have joined
-        - Find a suitable meeting playbook
-        - If meeting playbook is found
-            - ExecuteMeetingPlaybook(meeting_id, meeting_playbook_name)
+        - Find a suitable meeting playbook if not already in one
+        - If meeting playbook is found and not already running
+            - Call the meeting playbook directly with meeting context
             - Continue
         - Otherwise
             - Return "No suitable meeting playbook found"

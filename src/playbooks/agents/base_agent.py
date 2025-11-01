@@ -65,7 +65,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         pass
 
     # Built-in playbook methods
-    async def Say(self, target: str, message: str, already_streamed: bool = False):
+    async def Say(self, target: str, message: str):
         resolved_target = self.resolve_target(target, allow_fallback=True)
 
         # Message is already resolved by execute_playbook()
@@ -115,12 +115,22 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         ):
             self.state.last_message_target = resolved_target
 
-        if not already_streamed and resolved_target == "human":
-            await self.start_streaming_say()
-            await self.stream_say_update(message)
-            await self.complete_streaming_say()
+        # Check if we're currently streaming (executing freshly-streamed code)
+        # If so, skip the streaming output since it was already shown
+        already_streamed = getattr(self, "_currently_streaming", False)
 
-        await self.SendMessage(resolved_target, message)
+        # Use channel streaming for all messages (not just human)
+        if not already_streamed and self.program:
+            stream_id = await self.start_streaming_say_via_channel(resolved_target)
+            await self.stream_say_update_via_channel(
+                stream_id, resolved_target, message
+            )
+            await self.complete_streaming_say_via_channel(
+                stream_id, resolved_target, message
+            )
+        else:
+            await self.SendMessage(resolved_target, message)
+
         return message
 
     async def SendMessage(self, target_agent_id: str, message: str):
@@ -155,16 +165,54 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         )
 
     async def start_streaming_say(self, recipient=None):
-        """Start displaying a streaming Say() message. Override in subclasses."""
+        """Start displaying a streaming Say() message. Override in subclasses (legacy)."""
         pass
 
     async def stream_say_update(self, content: str):
-        """Add content to the current streaming Say() message. Override in subclasses."""
+        """Add content to the current streaming Say() message. Override in subclasses (legacy)."""
         pass
 
     async def complete_streaming_say(self):
-        """Complete the current streaming Say() message. Override in subclasses."""
+        """Complete the current streaming Say() message. Override in subclasses (legacy)."""
         pass
+
+    async def start_streaming_say_via_channel(self, target: str) -> str:
+        """Start streaming via channel infrastructure."""
+        import uuid
+
+        stream_id = str(uuid.uuid4())
+        if self.program:
+            await self.program.start_stream(
+                sender_id=self.id,
+                sender_klass=self.klass,
+                receiver_spec=target,
+                stream_id=stream_id,
+            )
+        return stream_id
+
+    async def stream_say_update_via_channel(
+        self, stream_id: str, target: str, content: str
+    ):
+        """Stream content chunk via channel infrastructure."""
+        if self.program:
+            await self.program.stream_chunk(
+                stream_id=stream_id,
+                sender_id=self.id,
+                receiver_spec=target,
+                content=content,
+            )
+
+    async def complete_streaming_say_via_channel(
+        self, stream_id: str, target: str, final_content: str
+    ):
+        """Complete streaming via channel infrastructure."""
+        if self.program:
+            await self.program.complete_stream(
+                stream_id=stream_id,
+                sender_id=self.id,
+                receiver_spec=target,
+                final_content=final_content,
+            )
 
     def to_dict(self) -> Dict[str, Any]:
         return {**self.kwargs, "type": self.klass, "agent_id": self.id}

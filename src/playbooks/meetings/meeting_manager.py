@@ -125,11 +125,14 @@ class MeetingManager:
             id=meeting_id,
             owner_id=self.agent.id,
             created_at=datetime.now(),
-            topic=kwargs.get("topic", f"{playbook} meeting"),
+            topic=kwargs.get("topic", f"{playbook.name} meeting"),
         )
 
         self.agent.state.owned_meetings[meeting_id] = meeting
         meeting.agent_joined(self.agent)
+
+        # Create asyncio.Event for tracking invitation responses
+        meeting.invitation_event = asyncio.Event()
 
         # Figure out the attendees
         if "attendees" in kwargs and kwargs["attendees"]:
@@ -169,6 +172,15 @@ class MeetingManager:
             raise ValueError(
                 f"Unknown attendees for meeting {meeting_id} with playbook {playbook.name}"
             )
+
+        # Create meeting channel with all potential participants
+        all_participants = (
+            [self.agent] + meeting.required_attendees + meeting.optional_attendees
+        )
+        self.agent.program.create_meeting_channel(meeting_id, all_participants)
+        debug(
+            f"{str(self.agent)}: Created meeting channel {meeting_id} with {len(all_participants)} participants"
+        )
 
         # Send invitations concurrently
         invitation_tasks = []
@@ -297,19 +309,40 @@ class MeetingManager:
         meeting_msg = MeetingLLMMessage(messages, meeting_id=meeting.id)
         self.agent.state.call_stack.add_llm_message(meeting_msg)
 
-        # Track which required attendees have joined
+        # Event-driven waiting: wait for invitation responses
         start_time = asyncio.get_event_loop().time()
 
         while meeting.has_pending_invitations():
-            # Check for timeout
-            if asyncio.get_event_loop().time() - start_time > timeout_seconds:
+            # Calculate remaining timeout
+            elapsed = asyncio.get_event_loop().time() - start_time
+            remaining_timeout = timeout_seconds - elapsed
+
+            if remaining_timeout <= 0:
                 raise TimeoutError(
                     f"Timeout waiting for required attendees to join meeting {meeting.id}. "
                     f"Missing: {[attendee.__repr__() for attendee in meeting.missing_required_attendees()]}"
                 )
-            message = f"Waiting for required attendees to join meeting {meeting.id}: {[attendee.__repr__() for attendee in meeting.missing_required_attendees()]}"
-            self.agent.state.session_log.append(message)
-            await asyncio.sleep(1)
+
+            try:
+                # Wait for invitation event (signaled when any response received)
+                await asyncio.wait_for(
+                    meeting.invitation_event.wait(), timeout=remaining_timeout
+                )
+                meeting.invitation_event.clear()  # Reset for next wait
+
+                # Check if all required attendees have joined
+                if not meeting.has_pending_invitations():
+                    break
+
+                # Log progress
+                message = f"Waiting for remaining attendees: {[attendee.__repr__() for attendee in meeting.missing_required_attendees()]}"
+                self.agent.state.session_log.append(message)
+
+            except asyncio.TimeoutError:
+                raise TimeoutError(
+                    f"Timeout waiting for required attendees to join meeting {meeting.id}. "
+                    f"Missing: {[attendee.__repr__() for attendee in meeting.missing_required_attendees()]}"
+                )
 
         message = f"All required attendees have joined meeting {meeting.id}: {[attendee.__repr__() for attendee in meeting.joined_attendees]}"
         self.agent.state.session_log.append(message)
@@ -341,11 +374,13 @@ class MeetingManager:
         from_agent_id: str = None,
         from_agent_klass: str = None,
     ):
-        """Broadcast a message to all participants in a meeting.
+        """Broadcast a message to all participants via unified channel.
 
         Args:
             meeting_id: ID of the meeting to broadcast to
             message: Message content to send
+            from_agent_id: ID of the sender (defaults to self)
+            from_agent_klass: Class of the sender (defaults to self)
         """
         # Check if I'm the owner of this meeting
         assert (
@@ -358,24 +393,22 @@ class MeetingManager:
             from_agent_id = self.agent.id
             from_agent_klass = self.agent.klass
 
-        meeting: Meeting = self.agent.state.owned_meetings[meeting_id]
         self.agent.state.session_log.append(
-            f"Adding message to owned meeting {meeting_id}: {message}"
+            f"Broadcasting to meeting {meeting_id}: {message}"
         )
-        for participant in meeting.joined_attendees:
-            if participant.id == from_agent_id:
-                continue
-            await self.agent.program.route_message(
-                sender_id=from_agent_id,
-                sender_klass=from_agent_klass,
-                receiver_spec=SpecUtils.to_agent_spec(participant.id),
-                message=message,
-                message_type=MessageType.MEETING_BROADCAST,
-                meeting_id=meeting_id,
-            )
+
+        # Use unified channel architecture - route_message handles channel multicast
+        await self.agent.program.route_message(
+            sender_id=from_agent_id,
+            sender_klass=from_agent_klass,
+            receiver_spec=f"meeting {meeting_id}",
+            message=message,
+            message_type=MessageType.MEETING_BROADCAST,
+            meeting_id=meeting_id,
+        )
 
     async def broadcast_to_meeting_as_participant(self, meeting_id: str, message: str):
-        """Broadcast a message to all participants in a meeting.
+        """Broadcast a message to all participants via unified channel.
 
         Args:
             meeting_id: ID of the meeting to broadcast to
@@ -386,16 +419,18 @@ class MeetingManager:
             and hasattr(self.agent.state, "joined_meetings")
             and meeting_id in self.agent.state.joined_meetings
         )
-        # I'm a participant - I will request the owner
-        owner_id = self.agent.state.joined_meetings[meeting_id].owner_id
 
-        # Send to meeting owner with protocol prefix
+        self.agent.state.session_log.append(
+            f"Broadcasting to meeting {meeting_id} as participant: {message}"
+        )
+
+        # Use unified channel architecture - participants can send directly to meeting channel
         await self.agent.program.route_message(
             sender_id=self.agent.id,
             sender_klass=self.agent.klass,
-            receiver_spec=SpecUtils.to_agent_spec(owner_id),
+            receiver_spec=f"meeting {meeting_id}",
             message=message,
-            message_type=MessageType.MEETING_BROADCAST_REQUEST,
+            message_type=MessageType.MEETING_BROADCAST,
             meeting_id=meeting_id,
         )
 
@@ -408,17 +443,23 @@ class MeetingManager:
             # Process meeting invitation immediately
             return await self._handle_meeting_invitation_immediately(message)
         elif message.message_type == MessageType.MEETING_INVITATION_RESPONSE:
-            # Process meeting response immediately
+            # Process meeting response immediately and signal event
             await self._handle_meeting_response_immediately(message)
-            return True
-        elif message.message_type == MessageType.MEETING_BROADCAST_REQUEST:
-            # Process meeting message immediately
-            await self.broadcast_to_meeting_as_owner(
-                meeting_id=message.meeting_id,
-                message=message.content,
-                from_agent_id=message.sender_id,
-                from_agent_klass=message.sender_klass,
-            )
+
+            # Signal the meeting's invitation event to wake up _wait_for_required_attendees
+            meeting_id = message.meeting_id
+            if (
+                meeting_id
+                and hasattr(self.agent.state, "owned_meetings")
+                and meeting_id in self.agent.state.owned_meetings
+            ):
+                meeting = self.agent.state.owned_meetings[meeting_id]
+                if hasattr(meeting, "invitation_event"):
+                    meeting.invitation_event.set()
+                    debug(
+                        f"{str(self.agent)}: Signaled invitation event for meeting {meeting_id}"
+                    )
+
             return True
         return False
 

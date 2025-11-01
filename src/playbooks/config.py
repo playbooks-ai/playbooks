@@ -37,7 +37,7 @@ class ModelConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
     provider: str = "anthropic"
-    name: str = "claude-sonnet-4-20250514"
+    name: str = "claude-haiku-4-5-20251001"
     temperature: float = Field(0.2, ge=0, le=2.0)
     max_completion_tokens: int = Field(7500, gt=0)
 

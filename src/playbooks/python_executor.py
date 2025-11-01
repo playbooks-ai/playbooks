@@ -144,8 +144,11 @@ class PythonExecutor:
             self.agent.state.call_stack.peek()
         )
 
-    def build_namespace(self) -> LLMNamespace:
+    def build_namespace(self, playbook_args: dict = None) -> LLMNamespace:
         """Build namespace with injected capture functions.
+
+        Args:
+            playbook_args: Optional dict of playbook argument names to values
 
         Returns:
             LLMNamespace containing:
@@ -153,6 +156,7 @@ class PythonExecutor:
             - Playbook call functions from registry
             - Agent proxy objects for cross-agent calls
             - Existing variables from state
+            - Playbook arguments (if provided)
         """
         namespace = LLMNamespace(
             self,
@@ -233,13 +237,21 @@ class PythonExecutor:
             if not name.startswith("_") and name not in blocked_builtins:
                 dict.__setitem__(namespace, name, getattr(builtins, name))
 
+        # Add playbook arguments to namespace
+        # Use dict.__setitem__ to bypass interception so these don't get
+        # captured as new assignments
+        if playbook_args:
+            for arg_name, arg_value in playbook_args.items():
+                dict.__setitem__(namespace, arg_name, arg_value)
+
         return namespace
 
-    async def execute(self, code: str) -> ExecutionResult:
+    async def execute(self, code: str, playbook_args: dict = None) -> ExecutionResult:
         """Execute Python code and return captured results.
 
         Args:
             code: Python code to execute (may contain $var = value syntax)
+            playbook_args: Optional dict of playbook argument names to values
 
         Returns:
             ExecutionResult containing captured directives and any errors
@@ -257,7 +269,7 @@ class PythonExecutor:
             code = preprocess_program(code)
 
             # Build namespace with capture functions
-            namespace = self.build_namespace()
+            namespace = self.build_namespace(playbook_args=playbook_args)
 
             # Wrap in async function, then inject Var() calls
             # These can raise SyntaxError if the code has syntax issues
@@ -454,21 +466,17 @@ class PythonExecutor:
         return self.agent.resolve_target(target, allow_fallback=False)
 
     def _create_say_wrapper(self):
-        """Create a wrapper for Say() that checks if this code was just streamed.
+        """Create a wrapper for Say() that ensures proper pre/post processing.
 
-        If the agent has _currently_streaming flag set, it means we're executing
-        code that was just streamed, so Say() calls were already displayed and
-        should be marked as already_streamed=True to prevent duplicate output.
+        The wrapper calls execute_playbook to ensure proper logging, langfuse tracking,
+        and other pre/post processing. The _currently_streaming flag is checked
+        internally by agent.Say() to prevent duplicate output.
         """
 
         async def say_wrapper(target: str, message: str):
-            # Check if we're currently executing freshly-streamed code
-            # The _currently_streaming flag is set during streaming and cleared after execution
-            already_streamed = getattr(self.agent, "_currently_streaming", False)
-
-            # Execute the Say() playbook with the already_streamed flag
+            # Execute the Say() playbook (which will internally check _currently_streaming)
             success, result = await self.agent.execute_playbook(
-                "Say", [target, message], {"already_streamed": already_streamed}
+                "Say", [target, message], {}
             )
             if not success:
                 return "ERROR: " + result

@@ -102,7 +102,7 @@ These playbooks are always available without declaration:
 
 **Create meeting**
 - To create/start a meeting, call playbook with metadata meeting:true, e.g. "PlanningMeeting(...)"
-- **Implicit arguments** Meeting playbooks always take two implict arguments - $topic:str and $attendees:List[str], e.g. `PlanningMeeting($quarter=current quarter, $topic=quarterly planning, $attendees=[GeneralManager, CTO, ScrumMaster])`
+- **Implicit arguments when creating a new meeting** Meeting playbooks take two implict arguments when creating a new meeting - $topic:str and $attendees:List[str], e.g. `PlanningMeeting($quarter=current quarter, $topic=quarterly planning, $attendees=[GeneralManager, CTO, ScrumMaster])`
 
 **InviteToMeeting(meeting, agent)**
 - Invite agents to an ongoing meeting

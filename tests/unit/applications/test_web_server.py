@@ -300,21 +300,18 @@ class TestPlaybookRun:
 
     @pytest.mark.asyncio
     async def test_agent_streaming_setup(self, playbooks_instance):
-        """Test that agent streaming methods are properly set up."""
+        """Test that channel stream observer is properly set up."""
         playbooks = await playbooks_instance()
         run = PlaybookRun("test-run-123", playbooks)
-        run._setup_early_streaming()
+        await run._setup_early_streaming()
 
-        # Get the AI agent (first agent in the personalized greeting playbook)
-        ai_agent = playbooks.program.agents[0]
+        # Verify that stream observer is initialized and subscribed to channels
+        assert run.stream_observer is not None
+        assert run.auto_subscribe_task is not None
+        assert not run.auto_subscribe_task.done()
 
-        # Check that streaming methods are added
-        assert hasattr(ai_agent, "start_streaming_say")
-        assert hasattr(ai_agent, "stream_say_update")
-        assert hasattr(ai_agent, "complete_streaming_say")
-        assert callable(ai_agent.start_streaming_say)
-        assert callable(ai_agent.stream_say_update)
-        assert callable(ai_agent.complete_streaming_say)
+        # Cleanup
+        await run.cleanup()
 
     @pytest.mark.asyncio
     async def test_message_interception_setup(self, playbooks_instance):
@@ -345,7 +342,7 @@ class TestPlaybookRun:
         assert Program.create_agent != run._original_methods["create_agent"]
 
         # Cleanup for other tests
-        run.cleanup()
+        await run.cleanup()
 
     @pytest.mark.asyncio
     async def test_send_human_message(self, playbooks_instance, mock_websocket):

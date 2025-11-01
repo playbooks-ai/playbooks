@@ -33,6 +33,11 @@ from rich.console import Console
 
 from playbooks import Playbooks
 from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.channels.stream_events import (
+    StreamChunkEvent,
+    StreamCompleteEvent,
+    StreamStartEvent,
+)
 from playbooks.constants import EOM, EXECUTION_FINISHED
 from playbooks.debug_logger import debug
 from playbooks.events import Event
@@ -102,24 +107,77 @@ class PubSub:
             subscriber(message)
 
 
+class ChannelStreamObserver:
+    """Observer for channel streaming events - displays agent messages in terminal."""
+
+    def __init__(self, program: Program, stream_enabled: bool = True):
+        self.program = program
+        self.stream_enabled = stream_enabled
+        self.active_streams = {}  # stream_id -> {"agent_klass": str, "content": str}
+        self.subscribed_channels = set()
+
+    async def subscribe_to_all_channels(self):
+        """Subscribe to all existing channels and set up subscription for new ones."""
+        # Subscribe to existing channels
+        for channel_id, channel in self.program.channels.items():
+            if channel_id not in self.subscribed_channels:
+                channel.add_stream_observer(self)
+                self.subscribed_channels.add(channel_id)
+                debug(f"ChannelStreamObserver: Subscribed to channel {channel_id}")
+
+    async def on_stream_start(self, event: StreamStartEvent):
+        """Handle stream start - print agent name."""
+        sender = self.program.agents_by_id.get(event.sender_id)
+        agent_name = sender.klass if sender else "Agent"
+
+        self.active_streams[event.stream_id] = {
+            "agent_klass": agent_name,
+            "content": "",
+        }
+
+        if self.stream_enabled:
+            console.print(f"\n[green]{agent_name}:[/green] ", end="")
+
+    async def on_stream_chunk(self, event: StreamChunkEvent):
+        """Handle stream chunk - print content incrementally."""
+        if event.stream_id not in self.active_streams:
+            return
+
+        self.active_streams[event.stream_id]["content"] += event.chunk
+
+        if self.stream_enabled:
+            print(event.chunk, end="", flush=True)
+
+    async def on_stream_complete(self, event: StreamCompleteEvent):
+        """Handle stream completion - print newline."""
+        if event.stream_id not in self.active_streams:
+            return
+
+        stream_data = self.active_streams[event.stream_id]
+
+        if self.stream_enabled:
+            console.print()  # Newline to finish streaming
+        else:
+            # Non-streaming mode: display complete message now
+            agent_name = stream_data["agent_klass"]
+            content = event.final_message.content or stream_data["content"]
+            console.print(f"\n[green]{agent_name}:[/green] {content}")
+
+        # Clean up
+        del self.active_streams[event.stream_id]
+
+
 class SessionLogWrapper:
     """Wrapper around session_log that publishes updates."""
 
-    def __init__(self, session_log, pubsub, verbose=False, agent=None, stream=True):
+    def __init__(self, session_log, pubsub, verbose=False):
         self._session_log = session_log
         self._pubsub = pubsub
         self.verbose = verbose
-        self.agent = agent
-        self.stream_enabled = stream
-        self.current_streaming_panel = None
-        self.streaming_content = ""
-        self.is_streaming = False
 
     def append(self, msg):
         """Append a message to the session log and publish it."""
         self._session_log.append(msg)
-        # Skip traditional display entirely - streaming handles all output now
-        # Traditional panels are disabled in favor of streaming output
 
         if self.verbose:
             self._pubsub.publish(str(msg))
@@ -130,46 +188,11 @@ class SessionLogWrapper:
     def __str__(self):
         return str(self._session_log)
 
-    async def start_streaming_say(self, recipient=None):
-        """Start displaying a streaming Say() message."""
-        agent_name = self.agent.klass if self.agent else "Agent"
-        self.streaming_content = ""
-        self.is_streaming = True
-
-        if self.stream_enabled:
-            # Print agent name to show streaming is starting
-            console.print(f"\n[green]{agent_name}:[/green] ", end="")
-
-    async def stream_say_update(self, content: str):
-        """Add content to the current streaming Say() message."""
-        self.streaming_content += content
-        if self.stream_enabled:
-            # Simple streaming display - just print the new content
-            print(content, end="", flush=True)
-
-    async def complete_streaming_say(self):
-        """Complete the current streaming Say() message."""
-        if self.is_streaming:
-            if self.stream_enabled:
-                # Print a new line to finish the streaming output
-                console.print()
-            else:
-                # Non-streaming mode: display the complete message now
-                agent_name = self.agent.klass if self.agent else "Agent"
-                console.print(
-                    f"\n[green]{agent_name}:[/green] {self.streaming_content}"
-                )
-
-            # Reset streaming state
-            self.is_streaming = False
-            self.streaming_content = ""
-
 
 # Store original methods for restoring later
 original_wait_for_message = MessagingMixin.WaitForMessage
 original_broadcast_to_meeting = None  # Will be set after MeetingManager is imported
 original_route_message = None  # Will be set after Program is loaded
-original_create_agent = None  # Will be set after Program is loaded
 
 
 @functools.wraps(original_wait_for_message)
@@ -321,10 +344,9 @@ async def main(
         raise
 
     # Store original methods and apply patches after playbooks are loaded
-    global original_broadcast_to_meeting, original_route_message, original_create_agent
+    global original_broadcast_to_meeting, original_route_message
     original_broadcast_to_meeting = MeetingManager.broadcast_to_meeting_as_owner
     original_route_message = Program.route_message
-    original_create_agent = Program.create_agent
 
     # Apply patches
     MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting_as_owner
@@ -333,37 +355,25 @@ async def main(
 
     pubsub = PubSub()
 
-    def setup_agent_streaming(agent):
-        """Helper function to set up streaming for an agent."""
-        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-            wrapper = SessionLogWrapper(
-                agent.state.session_log, pubsub, verbose, agent, stream
-            )
-            agent.state.session_log = wrapper
+    # Set up channel stream observer for displaying agent messages
+    stream_observer = ChannelStreamObserver(playbooks.program, stream_enabled=stream)
+    await stream_observer.subscribe_to_all_channels()
 
-            # Add streaming methods to the agent if it's not a human agent
-            if stream and hasattr(agent, "klass") and agent.klass != "human":
-                agent.start_streaming_say = wrapper.start_streaming_say
-                agent.stream_say_update = wrapper.stream_say_update
-                agent.complete_streaming_say = wrapper.complete_streaming_say
+    # Set up a periodic task to subscribe to new channels as they're created
+    async def auto_subscribe_to_new_channels():
+        """Periodically check for and subscribe to new channels."""
+        while not playbooks.program.execution_finished:
+            await stream_observer.subscribe_to_all_channels()
+            await asyncio.sleep(0.5)  # Check every 500ms
 
-    # Create patched version of create_agent that sets up streaming for new agents
-    async def patched_create_agent(program_self, agent_klass, **kwargs):
-        """Patched version of create_agent that sets up streaming for runtime-created agents."""
-        # Call original create_agent method
-        agent = await original_create_agent(program_self, agent_klass, **kwargs)
+    # Start the auto-subscription task
+    auto_subscribe_task = asyncio.create_task(auto_subscribe_to_new_channels())
 
-        # Set up streaming for the newly created agent
-        setup_agent_streaming(agent)
-
-        return agent
-
-    # Patch Program.create_agent to handle runtime-created agents
-    Program.create_agent = patched_create_agent
-
-    # Wrap the session_log with the custom wrapper for all existing agents
+    # Wrap session logs with SessionLogWrapper for verbose output
     for agent in playbooks.program.agents:
-        setup_agent_streaming(agent)
+        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+            wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose)
+            agent.state.session_log = wrapper
 
     def log_event(event: Event):
         print(event)
@@ -397,6 +407,14 @@ async def main(
         user_output.error("Execution error", details=str(e))
         raise
     finally:
+        # Cancel the auto-subscription task
+        if "auto_subscribe_task" in locals():
+            auto_subscribe_task.cancel()
+            try:
+                await auto_subscribe_task
+            except asyncio.CancelledError:
+                pass
+
         # Check for agent errors after execution using standardized error handling
         check_playbooks_health(
             playbooks,
@@ -416,8 +434,6 @@ async def main(
             MeetingManager.broadcast_to_meeting_as_owner = original_broadcast_to_meeting
         if original_route_message:
             Program.route_message = original_route_message
-        if original_create_agent:
-            Program.create_agent = original_create_agent
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Type, Union
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
 from .agents.base_agent import BaseAgent
+from .channels import AgentParticipant, Channel, HumanParticipant
 from .constants import HUMAN_AGENT_KLASS
 from .debug.server import (
     DebugServer,  # Note: Actually a debug client that connects to VSCode
@@ -180,45 +181,169 @@ class ProgramAgentsCommunicationMixin:
         message: str,
         message_type: MessageType = MessageType.DIRECT,
         meeting_id: str = None,
+        stream_id: str = None,
     ):
-        """Routes a message to receiver agent(s) via the runtime."""
-        # Handle Artifact objects - use content for actual message delivery
+        """Routes a message to receiver agent(s) via the unified channel architecture.
 
+        Features:
+        - Unified interface for all communication types
+        - Streaming support (via stream_id)
+        - Observable communication
+        - Agent targeting in meetings
+
+        Args:
+            stream_id: If provided, this message is part of a stream
+        """
+        # Handle Artifact objects - use content for actual message delivery
         message_str = message
         if isinstance(message, Artifact):
-            # Use the artifact's content for the actual message
             message_str = str(message.content)
 
         debug(
-            "Routing message",
+            "Routing message via channel",
             sender_id=sender_id,
             receiver_spec=receiver_spec,
             message_type=message_type.value if message_type else None,
             message_length=len(message_str) if message_str else 0,
         )
-        recipient_id = SpecUtils.extract_agent_id(receiver_spec)
-        recipient = self.agents_by_id.get(recipient_id)
-        recipient_klass = recipient.klass if recipient else None
-        # Create simple message
-        message = Message(
+
+        # Parse target agents from receiver_spec (for meetings with targeting)
+        target_agent_ids = None
+        if receiver_spec.startswith("meeting "):
+            # Check for agent targeting: "meeting X, agent Y, agent Z"
+            parts = receiver_spec.split(",")
+            if len(parts) > 1:
+                # Extract meeting ID from first part
+                meeting_spec = parts[0].strip()
+                meeting_id = SpecUtils.extract_meeting_id(meeting_spec)
+                receiver_spec = (
+                    meeting_spec  # Use clean meeting spec for channel lookup
+                )
+
+                # Extract target agent IDs from remaining parts
+                target_agent_ids = []
+                for part in parts[1:]:
+                    part = part.strip()
+                    if part.startswith("agent "):
+                        agent_id = SpecUtils.extract_agent_id(part)
+                        target_agent_ids.append(agent_id)
+
+                debug(
+                    f"Parsed meeting targeting: meeting={meeting_id}, targets={target_agent_ids}"
+                )
+
+        # Get sender agent
+        sender_agent = self.agents_by_id.get(sender_id)
+        if not sender_agent:
+            debug(f"Warning: Sender agent {sender_id} not found")
+            return
+
+        # Get or create channel for this communication
+        try:
+            channel = self.get_or_create_channel(sender_agent, receiver_spec)
+        except ValueError as e:
+            debug(f"Error getting channel: {e}")
+            return
+
+        # Determine recipient info for the message
+        if receiver_spec.startswith("meeting "):
+            # Meeting message
+            recipient_id = None
+            recipient_klass = None
+            if not meeting_id:
+                meeting_id = SpecUtils.extract_meeting_id(receiver_spec)
+        else:
+            # Direct message
+            recipient_id = SpecUtils.extract_agent_id(receiver_spec)
+            recipient = self.agents_by_id.get(recipient_id)
+            recipient_klass = recipient.klass if recipient else None
+
+        # Create message with targeting metadata and streaming info
+        msg = Message(
             sender_id=sender_id,
             sender_klass=sender_klass,
-            content=message_str,  # Use string representation for Artifacts
+            content=message_str,
             recipient_klass=recipient_klass,
             recipient_id=recipient_id,
             message_type=message_type,
             meeting_id=meeting_id,
+            target_agent_ids=target_agent_ids,
+            stream_id=stream_id,
         )
 
-        # First try to find by agent ID
-        receiver_agent = self.agents_by_id.get(
-            SpecUtils.extract_agent_id(receiver_spec)
-        )
-        debug(f"Receiver agent: {receiver_agent}")
-        if receiver_agent:
-            # Send to all agents using event-driven message handling
-            debug(f"Sending message to receiver agent: {receiver_agent}")
-            await receiver_agent._add_message_to_buffer(message)
+        # Send via channel (channel handles delivery to all participants)
+        await channel.send(msg, sender_id)
+
+    async def start_stream(
+        self: "Program",
+        sender_id: str,
+        sender_klass: str,
+        receiver_spec: str,
+        stream_id: str,
+        message_type: MessageType = MessageType.DIRECT,
+        meeting_id: str = None,
+    ):
+        """Start a streaming message via channel.
+
+        Returns:
+            stream_id for tracking this stream
+        """
+        sender_agent = self.agents_by_id.get(sender_id)
+        if not sender_agent:
+            return stream_id
+
+        try:
+            channel = self.get_or_create_channel(sender_agent, receiver_spec)
+            await channel.start_stream(stream_id, sender_id)
+            return stream_id
+        except ValueError:
+            return stream_id
+
+    async def stream_chunk(
+        self: "Program",
+        stream_id: str,
+        sender_id: str,
+        receiver_spec: str,
+        content: str,
+    ):
+        """Send a chunk of streaming content via channel."""
+        sender_agent = self.agents_by_id.get(sender_id)
+        if not sender_agent:
+            return
+
+        try:
+            channel = self.get_or_create_channel(sender_agent, receiver_spec)
+            await channel.stream_chunk(stream_id, content)
+        except ValueError:
+            pass
+
+    async def complete_stream(
+        self: "Program",
+        stream_id: str,
+        sender_id: str,
+        receiver_spec: str,
+        final_content: str = None,
+    ):
+        """Complete a streaming message via channel."""
+        sender_agent = self.agents_by_id.get(sender_id)
+        if not sender_agent:
+            return
+
+        try:
+            channel = self.get_or_create_channel(sender_agent, receiver_spec)
+            await channel.complete_stream(stream_id, final_content)
+
+            # Also send the final complete message
+            if final_content:
+                await self.route_message(
+                    sender_id=sender_id,
+                    sender_klass=sender_agent.klass,
+                    receiver_spec=receiver_spec,
+                    message=final_content,
+                    stream_id=stream_id,
+                )
+        except ValueError:
+            pass
 
 
 class AgentIdRegistry:
@@ -261,6 +386,9 @@ class Program(ProgramAgentsCommunicationMixin):
         self._debug_server = None
         self.agent_id_registry = AgentIdRegistry()
         self.meeting_id_registry = MeetingRegistry()
+
+        # Channel registry for unified communication
+        self.channels: Dict[str, Channel] = {}
 
         # Agent runtime manages execution with asyncio
         self.runtime = AsyncAgentRuntime(program=self)
@@ -661,3 +789,123 @@ class Program(ProgramAgentsCommunicationMixin):
             # If any klass is not a known klass, try to get agents by specs
             agents = self.get_agents_by_specs(klasses_or_specs)
         return agents
+
+    # Channel Management Methods
+
+    def _to_participant(
+        self, entity: Union[BaseAgent, str]
+    ) -> Union[AgentParticipant, HumanParticipant]:
+        """Convert an agent or identifier to a Participant.
+
+        Args:
+            entity: Agent instance or identifier string
+
+        Returns:
+            Participant instance (AgentParticipant or HumanParticipant)
+        """
+        if isinstance(entity, BaseAgent):
+            if entity.klass == HUMAN_AGENT_KLASS:
+                return HumanParticipant(entity.id, entity.klass, agent=entity)
+            return AgentParticipant(entity)
+        elif entity in ["human", "user"]:
+            human_agent = self.agents_by_id.get("human")
+            if human_agent:
+                return HumanParticipant(
+                    human_agent.id, human_agent.klass, agent=human_agent
+                )
+            return HumanParticipant("human", "human")
+        else:
+            raise ValueError(f"Cannot convert {entity} to Participant")
+
+    def _make_channel_id(self, sender_id: str, receiver_id: str) -> str:
+        """Create a channel ID for two participants.
+
+        Uses alphabetical ordering to ensure the same channel is used
+        regardless of who sends first.
+
+        Args:
+            sender_id: ID of the sender
+            receiver_id: ID of the receiver
+
+        Returns:
+            Channel ID string
+        """
+        ids = sorted([sender_id, receiver_id])
+        return f"channel_{ids[0]}_{ids[1]}"
+
+    def get_or_create_channel(self, sender: BaseAgent, receiver_spec: str) -> Channel:
+        """Get or create a channel for communication.
+
+        Args:
+            sender: The sending agent
+            receiver_spec: Receiver specification (agent ID, meeting ID, etc.)
+
+        Returns:
+            Channel instance
+        """
+        # Handle meeting channels
+        if receiver_spec.startswith("meeting "):
+            meeting_id = SpecUtils.extract_meeting_id(receiver_spec)
+            channel_id = f"meeting_{meeting_id}"
+
+            # Return existing meeting channel if it exists
+            if channel_id in self.channels:
+                return self.channels[channel_id]
+
+            # Meeting channel should be created by MeetingManager
+            # For now, raise an error if trying to access non-existent meeting channel
+            raise ValueError(
+                f"Meeting channel {channel_id} does not exist. Meetings must create their channels."
+            )
+
+        # Handle direct communication (agent-to-agent, agent-to-human)
+        if receiver_spec in ["human", "user"]:
+            receiver_id = "human"
+            receiver = self.agents_by_id.get("human")
+        else:
+            receiver_id = SpecUtils.extract_agent_id(receiver_spec)
+            receiver = self.agents_by_id.get(receiver_id)
+
+        if not receiver:
+            raise ValueError(f"Receiver {receiver_spec} not found")
+
+        # Create channel ID (consistent ordering)
+        channel_id = self._make_channel_id(sender.id, receiver_id)
+
+        # Return existing channel or create new one
+        if channel_id not in self.channels:
+            participants = [
+                self._to_participant(sender),
+                self._to_participant(receiver),
+            ]
+            self.channels[channel_id] = Channel(channel_id, participants)
+
+        return self.channels[channel_id]
+
+    def create_meeting_channel(
+        self, meeting_id: str, participants: List[BaseAgent]
+    ) -> Channel:
+        """Create a channel for a meeting.
+
+        This is called by MeetingManager when creating a meeting.
+
+        Args:
+            meeting_id: ID of the meeting
+            participants: List of participant agents
+
+        Returns:
+            Channel instance
+        """
+        channel_id = f"meeting_{meeting_id}"
+
+        if channel_id in self.channels:
+            # Channel already exists, just return it
+            return self.channels[channel_id]
+
+        # Convert all participants to Participant instances
+        channel_participants = [self._to_participant(p) for p in participants]
+
+        # Create and store the channel
+        self.channels[channel_id] = Channel(channel_id, channel_participants)
+
+        return self.channels[channel_id]

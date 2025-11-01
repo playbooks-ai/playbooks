@@ -21,7 +21,6 @@ from ..llm_messages import (
 )
 from ..llm_messages.types import ArtifactLLMMessage
 from ..meetings import MeetingManager
-from ..message import MessageType
 from ..playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from ..playbook_call import PlaybookCall, PlaybookCallResult
 from ..utils.expression_engine import (
@@ -582,6 +581,11 @@ async def {self.bgn_playbook_name}() -> None:
             is_meeting = True
             # Try to get meeting ID from kwargs or current context
             meeting_id = kwargs.get("meeting_id") or self.state.get_current_meeting()
+        elif "meeting_id" in kwargs:
+            # Even if not a meeting playbook, if meeting_id is in kwargs (e.g., AcceptAndJoinMeeting),
+            # mark as meeting context so get_current_meeting_from_call_stack() can find it
+            is_meeting = True
+            meeting_id = kwargs.get("meeting_id")
 
         source_file_path = (
             playbook.source_file_path
@@ -717,31 +721,63 @@ async def {self.bgn_playbook_name}() -> None:
             )
 
         try:
-            # Handle meeting playbook initialization (only for new meetings, not when joining existing ones)
-            debug(f"{str(self)}: Handling meeting playbook execution: {playbook_name}")
-            debug(
-                f"{str(self)}: Current meeting from call stack: {self.meeting_manager.get_current_meeting_from_call_stack()}"
-            )
-            if (
-                playbook
-                and playbook.meeting
-                and not self.meeting_manager.get_current_meeting_from_call_stack()
-            ):
-                meeting = await self.meeting_manager.create_meeting(
-                    playbook_name, kwargs
+            # Handle meeting playbook initialization
+            if playbook and playbook.meeting:
+                debug(
+                    f"{str(self)}: Handling meeting playbook execution: {playbook_name}"
                 )
 
-                if self.program and self.program.execution_finished:
-                    return EXECUTION_FINISHED
+                # Check if we're joining an existing meeting (meeting_id in kwargs)
+                existing_meeting_id = kwargs.get("meeting_id")
 
-                # Wait for required attendees to join before proceeding (if any besides requester)
-                await self.meeting_manager._wait_for_required_attendees(meeting)
+                if (
+                    existing_meeting_id
+                    and existing_meeting_id not in self.state.joined_meetings
+                ):
+                    # We're joining an existing meeting - accept the invitation first
+                    inviter_id = kwargs.get("inviter_id")
+                    topic = kwargs.get("topic", "Meeting")
 
-                message = f"Meeting {meeting.id} ready to proceed - all required attendees present"
-                self.state.session_log.append(message)
+                    debug(
+                        f"{str(self)}: Auto-accepting meeting invitation {existing_meeting_id}"
+                    )
+                    await self.meeting_manager._accept_meeting_invitation(
+                        existing_meeting_id, inviter_id, topic, playbook_name
+                    )
+                    # No need to wait for attendees - we're joining, not creating
 
-                meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
-                self.state.call_stack.add_llm_message(meeting_msg)
+                elif (
+                    existing_meeting_id
+                    and existing_meeting_id in self.state.joined_meetings
+                ):
+                    # We've already joined this meeting, just proceed with execution
+                    debug(
+                        f"{str(self)}: Already in meeting {existing_meeting_id}, proceeding with execution"
+                    )
+
+                elif (
+                    not existing_meeting_id
+                    and not self.meeting_manager.get_current_meeting_from_call_stack()
+                ):
+                    # We're creating a new meeting (no meeting_id provided and not in a meeting context)
+                    debug(
+                        f"{str(self)}: Creating new meeting for playbook {playbook_name}"
+                    )
+                    meeting = await self.meeting_manager.create_meeting(
+                        self.playbooks[playbook_name], kwargs
+                    )
+
+                    if self.program and self.program.execution_finished:
+                        return EXECUTION_FINISHED
+
+                    # Wait for required attendees to join before proceeding (if any besides requester)
+                    await self.meeting_manager._wait_for_required_attendees(meeting)
+
+                    message = f"Meeting {meeting.id} ready to proceed - all required attendees present"
+                    self.state.session_log.append(message)
+
+                    meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
+                    self.state.call_stack.add_llm_message(meeting_msg)
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
             await self._post_execute(call, False, error_msg, langfuse_span)
@@ -995,22 +1031,6 @@ async def {self.bgn_playbook_name}() -> None:
 
             self.state.variables["$_busy"] = True
 
-            # If this is a MEETING INVITATION, accept it immediately. We will handle meeting
-            # playbook lookup during the first message to the meeting.
-            for message in messages:
-                if message.message_type == MessageType.MEETING_INVITATION:
-                    await self.execute_playbook(
-                        "AcceptMeetingInvitation",
-                        [],
-                        {
-                            "meeting_id": message.meeting_id,
-                            "inviter_id": message.sender_id,
-                            "topic": message.content,
-                            "meeting_playbook_name": None,
-                        },
-                    )
-                    break
-
             # Delegate all message processing to ProcessMessages LLM playbook
-            # This includes trigger matching, and natural language handling
+            # This includes trigger matching, meeting invitations, and natural language handling
             await self.execute_playbook("ProcessMessages", [messages])

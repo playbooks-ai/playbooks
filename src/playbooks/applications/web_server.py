@@ -14,11 +14,16 @@ import websockets
 
 from playbooks import Playbooks
 from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.channels.stream_events import (
+    StreamChunkEvent,
+    StreamCompleteEvent,
+    StreamStartEvent,
+)
 from playbooks.constants import EOM
 from playbooks.debug_logger import debug
 from playbooks.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
-from playbooks.message import MessageType
+from playbooks.message import Message, MessageType
 from playbooks.program import Program
 from playbooks.streaming_session_log import StreamingSessionLog
 from playbooks.utils.spec_utils import SpecUtils
@@ -128,6 +133,80 @@ class AgentCreatedEvent(BaseEvent):
     agent_klass: str
 
 
+class ChannelStreamObserver:
+    """Observer for channel streaming events - broadcasts to WebSocket clients."""
+
+    def __init__(self, playbook_run: "PlaybookRun"):
+        self.playbook_run = playbook_run
+        self.subscribed_channels = set()
+
+    async def subscribe_to_all_channels(self):
+        """Subscribe to all existing channels."""
+        program = self.playbook_run.playbooks.program
+        for channel_id, channel in program.channels.items():
+            if channel_id not in self.subscribed_channels:
+                channel.add_observer(self.on_channel_event)
+                self.subscribed_channels.add(channel_id)
+                debug(f"ChannelStreamObserver: Subscribed to channel {channel_id}")
+
+    async def on_channel_event(self, event):
+        """Handle events from channels (messages and streaming events)."""
+        if isinstance(event, StreamStartEvent):
+            await self.on_stream_start(event)
+        elif isinstance(event, StreamChunkEvent):
+            await self.on_stream_chunk(event)
+        elif isinstance(event, StreamCompleteEvent):
+            await self.on_stream_complete(event)
+        elif isinstance(event, Message):
+            # Regular message delivery - agent will handle it
+            pass
+
+    async def on_stream_start(self, event: StreamStartEvent):
+        """Handle stream start - broadcast to WebSocket clients."""
+        sender = self.playbook_run.playbooks.program.agents_by_id.get(event.sender_id)
+        agent_klass = sender.klass if sender else "Agent"
+
+        web_event = AgentStreamingEvent(
+            type=EventType.AGENT_STREAMING_START,
+            timestamp=datetime.now().isoformat(),
+            run_id=self.playbook_run.run_id,
+            agent_id=event.sender_id,
+            agent_klass=agent_klass,
+            content="",
+        )
+        await self.playbook_run._broadcast_event(web_event)
+
+    async def on_stream_chunk(self, event: StreamChunkEvent):
+        """Handle stream chunk - broadcast to WebSocket clients."""
+        sender = self.playbook_run.playbooks.program.agents_by_id.get(event.sender_id)
+        agent_klass = sender.klass if sender else "Agent"
+
+        web_event = AgentStreamingEvent(
+            type=EventType.AGENT_STREAMING_UPDATE,
+            timestamp=datetime.now().isoformat(),
+            run_id=self.playbook_run.run_id,
+            agent_id=event.sender_id,
+            agent_klass=agent_klass,
+            content=event.content,
+        )
+        await self.playbook_run._broadcast_event(web_event)
+
+    async def on_stream_complete(self, event: StreamCompleteEvent):
+        """Handle stream completion - broadcast to WebSocket clients."""
+        sender = self.playbook_run.playbooks.program.agents_by_id.get(event.sender_id)
+        agent_klass = sender.klass if sender else "Agent"
+
+        web_event = AgentStreamingEvent(
+            type=EventType.AGENT_STREAMING_COMPLETE,
+            timestamp=datetime.now().isoformat(),
+            run_id=self.playbook_run.run_id,
+            agent_id=event.sender_id,
+            agent_klass=agent_klass,
+            content=event.final_content or "",
+        )
+        await self.playbook_run._broadcast_event(web_event)
+
+
 class PlaybookRun:
     """Enhanced run management with comprehensive event tracking."""
 
@@ -143,6 +222,10 @@ class PlaybookRun:
 
         # Store original methods for restoration
         self._original_methods = {}
+
+        # Initialize channel stream observer
+        self.stream_observer = ChannelStreamObserver(self)
+        self.auto_subscribe_task = None
 
         # Setup message interception (but not streaming logs yet)
         self._setup_message_interception()
@@ -299,17 +382,24 @@ class PlaybookRun:
             else:
                 debug("Agent has no session_log or state", agent_id=agent.id)
 
-    def _setup_early_streaming(self):
+    async def _setup_early_streaming(self):
         """Setup streaming before execution starts to catch all events."""
         debug("Setting up early streaming", run_id=self.run_id)
 
         # Setup session log streaming for all agents
         self._setup_streaming_session_logs()
 
-        # Setup agent streaming for AI agents
-        for agent in self.playbooks.program.agents:
-            if hasattr(agent, "klass") and agent.klass != "human":
-                self._setup_agent_streaming(agent)
+        # Setup channel stream observer for agent messages
+        await self.stream_observer.subscribe_to_all_channels()
+
+        # Start auto-subscription task for new channels
+        async def auto_subscribe_to_new_channels():
+            """Periodically check for and subscribe to new channels."""
+            while not self.terminated and not self.playbooks.program.execution_finished:
+                await self.stream_observer.subscribe_to_all_channels()
+                await asyncio.sleep(0.5)  # Check every 500ms
+
+        self.auto_subscribe_task = asyncio.create_task(auto_subscribe_to_new_channels())
 
     async def _setup_streaming_for_new_agent(self, agent):
         """Set up streaming for a newly created agent."""
@@ -367,11 +457,6 @@ class PlaybookRun:
                 existing_entries=len(streaming_log.log),
             )
 
-        # Set up agent message streaming if it's not a human agent
-        if hasattr(agent, "klass") and agent.klass != "human":
-            debug("Setting up agent message streaming for new agent", agent_id=agent.id)
-            self._setup_agent_streaming(agent)
-
         # Broadcast agent created event
         agent_created_event = AgentCreatedEvent(
             type=EventType.AGENT_CREATED,
@@ -381,47 +466,6 @@ class PlaybookRun:
             agent_klass=agent.klass,
         )
         await self._broadcast_event(agent_created_event)
-
-    def _setup_agent_streaming(self, agent):
-        """Setup streaming capabilities for an agent."""
-
-        async def start_streaming_say(recipient=None):
-            event = AgentStreamingEvent(
-                type=EventType.AGENT_STREAMING_START,
-                timestamp=datetime.now().isoformat(),
-                run_id=self.run_id,
-                agent_id=agent.id,
-                agent_klass=agent.klass,
-                content="",
-                recipient_id=recipient,
-            )
-            await self._broadcast_event(event)
-
-        async def stream_say_update(content: str):
-            event = AgentStreamingEvent(
-                type=EventType.AGENT_STREAMING_UPDATE,
-                timestamp=datetime.now().isoformat(),
-                run_id=self.run_id,
-                agent_id=agent.id,
-                agent_klass=agent.klass,
-                content=content,
-            )
-            await self._broadcast_event(event)
-
-        async def complete_streaming_say():
-            event = AgentStreamingEvent(
-                type=EventType.AGENT_STREAMING_COMPLETE,
-                timestamp=datetime.now().isoformat(),
-                run_id=self.run_id,
-                agent_id=agent.id,
-                agent_klass=agent.klass,
-                content="",
-            )
-            await self._broadcast_event(event)
-
-        agent.start_streaming_say = start_streaming_say
-        agent.stream_say_update = stream_say_update
-        agent.complete_streaming_say = complete_streaming_say
 
     async def _intercept_route_message(
         self,
@@ -616,8 +660,16 @@ class PlaybookRun:
             message=message,
         )
 
-    def cleanup(self):
+    async def cleanup(self):
         """Cleanup resources and restore original methods."""
+        # Cancel the auto-subscription task
+        if self.auto_subscribe_task:
+            self.auto_subscribe_task.cancel()
+            try:
+                await self.auto_subscribe_task
+            except asyncio.CancelledError:
+                pass
+
         Program.route_message = self._original_methods["route_message"]
         MessagingMixin.WaitForMessage = self._original_methods["wait_for_message"]
         MeetingManager.broadcast_to_meeting_as_owner = self._original_methods[
@@ -722,7 +774,7 @@ class RunManager:
             self.runs[run_id] = run
 
             # Setup streaming BEFORE starting execution to catch all events
-            run._setup_early_streaming()
+            await run._setup_early_streaming()
 
             # Start the playbook execution
             run.task = asyncio.create_task(self._run_playbook(run))
@@ -803,7 +855,7 @@ class RunManager:
             )
             await run._broadcast_event(term_event)
             # Cleanup
-            run.cleanup()
+            await run.cleanup()
 
     async def websocket_handler(self, websocket, path):
         """Handle new WebSocket connection."""

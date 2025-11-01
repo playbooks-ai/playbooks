@@ -1,4 +1,4 @@
-DEFAULT_MODEL = "claude-sonnet-4-20250514"
+DEFAULT_MODEL = "claude-haiku-4-5-20251001"
 SYSTEM_PROMPT_DELIMITER = "====SYSTEM_PROMPT_DELIMITER===="
 EOM = "<eom>"
 EXECUTION_FINISHED = "Execution finished"

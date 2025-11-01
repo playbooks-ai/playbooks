@@ -64,19 +64,28 @@ class ExecutionState:
             for participant in meeting.joined_attendees:
                 participants_list.append(f"{participant.klass}(agent {participant.id})")
             owned_meetings_list.append(
-                {"meeting_id": meeting_id, "participants": participants_list}
+                {
+                    "meeting_id": meeting_id,
+                    "participants": participants_list,
+                    "topic": meeting.topic,
+                }
             )
             joined_meetings_list.append(
                 {
                     "meeting_id": meeting_id,
                     "owner": f"Owned by me - agent {meeting.owner_id}",
+                    "topic": meeting.topic,
                 }
             )
 
         # Joined meetings
         for meeting_id, meeting in self.joined_meetings.items():
             joined_meetings_list.append(
-                {"meeting_id": meeting_id, "owner": f"agent {meeting.owner_id}"}
+                {
+                    "meeting_id": meeting_id,
+                    "owner": f"agent {meeting.owner_id}",
+                    "topic": meeting.topic,
+                }
             )
 
         return {

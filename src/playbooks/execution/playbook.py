@@ -137,7 +137,9 @@ class PlaybookLLMExecution(LLMExecution):
             llm_response_msg = AssistantResponseLLMMessage(llm_response.response)
             self.agent.state.call_stack.add_llm_message(llm_response_msg)
 
-            await llm_response.execute_generated_code()
+            # Extract playbook arguments to make available in generated code
+            playbook_args = self._extract_playbook_arguments(call)
+            await llm_response.execute_generated_code(playbook_args=playbook_args)
 
             # Clear streaming flag after code execution
             # This ensures next LLM call will properly stream its Say() calls
@@ -476,3 +478,68 @@ class PlaybookLLMExecution(LLMExecution):
         # Resolve placeholders
         resolved = await resolve_description_placeholders(message, context)
         return resolved
+
+    def _extract_playbook_arguments(self, call: PlaybookCall) -> dict:
+        """Extract and resolve playbook arguments to a dict.
+
+        Takes the PlaybookCall's args and kwargs and binds them to parameter
+        names using the playbook's signature. Resolves LiteralValue and
+        VariableReference types to actual values.
+
+        Args:
+            call: The PlaybookCall containing args and kwargs
+
+        Returns:
+            Dict mapping parameter names to resolved values
+        """
+        from ..argument_types import LiteralValue, VariableReference
+        from ..utils.expression_engine import bind_call_parameters
+
+        result = {}
+
+        # Get playbook signature
+        if not hasattr(self.playbook, "signature") or not self.playbook.signature:
+            return result
+
+        # Get args and kwargs from call
+        args = call.args if hasattr(call, "args") and call.args else []
+        kwargs = call.kwargs if hasattr(call, "kwargs") and call.kwargs else {}
+
+        # Bind arguments to parameter names
+        bound_params = bind_call_parameters(self.playbook.signature, args, kwargs)
+
+        # Resolve VariableReference and LiteralValue types to actual values
+        for param_name, value in bound_params.items():
+            if isinstance(value, LiteralValue):
+                result[param_name] = value.value
+            elif isinstance(value, VariableReference):
+                # Resolve the variable reference
+                ref = value.reference
+                # Remove $ prefix if present
+                if ref.startswith("$"):
+                    ref = ref[1:]
+                try:
+                    # Try to get from state variables
+                    if self.agent.state and hasattr(self.agent.state, "variables"):
+                        state_key = f"${ref}"
+                        if state_key in self.agent.state.variables:
+                            var = self.agent.state.variables[state_key]
+                            from ..variables import Variable
+
+                            if isinstance(var, Variable):
+                                result[param_name] = var.value
+                            else:
+                                result[param_name] = var
+                        else:
+                            # Variable not found, store the reference as-is
+                            result[param_name] = value
+                    else:
+                        result[param_name] = value
+                except Exception:
+                    # If can't resolve, store the reference as-is
+                    result[param_name] = value
+            else:
+                # Already a resolved value
+                result[param_name] = value
+
+        return result

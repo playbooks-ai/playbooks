@@ -246,3 +246,53 @@ await Return(True)
         assert isinstance(result.playbook_calls, list)
         assert result.return_value is not None
         assert result.playbook_finished is True
+
+    @pytest.mark.asyncio
+    async def test_playbook_arguments_in_namespace(self, executor):
+        """Test that playbook arguments are available in generated code."""
+        # Simulate playbook arguments
+        playbook_args = {
+            "order_id": "12345",
+            "customer_name": "John Doe",
+            "total": 99.99,
+        }
+
+        # Code that uses the playbook arguments
+        code = """
+$order_info = f"Order {order_id} for {customer_name}"
+$total_plus_ten = total + 10
+"""
+        result = await executor.execute(code, playbook_args=playbook_args)
+
+        # Verify arguments were accessible
+        assert result.error_message is None
+        assert result.vars["order_info"] == "Order 12345 for John Doe"
+        assert result.vars["total_plus_ten"] == 109.99
+
+    @pytest.mark.asyncio
+    async def test_playbook_arguments_none(self, executor):
+        """Test that code works when no playbook_args are provided."""
+        code = "$x = 5"
+        result = await executor.execute(code, playbook_args=None)
+        assert result.error_message is None
+        assert result.vars["x"] == 5
+
+    @pytest.mark.asyncio
+    async def test_playbook_arguments_empty_dict(self, executor):
+        """Test that code works with empty playbook_args dict."""
+        code = "$y = 10"
+        result = await executor.execute(code, playbook_args={})
+        assert result.error_message is None
+        assert result.vars["y"] == 10
+
+    @pytest.mark.asyncio
+    async def test_playbook_arguments_with_say(self, executor):
+        """Test using playbook arguments in Say() calls."""
+        playbook_args = {"user_name": "Alice", "greeting": "Welcome"}
+
+        code = 'await Say("user", f"{greeting}, {user_name}!")'
+        result = await executor.execute(code, playbook_args=playbook_args)
+
+        assert result.error_message is None
+        assert len(result.messages) == 1
+        assert result.messages[0] == ("user", "Welcome, Alice!")

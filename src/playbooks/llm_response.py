@@ -88,7 +88,13 @@ class LLMResponse(AsyncInitMixin):
         else:
             raise ValueError(f"Third line is not a comment: {third_line}")
 
-    async def execute_generated_code(self):
-        """Execute the generated code."""
+    async def execute_generated_code(self, playbook_args: dict = None):
+        """Execute the generated code.
+
+        Args:
+            playbook_args: Optional dict of playbook argument names to values
+        """
         executor = PythonExecutor(self.agent)
-        self.execution_result = await executor.execute(self.preprocessed_code)
+        self.execution_result = await executor.execute(
+            self.preprocessed_code, playbook_args=playbook_args
+        )

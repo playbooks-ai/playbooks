@@ -3,9 +3,9 @@ MessagingMixin for event-driven message processing.
 """
 
 import asyncio
-import time
 from typing import List
 
+from ..async_message_queue import AsyncMessageQueue
 from ..constants import EOM, EXECUTION_FINISHED
 from ..debug_logger import debug
 from ..exceptions import ExecutionFinished
@@ -18,8 +18,8 @@ class MessagingMixin:
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._message_queue = AsyncMessageQueue()
         self._message_buffer: List[Message] = []
-        self._message_event = asyncio.Event()
 
     async def _add_message_to_buffer(self, message) -> None:
         """Add a message to buffer and notify waiting processes.
@@ -32,15 +32,12 @@ class MessagingMixin:
             if message_handled:
                 return
 
-        # Regular messages go to buffer
-        debug(f"{str(self)}: Adding message to buffer: {message}")
+        debug(f"{str(self)}: Adding message to queue: {message}")
+        await self._message_queue.put(message)
         self._message_buffer.append(message)
-        # Wake up any agents waiting for messages
-        debug(f"{str(self)}: Waking up any threads waiting for messages")
-        self._message_event.set()
 
     async def WaitForMessage(self, wait_for_message_from: str) -> List[Message]:
-        """Unified message waiting with smart buffering.
+        """Wait for messages with event-driven delivery and differential timeouts.
 
         Args:
             wait_for_message_from: Message source - "*", "human", "agent 1234", or "meeting 123"
@@ -48,123 +45,117 @@ class MessagingMixin:
         Returns:
             List of Message objects
         """
-        while True:
-            debug(f"{str(self)}: Waiting for message from {wait_for_message_from}")
-            if self.program.execution_finished:
-                raise ExecutionFinished(EXECUTION_FINISHED)
+        debug(f"{str(self)}: Waiting for message from {wait_for_message_from}")
 
-            first_message_time = None
-            buffer_timeout = 5.0  # 5s maximum buffer time
+        if self.program.execution_finished:
+            raise ExecutionFinished(EXECUTION_FINISHED)
 
-            release_buffer = False
-            num_messages_to_process = 0
-            # Check buffer for messages
-            for message in self._message_buffer:
-                # Track timing from first message
-                if first_message_time is None:
-                    first_message_time = message.created_at.timestamp()
-
-                # Check if we should release the buffer
-                debug(
-                    f"{str(self)}: Checking if we should release the buffer for message {message}"
-                )
-                if release_buffer or self._should_release_buffer(
-                    wait_for_message_from, message, first_message_time, buffer_timeout
-                ):
-                    release_buffer = True
-                    num_messages_to_process += 1
-
-                if message.content == EOM:
-                    release_buffer = True
-                    break
-            if release_buffer:
-                debug(f"{str(self)}: Releasing buffer")
-                return await self._process_collected_messages(num_messages_to_process)
-
-            # Wait for new messages or timeout
-            try:
-                debug(f"{str(self)}: Waiting for new messages")
-                await asyncio.wait_for(self._message_event.wait(), timeout=5)
-                debug(f"{str(self)}: New messages received")
-                self._message_event.clear()
-            except asyncio.TimeoutError:
-                # Loop back to process received messages
-                debug(f"{str(self)}: Timeout waiting for new messages")
-                pass
-
-    def _should_release_buffer(
-        self,
-        source: str,
-        message: Message,
-        first_message_time: float,
-        buffer_timeout: float,
-    ) -> bool:
-        """Determine if we should release the buffer now.
-
-        Args:
-            source: The source we're waiting for ("human", "agent 1234", "meeting 123")
-            message: The message that just arrived
-            first_message_time: When we started buffering
-            buffer_timeout: Maximum buffer time (5s)
-
-        Returns:
-            True if buffer should be released now
-        """
-        time_elapsed = time.time() - first_message_time if first_message_time else 0
-
-        if source.startswith("meeting "):
-            # if the message mentions me, release immediately
-            if self.id.lower() in message.content.lower():
-                return True
-
-            if self.name.lower() in message.content.lower():
-                return True
-
-            # Meeting: always wait full 5s to accumulate chatter
-            return time_elapsed >= buffer_timeout
+        # Determine timeout based on context
+        if wait_for_message_from.startswith("meeting "):
+            # For meetings, use differential timeout logic
+            timeout = await self._get_meeting_timeout(wait_for_message_from)
         else:
-            # Human/Agent: release immediately on target source OR 5s timeout
-            target_source_message = (
-                message.sender_id == source
-                or message.sender_id == "human"
-                or source == "*"
-            )
-            sent_directly_to_me = message.recipient_id == self.id
-            if (
-                target_source_message
-                or sent_directly_to_me
-                or message.content == EOM
-                or time_elapsed >= buffer_timeout
-            ):
+            # For direct messages (human/agent), release immediately
+            timeout = 5.0
+
+        # Create predicate for message filtering
+        def message_predicate(message: Message) -> bool:
+            # Always match EOM
+            if message.content == EOM:
                 return True
 
-    async def _process_collected_messages(
-        self, num_messages_to_process: int = None
-    ) -> List[Message]:
-        """Process and format collected messages.
+            # Match based on source specification
+            if wait_for_message_from == "*":
+                return True
+            elif wait_for_message_from in ("human", "user"):
+                return message.sender_id in ("human", "user")
+            elif wait_for_message_from.startswith("meeting "):
+                # Extract meeting ID
+                meeting_id = wait_for_message_from.split(" ", 1)[1]
+                return message.meeting_id == meeting_id
+            elif wait_for_message_from.startswith("agent "):
+                agent_id = wait_for_message_from.split(" ", 1)[1]
+                return message.sender_id == agent_id
+            else:
+                return message.sender_id == wait_for_message_from
 
-        Args:
-            num_messages_to_process: Number of messages to process from buffer
+        # Use queue's get_batch for event-driven waiting
+        try:
+            messages = await self._message_queue.get_batch(
+                predicate=message_predicate,
+                timeout=timeout,
+                min_messages=1,
+                max_messages=100,
+            )
+
+            # Process and return messages
+            if messages:
+                return await self._process_collected_messages_from_queue(messages)
+            else:
+                # Timeout with no messages - return empty list
+                return []
+
+        except asyncio.TimeoutError:
+            debug(f"{str(self)}: Timeout waiting for messages")
+            return []
+
+    async def _get_meeting_timeout(self, meeting_spec: str) -> float:
+        """Determine timeout for meeting messages based on agent targeting.
 
         Returns:
-            List of Message objects
+            0.5s if agent is targeted (immediate response), 5.0s for passive listening
         """
-        if not num_messages_to_process:
-            num_messages_to_process = len(self._message_buffer)
+        # Check if there are any messages in queue targeting this agent
+        targeted_message = await self._message_queue.peek(
+            lambda m: (
+                m.meeting_id == meeting_spec.split(" ", 1)[1]
+                and (
+                    # Explicitly targeted via target_agent_ids
+                    (m.target_agent_ids and self.id in m.target_agent_ids)
+                    # Or mentioned in content
+                    or (self.id.lower() in m.content.lower())
+                    or (
+                        hasattr(self, "name") and self.name.lower() in m.content.lower()
+                    )
+                )
+            )
+        )
 
-        debug(f"{str(self)}: Processing {num_messages_to_process} messages")
-        if not num_messages_to_process:
+        if targeted_message:
+            # Agent is targeted - respond immediately
+            debug(f"{str(self)}: Targeted in meeting, using short timeout (0.5s)")
+            return 0.5
+        else:
+            # Passive listening - accumulate chatter
+            debug(f"{str(self)}: Passive listening in meeting, using long timeout (5s)")
+            return 5.0
+
+    async def _process_collected_messages_from_queue(
+        self, messages: List[Message]
+    ) -> List[Message]:
+        """Process and format messages retrieved from AsyncMessageQueue.
+
+        Args:
+            messages: List of messages from the queue
+
+        Returns:
+            List of Message objects (EOM filtered out)
+        """
+        debug(f"{str(self)}: Processing {len(messages)} messages from queue")
+
+        if not messages:
             return []
 
         # Filter out EOM messages before processing
-        messages = [
-            msg
-            for msg in self._message_buffer[:num_messages_to_process]
-            if msg.content != EOM
-        ]
+        messages = [msg for msg in messages if msg.content != EOM]
 
-        # Remove processed messages from buffer
-        self._message_buffer = self._message_buffer[num_messages_to_process:]
+        if not messages:
+            return []
+
+        # Sync with _message_buffer (used by agent_chat.py)
+        for msg in messages:
+            if msg in self._message_buffer:
+                self._message_buffer.remove(msg)
 
         if not self.state.call_stack.is_empty():
             messages_str = []
