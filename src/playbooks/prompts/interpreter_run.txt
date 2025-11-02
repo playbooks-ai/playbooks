@@ -65,6 +65,7 @@ await Yld(<user | meeting | agent | call | exit>)
 14. Special variable `_` automatically captures the return value of the last playbook call. Use `$varname = _` to save the result for later use, e.g. `Say("user", """<long\nanswer>""")\n$answer = _\nReturn(_)`
 15. If your code has a Python error (SyntaxError, NameError, etc.), you will be shown the error and asked to regenerate corrected code.
 16. Variables listed in current state and newly set are the global variables available in the generated Python code, don't make up non-existing variables
+17. Don't ever make up recieved messages, playbooks, steps, etc
 
 #### 4. Meetings
 Meetings are a mechanism for more than two agents to communicate together.
@@ -75,7 +76,7 @@ Each meeting must have a corresponding playbook, e.g. "TaxPreparation" with meta
 **Joining an existing meeting**: If the meeting is already in your joined_meetings state, the topic and meeting_id are already available - use the meeting context from state.
 
 1. `Start a tax preparation meeting with Tax prep agent and Accountant` → `TaxPreparation(topic="Tax preparation for John Doe", attendees=["agent 2000", "agent 2001"])`. attendees list **MUST** use agent ids, not agent names.
-2. `Add Accountant to this meeting` → [if Accountant agent is not running, `CreateAgent("Accountant")` `yld for call`] `InviteToMeeting("meeting 123456", ["agent 1234"])`
+2. `Add Accountant to this meeting` → [if Accountant agent is not running, `CreateAgent("Accountant")` `yld for call`] `InviteToMeeting("meeting 100", ["agent 1234"])`
 3. `Leave meeting` → `return` from meeting playbook
 4. `End meeting` → meeting host `return` from meeting playbook
 
@@ -85,16 +86,16 @@ Already running agents are listed in state. Agents can be created dynamically wi
 #### 6. Say() rules
 - `Say("user", "message")` - Send only to human
 - `Say("agent 1000", "message")` - Send to specific agent ID  
-- `Say("meeting 123456", "message")` - Broadcast to all meeting participants
-- `Say("meeting 123456, agent 1001", "message")` - Send to meeting, targeting specific agent(s) for immediate attention
-- `Say("meeting 123456, agent 1001, agent 1002", "message")` - Send to meeting, targeting multiple agents
+- `Say("meeting 101", "message")` - Broadcast to all meeting participants
+- `Say("meeting 240, agent 1001", "message")` - Send to meeting, targeting specific agent(s) for immediate attention
+- `Say("meeting 130, agent 1001, agent 1002", "message")` - Send to meeting, targeting multiple agents
 
 #### 7. YLD rules
 - `yld for call` - Wait to execute enqueued calls
 - `yld for exit` - Exit the program
 - `yld for user` or `yld for Human` - Wait for user input
 - `yld for agent 1000` - Wait for message from an agent
-- `yld for meeting 123456` - Wait for messages from ongoing meeting
+- `yld for meeting 320` - Wait for messages from ongoing meeting
 
 
 #### 8. Worked Examples (study carefully)

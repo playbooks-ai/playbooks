@@ -10,7 +10,7 @@ from ..constants import EOM, EXECUTION_FINISHED
 from ..debug_logger import debug
 from ..exceptions import ExecutionFinished
 from ..llm_messages import AgentCommunicationLLMMessage
-from ..message import Message
+from ..message import Message, MessageType
 
 
 class MessagingMixin:
@@ -160,8 +160,16 @@ class MessagingMixin:
         if not self.state.call_stack.is_empty():
             messages_str = []
             for message in messages:
+                message_type_str = ""
+                if message.message_type == MessageType.MEETING_INVITATION:
+                    message_type_str = (
+                        f" [MEETING_INVITATION for meeting {message.meeting_id}]"
+                    )
+                elif message.message_type == MessageType.MEETING_BROADCAST:
+                    message_type_str = f" [in meeting {message.meeting_id}]"
+
                 messages_str.append(
-                    f"Received message from {message.sender_klass}(agent {message.sender_id}): {message.content}"
+                    f"Received message from {message.sender_klass}(agent {message.sender_id}){message_type_str}: {message.content}"
                 )
             debug(f"{str(self)}: Messages to process: {messages_str}")
             # Use the first sender agent for the semantic message type

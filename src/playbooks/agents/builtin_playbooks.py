@@ -111,10 +111,12 @@ hidden: true
 
 ### Steps
 - For each $message in $messages
-    - If $message is a MEETING_INVITATION
-        - Look at the topic and determine if there is a suitable meeting playbook to handle it
+    - If $message is a MEETING_INVITATION (check if message contains "[MEETING_INVITATION for meeting" text)
+        - Extract the meeting_id from the message (e.g., from "[MEETING_INVITATION for meeting 123456]")
+        - Extract the inviter agent id from the message sender_id
+        - Look at the topic (message content) and determine if there is a suitable meeting playbook to handle it
         - If a suitable meeting playbook is found
-            - Call the meeting playbook directly: <MeetingPlaybookName>(meeting_id=$message.meeting_id, inviter_id=$message.sender_id, topic=$message.content)
+            - Call the meeting playbook directly: <MeetingPlaybookName>(meeting_id=<extracted_meeting_id>, inviter_id=<extracted_inviter_id>, topic=<message_content>)
             - Continue to next message
         - Otherwise
             - Reject the invitation by saying to the inviter that no suitable meeting playbook was found

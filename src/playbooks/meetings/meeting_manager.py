@@ -187,13 +187,15 @@ class MeetingManager:
 
         # Create tasks for all required attendees
         for attendee in meeting.required_attendees:
-            task = asyncio.create_task(self._invite_to_meeting(meeting, attendee))
-            invitation_tasks.append(task)
+            future = self._invite_to_meeting(meeting, attendee)
+            if future:
+                invitation_tasks.append(asyncio.create_task(future))
 
         # Create tasks for all optional attendees
         for attendee in meeting.optional_attendees:
-            task = asyncio.create_task(self._invite_to_meeting(meeting, attendee))
-            invitation_tasks.append(task)
+            future = self._invite_to_meeting(meeting, attendee)
+            if future:
+                invitation_tasks.append(asyncio.create_task(future))
 
         # Yield for other tasks
         await asyncio.sleep(0.1)
@@ -224,10 +226,11 @@ class MeetingManager:
                 status=MeetingInvitationStatus.PENDING,
             )
             response = f"Inviting {str(target_agent)} to meeting {meeting.id}: {meeting.topic or 'Meeting'}"
-            self.agent.state.session_log.append(response)
-            meeting_msg = MeetingLLMMessage(response, meeting_id=meeting.id)
-            self.agent.state.call_stack.add_llm_message(meeting_msg)
-            asyncio.create_task(self._send_invitation(meeting, target_agent))
+            await self._send_invitation(meeting, target_agent)
+
+        self.agent.state.session_log.append(response)
+        meeting_msg = MeetingLLMMessage(response, meeting_id=meeting.id)
+        self.agent.state.call_stack.add_llm_message(meeting_msg)
 
         return response
 
@@ -276,12 +279,15 @@ class MeetingManager:
         # Send invitations concurrently
         invitation_tasks = []
         for attendee in attendees:
-            task = asyncio.create_task(self._invite_to_meeting(meeting, attendee))
-            invitation_tasks.append(task)
+            future = self._invite_to_meeting(meeting, attendee)
+            if future:
+                invitation_tasks.append(asyncio.create_task(future))
 
         # Wait for all invitations and collect responses
-        responses = await asyncio.gather(*invitation_tasks) if invitation_tasks else []
-        return "\n".join(responses)
+        if invitation_tasks:
+            responses = await asyncio.gather(*invitation_tasks)
+            return "\n".join(responses)
+        return ""
 
     async def _wait_for_required_attendees(
         self, meeting: Meeting, timeout_seconds: int = 30
@@ -512,7 +518,7 @@ class MeetingManager:
         # Check if agent is busy (has active call stack)
         if (
             "$_busy" in self.agent.state.variables
-            and self.agent.state.variables["$_busy"].value == "true"
+            and self.agent.state.variables["$_busy"].value
         ):
             log = f"Rejecting meeting {meeting_id} - agent is busy"
             self.agent.state.session_log.append(log)

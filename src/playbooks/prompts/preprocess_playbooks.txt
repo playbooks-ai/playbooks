@@ -101,8 +101,8 @@ These playbooks are always available without declaration:
 - Example: `- 01:QUE CreateAgent(MyWorker, name="MW001", age=25)`
 
 **Create meeting**
-- To create/start a meeting, call playbook with metadata meeting:true, e.g. "PlanningMeeting(...)"
-- **Implicit arguments when creating a new meeting** Meeting playbooks take two implict arguments when creating a new meeting - $topic:str and $attendees:List[str], e.g. `PlanningMeeting($quarter=current quarter, $topic=quarterly planning, $attendees=[GeneralManager, CTO, ScrumMaster])`
+- To create/start a meeting, call playbook with metadata meeting:true, e.g. "PlanningMeeting($topic:str and $attendees:List[str], ...)"
+- **Implicit arguments when creating a new meeting** Meeting playbooks take two implict arguments when creating a new meeting - $topic:str and $attendees:List[str], e.g. `PlanningMeeting($topic=quarterly planning, $attendees=[GeneralManager, CTO, ScrumMaster], $quarter=current quarter)`
 
 **InviteToMeeting(meeting, agent)**
 - Invite agents to an ongoing meeting
@@ -563,6 +563,12 @@ execution_mode: raw
 Produce a 1 paragraph summary of the following document:
 {{document}}
 
+## P3
+meeting: true
+Conduct a planning meeting
+- While meeting is in progress
+  - respond if your response is needed, otherwise keep observing the meeting
+
 **Output:**
 # GreetAgent
 This is a second agent that can say hello and goodbye to the user
@@ -572,6 +578,7 @@ metadata:
   model: gpt-4o
 ---
 Says hello to the user
+
 ### Steps
 - 01:QUE Say(user, Say hello $name)
 - 02:QUE $info:dict = ExampleAgent.LookupInfo(query=$name)
@@ -583,6 +590,7 @@ metadata:
   public: true
 ---
 Says goodbye to the user
+
 ### Steps
 - 01:QUE $greeting_txt = LoadFile("greeting.txt")
 - 02:YLD for call
@@ -595,6 +603,22 @@ metadata:
 ---
 Produce a 1 paragraph summary of the following document:
 {{$document}}
+
+## P3() -> None
+metadata:
+  meeting: true
+---
+Conduct a planning meeting
+
+### Triggers
+- When invited for a planning meeting
+
+### Steps
+- 01:CND While meeting is in progress
+  - 01.01:CND if your response is needed
+    - 01.01.01:QUE respond
+  - 01.02:CND otherwise
+    - 01.02.01:EXE keep observing the meeting
 
 ```public.json
 [
