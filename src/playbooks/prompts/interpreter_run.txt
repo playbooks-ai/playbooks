@@ -319,10 +319,11 @@ OR, if TaxRateQuery can be called -
 ```
 ...
 # think: Check if accountant type agent. Yes, I see AccountantExpert listed. Check if an agent is created. Yes, I see AccountantExpert agent 1020, so I don't need to call CreateAgent. Check if there is suitable playbook to get tax rate from AccountantExpert. Yes, I see TaxRateQuery($gross_income). Check if I can call this playbook. Yes, we can.
-tax_rate = await AccountantExpert.TaxRateQuery($gross_income)
+tax_rate = await AccountantExpert["agent 1020"].TaxRateQuery($gross_income)
 await Var('tax_rate', tax_rate)
 ...
 ```
+Note how specific agent instance is selected - AccountantExpert["agent 1020"]
 
 #### 9  Quick Mapping Cheatsheet
 || Playbook step                          | Condition     |Output (example)                                   |

@@ -752,6 +752,58 @@ async def {self.bgn_playbook_name}() -> None:
             # Not a typed argument (shouldn't happen, but fallback)
             return arg
 
+    def _resolve_target_agent(
+        self, playbook_name: str
+    ) -> tuple[Optional["AIAgent"], Optional[str]]:
+        """Resolve the target agent for a cross-agent playbook call.
+
+        Supports two formats:
+        - AgentName.PlaybookName: Targets first instance of AgentName
+        - AgentName:AgentId.PlaybookName: Targets specific instance with AgentId
+          (AgentId can be "agent 1020" or just "1020")
+
+        Args:
+            playbook_name: The full playbook name (may include agent prefix)
+
+        Returns:
+            Tuple of (target_agent, actual_playbook_name) or (None, None) if not found
+        """
+        if not self.program or "." not in playbook_name:
+            return (None, None)
+
+        # Check if targeting a specific agent instance (AgentName:AgentId.PlaybookName)
+        if ":" in playbook_name:
+            agent_part, actual_playbook_name = playbook_name.split(".", 1)
+            agent_name, agent_id_spec = agent_part.split(":", 1)
+
+            # Parse agent ID to handle both "agent 1020" and "1020" formats
+            from ..identifiers import AgentID
+
+            try:
+                agent_id_obj = AgentID.parse(agent_id_spec)
+                normalized_agent_id = agent_id_obj.id  # Just the numeric part
+            except ValueError:
+                # If parsing fails, use as-is
+                normalized_agent_id = agent_id_spec
+
+            # Filter by both agent class and instance ID
+            target_agents = list(
+                filter(
+                    lambda x: x.klass == agent_name and x.id == normalized_agent_id,
+                    self.program.agents,
+                )
+            )
+            target_agent = target_agents[0] if target_agents else None
+        else:
+            # Original format: AgentName.PlaybookName (targets first instance)
+            agent_name, actual_playbook_name = playbook_name.split(".", 1)
+            target_agents = list(
+                filter(lambda x: x.klass == agent_name, self.program.agents)
+            )
+            target_agent = target_agents[0] if target_agents else None
+
+        return (target_agent, actual_playbook_name)
+
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> tuple[bool, Any]:
@@ -873,25 +925,22 @@ async def {self.bgn_playbook_name}() -> None:
                 await self._post_execute(call, False, message, langfuse_span)
                 raise
         else:
-            # Handle cross-agent playbook calls (AgentName.PlaybookName format)
-            if "." in playbook_name:
-                agent_name, actual_playbook_name = playbook_name.split(".", 1)
-                target_agent = list(
-                    filter(lambda x: x.klass == agent_name, self.program.agents)
-                )
-                if target_agent:
-                    target_agent = target_agent[0]
+            # Handle cross-agent playbook calls (AgentName.PlaybookName or AgentName:AgentId.PlaybookName format)
+            target_agent, actual_playbook_name = self._resolve_target_agent(
+                playbook_name
+            )
 
-                if (
-                    target_agent
-                    and actual_playbook_name in target_agent.playbooks
-                    and target_agent.playbooks[actual_playbook_name].public
-                ):
-                    success, result = await target_agent.execute_playbook(
-                        actual_playbook_name, args, kwargs
-                    )
-                    await self._post_execute(call, success, result, langfuse_span)
-                    return (success, result)
+            if (
+                target_agent
+                and actual_playbook_name
+                and actual_playbook_name in target_agent.playbooks
+                and target_agent.playbooks[actual_playbook_name].public
+            ):
+                success, result = await target_agent.execute_playbook(
+                    actual_playbook_name, args, kwargs
+                )
+                await self._post_execute(call, success, result, langfuse_span)
+                return (success, result)
 
             # Try to execute playbook in other agents (fallback)
             for agent in self.other_agents:
