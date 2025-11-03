@@ -341,6 +341,7 @@ class PlaybookLLMExecution(LLMExecution):
         current_say_content = ""
         say_start_pos = 0
         say_recipient = ""
+        say_stream_id = None  # Track stream ID for channel-based streaming
         processed_up_to = 0  # Track how much of buffer we've already processed
         say_has_placeholders = False  # Track if current Say has {$var} placeholders
 
@@ -384,7 +385,17 @@ class PlaybookLLMExecution(LLMExecution):
                             # Set flag indicating we're actively streaming Say() calls
                             # This prevents double-processing when the generated code executes
                             self.agent._currently_streaming = True
-                            await self.agent.start_streaming_say(say_recipient)
+                            # Use channel-based streaming infrastructure
+                            stream_result = (
+                                await self.agent.start_streaming_say_via_channel(
+                                    say_recipient
+                                )
+                            )
+                            say_stream_id = (
+                                stream_result.stream_id
+                                if stream_result.should_stream
+                                else None
+                            )
                         else:
                             # Not a user/human recipient, skip streaming for this Say call
                             processed_up_to = recipient_end_pos + len(
@@ -412,21 +423,29 @@ class PlaybookLLMExecution(LLMExecution):
 
                     # If we deferred streaming due to placeholders, stream entire resolved content
                     # Otherwise, only stream the delta
-                    if say_has_placeholders:
-                        # Stream entire resolved content
-                        if final_content:
-                            await self.agent.stream_say_update(final_content)
-                    else:
-                        # Stream only new content since last update
-                        if len(final_content) > len(current_say_content):
-                            new_content = final_content[len(current_say_content) :]
-                            if new_content:
-                                await self.agent.stream_say_update(new_content)
+                    if say_stream_id:
+                        if say_has_placeholders:
+                            # Stream entire resolved content
+                            if final_content:
+                                await self.agent.stream_say_update_via_channel(
+                                    say_stream_id, say_recipient, final_content
+                                )
+                        else:
+                            # Stream only new content since last update
+                            if len(final_content) > len(current_say_content):
+                                new_content = final_content[len(current_say_content) :]
+                                if new_content:
+                                    await self.agent.stream_say_update_via_channel(
+                                        say_stream_id, say_recipient, new_content
+                                    )
 
-                    await self.agent.complete_streaming_say()
+                        await self.agent.complete_streaming_say_via_channel(
+                            say_stream_id, say_recipient, final_content
+                        )
                     in_say_call = False
                     current_say_content = ""
                     say_recipient = ""
+                    say_stream_id = None
                     say_has_placeholders = False
                     processed_up_to = end_pos + len(end_pattern)
                 else:
@@ -447,7 +466,7 @@ class PlaybookLLMExecution(LLMExecution):
 
                     # Don't stream incrementally if there are placeholders to resolve
                     # Wait until message is complete to resolve and stream
-                    if not say_has_placeholders:
+                    if not say_has_placeholders and say_stream_id:
                         # Don't stream if it ends with escape character (incomplete)
                         if not available_content.endswith("\\"):
                             if len(available_content) > len(current_say_content):
@@ -457,11 +476,15 @@ class PlaybookLLMExecution(LLMExecution):
                                 current_say_content = available_content
 
                                 if new_content:
-                                    await self.agent.stream_say_update(new_content)
+                                    await self.agent.stream_say_update_via_channel(
+                                        say_stream_id, say_recipient, new_content
+                                    )
 
         # If we ended while still in a Say call, complete it
-        if in_say_call:
-            await self.agent.complete_streaming_say()
+        if in_say_call and say_stream_id:
+            await self.agent.complete_streaming_say_via_channel(
+                say_stream_id, say_recipient, current_say_content
+            )
 
         return buffer
 

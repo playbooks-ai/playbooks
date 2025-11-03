@@ -51,8 +51,11 @@ class ChannelStreamObserver(ABC):
             ChannelCreatedEvent, self._on_channel_created_event
         )
 
-    async def _on_channel_created_event(self, event: ChannelCreatedEvent) -> None:
+    def _on_channel_created_event(self, event: ChannelCreatedEvent) -> None:
         """Event handler for channel creation events.
+
+        This is a synchronous handler to ensure the observer is subscribed
+        to channels immediately when they are created, before any streaming begins.
 
         Args:
             event: ChannelCreatedEvent containing channel information
@@ -70,7 +73,12 @@ class ChannelStreamObserver(ABC):
         the observer was registered.
         """
         for channel_id, channel in self.program.channels.items():
-            await self.on_new_channel(channel)
+            if channel_id not in self.subscribed_channels:
+                channel.add_stream_observer(self)
+                self.subscribed_channels.add(channel_id)
+                debug(
+                    f"ChannelStreamObserver: Subscribed to existing channel {channel_id}"
+                )
 
     async def on_stream_start(self, event: StreamStartEvent) -> None:
         """Handle stream start event.

@@ -55,3 +55,40 @@ def test_mcp_server_instance():
     server = get_test_server()
     server.reset_data()
     return server.get_server()
+
+
+def extract_messages_from_cli_output(output: str) -> list[str]:
+    """Extract message content from CLI output.
+
+    Parses lines like:
+    💬 HelloWorld(agent 1000) → User(human): Hello! Welcome to the Playbooks system!
+
+    Returns list of message contents (the part after the colon).
+    """
+    messages = []
+    # Pattern to match message lines: 💬 Sender → Recipient: message
+    # The message might span multiple lines if wrapped
+    lines = output.split("\n")
+
+    current_message = None
+    for line in lines:
+        # Check if this is a message line (starts with 💬)
+        if "💬" in line and "→" in line and ":" in line:
+            # Extract the message content (everything after the last colon)
+            parts = line.split(":", 1)
+            if len(parts) == 2:
+                message_content = parts[1].strip()
+                if current_message:
+                    messages.append(current_message)
+                current_message = message_content
+        elif current_message and line.strip():
+            # Continuation of previous message (wrapped line)
+            # Only add if it doesn't start a new section (like "Error" or another message)
+            if not line.startswith(("Error", "💬", "---", "Playbooks")):
+                current_message += " " + line.strip()
+
+    # Add the last message if any
+    if current_message:
+        messages.append(current_message)
+
+    return messages

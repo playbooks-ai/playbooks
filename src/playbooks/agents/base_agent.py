@@ -237,7 +237,11 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             return
 
         # Add to current frame context if available
-        if hasattr(self, "state") and self.state.call_stack.peek():
+        if (
+            hasattr(self, "state")
+            and hasattr(self.state, "call_stack")
+            and self.state.call_stack.peek()
+        ):
             current_frame = self.state.call_stack.peek()
             if current_frame.playbook == "Say":
                 current_frame = self.state.call_stack.frames[-2]

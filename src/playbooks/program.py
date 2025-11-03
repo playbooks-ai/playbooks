@@ -374,7 +374,8 @@ class ProgramAgentsCommunicationMixin:
 
             if receiver_spec in ["human", "user"]:
                 recipient_id = "human"
-                recipient_klass = "human"
+                recipient_agent = self.agents_by_id.get("human")
+                recipient_klass = recipient_agent.klass if recipient_agent else "User"
             elif not receiver_spec.startswith("meeting "):
                 # Direct agent communication - parse to structured ID
                 recipient_agent_id = AgentID.parse(receiver_spec)
@@ -985,8 +986,10 @@ class Program(ProgramAgentsCommunicationMixin):
         Returns:
             Participant instance (AgentParticipant or HumanParticipant)
         """
+        from .agents.human_agent import HumanAgent
+
         if isinstance(entity, BaseAgent):
-            if entity.klass == HUMAN_AGENT_KLASS:
+            if isinstance(entity, HumanAgent):
                 return HumanParticipant(entity.id, entity.klass, agent=entity)
             return AgentParticipant(entity)
         elif entity in ["human", "user"]:

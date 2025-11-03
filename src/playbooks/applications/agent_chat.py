@@ -46,7 +46,6 @@ from playbooks.debug_logger import debug
 from playbooks.events import Event
 from playbooks.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
-from playbooks.message import MessageType
 from playbooks.program import Program
 from playbooks.user_output import user_output
 from playbooks.utils.error_utils import check_playbooks_health
@@ -126,16 +125,24 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
         """Display stream start in terminal."""
         self.active_streams[event.stream_id] = {
             "agent_klass": agent_name,
+            "sender_id": event.sender_id,
+            "recipient_id": event.recipient_id,
+            "recipient_klass": event.recipient_klass,
             "content": "",
         }
-        # Show recipient if available (for multi-human scenarios)
+        # Format: 💬 HelloWorld(agent 1000) → Human(user):
+        sender_display = f"{agent_name}(agent {event.sender_id})"
         if event.recipient_id and event.recipient_klass:
+            recipient_display = f"{event.recipient_klass}({event.recipient_id})"
             console.print(
-                f"\n[green]{agent_name}[/green] → [yellow]{event.recipient_klass}({event.recipient_id})[/yellow]: ",
+                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: ",
                 end="",
             )
         else:
-            console.print(f"\n[green]{agent_name}:[/green] ", end="")
+            console.print(
+                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple]: ",
+                end="",
+            )
 
     async def _display_chunk(self, event: StreamChunkEvent) -> None:
         """Display stream chunk in terminal."""
@@ -151,17 +158,42 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
 
     async def _display_buffered(self, event: StreamCompleteEvent) -> None:
         """Display buffered complete message in terminal (non-streaming mode)."""
-        # Get agent name from active streams or event
-        agent_name = "Agent"
+        # Get sender/recipient info from active streams or event
         if event.stream_id in self.active_streams:
             stream_data = self.active_streams[event.stream_id]
-            agent_name = stream_data["agent_klass"]
+            sender_klass = stream_data["agent_klass"]
+            sender_id = stream_data["sender_id"]
+            recipient_id = stream_data.get("recipient_id")
+            recipient_klass = stream_data.get("recipient_klass")
             content = event.final_message.content or stream_data["content"]
             del self.active_streams[event.stream_id]
         else:
+            # Fallback to extracting from event
+            sender_klass = event.final_message.sender_klass or "Agent"
+            sender_id = (
+                event.final_message.sender_id.id
+                if event.final_message.sender_id
+                else "unknown"
+            )
+            recipient_id = (
+                event.final_message.recipient_id.id
+                if event.final_message.recipient_id
+                else None
+            )
+            recipient_klass = event.final_message.recipient_klass
             content = event.final_message.content
 
-        console.print(f"\n[green]{agent_name}:[/green] {content}")
+        # Format: 💬 HelloWorld(agent 1000) → Human(user): message
+        sender_display = f"{sender_klass}(agent {sender_id})"
+        if recipient_id and recipient_klass:
+            recipient_display = f"{recipient_klass}({recipient_id})"
+            console.print(
+                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: {content}"
+            )
+        else:
+            console.print(
+                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple]: {content}"
+            )
 
 
 class SessionLogWrapper:
@@ -189,7 +221,6 @@ class SessionLogWrapper:
 # Store original methods for restoring later
 original_wait_for_message = MessagingMixin.WaitForMessage
 original_broadcast_to_meeting = None  # Will be set after MeetingManager is imported
-original_route_message = None  # Will be set after Program is loaded
 
 
 @functools.wraps(original_wait_for_message)
@@ -297,51 +328,6 @@ async def patched_broadcast_to_meeting_as_owner(
         )
 
 
-async def patched_route_message(
-    self,
-    sender_id: str,
-    sender_klass: str,
-    receiver_spec: str,
-    message: str,
-    message_type=MessageType.DIRECT,
-    meeting_id: str = None,
-):
-    """Patched version of route_message that displays agent-to-agent messages."""
-    # Extract receiver info
-    from playbooks.identifiers import AgentID
-
-    debug(
-        "Patched route message",
-        sender_id=sender_id,
-        receiver_spec=receiver_spec,
-        message=message[:50],
-    )
-
-    recipient_agent_id = AgentID.parse(receiver_spec)
-    recipient_id = recipient_agent_id.id
-
-    recipient = self.agents_by_id.get(recipient_id)
-    recipient_klass = recipient.klass if recipient else "Unknown"
-
-    # Display agent-to-agent message with formatting
-    if message != EOM:
-        console.print(
-            f"\n[bold magenta]💬 Message[/bold magenta]: [purple]{sender_klass}({sender_id})[/purple] → [purple]{recipient_klass}({recipient_id})[/purple]: {message}"
-        )
-
-    # Call the original method
-    if original_route_message:
-        return await original_route_message(
-            self,
-            sender_id,
-            sender_klass,
-            receiver_spec,
-            message,
-            message_type,
-            meeting_id,
-        )
-
-
 async def main(
     program_paths: str,
     verbose: bool,
@@ -390,14 +376,13 @@ async def main(
         raise
 
     # Store original methods and apply patches after playbooks are loaded
-    global original_broadcast_to_meeting, original_route_message
+    global original_broadcast_to_meeting
     original_broadcast_to_meeting = MeetingManager.broadcast_to_meeting_as_owner
-    original_route_message = Program.route_message
 
     # Apply patches
     MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting_as_owner
-    if not stream:
-        Program.route_message = patched_route_message
+    # Note: Message display is now handled by ChannelStreamObserver for both
+    # streaming and non-streaming modes, so no need to patch route_message
 
     pubsub = PubSub()
 
@@ -463,8 +448,6 @@ async def main(
         MessagingMixin.WaitForMessage = original_wait_for_message
         if original_broadcast_to_meeting:
             MeetingManager.broadcast_to_meeting_as_owner = original_broadcast_to_meeting
-        if original_route_message:
-            Program.route_message = original_route_message
 
 
 if __name__ == "__main__":

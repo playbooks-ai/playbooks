@@ -1,3 +1,5 @@
+import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
@@ -6,6 +8,7 @@ from playbooks import Playbooks
 from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.agents.mcp_agent import MCPAgent
 from playbooks.constants import EOM, EXECUTION_FINISHED
+from tests.conftest import extract_messages_from_cli_output
 from tests.unit.playbooks.test_mcp_end_to_end import InMemoryMCPTransport
 
 
@@ -327,3 +330,79 @@ async def test_example_storyteller(test_examples_dir):
     log = character_creator.state.session_log.to_log_full()
     print(log)
     assert "CharacterCreator.CreateNewCharacter" in log
+
+
+@pytest.mark.integration
+def test_streaming_vs_nonstreaming_consistency(test_data_dir):
+    """Test that streaming and non-streaming modes produce the same messages.
+
+    Regression test for architectural changes to ensure both modes display
+    the same content to users.
+    """
+    playbook_path = test_data_dir / "01-hello-playbooks.pb"
+
+    # Run with streaming enabled
+    result_streaming = subprocess.run(
+        ["poetry", "run", "playbooks", "run", str(playbook_path), "--stream", "true"],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parent.parent.parent,  # Project root
+    )
+
+    # Run with streaming disabled
+    result_no_streaming = subprocess.run(
+        ["poetry", "run", "playbooks", "run", str(playbook_path), "--stream", "false"],
+        capture_output=True,
+        text=True,
+        cwd=Path(__file__).parent.parent.parent,  # Project root
+    )
+
+    # Both should succeed
+    assert (
+        result_streaming.returncode == 0
+    ), f"Streaming mode failed: {result_streaming.stderr}"
+    assert (
+        result_no_streaming.returncode == 0
+    ), f"Non-streaming mode failed: {result_no_streaming.stderr}"
+
+    # Extract messages from both outputs
+    messages_streaming = extract_messages_from_cli_output(result_streaming.stdout)
+    messages_no_streaming = extract_messages_from_cli_output(result_no_streaming.stdout)
+
+    # Print for debugging if test fails
+    if messages_streaming != messages_no_streaming:
+        print("\n=== STREAMING OUTPUT ===")
+        print(result_streaming.stdout)
+        print("\n=== NON-STREAMING OUTPUT ===")
+        print(result_no_streaming.stdout)
+        print("\n=== EXTRACTED MESSAGES (streaming) ===")
+        for i, msg in enumerate(messages_streaming):
+            print(f"{i}: {msg}")
+        print("\n=== EXTRACTED MESSAGES (non-streaming) ===")
+        for i, msg in enumerate(messages_no_streaming):
+            print(f"{i}: {msg}")
+
+    # Both modes should produce the same messages
+    assert len(messages_streaming) == len(
+        messages_no_streaming
+    ), f"Different number of messages: streaming={len(messages_streaming)}, non-streaming={len(messages_no_streaming)}"
+
+    # Compare each message (allowing for minor whitespace differences)
+    for i, (msg_stream, msg_no_stream) in enumerate(
+        zip(messages_streaming, messages_no_streaming)
+    ):
+        # Normalize whitespace for comparison
+        normalized_stream = " ".join(msg_stream.split())
+        normalized_no_stream = " ".join(msg_no_stream.split())
+        assert (
+            normalized_stream == normalized_no_stream
+        ), f"Message {i} differs:\nStreaming: {msg_stream}\nNon-streaming: {msg_no_stream}"
+
+    # Verify we got the expected messages
+    assert len(messages_streaming) == 3, "Should have 3 messages from HelloWorldDemo"
+    assert "Hello" in messages_streaming[0] and "Playbooks" in messages_streaming[0]
+    assert (
+        "demo" in messages_streaming[1].lower()
+        and "playbooks" in messages_streaming[1].lower()
+    )
+    assert "Goodbye" in messages_streaming[2] or "goodbye" in messages_streaming[2]
