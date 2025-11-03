@@ -61,7 +61,7 @@ class PlaybookCall(SessionLogItem):
                 elif isinstance(arg, Artifact):
                     formatted_args.append(f"${arg.name}")  # Show reference
                 else:
-                    formatted_args.append(str(arg))
+                    formatted_args.append(self._format_arg(arg))
             code.append(", ".join(formatted_args))
 
         # Format kwargs
@@ -77,11 +77,36 @@ class PlaybookCall(SessionLogItem):
                 elif isinstance(v, Artifact):
                     formatted_kwargs.append(f"{k}=${v.name}")
                 else:
-                    formatted_kwargs.append(f"{k}={v}")
+                    formatted_kwargs.append(f"{k}={self._format_arg(v)}")
             code.append(", ".join(formatted_kwargs))
 
         code.append(")")
         return "".join(code)
+
+    def _format_arg(self, arg: Any) -> str:
+        """Format a single argument for display in playbook call string.
+
+        Uses compact representation for Message objects and lists of messages.
+
+        Args:
+            arg: Argument value to format
+
+        Returns:
+            Formatted string representation of the argument
+        """
+        from playbooks.message import Message
+
+        # Handle list of messages compactly
+        if isinstance(arg, list) and len(arg) > 0 and isinstance(arg[0], Message):
+            formatted_messages = [f'"{msg.to_compact_str()}"' for msg in arg]
+            return f"[{', '.join(formatted_messages)}]"
+
+        # Handle single message compactly
+        if isinstance(arg, Message):
+            return f'"{arg.to_compact_str()}"'
+
+        # Default to str() for other types
+        return str(arg)
 
     def to_log_full(self) -> str:
         """Return full log representation of the call.

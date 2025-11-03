@@ -82,6 +82,34 @@ class Message:
         )
         return f"{message_type}Message from {self.sender_klass}(agent {self.sender_id}) to {self.recipient_klass}(agent {self.recipient_id}){meeting_message}: {self.content}"
 
+    def to_compact_str(self) -> str:
+        """Return compact string representation for LLM context.
+
+        Format: "SenderKlass(agent sender_id) → RecipientKlass(recipient_id): content"
+        Example: "StoryTeller(agent 1000) → CharacterCreator(agent 1001): Hi! Could you..."
+
+        Returns:
+            Compact string representation similar to CLI output format
+        """
+        # Format sender
+        sender = f"{self.sender_klass}(agent {self.sender_id})"
+
+        # Format recipient
+        if self.recipient_id and self.recipient_klass:
+            if self.recipient_id == "user" or self.recipient_klass == "Human":
+                recipient = f"{self.recipient_klass}({self.recipient_id})"
+            else:
+                recipient = f"{self.recipient_klass}(agent {self.recipient_id})"
+        else:
+            recipient = "all"
+
+        # Format message content (truncate if very long)
+        content = self.content
+        if len(content) > 100:
+            content = content[:97] + "..."
+
+        return f"{sender} → {recipient}: {content}"
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert message to dictionary representation.
 
