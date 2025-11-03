@@ -9,6 +9,7 @@ from playbooks.channels.stream_events import (
     StreamCompleteEvent,
     StreamStartEvent,
 )
+from playbooks.identifiers import AgentID
 from playbooks.message import Message, MessageType
 
 
@@ -80,9 +81,9 @@ def channel(participants):
 def sample_message():
     """Create a sample message."""
     return Message(
-        sender_id="agent1",
+        sender_id=AgentID("agent1"),
         sender_klass="TestAgent",
-        recipient_id="agent2",
+        recipient_id=AgentID("agent2"),
         recipient_klass="TestAgent",
         message_type=MessageType.DIRECT,
         content="Test message",
@@ -131,38 +132,38 @@ class TestChannelInit:
 class TestChannelObserverManagement:
     """Test observer management."""
 
-    def test_add_observer(self, channel):
+    def test_add_stream_observer(self, channel):
         """Test adding a message observer."""
         observer = MockMessageObserver()
-        initial_count = len(channel.observers)
+        initial_count = len(channel.stream_observers)
 
-        channel.add_observer(observer)
+        channel.add_stream_observer(observer)
 
-        assert len(channel.observers) == initial_count + 1
-        assert observer in channel.observers
+        assert len(channel.stream_observers) == initial_count + 1
+        assert observer in channel.stream_observers
 
     def test_add_duplicate_observer_ignored(self, channel):
         """Test that adding a duplicate observer is ignored."""
         observer = MockMessageObserver()
-        channel.add_observer(observer)
-        initial_count = len(channel.observers)
+        channel.add_stream_observer(observer)
+        initial_count = len(channel.stream_observers)
 
-        channel.add_observer(observer)
+        channel.add_stream_observer(observer)
 
-        assert len(channel.observers) == initial_count
+        assert len(channel.stream_observers) == initial_count
 
-    def test_remove_observer(self, channel):
+    def test_remove_message_observer(self, channel):
         """Test removing a message observer."""
         observer = MockMessageObserver()
-        channel.add_observer(observer)
-        initial_count = len(channel.observers)
+        channel.add_stream_observer(observer)
+        initial_count = len(channel.stream_observers)
 
-        channel.remove_observer(observer)
+        channel.remove_stream_observer(observer)
 
-        assert len(channel.observers) == initial_count - 1
-        assert observer not in channel.observers
+        assert len(channel.stream_observers) == initial_count - 1
+        assert observer not in channel.stream_observers
 
-    def test_add_stream_observer(self, channel):
+    def test_add_stream_observer_with_stream_type(self, channel):
         """Test adding a stream observer."""
         observer = MockStreamObserver()
         initial_count = len(channel.stream_observers)
@@ -182,7 +183,7 @@ class TestChannelObserverManagement:
 
         assert len(channel.stream_observers) == initial_count
 
-    def test_remove_stream_observer(self, channel):
+    def test_remove_stream_observer_with_stream_type(self, channel):
         """Test removing a stream observer."""
         observer = MockStreamObserver()
         channel.add_stream_observer(observer)
@@ -261,27 +262,17 @@ class TestChannelMessaging:
         # But our MockParticipant actually tracks deliveries
         assert len(participants[2].delivered_messages) == 1
 
-    async def test_send_notifies_observers(self, channel, sample_message):
-        """Test that sending a message notifies observers."""
-        observer = MockMessageObserver()
-        channel.add_observer(observer)
+    async def test_send_delivers_to_participants_only(self, channel, sample_message):
+        """Test that send() delivers to participants, not observers."""
+        observer = MockStreamObserver()
+        channel.add_stream_observer(observer)
 
         await channel.send(sample_message, sender_id="agent1")
 
-        assert len(observer.messages) == 1
-        assert observer.messages[0] == sample_message
-
-    async def test_send_with_multiple_observers(self, channel, sample_message):
-        """Test sending with multiple observers."""
-        observer1 = MockMessageObserver()
-        observer2 = MockMessageObserver()
-        channel.add_observer(observer1)
-        channel.add_observer(observer2)
-
-        await channel.send(sample_message, sender_id="agent1")
-
-        assert len(observer1.messages) == 1
-        assert len(observer2.messages) == 1
+        # Observers are not notified on regular send - only on streaming
+        assert len(observer.stream_starts) == 0
+        assert len(observer.stream_chunks) == 0
+        assert len(observer.stream_completes) == 0
 
 
 @pytest.mark.asyncio
@@ -293,11 +284,15 @@ class TestChannelStreaming:
         observer = MockStreamObserver()
         channel.add_stream_observer(observer)
 
+        test_stream_id = "test-stream-id-1"
         stream_id = await channel.start_stream(
-            sender_id="agent1", sender_klass="TestAgent", receiver_spec="agent2"
+            stream_id=test_stream_id,
+            sender_id="agent1",
+            sender_klass="TestAgent",
+            receiver_spec="agent2",
         )
 
-        assert stream_id is not None
+        assert stream_id == test_stream_id
         assert len(observer.stream_starts) == 1
         assert observer.stream_starts[0].stream_id == stream_id
         assert observer.stream_starts[0].sender_id == "agent1"
@@ -307,7 +302,10 @@ class TestChannelStreaming:
         observer = MockStreamObserver()
         channel.add_stream_observer(observer)
 
-        stream_id = await channel.start_stream(sender_id="agent1")
+        test_stream_id = "test-stream-id-2"
+        stream_id = await channel.start_stream(
+            stream_id=test_stream_id, sender_id="agent1"
+        )
         await channel.stream_chunk(stream_id, "Hello ")
         await channel.stream_chunk(stream_id, "world!")
 
@@ -325,7 +323,10 @@ class TestChannelStreaming:
         observer = MockStreamObserver()
         channel.add_stream_observer(observer)
 
-        stream_id = await channel.start_stream(sender_id="agent1")
+        test_stream_id = "test-stream-id-3"
+        stream_id = await channel.start_stream(
+            stream_id=test_stream_id, sender_id="agent1"
+        )
         await channel.stream_chunk(stream_id, "Hello")
         await channel.complete_stream(stream_id, sample_message)
 
@@ -347,7 +348,10 @@ class TestChannelStreaming:
         self, channel, sample_message
     ):
         """Test that completing a stream removes it from active streams."""
-        stream_id = await channel.start_stream(sender_id="agent1")
+        test_stream_id = "test-stream-id-4"
+        stream_id = await channel.start_stream(
+            stream_id=test_stream_id, sender_id="agent1"
+        )
         await channel.complete_stream(stream_id, sample_message)
 
         # Try to stream another chunk - should fail
@@ -360,8 +364,9 @@ class TestChannelStreaming:
         channel.add_stream_observer(observer)
 
         # Start stream
+        test_stream_id = "test-stream-id-5"
         stream_id = await channel.start_stream(
-            sender_id="agent1", sender_klass="TestAgent"
+            stream_id=test_stream_id, sender_id="agent1", sender_klass="TestAgent"
         )
 
         # Stream chunks

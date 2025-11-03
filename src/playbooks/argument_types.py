@@ -6,9 +6,11 @@ from typing import Any
 
 @dataclass
 class ArgumentValue:
-    """Base class for typed argument values."""
+    """Base class for typed argument values.
 
-    pass
+    Used to distinguish between literal values and variable references
+    in playbook argument handling.
+    """
 
 
 @dataclass

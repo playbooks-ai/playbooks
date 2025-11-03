@@ -1,8 +1,15 @@
+"""Playbook compilation system.
+
+This module handles the compilation of playbook files from various formats
+(.pb, .md) into executable Python code, with support for LLM-based processing,
+metadata extraction, and parallel compilation.
+"""
+
 import hashlib
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Iterator, List, NamedTuple, Tuple
+from typing import Dict, Iterator, List, NamedTuple, Optional, Tuple
 
 import frontmatter
 from rich.console import Console
@@ -179,25 +186,32 @@ class Compiler:
         return compilation_results
 
     def compile(
-        self, file_path: str = None, content: str = None
+        self, file_path: Optional[str] = None, content: Optional[str] = None
     ) -> Tuple[dict, str, Path]:
-        """
-        Compile a single .pb file.
+        """Compile a single .pb file.
 
         Args:
-            file_path: Path to the file being compiled
+            file_path: Path to the file being compiled (optional if content provided)
+            content: File content to compile (optional if file_path provided)
 
         Returns:
-            Tuple[dict, str, Path]: (frontmatter_dict, compiled_content, cache_path)
+            Tuple of (frontmatter_dict, compiled_content, cache_path)
+
+        Raises:
+            ValueError: If neither file_path nor content is provided, or both are provided
         """
-        if file_path and content or not file_path and not content:
+        if not file_path and not content:
             raise ValueError("Either file_path or content must be provided")
+
+        if file_path and content:
+            raise ValueError(
+                "Cannot provide both file_path and content - use one or the other"
+            )
 
         if file_path:
             with open(file_path, "r") as f:
                 content = f.read()
-        else:
-            content = content
+        # else: content is already set
 
         # Create a FileCompilationSpec and process it
         spec = FileCompilationSpec(
@@ -211,15 +225,16 @@ class Compiler:
 
         return result.frontmatter_dict, result.content, Path(result.compiled_file_path)
 
-    def _extract_agents(self, content: str) -> List[dict]:
-        """
-        Extract individual agents from markdown content.
+    def _extract_agents(self, content: str) -> List[Dict[str, str]]:
+        """Extract individual agents from markdown content.
+
+        Parses markdown AST and groups content under H1 headings as agents.
 
         Args:
             content: Markdown content (already has frontmatter removed)
 
         Returns:
-            List of agent dictionaries with name and content
+            List of agent dictionaries with 'name' and 'content' keys
         """
         # Parse markdown AST
         ast = markdown_to_ast(content)
@@ -271,9 +286,12 @@ class Compiler:
         cache_filename = f"{safe_name}_{cache_key}.pbasm"
         return cache_dir / cache_filename
 
-    def _compile_agent_with_caching(self, agent_info: dict) -> FileCompilationResult:
-        """
-        Compile a single agent with caching, suitable for parallel execution.
+    def _compile_agent_with_caching(
+        self, agent_info: Dict[str, str]
+    ) -> FileCompilationResult:
+        """Compile a single agent with caching, suitable for parallel execution.
+
+        Checks cache first, compiles if needed, and saves result to cache.
 
         Args:
             agent_info: Dictionary with 'name' and 'content' keys

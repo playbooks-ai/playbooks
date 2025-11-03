@@ -1,3 +1,9 @@
+"""Built-in playbooks for common agent operations.
+
+This module provides standard playbooks that are automatically available
+to all agents, including messaging, artifact handling, and system operations.
+"""
+
 from ..compiler import Compiler
 from ..utils.llm_config import LLMConfig
 from ..utils.markdown_to_ast import markdown_to_ast
@@ -27,7 +33,6 @@ class BuiltinPlaybooks:
         """
         code_block = '''
 ```python
-from playbooks.utils.spec_utils import SpecUtils
 from playbooks.llm_messages.types import ArtifactLLMMessage
 from playbooks.variables import Artifact
 

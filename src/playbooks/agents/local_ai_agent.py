@@ -1,5 +1,11 @@
+"""Local AI agent implementation for direct LLM execution.
+
+This module provides agents that execute playbooks locally using configured
+LLM services without external server communication.
+"""
+
 import logging
-from typing import TYPE_CHECKING, Any, Dict, Type
+from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 from playbooks.agents.namespace_manager import AgentNamespaceManager
 from playbooks.event_bus import EventBus
@@ -89,7 +95,16 @@ class LocalAIAgent(AIAgent):
         source_file_path = h1.get("source_file_path")
 
         # Define __init__ for the new class
-        def __init__(self, event_bus: EventBus, agent_id: str = None, **kwargs):
+        def __init__(
+            self, event_bus: EventBus, agent_id: Optional[str] = None, **kwargs: Any
+        ) -> None:
+            """Initialize the dynamically created agent class.
+
+            Args:
+                event_bus: Event bus for publishing events
+                agent_id: Optional agent ID (generated if not provided)
+                **kwargs: Additional initialization arguments
+            """
             LocalAIAgent.__init__(
                 self,
                 event_bus=event_bus,
@@ -116,22 +131,22 @@ class LocalAIAgent(AIAgent):
     def __init__(
         self,
         event_bus: EventBus,
-        source_line_number: int = None,
-        source_file_path: str = None,
-        agent_id: str = None,
-        program: "Program" = None,
-        **kwargs,
-    ):
+        source_line_number: Optional[int] = None,
+        source_file_path: Optional[str] = None,
+        agent_id: Optional[str] = None,
+        program: Optional["Program"] = None,
+        **kwargs: Any,
+    ) -> None:
         """Initialize a new LocalAIAgent.
 
         Args:
-            klass: The class/type of this agent.
-            description: Human-readable description of the agent.
-            event_bus: The event bus for publishing events.
-            playbooks: Dictionary of playbooks available to this agent.
+            event_bus: The event bus for publishing events
             source_line_number: The line number in the source markdown where this
-                agent is defined.
-            agent_id: Optional agent ID. If not provided, will generate UUID.
+                agent is defined
+            source_file_path: Path to the source file where agent is defined
+            agent_id: Optional agent ID. If not provided, will be generated
+            program: Program instance managing this agent
+            **kwargs: Additional initialization arguments
         """
         super().__init__(
             event_bus=event_bus,

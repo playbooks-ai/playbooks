@@ -1,3 +1,13 @@
+"""LLM helper utilities for making completion requests with caching and tracing.
+
+This module provides a unified interface for LLM interactions, including:
+- Streaming and non-streaming completion requests
+- Automatic retry logic for rate limits and overloads
+- LLM response caching (disk or Redis)
+- Langfuse integration for observability
+- Message preprocessing and consolidation
+"""
+
 import hashlib
 import logging
 import os
@@ -40,9 +50,18 @@ playbooks_handler = PlaybooksLMHandler()
 _original_completion = completion
 
 
-def completion_with_preprocessing(*args, **kwargs):
-    """
-    Wrapper for litellm.completion that applies preprocessing for playbooks-lm models.
+def completion_with_preprocessing(*args: Any, **kwargs: Any) -> Any:
+    """Wrapper for litellm.completion that applies preprocessing for playbooks-lm models.
+
+    This wrapper is injected into litellm to intercept completion calls.
+    Currently handles debugging/logging when verbose mode is enabled.
+
+    Args:
+        *args: Positional arguments passed to litellm.completion
+        **kwargs: Keyword arguments passed to litellm.completion
+
+    Returns:
+        Response from litellm.completion
     """
     model = kwargs.get("model", "")
 
@@ -169,7 +188,19 @@ def retry_on_overload(
 
 @retry_on_overload()
 def _make_completion_request(completion_kwargs: dict) -> str:
-    """Make a non-streaming completion request to the LLM with automatic retries on overload."""
+    """Make a non-streaming completion request to the LLM with automatic retries on overload.
+
+    Args:
+        completion_kwargs: Dictionary of arguments for litellm.completion
+
+    Returns:
+        Full response text from the LLM
+
+    Raises:
+        VendorAPIOverloadedError: If API is overloaded after retries
+        VendorAPIRateLimitError: If rate limit exceeded after retries
+        litellm exceptions: Various litellm exceptions if request fails
+    """
     response = completion(**completion_kwargs)
     return response["choices"][0]["message"]["content"]
 
@@ -179,6 +210,17 @@ def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
 
     Since exceptions occur on the first token (during initial call), we can retry
     the entire stream creation and maintain true streaming.
+
+    Args:
+        completion_kwargs: Dictionary of arguments for litellm.completion
+
+    Yields:
+        Response text chunks as they arrive from the LLM
+
+    Raises:
+        VendorAPIOverloadedError: If API is overloaded after retries
+        VendorAPIRateLimitError: If rate limit exceeded after retries
+        litellm exceptions: Various litellm exceptions if request fails
     """
     max_retries = 5
     base_delay = 1.0
@@ -363,7 +405,16 @@ def get_completion(
 
 
 def remove_empty_messages(messages: List[dict]) -> List[dict]:
-    """Remove empty messages from the list."""
+    """Remove empty messages from the list.
+
+    Filters out messages with empty or whitespace-only content.
+
+    Args:
+        messages: List of message dictionaries
+
+    Returns:
+        Filtered list with empty messages removed
+    """
     return [message for message in messages if message["content"].strip()]
 
 
@@ -390,9 +441,17 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
 
 
 def consolidate_messages(messages: List[dict]) -> List[dict]:
-    """
-    Consolidate consecutive messages where possible
-    Break into separate messages for different roles and to include upto 1 cached message
+    """Consolidate consecutive messages where possible.
+
+    Groups consecutive messages with the same role and combines them into single
+    messages. Handles cache control markers and preserves up to 1 cached message
+    per role group.
+
+    Args:
+        messages: List of message dictionaries to consolidate
+
+    Returns:
+        Consolidated list of messages with consecutive same-role messages merged
     """
 
     # First, group messages that can be combined into a single message
@@ -453,9 +512,17 @@ def consolidate_messages(messages: List[dict]) -> List[dict]:
 
 
 def ensure_upto_N_cached_messages(messages: List[dict]) -> List[dict]:
-    """
-    Ensure that there are at most N cached messages in the list.
-    If there are more than N, keep the last N.
+    """Ensure that there are at most N cached messages in the list.
+
+    Scans messages in reverse order and removes cache_control markers from
+    messages beyond the limit. System messages are always preserved regardless
+    of cache status.
+
+    Args:
+        messages: List of message dictionaries (modified in-place)
+
+    Returns:
+        Modified message list with cache_control markers removed from excess messages
     """
 
     max_cached_messages = 4 - 1  # Keep one for the System message

@@ -123,14 +123,15 @@ class PlaybookStep:
         """Return a string representation of the step."""
         return f"PlaybookStep({self.line_number}, {self.step_type}, {self.content})"
 
-    def execute(self):
+    def execute(self) -> None:
+        """Execute this step (placeholder for future implementation)."""
         pass
 
 
 class PlaybookStepCollection:
     """A collection of playbook steps."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize a playbook step collection."""
         self.steps: Dict[str, PlaybookStep] = {}
         self.ordered_line_numbers: List[str] = []

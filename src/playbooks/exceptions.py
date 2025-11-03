@@ -2,9 +2,11 @@
 
 
 class PlaybooksError(Exception):
-    """Base exception class for all playbooks errors."""
+    """Base exception class for all playbooks errors.
 
-    pass
+    All custom exceptions in the playbooks framework inherit from this class
+    to allow catching all playbooks-specific errors.
+    """
 
 
 class ProgramLoadError(PlaybooksError):
@@ -38,9 +40,11 @@ class VendorAPIRateLimitError(PlaybooksError):
 
 
 class ExecutionFinished(Exception):
-    """Custom exception to indicate that the playbook execution is finished."""
+    """Custom exception to indicate that the playbook execution is finished.
 
-    pass
+    This exception is raised to signal normal completion of playbook execution,
+    allowing clean exit from execution loops and waiting operations.
+    """
 
 
 class KlassNotFoundError(PlaybooksError):

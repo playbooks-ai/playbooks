@@ -1,3 +1,9 @@
+"""Python function-based playbooks.
+
+This module provides playbooks that wrap Python functions decorated with
+@playbook, enabling direct execution of Python code as agent actions.
+"""
+
 import inspect
 from typing import Any, Callable, Dict, Optional
 

@@ -54,7 +54,7 @@ def preprocess_expression(expr: str) -> str:
     # Uses word boundaries to avoid matching inside strings
     pattern = r"\$([a-zA-Z_][a-zA-Z0-9_]*)"
 
-    def replace_dollar(match):
+    def replace_dollar(match: re.Match) -> str:
         var_name = match.group(1)
         return var_name
 
@@ -305,7 +305,9 @@ def bind_call_parameters(
 class ExpressionContext:
     """Minimal context for variable and function resolution."""
 
-    def __init__(self, agent: "Agent", state: "ExecutionState", call: "PlaybookCall"):
+    def __init__(
+        self, agent: "Agent", state: "ExecutionState", call: "PlaybookCall"
+    ) -> None:
         """Initialize expression context.
 
         Args:
@@ -932,7 +934,7 @@ def _node_to_value(
 def _build_attribute_expr(node: ast.Attribute) -> str:
     """Build attribute expression string like $user.name."""
 
-    def build_parts(n):
+    def build_parts(n: ast.AST) -> str:
         if isinstance(n, ast.Name):
             return f"${n.id}"
         elif isinstance(n, ast.Attribute):
@@ -948,7 +950,7 @@ def _restore_variable_prefixes(expr_str: str, call_node: ast.Call) -> str:
     # This is a simple approach - collect all Name nodes that are variables
     var_names = set()
 
-    def collect_var_names(node):
+    def collect_var_names(node: ast.AST) -> None:
         if isinstance(node, ast.Name):
             var_names.add(node.id)
         elif hasattr(node, "_fields"):

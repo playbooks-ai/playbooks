@@ -305,10 +305,12 @@ class TestPlaybookRun:
         run = PlaybookRun("test-run-123", playbooks)
         await run._setup_early_streaming()
 
-        # Verify that stream observer is initialized and subscribed to channels
+        # Verify that stream observer is initialized
         assert run.stream_observer is not None
-        assert run.auto_subscribe_task is not None
-        assert not run.auto_subscribe_task.done()
+
+        # Verify that observer is subscribed to EventBus for channel creation events
+        # (No longer using callbacks - using EventBus instead)
+        assert callable(run.stream_observer._on_channel_created_event)
 
         # Cleanup
         await run.cleanup()

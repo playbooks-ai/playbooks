@@ -6,7 +6,7 @@ LLM-generated Python code. It uses the same "." in name routing logic as
 execute_playbook to find and execute playbooks on other agents.
 """
 
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 if TYPE_CHECKING:
     from playbooks.agents import AIAgent
@@ -15,8 +15,19 @@ if TYPE_CHECKING:
 
 def create_playbook_wrapper(
     playbook_name: str, current_agent: "AIAgent", namespace: "LLMNamespace"
-) -> Callable:
-    async def wrapper(*args, **kwargs):
+) -> Callable[..., Any]:
+    """Create a wrapper function for executing a playbook.
+
+    Args:
+        playbook_name: Name of the playbook to execute
+        current_agent: The agent that will execute the playbook
+        namespace: The namespace context for execution
+
+    Returns:
+        An async callable that executes the playbook and returns the result
+    """
+
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
         success, result = await current_agent.execute_playbook(
             playbook_name, args, kwargs
         )
@@ -43,12 +54,13 @@ class AIAgentProxy:
         proxied_agent_klass_name: str,
         current_agent: "AIAgent",
         namespace: "LLMNamespace",
-    ):
+    ) -> None:
         """Initialize the agent proxy.
 
         Args:
             proxied_agent_klass_name: The class name of the agent (e.g., "FileSystemAgent")
             current_agent: The current agent executing the code (needed to access the program)
+            namespace: The namespace context for execution
         """
         self._proxied_agent_klass_name = proxied_agent_klass_name
         self._proxied_agent_klass = current_agent.program.agent_klasses[
@@ -57,7 +69,7 @@ class AIAgentProxy:
         self._current_agent = current_agent
         self._namespace = namespace
 
-    def __getattr__(self, method_name: str) -> Callable:
+    def __getattr__(self, method_name: str) -> Callable[..., Any]:
         """Intercept method calls and route them through execute_playbook.
 
         Args:
@@ -67,7 +79,7 @@ class AIAgentProxy:
             A callable that will execute the playbook on the target agent
 
         Raises:
-            AttributeError: If the method name starts with '_' (private)
+            AttributeError: If the method name starts with '_' (private) or playbook doesn't exist
         """
         # Prevent access to private attributes
         if method_name.startswith("_"):
@@ -87,6 +99,13 @@ class AIAgentProxy:
             )
 
     def _is_coroutine_marker(self) -> bool:
+        """Mark that proxy methods return coroutines.
+
+        This helps the executor identify async functions in the namespace.
+
+        Returns:
+            False (methods return coroutines, not the marker itself)
+        """
         return False
 
     def __repr__(self) -> str:
@@ -99,8 +118,12 @@ def create_agent_proxies(
 ) -> dict[str, AIAgentProxy]:
     """Create agent proxy objects for all agents in the program.
 
+    Creates proxies for all agents except the current agent, enabling
+    cross-agent playbook calls from LLM-generated code.
+
     Args:
         current_agent: The current agent executing the code
+        namespace: The namespace context for execution
 
     Returns:
         Dictionary mapping agent class names to AIAgentProxy instances

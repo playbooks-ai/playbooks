@@ -1,9 +1,16 @@
+"""AI agent implementation for executing playbooks.
+
+This module provides the AIAgent class and related metaclasses for AI-powered
+agents that can execute various types of playbooks, handle LLM interactions,
+and manage execution state.
+"""
+
 import copy
 import hashlib
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from ..argument_types import LiteralValue, VariableReference
 from ..call_stack import CallStackFrame, InstructionPointer
@@ -14,6 +21,7 @@ from ..enums import StartupMode
 from ..event_bus import EventBus
 from ..exceptions import ExecutionFinished
 from ..execution_state import ExecutionState
+from ..identifiers import AgentID
 from ..llm_messages import (
     ExecutionResultLLMMessage,
     FileLoadLLMMessage,
@@ -29,7 +37,6 @@ from ..utils.expression_engine import (
 )
 from ..utils.langfuse_helper import LangfuseHelper
 from ..utils.misc import copy_func
-from ..utils.spec_utils import SpecUtils
 from ..utils.text_utils import indent, simple_shorten
 from ..variables import Artifact
 from .base_agent import BaseAgent, BaseAgentMeta
@@ -40,9 +47,23 @@ if TYPE_CHECKING:
 
 
 class AIAgentMeta(BaseAgentMeta):
-    """Meta class for AIAgent."""
+    """Meta class for AIAgent.
 
-    def __new__(cls, name, bases, attrs):
+    Handles validation of agent metadata and startup mode configuration
+    during class creation.
+    """
+
+    def __new__(cls, name: str, bases: tuple, attrs: dict) -> type:
+        """Create a new AIAgent class with metadata validation.
+
+        Args:
+            name: Class name
+            bases: Base classes
+            attrs: Class attributes
+
+        Returns:
+            New class with validated metadata
+        """
         cls = super().__new__(cls, name, bases, attrs)
         cls.validate_metadata()
         return cls
@@ -52,8 +73,12 @@ class AIAgentMeta(BaseAgentMeta):
         """Get the startup mode for this agent."""
         return getattr(self, "metadata", {}).get("startup_mode", StartupMode.DEFAULT)
 
-    def validate_metadata(self):
-        """Validate the metadata for this agent."""
+    def validate_metadata(self) -> None:
+        """Validate the metadata for this agent.
+
+        Raises:
+            ValueError: If startup_mode is invalid
+        """
         if self.startup_mode not in [StartupMode.DEFAULT, StartupMode.STANDBY]:
             raise ValueError(f"Invalid startup mode: {self.startup_mode}")
 
@@ -124,12 +149,18 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         # Create instance-specific namespace with playbook wrappers
         self._setup_isolated_namespace()
 
-        # Initialize meeting manager
-        self.meeting_manager = MeetingManager(agent=self)
+        self.state = ExecutionState(event_bus, self.klass, self.id)
+
+        # Initialize meeting manager with dependency injection (after state is created)
+        self.meeting_manager = MeetingManager(
+            agent_id=self.id,
+            agent_klass=self.klass,
+            state=self.state,
+            program=self.program,
+            playbook_executor=self,
+        )
 
         self.meeting_manager.ensure_meeting_playbook_kwargs(self.playbooks)
-
-        self.state = ExecutionState(event_bus, self.klass, self.id)
         self.source_line_number = source_line_number
         self.public_json = None
 
@@ -419,79 +450,116 @@ async def {self.bgn_playbook_name}() -> None:
             agent_klass.get_public_information()
             for agent_klass in self.program.agent_klasses.values()
             if agent_klass.klass != self.klass
+            and hasattr(agent_klass, "get_public_information")  # Skip human agents
         ]
 
-    def resolve_target(self, target: str = None, allow_fallback: bool = True) -> str:
-        """Resolve a target specification to an agent ID.
+    def resolve_target(
+        self, target: Optional[str] = None, allow_fallback: bool = True
+    ) -> Optional[str]:
+        """Resolve a target specification to an agent ID or meeting spec.
 
         Args:
-            target: Target specification (agent ID, agent type, "human", etc.)
-            allow_fallback: Whether to use fallback logic when target is None
+            target: Target specification (agent ID, agent type, "human", "meeting", etc.)
+            allow_fallback: Whether to use fallback logic when target is None or not found
 
         Returns:
-            Resolved target agent ID, or None if no fallback allowed and target not found
+            Resolved target identifier (agent ID or meeting spec), or None if not found
         """
         if target is not None:
             target = target.strip()
 
-            # Handle human aliases
-            if target.lower() in ["human", "user"]:
-                return "human"
-
-            # Handle meeting targets (Phase 5)
-            if target == "meeting":
-                # Map "meeting" to current meeting context
-                if meeting_id := self.state.get_current_meeting():
-                    return f"meeting {meeting_id}"
-                return None  # No current meeting
-
-            if SpecUtils.is_meeting_spec(target):
-                return target  # Return as-is for now
-
-            # Handle agent ID targets
-            if SpecUtils.is_agent_spec(target):
-                agent_id = SpecUtils.extract_agent_id(target)
-                return agent_id
-
-            # Check if target is a numeric agent ID
-            if target.isdigit():
-                return target
-
-            # Handle special YLD targets
-            if target == "last_non_human_agent":
-                if (
-                    self.state.last_message_target
-                    and self.state.last_message_target != "human"
-                ):
-                    return self.state.last_message_target
-                return None  # No fallback for this case
-
-            # Handle agent type - find first agent of this type
-            for agent in self.other_agents:
-                if agent.klass == target:
-                    return agent.id
-
-            # If not found, check if Human agent exists with this type name
-            if target == HUMAN_AGENT_KLASS:
-                return "human"
+            # Try explicit target resolution
+            resolved = self._resolve_explicit_target(target)
+            if resolved is not None:
+                return resolved
 
             # Target not found - fallback to human if allowed
             return "human" if allow_fallback else None
 
-        # No target specified - use fallback logic if allowed
-        if not allow_fallback:
+        # No target specified - use context-based fallback
+        return self._resolve_fallback_target() if allow_fallback else None
+
+    def _resolve_explicit_target(self, target: str) -> Optional[str]:
+        """Resolve an explicitly specified target.
+
+        Args:
+            target: Target specification string
+
+        Returns:
+            Resolved target identifier, or None if not found
+        """
+        # Human aliases
+        if target.lower() in ["human", "user"]:
+            return "human"
+
+        # Meeting targets
+        if target == "meeting":
+            if meeting_id := self.state.get_current_meeting():
+                return f"meeting {meeting_id}"
             return None
 
-        # Fallback logic: current context → last 1:1 target → Human
-        # Check current meeting context first
+        if target.startswith("meeting "):
+            return target
+
+        # Agent ID formats (structured or raw)
+        if target.startswith("agent "):
+            return AgentID.parse(target).id
+
+        if target.isdigit():
+            return target
+
+        # Special context targets
+        if target == "last_non_human_agent":
+            if (
+                self.state.last_message_target
+                and self.state.last_message_target != "human"
+            ):
+                return self.state.last_message_target
+            return None
+
+        # Agent by class name
+        return self._find_agent_by_klass(target)
+
+    def _find_agent_by_klass(self, klass: str) -> Optional[str]:
+        """Find first agent matching the given class name.
+
+        Args:
+            klass: Agent class name to search for
+
+        Returns:
+            Agent ID if found, None otherwise
+        """
+        # Search other agents for matching class
+        for agent in self.other_agents:
+            if agent.klass == klass:
+                return agent.id
+
+        # Check if target is the human agent class
+        if klass == HUMAN_AGENT_KLASS:
+            return "human"
+
+        return None
+
+    def _resolve_fallback_target(self) -> str:
+        """Resolve target using context-based fallback logic.
+
+        Fallback order:
+        1. Current meeting context (if in a meeting)
+        2. Last 1:1 message target (conversation continuity)
+        3. Human (default)
+
+        Returns:
+            Fallback target identifier
+        """
+        # Current meeting context
         if meeting_id := self.state.get_current_meeting():
             return f"meeting {meeting_id}"
 
-        # Check last 1:1 target
+        # Last 1:1 conversation target
         if self.state.last_message_target:
             return self.state.last_message_target
 
-        # Default to Human
+        # Default to human
         return "human"
 
     @property

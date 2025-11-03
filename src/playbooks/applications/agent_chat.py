@@ -1,6 +1,6 @@
 #!/usr/bin/env python
-"""
-CLI application for interactive agent chat using playbooks.
+"""CLI application for interactive agent chat using playbooks.
+
 Provides a simple terminal interface for communicating with AI agents.
 """
 
@@ -12,7 +12,7 @@ import select
 import sys
 import uuid
 from pathlib import Path
-from typing import Callable, List
+from typing import Any, Callable, List
 
 # Platform-specific imports for stdin clearing
 try:
@@ -33,6 +33,9 @@ from rich.console import Console
 
 from playbooks import Playbooks
 from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.applications.streaming_observer import (
+    ChannelStreamObserver as BaseChannelStreamObserver,
+)
 from playbooks.channels.stream_events import (
     StreamChunkEvent,
     StreamCompleteEvent,
@@ -94,88 +97,82 @@ def clear_stdin():
 class PubSub:
     """Simple publish-subscribe mechanism for event handling."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.subscribers: List[Callable] = []
 
-    def subscribe(self, callback: Callable):
+    def subscribe(self, callback: Callable) -> None:
         """Subscribe a callback function to receive messages."""
         self.subscribers.append(callback)
 
-    def publish(self, message):
+    def publish(self, message: Any) -> None:
         """Publish a message to all subscribers."""
         for subscriber in self.subscribers:
             subscriber(message)
 
 
-class ChannelStreamObserver:
-    """Observer for channel streaming events - displays agent messages in terminal."""
+class ChannelStreamObserver(BaseChannelStreamObserver):
+    """Terminal-based streaming observer - displays agent messages in the console."""
 
-    def __init__(self, program: Program, stream_enabled: bool = True):
-        self.program = program
-        self.stream_enabled = stream_enabled
+    def __init__(
+        self,
+        program: Program,
+        stream_enabled: bool = True,
+        target_human_id: str = None,
+    ):
+        super().__init__(program, stream_enabled, target_human_id)
         self.active_streams = {}  # stream_id -> {"agent_klass": str, "content": str}
-        self.subscribed_channels = set()
 
-    async def subscribe_to_all_channels(self):
-        """Subscribe to all existing channels and set up subscription for new ones."""
-        # Subscribe to existing channels
-        for channel_id, channel in self.program.channels.items():
-            if channel_id not in self.subscribed_channels:
-                channel.add_stream_observer(self)
-                self.subscribed_channels.add(channel_id)
-                debug(f"ChannelStreamObserver: Subscribed to channel {channel_id}")
-
-    async def on_stream_start(self, event: StreamStartEvent):
-        """Handle stream start - print agent name."""
-        sender = self.program.agents_by_id.get(event.sender_id)
-        agent_name = sender.klass if sender else "Agent"
-
+    async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
+        """Display stream start in terminal."""
         self.active_streams[event.stream_id] = {
             "agent_klass": agent_name,
             "content": "",
         }
-
-        if self.stream_enabled:
+        # Show recipient if available (for multi-human scenarios)
+        if event.recipient_id and event.recipient_klass:
+            console.print(
+                f"\n[green]{agent_name}[/green] → [yellow]{event.recipient_klass}({event.recipient_id})[/yellow]: ",
+                end="",
+            )
+        else:
             console.print(f"\n[green]{agent_name}:[/green] ", end="")
 
-    async def on_stream_chunk(self, event: StreamChunkEvent):
-        """Handle stream chunk - print content incrementally."""
-        if event.stream_id not in self.active_streams:
-            return
+    async def _display_chunk(self, event: StreamChunkEvent) -> None:
+        """Display stream chunk in terminal."""
+        if event.stream_id in self.active_streams:
+            self.active_streams[event.stream_id]["content"] += event.chunk
+        print(event.chunk, end="", flush=True)
 
-        self.active_streams[event.stream_id]["content"] += event.chunk
+    async def _display_complete(self, event: StreamCompleteEvent) -> None:
+        """Display stream completion in terminal."""
+        console.print()  # Newline to finish streaming
+        if event.stream_id in self.active_streams:
+            del self.active_streams[event.stream_id]
 
-        if self.stream_enabled:
-            print(event.chunk, end="", flush=True)
-
-    async def on_stream_complete(self, event: StreamCompleteEvent):
-        """Handle stream completion - print newline."""
-        if event.stream_id not in self.active_streams:
-            return
-
-        stream_data = self.active_streams[event.stream_id]
-
-        if self.stream_enabled:
-            console.print()  # Newline to finish streaming
-        else:
-            # Non-streaming mode: display complete message now
+    async def _display_buffered(self, event: StreamCompleteEvent) -> None:
+        """Display buffered complete message in terminal (non-streaming mode)."""
+        # Get agent name from active streams or event
+        agent_name = "Agent"
+        if event.stream_id in self.active_streams:
+            stream_data = self.active_streams[event.stream_id]
             agent_name = stream_data["agent_klass"]
             content = event.final_message.content or stream_data["content"]
-            console.print(f"\n[green]{agent_name}:[/green] {content}")
+            del self.active_streams[event.stream_id]
+        else:
+            content = event.final_message.content
 
-        # Clean up
-        del self.active_streams[event.stream_id]
+        console.print(f"\n[green]{agent_name}:[/green] {content}")
 
 
 class SessionLogWrapper:
     """Wrapper around session_log that publishes updates."""
 
-    def __init__(self, session_log, pubsub, verbose=False):
+    def __init__(self, session_log: Any, pubsub: PubSub, verbose: bool = False) -> None:
         self._session_log = session_log
         self._pubsub = pubsub
         self.verbose = verbose
 
-    def append(self, msg):
+    def append(self, msg: str) -> None:
         """Append a message to the session log and publish it."""
         self._session_log.append(msg)
 
@@ -185,7 +182,7 @@ class SessionLogWrapper:
     def __iter__(self):
         return iter(self._session_log)
 
-    def __str__(self):
+    def __str__(self) -> str:
         return str(self._session_log)
 
 
@@ -201,24 +198,72 @@ async def patched_wait_for_message(self, source_agent_id: str):
     # For human input, show a prompt before calling the normal WaitForMessage
     # Accept both "human" and "user" as identifiers for human input
     if source_agent_id in ("human", "user"):
-        # Check if there are already messages waiting
-        messages = self._message_buffer
-        human_messages = [msg for msg in messages if msg.sender_id == "human"]
+        # Check if there are already messages waiting using queue peek
+        human_message = await self._message_queue.peek(
+            lambda msg: msg.sender_id.id == "human"
+        )
 
-        if not human_messages:
+        if not human_message:
             # No human messages waiting, show prompt
             console.print()  # Add a newline for spacing
             # Clear stdin buffer to prevent pre-filled input
             await asyncio.to_thread(clear_stdin)
-            user_input = await asyncio.to_thread(
-                console.input, "[bold yellow]User:[/bold yellow] "
-            )
-            # Send the user input and EOM
+
+            # Determine which humans exist in the program
             program: Program = self.program
-            for message in [user_input, EOM]:
+            humans = [
+                a
+                for a in program.agents
+                if a.klass.endswith("Human") or a.id == "human"
+            ]
+
+            # If multiple humans, let user specify which one is speaking
+            if len(humans) > 1:
+                console.print(
+                    f"[dim]Available humans: {', '.join(h.klass for h in humans)}[/dim]"
+                )
+                console.print(
+                    "[dim]Format: HumanName: your message  (e.g., 'Alice: Hello')[/dim]"
+                )
+                user_input = await asyncio.to_thread(
+                    console.input, "[bold yellow]Input:[/bold yellow] "
+                )
+
+                # Parse "HumanName: message" format
+                sender_id = "human"
+                sender_klass = "human"
+                message_content = user_input
+
+                if ": " in user_input:
+                    potential_human_name, rest = user_input.split(": ", 1)
+                    # Check if potential_human_name matches any human
+                    matching_human = next(
+                        (
+                            h
+                            for h in humans
+                            if h.klass.lower() == potential_human_name.lower()
+                        ),
+                        None,
+                    )
+                    if matching_human:
+                        sender_id = matching_human.id
+                        sender_klass = matching_human.klass
+                        message_content = rest
+                    # If no match, treat entire input as message from default "human"
+            else:
+                # Single human, use simple prompt
+                user_input = await asyncio.to_thread(
+                    console.input, "[bold yellow]User:[/bold yellow] "
+                )
+                sender_id = "human"
+                sender_klass = "human"
+                message_content = user_input
+
+            # Send the user input and EOM
+            for message in [message_content, EOM]:
                 await program.route_message(
-                    sender_id="human",
-                    sender_klass="human",
+                    sender_id=sender_id,
+                    sender_klass=sender_klass,
                     receiver_spec=f"agent {self.id}",
                     message=message,
                 )
@@ -263,7 +308,7 @@ async def patched_route_message(
 ):
     """Patched version of route_message that displays agent-to-agent messages."""
     # Extract receiver info
-    from playbooks.utils.spec_utils import SpecUtils
+    from playbooks.identifiers import AgentID
 
     debug(
         "Patched route message",
@@ -272,7 +317,8 @@ async def patched_route_message(
         message=message[:50],
     )
 
-    recipient_id = SpecUtils.extract_agent_id(receiver_spec)
+    recipient_agent_id = AgentID.parse(receiver_spec)
+    recipient_id = recipient_agent_id.id
 
     recipient = self.agents_by_id.get(recipient_id)
     recipient_klass = recipient.klass if recipient else "Unknown"
@@ -357,17 +403,10 @@ async def main(
 
     # Set up channel stream observer for displaying agent messages
     stream_observer = ChannelStreamObserver(playbooks.program, stream_enabled=stream)
+
+    # Subscribe to existing channels
+    # The observer automatically subscribes to ChannelCreatedEvent via EventBus
     await stream_observer.subscribe_to_all_channels()
-
-    # Set up a periodic task to subscribe to new channels as they're created
-    async def auto_subscribe_to_new_channels():
-        """Periodically check for and subscribe to new channels."""
-        while not playbooks.program.execution_finished:
-            await stream_observer.subscribe_to_all_channels()
-            await asyncio.sleep(0.5)  # Check every 500ms
-
-    # Start the auto-subscription task
-    auto_subscribe_task = asyncio.create_task(auto_subscribe_to_new_channels())
 
     # Wrap session logs with SessionLogWrapper for verbose output
     for agent in playbooks.program.agents:
@@ -375,7 +414,7 @@ async def main(
             wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose)
             agent.state.session_log = wrapper
 
-    def log_event(event: Event):
+    def log_event(event: Event) -> None:
         print(event)
 
     # Connect to debug adapter if requested
@@ -407,14 +446,6 @@ async def main(
         user_output.error("Execution error", details=str(e))
         raise
     finally:
-        # Cancel the auto-subscription task
-        if "auto_subscribe_task" in locals():
-            auto_subscribe_task.cancel()
-            try:
-                await auto_subscribe_task
-            except asyncio.CancelledError:
-                pass
-
         # Check for agent errors after execution using standardized error handling
         check_playbooks_health(
             playbooks,

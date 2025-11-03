@@ -1,7 +1,7 @@
 """Traditional playbook execution with defined steps."""
 
 import logging
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..config import config
 from ..constants import EXECUTION_FINISHED
@@ -36,7 +36,7 @@ class PlaybookLLMExecution(LLMExecution):
     This implements the unified execution strategy that replaced MarkdownPlaybookExecution.
     """
 
-    def __init__(self, agent: "Agent", playbook: "LLMPlaybook"):
+    def __init__(self, agent: "Agent", playbook: "LLMPlaybook") -> None:
         """Initialize playbook execution.
 
         Args:
@@ -46,9 +46,6 @@ class PlaybookLLMExecution(LLMExecution):
         super().__init__(agent, playbook)
 
         # Initialize debug handler based on whether debug server is available
-        # debug(
-        #     f"[DEBUG] Initializing debug handler - agent has program: {hasattr(agent, 'program')}, program exists: {agent.program if hasattr(agent, 'program') else 'No'}, debug server exists: {agent.program._debug_server if hasattr(agent, 'program') and agent.program else 'No'}",
-        # )
         if hasattr(agent, "program") and agent.program and agent.program._debug_server:
             # Check if debug server already has a debug handler
             if (
@@ -56,25 +53,24 @@ class PlaybookLLMExecution(LLMExecution):
                 and agent.program._debug_server.debug_handler
             ):
                 # Use the existing debug handler from the debug server
-                # debug(
-                #     "[DEBUG] Using existing DebugHandler from debug server",
-                # )
                 self.debug_handler = agent.program._debug_server.debug_handler
             else:
                 # Create new debug handler and connect it
-                # debug(
-                #     "[DEBUG] Creating new DebugHandler and connecting to debug server",
-                # )
                 self.debug_handler = DebugHandler(agent.program._debug_server)
                 # Store reference in debug server for bidirectional communication
                 agent.program._debug_server.debug_handler = self.debug_handler
-                # debug(
-                #     "[DEBUG] New debug handler connected to debug server",
-                # )
         else:
             self.debug_handler = NoOpDebugHandler()
 
     async def pre_execute(self, call: PlaybookCall) -> None:
+        """Prepare for playbook execution by adding implementation to call stack.
+
+        Resolves description placeholders and adds playbook implementation
+        message to the call stack for LLM context.
+
+        Args:
+            call: The playbook call being executed
+        """
         llm_message = []
         markdown_for_llm = self.playbook.markdown  # Default to original markdown
 
@@ -106,8 +102,19 @@ class PlaybookLLMExecution(LLMExecution):
         # Add the message object directly to the call stack
         self.agent.state.call_stack.add_llm_message(playbook_impl_msg)
 
-    async def execute(self, *args, **kwargs) -> Any:
-        """Execute the playbook with traditional step-by-step logic."""
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        """Execute the playbook with traditional step-by-step logic.
+
+        Loops until execution completes, making LLM calls for each step.
+        Handles streaming, code execution, and playbook completion.
+
+        Args:
+            *args: Positional arguments for the playbook
+            **kwargs: Keyword arguments for the playbook
+
+        Returns:
+            Return value from the playbook execution (if any)
+        """
         done = False
         return_value = None
 
@@ -227,38 +234,6 @@ class PlaybookLLMExecution(LLMExecution):
             #             elif playbook_call.playbook_klass == "LoadArtifact":
             #                 artifacts_to_load.append(playbook_call.args[0])
 
-            #     # Return value
-            #     if line.return_value:
-            #         return_value = line.return_value
-            #         str_return_value = str(return_value)
-            #         # If it's a variable reference or expression (starts with $), evaluate it
-            #         if str_return_value.startswith("$"):
-            #             context = ExpressionContext(
-            #                 agent=self.agent, state=self.agent.state, call=None
-            #             )
-            #             return_value = context.evaluate_expression(str_return_value)
-
-            #     # Wait for external event
-            #     if line.wait_for_user_input:
-            #         await self.agent.WaitForMessage("human")
-            #     elif line.wait_for_agent_input:
-            #         target_agent_id = self._resolve_yld_target(
-            #             line.wait_for_agent_target
-            #         )
-            #         if target_agent_id:
-            #             # Check if this is a meeting target
-            #             if SpecUtils.is_meeting_spec(target_agent_id):
-            #                 meeting_id = SpecUtils.extract_meeting_id(target_agent_id)
-            #                 if meeting_id == "current":
-            #                     meeting_id = (
-            #                         self.agent.state.call_stack.peek().meeting_id
-            #                     )
-            #                 await self.agent.WaitForMessage(f"meeting {meeting_id}")
-            #             else:
-            #                 await self.agent.WaitForMessage(target_agent_id)
-            #     elif line.playbook_finished:
-            #         done = True
-
             # Check if exiting program
             if llm_response.execution_result.exit_program:
                 raise ExecutionFinished(EXECUTION_FINISHED)
@@ -289,13 +264,27 @@ class PlaybookLLMExecution(LLMExecution):
         self,
         instruction: str,
         agent_instructions: str,
-        artifacts_to_load: List[str] = [],
-    ):
+        artifacts_to_load: List[str] = None,
+    ) -> str:
         """Make an LLM call for playbook execution.
 
         Increments execution_counter before the call and passes it to the prompt
         so the LLM can include it in the response (# execution_id: N).
+        Uses streaming to handle Say() calls progressively.
+
+        Args:
+            instruction: Instruction for the LLM (what to do next)
+            agent_instructions: Agent-specific instructions
+            artifacts_to_load: List of artifact names to load into context
+
+        Returns:
+            Complete LLM response string
+
+        Raises:
+            ExecutionFinished: If max_llm_calls limit is exceeded
         """
+        if artifacts_to_load is None:
+            artifacts_to_load = []
         # Increment execution counter for this LLM call
         self.agent.execution_counter += 1
         execution_id = self.agent.execution_counter
@@ -321,12 +310,27 @@ class PlaybookLLMExecution(LLMExecution):
         # Use streaming to handle Say() calls progressively
         return await self._stream_llm_response(prompt)
 
-    async def _stream_llm_response(self, prompt):
+    async def _stream_llm_response(self, prompt: InterpreterPrompt) -> str:
         """Stream LLM response and handle Say() calls progressively.
 
         Two-phase streaming approach:
         1. Pattern-based streaming (as tokens arrive) - detects Say("...") calls
         2. AST validation (after complete) - validates syntax of generated Python
+
+        The _currently_streaming flag mechanism:
+        - When Say("human", "...") is pattern-detected during LLM token streaming,
+          we stream it immediately to provide real-time feedback to the user
+        - We set _currently_streaming=True to mark that this Say() was already displayed
+        - Later, when the generated Python code executes, Say() checks this flag
+        - If True, it skips streaming (already done) and just sends the message
+        - This prevents double-display: once during LLM streaming, not again during execution
+        - Only applies to human recipients - agent-to-agent messages use different path
+
+        Args:
+            prompt: InterpreterPrompt instance with messages and context
+
+        Returns:
+            Complete LLM response string (all chunks concatenated)
         """
         # Clear any previous streaming flag and set it for this streaming session
         # This ensures each LLM call has its own streaming cycle
@@ -378,6 +382,7 @@ class PlaybookLLMExecution(LLMExecution):
                             say_has_placeholders = False  # Reset for new Say call
                             processed_up_to = say_start_pos
                             # Set flag indicating we're actively streaming Say() calls
+                            # This prevents double-processing when the generated code executes
                             self.agent._currently_streaming = True
                             await self.agent.start_streaming_say(say_recipient)
                         else:
@@ -479,7 +484,7 @@ class PlaybookLLMExecution(LLMExecution):
         resolved = await resolve_description_placeholders(message, context)
         return resolved
 
-    def _extract_playbook_arguments(self, call: PlaybookCall) -> dict:
+    def _extract_playbook_arguments(self, call: PlaybookCall) -> Dict[str, Any]:
         """Extract and resolve playbook arguments to a dict.
 
         Takes the PlaybookCall's args and kwargs and binds them to parameter
@@ -490,7 +495,7 @@ class PlaybookLLMExecution(LLMExecution):
             call: The PlaybookCall containing args and kwargs
 
         Returns:
-            Dict mapping parameter names to resolved values
+            Dictionary mapping parameter names to resolved values
         """
         from ..argument_types import LiteralValue, VariableReference
         from ..utils.expression_engine import bind_call_parameters

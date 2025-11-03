@@ -276,7 +276,10 @@ class ImportProcessor:
         except (IOError, OSError) as e:
             raise ImportNotFoundError(str(file_path), importing_file, line_num) from e
 
-    def reset(self):
-        """Reset the processor state for a new processing session."""
+    def reset(self) -> None:
+        """Reset the processor state for a new processing session.
+
+        Clears the import stack and processed files cache.
+        """
         self.import_stack.clear()
         self.processed_files.clear()

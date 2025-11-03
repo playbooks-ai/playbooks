@@ -33,8 +33,16 @@ class LLMConfig:
     max_completion_tokens: Optional[int] = None
     api_key: Optional[str] = None
 
-    def __post_init__(self):
-        """Initialize with default values from config system and environment variables."""
+    def __post_init__(self) -> None:
+        """Initialize with default values from config system and environment variables.
+
+        Loads model configuration from config system (which handles env overrides)
+        and determines API key based on provider/model type. Falls back to defaults
+        if config loading fails.
+
+        Raises:
+            ValueError: If required API key environment variable is not set
+        """
         # Load model configuration from config system (which handles env overrides)
         try:
             # Set model name if not explicitly provided
@@ -93,7 +101,11 @@ class LLMConfig:
             )
 
     def to_dict(self) -> dict:
-        """Convert configuration to a dictionary."""
+        """Convert configuration to a dictionary.
+
+        Returns:
+            Dictionary containing all configuration fields
+        """
         return {
             "model": self.model,
             "provider": self.provider,
@@ -103,7 +115,11 @@ class LLMConfig:
         }
 
     def copy(self) -> "LLMConfig":
-        """Create a copy of the configuration."""
+        """Create a copy of this LLM configuration.
+
+        Returns:
+            New LLMConfig instance with same values
+        """
         return LLMConfig(
             model=self.model,
             provider=self.provider,

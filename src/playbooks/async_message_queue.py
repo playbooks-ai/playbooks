@@ -7,7 +7,7 @@ timeout-based polling with pure event-driven patterns using asyncio.Condition.
 
 import asyncio
 import logging
-from typing import List, Callable, Optional, Any, Dict
+from typing import Any, Callable, Dict, List, Optional
 from collections import deque
 from weakref import WeakSet
 import time
@@ -45,7 +45,7 @@ class AsyncMessageQueue:
         msgs = await queue.get_batch(predicate=None, timeout=5.0, max_messages=10)
     """
 
-    def __init__(self, max_size: Optional[int] = None):
+    def __init__(self, max_size: Optional[int] = None) -> None:
         """
         Initialize the async message queue.
 
@@ -318,12 +318,22 @@ class AsyncMessageQueue:
 
         logger.debug("Message queue closed")
 
-    async def __aenter__(self):
-        """Context manager entry."""
+    async def __aenter__(self) -> "AsyncMessageQueue":
+        """Context manager entry.
+
+        Returns:
+            Self for use in async with statements
+        """
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit with cleanup."""
+    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        """Context manager exit with cleanup.
+
+        Args:
+            exc_type: Exception type if exception occurred
+            exc_val: Exception value if exception occurred
+            exc_tb: Exception traceback if exception occurred
+        """
         await self.close()
 
     @property
@@ -355,186 +365,3 @@ class AsyncMessageQueue:
             "active_waiters": len(self._waiters),
             "is_closed": self._closed,
         }
-
-
-class PriorityAsyncMessageQueue(AsyncMessageQueue):
-    """
-    Message queue with priority levels.
-
-    Messages are organized by priority levels (0=highest, higher numbers=lower priority).
-    Within each priority level, messages maintain FIFO order.
-    """
-
-    def __init__(self, max_size: Optional[int] = None, max_priority: int = 10):
-        """
-        Initialize priority message queue.
-
-        Args:
-            max_size: Maximum total messages across all priorities
-            max_priority: Maximum priority level (0 to max_priority)
-        """
-        # Don't call super().__init__ to avoid creating the simple deque
-        self._priority_queues: Dict[int, deque[Message]] = {
-            i: deque() for i in range(max_priority + 1)
-        }
-        self._condition = asyncio.Condition()
-        self._closed = False
-        self._max_size = max_size
-        self._max_priority = max_priority
-        self._waiters: WeakSet[asyncio.Task] = WeakSet()
-
-        # Statistics
-        self._total_messages = 0
-        self._total_gets = 0
-        self._creation_time = time.time()
-
-    async def put(self, message: Message, priority: int = 5) -> None:
-        """
-        Add message with specific priority.
-
-        Args:
-            message: The message to add
-            priority: Priority level (0=highest priority)
-        """
-        if message is None:
-            raise ValueError("Message cannot be None")
-
-        if not (0 <= priority <= self._max_priority):
-            raise ValueError(f"Priority must be between 0 and {self._max_priority}")
-
-        async with self._condition:
-            if self._closed:
-                raise RuntimeError("Cannot put message to closed queue")
-
-            # Check total size limit
-            if self._max_size is not None and self.size >= self._max_size:
-                raise RuntimeError("Queue is full")
-
-            # Add to appropriate priority queue
-            self._priority_queues[priority].append(message)
-            self._total_messages += 1
-
-            # Notify waiters
-            self._condition.notify_all()
-
-    async def get(
-        self,
-        predicate: Optional[Callable[[Message], bool]] = None,
-        timeout: Optional[float] = None,
-    ) -> Message:
-        """Get highest priority message matching predicate."""
-        async with self._condition:
-            current_task = asyncio.current_task()
-            if current_task:
-                self._waiters.add(current_task)
-
-            try:
-                while True:
-                    if self._closed and self.size == 0:
-                        raise RuntimeError("Queue is closed and empty")
-
-                    # Search by priority (0 = highest)
-                    for priority in range(self._max_priority + 1):
-                        queue = self._priority_queues[priority]
-                        for i, message in enumerate(queue):
-                            if predicate is None or predicate(message):
-                                # Remove and return
-                                found_message = queue[i]
-                                del queue[i]
-                                self._total_gets += 1
-                                return found_message
-
-                    # No matching message, wait
-                    if self._closed:
-                        raise RuntimeError("Queue is closed")
-
-                    if timeout is not None:
-                        await asyncio.wait_for(self._condition.wait(), timeout=timeout)
-                    else:
-                        await self._condition.wait()
-
-            finally:
-                if current_task:
-                    self._waiters.discard(current_task)
-
-    @property
-    def size(self) -> int:
-        """Get total number of messages across all priorities."""
-        return sum(len(queue) for queue in self._priority_queues.values())
-
-    @property
-    def priority_stats(self) -> Dict[int, int]:
-        """Get message count by priority level."""
-        return {
-            priority: len(queue)
-            for priority, queue in self._priority_queues.items()
-            if len(queue) > 0
-        }
-
-
-class MessageBuffer:
-    """
-    Smart message buffering with timing-based release logic.
-
-    This class provides the intelligent buffering behavior from the original
-    messaging system, but with pure async implementation.
-    """
-
-    def __init__(self, queue: AsyncMessageQueue, buffer_timeout: float = 5.0):
-        """
-        Initialize message buffer.
-
-        Args:
-            queue: The underlying message queue
-            buffer_timeout: Maximum time to buffer messages
-        """
-        self.queue = queue
-        self.buffer_timeout = buffer_timeout
-
-    async def wait_for_messages(
-        self, wait_for_message_from: str, timeout: Optional[float] = None
-    ) -> List[Message]:
-        """
-        Wait for messages with smart buffering logic.
-
-        This replicates the original WaitForMessage behavior but with
-        pure event-driven implementation.
-
-        Args:
-            wait_for_message_from: Message source filter
-            timeout: Maximum wait time
-
-        Returns:
-            List of collected messages
-        """
-
-        # Create predicate based on source filter
-        def source_predicate(message: Message) -> bool:
-            if wait_for_message_from == "*":
-                return True
-            elif wait_for_message_from == "human":
-                return message.sender_id == "human"
-            elif wait_for_message_from.startswith("meeting "):
-                meeting_id = wait_for_message_from.split(" ", 1)[1]
-                return message.meeting_id == meeting_id
-            elif wait_for_message_from.startswith("agent "):
-                agent_id = wait_for_message_from.split(" ", 1)[1]
-                return message.sender_id == agent_id
-            else:
-                return message.sender_id == wait_for_message_from
-
-        # For meeting messages, always wait full buffer timeout
-        if wait_for_message_from.startswith("meeting "):
-            min_messages = 1
-            buffer_timeout = self.buffer_timeout
-        else:
-            # For direct messages, return immediately on first match
-            min_messages = 1
-            buffer_timeout = self.buffer_timeout
-
-        return await self.queue.get_batch(
-            predicate=source_predicate,
-            timeout=timeout or buffer_timeout,
-            min_messages=min_messages,
-            max_messages=100,  # Reasonable batch limit
-        )

@@ -1,4 +1,9 @@
-"""Playbook package containing all playbook implementations."""
+"""Playbook implementations for different execution modes.
+
+This module provides various playbook types that define how agents execute
+tasks, including LLM-based playbooks, Python function playbooks, local execution,
+and remote server execution.
+"""
 
 from ..triggers import PlaybookTrigger, PlaybookTriggers
 from .base import Playbook

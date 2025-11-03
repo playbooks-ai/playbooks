@@ -1,3 +1,9 @@
+"""File loading and import processing for playbooks.
+
+This module handles loading playbook files from disk, processing imports,
+and resolving file dependencies for playbook compilation and execution.
+"""
+
 from glob import glob
 from pathlib import Path
 from typing import List, Tuple
@@ -8,10 +14,24 @@ from .utils.file_utils import is_compiled_playbook_file
 
 
 class Loader:
+    """File loader for playbook programs.
+
+    Handles loading playbook files from disk, supporting glob patterns,
+    compiled file detection, and import processing.
+    """
+
     @staticmethod
-    def read_program(program_paths: List[str]) -> str:
-        """
-        Load program content from file paths.
+    def read_program(program_paths: List[str]) -> Tuple[str, bool]:
+        """Load program content from file paths.
+
+        Args:
+            program_paths: List of file paths or glob patterns
+
+        Returns:
+            Tuple of (combined program content, do_not_compile flag)
+
+        Raises:
+            ProgramLoadError: If files cannot be read or are not found
         """
         program_content = None
         try:
@@ -24,15 +44,14 @@ class Loader:
         return program_content, do_not_compile
 
     @staticmethod
-    def _read_program(paths: List[str]) -> str:
-        """
-        Load program content from file paths. Supports both single files and glob patterns.
+    def _read_program(paths: List[str]) -> Tuple[str, bool]:
+        """Load program content from file paths. Supports both single files and glob patterns.
 
         Args:
             paths: List of file paths or glob patterns (e.g., 'my_playbooks/**/*.pb')
 
         Returns:
-            str: Combined contents of all matching program files
+            Tuple of (combined contents of all matching program files, do_not_compile flag)
 
         Raises:
             FileNotFoundError: If no files are found or if files are empty

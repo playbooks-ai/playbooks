@@ -1,3 +1,5 @@
+"""Langfuse integration helper for LLM observability and tracing."""
+
 import os
 from typing import Any
 
@@ -7,21 +9,60 @@ from ..config import config
 
 
 class PlaybooksLangfuseSpan:
+    """No-op span implementation when Langfuse is disabled.
+
+    Provides the same interface as Langfuse spans but performs no operations.
+    Used when Langfuse telemetry is disabled via configuration.
+    """
+
     def update(self, **kwargs: Any) -> None:
+        """Update span metadata (no-op).
+
+        Args:
+            **kwargs: Metadata to update (ignored)
+        """
         pass
 
     def generation(self, **kwargs: Any) -> None:
+        """Log generation event (no-op).
+
+        Args:
+            **kwargs: Generation event data (ignored)
+        """
         pass
 
-    def span(self, **kwargs: Any) -> None:
+    def span(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """Create a child span (no-op, returns self).
+
+        Args:
+            **kwargs: Span configuration (ignored)
+
+        Returns:
+            Self (no-op span)
+        """
         return PlaybooksLangfuseSpan()
 
 
 class PlaybooksLangfuseInstance:
-    def trace(self, **kwargs: Any) -> None:
+    """No-op Langfuse instance when Langfuse is disabled.
+
+    Provides the same interface as Langfuse client but performs no operations.
+    Used when Langfuse telemetry is disabled via configuration.
+    """
+
+    def trace(self, **kwargs: Any) -> PlaybooksLangfuseSpan:
+        """Create a trace span (no-op).
+
+        Args:
+            **kwargs: Trace configuration (ignored)
+
+        Returns:
+            No-op span instance
+        """
         return PlaybooksLangfuseSpan()
 
     def flush(self) -> None:
+        """Flush pending events (no-op)."""
         pass
 
 
@@ -35,14 +76,14 @@ class LangfuseHelper:
     langfuse: Langfuse | None = None
 
     @classmethod
-    def instance(cls) -> Langfuse | None:
+    def instance(cls) -> Langfuse | PlaybooksLangfuseInstance | None:
         """Get or initialize the Langfuse singleton instance.
 
         Creates the Langfuse client on first call using environment variables.
-        Returns None if environment variables are not set.
+        Returns a no-op instance if Langfuse is disabled via configuration.
 
         Returns:
-            Langfuse: The initialized Langfuse client instance, or None
+            Langfuse client instance, no-op instance if disabled, or None
         """
         if cls.langfuse is None:
             # Check if Langfuse is enabled via config system first, then env fallback

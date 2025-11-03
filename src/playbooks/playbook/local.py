@@ -1,3 +1,9 @@
+"""Local playbook implementations for direct execution.
+
+This module provides playbook types that execute locally without external
+server communication, including both LLM-based and Python function playbooks.
+"""
+
 from abc import abstractmethod
 from typing import Any, Dict, Optional
 

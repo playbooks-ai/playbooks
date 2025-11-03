@@ -1,3 +1,10 @@
+"""Event classes for the playbooks framework.
+
+This module defines various event types used throughout the system for
+communication between components, including agent lifecycle events,
+playbook execution events, and messaging events.
+"""
+
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, List
@@ -150,3 +157,12 @@ class PlaybookEndEvent(Event):
     playbook: str = ""
     return_value: Any = None
     call_stack_depth: int = 0
+
+
+@dataclass(frozen=True)
+class ChannelCreatedEvent(Event):
+    """Channel created."""
+
+    channel_id: str = ""
+    is_meeting: bool = False
+    participant_ids: List[str] = field(default_factory=list)

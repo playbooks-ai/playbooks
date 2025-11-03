@@ -1,3 +1,10 @@
+"""Call stack management for playbook execution.
+
+This module provides the call stack infrastructure that tracks execution
+state, instruction pointers, and function call nesting during playbook
+execution and debugging.
+"""
+
 from typing import Any, Dict, List, Optional
 
 from playbooks.llm_messages import LLMMessage
@@ -22,9 +29,18 @@ class InstructionPointer:
         playbook: str,
         line_number: str,
         source_line_number: int,
-        step: PlaybookStep = None,
-        source_file_path: str = None,
-    ):
+        step: Optional[PlaybookStep] = None,
+        source_file_path: Optional[str] = None,
+    ) -> None:
+        """Initialize an instruction pointer.
+
+        Args:
+            playbook: Name of the playbook
+            line_number: Line number within the playbook (e.g., "01", "01.02")
+            source_line_number: Original line number in source markdown
+            step: Associated PlaybookStep object (optional)
+            source_file_path: Path to source file (optional)
+        """
         self.playbook = playbook
         self.line_number = line_number
         self.source_line_number = source_line_number
@@ -32,6 +48,11 @@ class InstructionPointer:
         self.step = step
 
     def copy(self) -> "InstructionPointer":
+        """Create a copy of this instruction pointer.
+
+        Returns:
+            New InstructionPointer with same values
+        """
         return InstructionPointer(
             self.playbook,
             self.line_number,
@@ -41,11 +62,20 @@ class InstructionPointer:
         )
 
     def increment_instruction_pointer(self) -> None:
-        # TODO: this is a hack to advance the instruction pointer
+        """Increment the instruction pointer to the next line.
+
+        Note: This is a temporary implementation that assumes simple numeric
+        line numbers. May need revision for complex nested line numbers.
+        """
         self.line_number = str(int(self.line_number) + 1)
         self.source_line_number = self.source_line_number + 1
 
     def to_compact_str(self) -> str:
+        """Get compact string representation (playbook:line_number).
+
+        Returns:
+            String like "PlaybookName:01" or just "PlaybookName" if no line number
+        """
         compact_str = (
             self.playbook
             if self.line_number is None
@@ -54,15 +84,22 @@ class InstructionPointer:
         return compact_str
 
     def __str__(self) -> str:
+        """Get full string representation with source location."""
         compact_str = self.to_compact_str()
         if self.source_line_number is not None:
             return f"{compact_str} ({self.source_file_path}:{self.source_line_number})"
         return compact_str
 
     def __repr__(self) -> str:
+        """Return string representation."""
         return str(self)
 
     def to_dict(self) -> Dict[str, Any]:
+        """Convert to dictionary representation.
+
+        Returns:
+            Dictionary with playbook, line_number, and source_line_number
+        """
         return {
             "playbook": self.playbook,
             "line_number": self.line_number,
@@ -85,7 +122,16 @@ class CallStackFrame:
         langfuse_span: Optional[Any] = None,
         is_meeting: bool = False,
         meeting_id: Optional[str] = None,
-    ):
+    ) -> None:
+        """Initialize a call stack frame.
+
+        Args:
+            instruction_pointer: Current execution position
+            llm_messages: LLM messages associated with this frame
+            langfuse_span: Langfuse tracing span (optional)
+            is_meeting: Whether this frame is part of a meeting
+            meeting_id: Meeting ID if is_meeting is True
+        """
         self.instruction_pointer = instruction_pointer
         self.llm_messages = llm_messages or []
         self.langfuse_span = langfuse_span
@@ -95,18 +141,22 @@ class CallStackFrame:
 
     @property
     def source_line_number(self) -> int:
+        """Get source line number from instruction pointer."""
         return self.instruction_pointer.source_line_number
 
     @property
-    def line_number(self) -> int:
+    def line_number(self) -> str:
+        """Get line number from instruction pointer."""
         return self.instruction_pointer.line_number
 
     @property
     def playbook(self) -> str:
+        """Get playbook name from instruction pointer."""
         return self.instruction_pointer.playbook
 
     @property
-    def step(self) -> PlaybookStep:
+    def step(self) -> Optional[PlaybookStep]:
+        """Get PlaybookStep from instruction pointer."""
         return self.instruction_pointer.step
 
     def to_dict(self) -> Dict[str, Any]:
@@ -125,24 +175,39 @@ class CallStackFrame:
         return result
 
     def add_llm_message(self, message: LLMMessage) -> None:
-        """Add an LLMMessage object to the call stack frame."""
+        """Add an LLMMessage object to the call stack frame.
+
+        Args:
+            message: LLM message to add to this frame
+        """
         self.llm_messages.append(message)
 
     def __repr__(self) -> str:
+        """Return string representation of the frame."""
         base_repr = self.instruction_pointer.to_compact_str()
         if self.is_meeting and self.meeting_id:
             return f"{base_repr}[meeting {self.meeting_id}]"
         return base_repr
 
     def get_llm_messages(self) -> List[Dict[str, str]]:
-        """Get the messages for the call stack frame as dictionaries for LLM API."""
+        """Get the messages for the call stack frame as dictionaries for LLM API.
+
+        Returns:
+            List of message dictionaries ready for LLM API calls
+        """
         return [msg.to_full_message() for msg in self.llm_messages]
 
 
 class CallStack:
     """A stack of call frames."""
 
-    def __init__(self, event_bus: EventBus, agent_id: str = "unknown"):
+    def __init__(self, event_bus: EventBus, agent_id: str = "unknown") -> None:
+        """Initialize a call stack.
+
+        Args:
+            event_bus: Event bus for publishing call stack events
+            agent_id: ID of the agent owning this call stack
+        """
         self.frames: List[CallStackFrame] = []
         self.event_bus = event_bus
         self.agent_id = agent_id
@@ -228,14 +293,24 @@ class CallStack:
             messages.extend(frame.get_llm_messages())
         return messages
 
-    def add_llm_message(self, message) -> None:
-        """Safely add an LLM message to the top frame if the stack is not empty."""
+    def add_llm_message(self, message: LLMMessage) -> None:
+        """Safely add an LLM message to the top frame if the stack is not empty.
+
+        Args:
+            message: LLM message to add
+        """
         current_frame = self.peek()
         if current_frame is not None:
             current_frame.add_llm_message(message)
 
-    def add_llm_message_on_caller(self, message) -> None:
-        """Safely add an LLM message to the top frame if the stack is not empty."""
+    def add_llm_message_on_caller(self, message: LLMMessage) -> None:
+        """Add an LLM message to the caller frame (second from top).
+
+        Used when a called playbook wants to add a message to its caller's context.
+
+        Args:
+            message: LLM message to add
+        """
         if len(self.frames) < 2:
             return
         current_frame = self.frames[-2]

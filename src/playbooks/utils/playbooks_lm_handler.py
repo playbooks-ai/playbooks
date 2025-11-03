@@ -101,8 +101,9 @@ yld? <no | yes | wait>, reason
     def _merge_consecutive_messages(
         self, messages: List[Dict[str, str]]
     ) -> List[Dict[str, str]]:
-        """
-        Merge consecutive messages from the same role.
+        """Merge consecutive messages from the same role.
+
+        Currently disabled but kept for potential future use.
 
         Args:
             messages: List of messages

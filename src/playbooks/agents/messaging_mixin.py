@@ -9,6 +9,7 @@ from ..async_message_queue import AsyncMessageQueue
 from ..constants import EOM, EXECUTION_FINISHED
 from ..debug_logger import debug
 from ..exceptions import ExecutionFinished
+from ..identifiers import AgentID, MeetingID
 from ..llm_messages import AgentCommunicationLLMMessage
 from ..message import Message, MessageType
 
@@ -16,15 +17,18 @@ from ..message import Message, MessageType
 class MessagingMixin:
     """Mixin for event-driven message processing functionality."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._message_queue = AsyncMessageQueue()
-        self._message_buffer: List[Message] = []
 
-    async def _add_message_to_buffer(self, message) -> None:
+    async def _add_message_to_buffer(self, message: Message) -> None:
         """Add a message to buffer and notify waiting processes.
 
         This is the single entry point for all incoming messages.
+        Delegates to meeting manager if available, otherwise adds to message queue.
+
+        Args:
+            message: Message to add to buffer
         """
         if hasattr(self, "meeting_manager") and self.meeting_manager:
             debug(f"{str(self)}: Adding message to meeting manager: {message}")
@@ -34,7 +38,6 @@ class MessagingMixin:
 
         debug(f"{str(self)}: Adding message to queue: {message}")
         await self._message_queue.put(message)
-        self._message_buffer.append(message)
 
     async def WaitForMessage(self, wait_for_message_from: str) -> List[Message]:
         """Wait for messages with event-driven delivery and differential timeouts.
@@ -68,16 +71,20 @@ class MessagingMixin:
             if wait_for_message_from == "*":
                 return True
             elif wait_for_message_from in ("human", "user"):
-                return message.sender_id in ("human", "user")
+                # Compare structured IDs
+                return message.sender_id.id in ("human", "user")
             elif wait_for_message_from.startswith("meeting "):
-                # Extract meeting ID
-                meeting_id = wait_for_message_from.split(" ", 1)[1]
-                return message.meeting_id == meeting_id
+                # Parse meeting spec and compare
+                expected_meeting_id = MeetingID.parse(wait_for_message_from)
+                return message.meeting_id == expected_meeting_id
             elif wait_for_message_from.startswith("agent "):
-                agent_id = wait_for_message_from.split(" ", 1)[1]
-                return message.sender_id == agent_id
+                # Parse agent spec and compare
+                expected_agent_id = AgentID.parse(wait_for_message_from)
+                return message.sender_id == expected_agent_id
             else:
-                return message.sender_id == wait_for_message_from
+                # Assume raw ID
+                expected_agent_id = AgentID.parse(wait_for_message_from)
+                return message.sender_id == expected_agent_id
 
         # Use queue's get_batch for event-driven waiting
         try:
@@ -102,16 +109,26 @@ class MessagingMixin:
     async def _get_meeting_timeout(self, meeting_spec: str) -> float:
         """Determine timeout for meeting messages based on agent targeting.
 
+        Uses differential timeout logic: shorter timeout if agent is explicitly
+        targeted or mentioned in message content.
+
+        Args:
+            meeting_spec: Meeting specification (e.g., "meeting 123")
+
         Returns:
             0.5s if agent is targeted (immediate response), 5.0s for passive listening
         """
+        # Parse meeting ID for comparison
+        expected_meeting_id = MeetingID.parse(meeting_spec)
+        my_agent_id = AgentID.parse(self.id)
+
         # Check if there are any messages in queue targeting this agent
         targeted_message = await self._message_queue.peek(
             lambda m: (
-                m.meeting_id == meeting_spec.split(" ", 1)[1]
+                m.meeting_id == expected_meeting_id
                 and (
                     # Explicitly targeted via target_agent_ids
-                    (m.target_agent_ids and self.id in m.target_agent_ids)
+                    (m.target_agent_ids and my_agent_id in m.target_agent_ids)
                     # Or mentioned in content
                     or (self.id.lower() in m.content.lower())
                     or (
@@ -152,11 +169,6 @@ class MessagingMixin:
         if not messages:
             return []
 
-        # Sync with _message_buffer (used by agent_chat.py)
-        for msg in messages:
-            if msg in self._message_buffer:
-                self._message_buffer.remove(msg)
-
         if not self.state.call_stack.is_empty():
             messages_str = []
             for message in messages:
@@ -169,7 +181,7 @@ class MessagingMixin:
                     message_type_str = f" [in meeting {message.meeting_id}]"
 
                 messages_str.append(
-                    f"Received message from {message.sender_klass}(agent {message.sender_id}){message_type_str}: {message.content}"
+                    f"Received message from {message.sender_klass}({message.sender_id}){message_type_str}: {message.content}"
                 )
             debug(f"{str(self)}: Messages to process: {messages_str}")
             # Use the first sender agent for the semantic message type

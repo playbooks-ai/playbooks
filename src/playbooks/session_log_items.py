@@ -17,11 +17,22 @@ class SessionLogItemBase(SessionLogItem):
 
     @property
     def item_type(self) -> str:
-        """Return the type identifier for this log item."""
+        """Return the type identifier for this log item.
+
+        Derives type from class name by removing "SessionLogItem" prefix
+        and converting to lowercase.
+
+        Returns:
+            Type identifier string (e.g., "playbookstart", "llmrequest")
+        """
         return self.__class__.__name__.replace("SessionLogItem", "").lower()
 
     def to_metadata(self) -> Dict[str, Any]:
-        """Convert to metadata dict for streaming."""
+        """Convert to metadata dict for streaming.
+
+        Returns:
+            Dictionary containing base metadata (type, timestamp, agent info)
+        """
         return {
             "type": self.item_type,
             "timestamp": self.timestamp.isoformat(),
@@ -39,6 +50,11 @@ class SessionLogItemPlaybookStart(SessionLogItemBase):
     parent_playbook: Optional[str] = None
 
     def to_log_full(self) -> str:
+        """Generate full log message for this item.
+
+        Returns:
+            Formatted log message string
+        """
         return f"▶ Starting playbook: {self.playbook_name}"
 
     def to_metadata(self) -> Dict[str, Any]:

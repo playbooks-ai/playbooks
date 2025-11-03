@@ -7,15 +7,19 @@ from playbooks.agents.base_agent import BaseAgent
 from playbooks.message import MessageType
 
 if TYPE_CHECKING:
-    pass
+    from playbooks.message import Message
 
 logger = logging.getLogger(__name__)
 
 
 class MeetingMessageHandler:
-    """Handles meeting message processing and distribution."""
+    """Handles meeting message processing and distribution.
 
-    def __init__(self, agent_id: str, agent_klass: str):
+    Processes meeting-related messages including invitation responses
+    and manages meeting state updates.
+    """
+
+    def __init__(self, agent_id: str, agent_klass: str) -> None:
         """Initialize meeting message handler.
 
         Args:
@@ -25,28 +29,36 @@ class MeetingMessageHandler:
         self.agent_id = agent_id
         self.agent_klass = agent_klass
 
-    async def handle_meeting_response(self, agent_message, agent: BaseAgent) -> bool:
+    async def handle_meeting_response(
+        self, agent_message: "Message", agent: BaseAgent
+    ) -> bool:
         """Handle meeting invitation responses.
 
+        Processes MEETING_INVITATION_RESPONSE messages and updates meeting
+        state (adds participants who joined, marks rejections).
+
         Args:
-            agent_message: The agent message containing the response
-            owned_meetings: Dictionary of meetings owned by the agent
-            session_log: Session log for recording events
+            agent_message: The message containing the meeting response
+            agent: The agent receiving the response (must own the meeting)
 
         Returns:
-            True if response was handled, False otherwise
+            True if response was handled, False if message type doesn't match
+                or agent doesn't own the meeting
         """
         if agent_message.message_type != MessageType.MEETING_INVITATION_RESPONSE:
             return False
 
-        meeting_id = agent_message.meeting_id
-        meeting_id = meeting_id.replace("meeting ", "")
-        if not meeting_id or meeting_id not in agent.state.owned_meetings:
+        meeting_id_obj = agent_message.meeting_id
+        if not meeting_id_obj:
+            return False
+
+        meeting_id = meeting_id_obj.id
+        if meeting_id not in agent.state.owned_meetings:
             return False
 
         session_log = agent.state.session_log
         meeting = agent.state.owned_meetings[meeting_id]
-        sender_id = agent_message.sender_id
+        sender_id = agent_message.sender_id.id
         sender = agent.program.agents_by_id.get(sender_id)
         content = agent_message.content
 

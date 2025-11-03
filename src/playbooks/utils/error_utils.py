@@ -93,7 +93,7 @@ def raise_on_agent_errors(
 
 
 def check_playbooks_health(
-    playbooks,
+    playbooks: Any,
     print_errors: bool = True,
     log_errors: bool = True,
     raise_on_errors: bool = False,
@@ -151,22 +151,42 @@ class PlaybooksErrorChecker:
 
     def __init__(
         self,
-        playbooks,
+        playbooks: Any,
         print_errors: bool = True,
         log_errors: bool = True,
         raise_on_errors: bool = False,
         context: str = "execution",
-    ):
+    ) -> None:
+        """Initialize error checker.
+
+        Args:
+            playbooks: Playbooks instance to monitor
+            print_errors: Whether to print errors to console
+            log_errors: Whether to log errors to structured logging
+            raise_on_errors: Whether to raise exception if errors found
+            context: Context string for error reporting
+        """
         self.playbooks = playbooks
         self.print_errors = print_errors
         self.log_errors = log_errors
         self.raise_on_errors = raise_on_errors
         self.context = context
 
-    def __enter__(self):
+    def __enter__(self) -> "PlaybooksErrorChecker":
+        """Enter context manager."""
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> bool:
+        """Exit context manager and check for errors.
+
+        Args:
+            exc_type: Exception type (if any)
+            exc_val: Exception value (if any)
+            exc_tb: Exception traceback (if any)
+
+        Returns:
+            False (doesn't suppress exceptions)
+        """
         check_playbooks_health(
             self.playbooks,
             print_errors=self.print_errors,

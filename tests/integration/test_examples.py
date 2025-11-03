@@ -56,7 +56,7 @@ async def test_example_04(test_data_dir):
     await playbooks.initialize()
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
-    assert "generate_report_summary() finished" in log
+    assert "generate_report_summary() →" in log
 
 
 @pytest.mark.asyncio
@@ -302,3 +302,28 @@ async def test_example_14_python_only(test_data_dir, monkeypatch):
 
     # Verify no LLM calls were made
     assert llm_call_count == 0, f"Expected 0 LLM calls, but got {llm_call_count}"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_example_storyteller(test_examples_dir):
+    # Run the MCP server before running the test
+    playbooks = Playbooks([test_examples_dir / "storyteller.pb"])
+    await playbooks.initialize()
+    storyteller = playbooks.program.agents_by_klass["StoryTeller"][0]
+    human = playbooks.program.agents_by_id["human"]
+
+    await human.SendMessage(storyteller.id, "cotton candy")
+    await human.SendMessage(storyteller.id, EOM)
+
+    await playbooks.program.run_till_exit()
+    log = storyteller.state.session_log.to_log_full()
+    print(log)
+    assert "StoryTeller.Main" in log
+    assert "CharacterCreator.CreateNewCharacter" in log
+    assert "Execution finished" in log
+
+    character_creator = playbooks.program.agents_by_klass["CharacterCreator"][0]
+    log = character_creator.state.session_log.to_log_full()
+    print(log)
+    assert "CharacterCreator.CreateNewCharacter" in log

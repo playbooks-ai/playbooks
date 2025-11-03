@@ -1,3 +1,10 @@
+"""Main Playbooks class for orchestrating AI agent systems.
+
+This module provides the primary interface for loading, compiling, and executing
+playbooks with AI agents. It handles file processing, metadata extraction, and
+coordination between various system components.
+"""
+
 import uuid
 from functools import reduce
 from typing import List
@@ -16,12 +23,25 @@ configure_logging()
 
 
 class Playbooks:
+    """Main class for orchestrating AI agent playbook execution.
+
+    Handles loading, compilation, and execution of playbooks with support for
+    multiple file formats, metadata extraction, and agent coordination.
+    """
+
     def __init__(
         self,
         program_paths: List[str],
         llm_config: LLMConfig = None,
         session_id: str = None,
     ):
+        """Initialize a Playbooks instance.
+
+        Args:
+            program_paths: List of file paths to playbook files (.pb or .pbasm)
+            llm_config: Configuration for LLM services, uses defaults if None
+            session_id: Unique identifier for this session, generated if None
+        """
         self.program_paths = program_paths
         if llm_config is None:
             self.llm_config = LLMConfig()
@@ -100,9 +120,11 @@ class Playbooks:
         )
 
     async def initialize(self):
+        """Initialize the playbook execution environment and agents."""
         await self.program.initialize()
 
     async def begin(self):
+        """Start execution of the playbook."""
         await self.program.begin()
 
     def _apply_program_metadata(self):

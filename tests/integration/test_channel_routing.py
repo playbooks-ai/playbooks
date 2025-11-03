@@ -117,9 +117,10 @@ class TestChannelRouting:
         )
 
         # Agent B should have received the message
-        assert len(agent_b._message_buffer) == 1
-        assert agent_b._message_buffer[0].content == "Test message"
-        assert agent_b._message_buffer[0].sender_id == agent_a.id
+        assert agent_b._message_queue.size == 1
+        msg = await agent_b._message_queue.peek()
+        assert msg.content == "Test message"
+        assert msg.sender_id.id == agent_a.id
 
     async def test_direct_message_not_delivered_to_sender(self, program_with_agents):
         """Test that the sender doesn't receive their own message."""
@@ -139,7 +140,7 @@ class TestChannelRouting:
         )
 
         # Agent A should NOT have received their own message
-        assert len(agent_a._message_buffer) == 0
+        assert agent_a._message_queue.size == 0
 
     async def test_channel_reused_for_same_participants(self, program_with_agents):
         """Test that the same channel is reused for the same participants."""
@@ -173,7 +174,7 @@ class TestChannelRouting:
         assert len(program.channels) == initial_channel_count
 
         # Agent B should have received both messages
-        assert len(agent_b._message_buffer) == 2
+        assert agent_b._message_queue.size == 2
 
     async def test_bidirectional_communication_uses_same_channel(
         self, program_with_agents
@@ -228,8 +229,7 @@ class TestChannelRouting:
         assert channel_id in program.channels
 
         # Human should receive the message
-        # Note: Human participant delivery is a no-op, but message should be in buffer
-        assert len(human._message_buffer) == 1
+        assert human._message_queue.size == 1
 
 
 @pytest.mark.asyncio
@@ -246,7 +246,7 @@ class TestTargetedMessaging:
         # Create a mock meeting channel first
         meeting_id = "100"
         mock_participants = agents
-        program.create_meeting_channel(meeting_id, mock_participants)
+        await program.create_meeting_channel(meeting_id, mock_participants)
 
         # Send message with targeting
         await program.route_message(
@@ -259,10 +259,11 @@ class TestTargetedMessaging:
 
         # Agent B should have received the message with targeting metadata
         agent_b = mock_participants[1]
-        assert len(agent_b._message_buffer) == 1
-        message = agent_b._message_buffer[0]
+        assert agent_b._message_queue.size == 1
+        message = await agent_b._message_queue.peek()
         assert message.target_agent_ids is not None
-        assert agent_b.id in message.target_agent_ids
+        # target_agent_ids is now a list of AgentID objects
+        assert any(aid.id == agent_b.id for aid in message.target_agent_ids)
 
     async def test_parse_meeting_with_multiple_targets(self, program_with_agents):
         """Test parsing meeting spec with multiple target agents."""
@@ -275,7 +276,7 @@ class TestTargetedMessaging:
         # Create mock meeting
         meeting_id = "101"
         mock_participants = [agent_a, agent_b]
-        program.create_meeting_channel(meeting_id, mock_participants)
+        await program.create_meeting_channel(meeting_id, mock_participants)
 
         # Send with multiple targets
         await program.route_message(
@@ -287,7 +288,7 @@ class TestTargetedMessaging:
         )
 
         # Agent B should receive with targeting
-        message = agent_b._message_buffer[0]
+        message = await agent_b._message_queue.peek()
         assert message.target_agent_ids is not None
         assert len(message.target_agent_ids) == 1
 
@@ -301,7 +302,7 @@ class TestTargetedMessaging:
 
         # Create meeting
         meeting_id = "102"
-        program.create_meeting_channel(meeting_id, [agent_a, agent_b])
+        await program.create_meeting_channel(meeting_id, [agent_a, agent_b])
 
         # Send without targeting
         await program.route_message(
@@ -313,7 +314,7 @@ class TestTargetedMessaging:
         )
 
         # Agent B should receive without targeting metadata
-        message = agent_b._message_buffer[0]
+        message = await agent_b._message_queue.peek()
         assert message.target_agent_ids is None
 
 
@@ -353,7 +354,7 @@ class TestChannelProperties:
 
         # Create meeting channel
         meeting_id = "103"
-        channel = program.create_meeting_channel(meeting_id, participants)
+        channel = await program.create_meeting_channel(meeting_id, participants)
 
         # With 2 participants, it's direct
         assert channel.is_direct is True

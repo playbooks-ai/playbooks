@@ -1,3 +1,10 @@
+"""Playbook decorator for marking functions as executable playbooks.
+
+This module provides the @playbook decorator that marks Python functions
+as playbooks, enabling them to be discovered and executed by the playbook
+runtime system.
+"""
+
 from typing import Any, Callable, List, Optional, Union
 
 

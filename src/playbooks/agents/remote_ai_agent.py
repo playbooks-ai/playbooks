@@ -1,3 +1,9 @@
+"""Remote AI agent implementation for external LLM services.
+
+This module provides agents that communicate with remote LLM services
+for playbook execution and processing.
+"""
+
 import logging
 from typing import Any, Dict
 

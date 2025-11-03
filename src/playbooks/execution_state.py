@@ -25,11 +25,13 @@ class ExecutionState:
         artifacts: Store for execution artifacts
     """
 
-    def __init__(self, event_bus: EventBus, klass: str, agent_id: str):
+    def __init__(self, event_bus: EventBus, klass: str, agent_id: str) -> None:
         """Initialize execution state with an event bus.
 
         Args:
-            bus: The event bus to use for all components
+            event_bus: The event bus to use for all components
+            klass: Agent class name
+            agent_id: Agent identifier
         """
         self.event_bus = event_bus
         self.klass = klass
@@ -54,7 +56,11 @@ class ExecutionState:
         return f"{self.call_stack.__repr__()};{self.variables.__repr__()}"
 
     def to_dict(self) -> Dict[str, Any]:
-        """Return a dictionary representation of the execution state."""
+        """Return a dictionary representation of the execution state.
+
+        Returns:
+            Dictionary containing call stack, variables, agents, and meetings
+        """
         # Owned meetings
         owned_meetings_list = []
         joined_meetings_list = []

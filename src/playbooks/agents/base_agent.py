@@ -1,14 +1,21 @@
+"""Base agent implementation for the playbooks framework.
+
+This module provides the foundational BaseAgent class that all agent types
+inherit from, along with the BaseAgentMeta metaclass for agent configuration.
+"""
+
 from abc import ABC, ABCMeta
-from typing import TYPE_CHECKING, Any, Dict
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from ..debug_logger import debug
 from ..events import AgentPausedEvent, AgentResumedEvent
+from ..identifiers import AgentID, MeetingID
 from ..llm_messages import AgentCommunicationLLMMessage
-from ..utils.spec_utils import SpecUtils
 from .messaging_mixin import MessagingMixin
 
 if TYPE_CHECKING:
     from ..program import Program
+    from ..stream_result import StreamResult
 
 
 class BaseAgentMeta(ABCMeta):
@@ -34,11 +41,19 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         self,
         agent_id: str,
         program: "Program",
-        source_line_number: int = None,
-        source_file_path: str = None,
-        **kwargs,
-    ):
-        """Initialize a new BaseAgent."""
+        source_line_number: Optional[int] = None,
+        source_file_path: Optional[str] = None,
+        **kwargs: Any,
+    ) -> None:
+        """Initialize a new BaseAgent.
+
+        Args:
+            agent_id: Unique identifier for this agent instance
+            program: Program instance managing this agent
+            source_line_number: Line number in source where agent is defined
+            source_file_path: Path to source file where agent is defined
+            **kwargs: Additional initialization arguments
+        """
         super().__init__()
         self.klass = self.__class__.klass
         self.description = self.__class__.description
@@ -53,88 +68,171 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         self.source_file_path = source_file_path
 
         # Debug context
-        self._debug_thread_id: int = None
-        self.paused: str = None
+        self._debug_thread_id: Optional[int] = None
+        self.paused: Optional[str] = None
 
-    async def begin(self):
-        """Agent startup logic. Override in subclasses."""
+    async def begin(self) -> None:
+        """Agent startup logic. Override in subclasses.
+
+        Called when the agent's execution thread starts. Implement
+        message processing loops and playbook execution here.
+        """
         pass
 
-    async def initialize(self):
-        """Agent initialization logic. Override in subclasses."""
+    async def initialize(self) -> None:
+        """Agent initialization logic. Override in subclasses.
+
+        Called before begin() to set up agent state, load resources,
+        and prepare for execution.
+        """
         pass
 
     # Built-in playbook methods
-    async def Say(self, target: str, message: str):
+    async def Say(self, target: str, message: str) -> str:
+        """Send a message to a target (agent, human, or meeting).
+
+        This is the main entry point for message sending. It resolves the target,
+        handles different routing paths, and manages streaming for human recipients.
+
+        Args:
+            target: Target specification (agent ID, "human", "meeting", etc.)
+            message: Message content to send
+
+        Returns:
+            The message content (for compatibility with existing code)
+        """
         resolved_target = self.resolve_target(target, allow_fallback=True)
 
-        # Message is already resolved by execute_playbook()
-        # No need to evaluate it again here
+        # Route to appropriate handler based on target type
+        if resolved_target.startswith("meeting "):
+            return await self._say_to_meeting(resolved_target, message)
 
-        # Handle meeting targets with broadcasting
-        if SpecUtils.is_meeting_spec(resolved_target):
-            meeting_id = SpecUtils.extract_meeting_id(resolved_target)
-            if (
-                hasattr(self, "state")
-                and hasattr(self.state, "owned_meetings")
-                and meeting_id in self.state.owned_meetings
-            ):
-                debug(
-                    f"{str(self)}: Broadcasting to meeting {meeting_id} as owner: {message}"
-                )
+        return await self._say_direct(resolved_target, message)
+
+    async def _say_to_meeting(self, meeting_spec: str, message: str) -> str:
+        """Send message to a meeting.
+
+        Args:
+            meeting_spec: Meeting specification (e.g., "meeting 123")
+            message: Message content to broadcast
+
+        Returns:
+            The message content
+        """
+        meeting_id = MeetingID.parse(meeting_spec).id
+
+        # Check meeting participation and broadcast accordingly
+        if hasattr(self, "state") and hasattr(self.state, "owned_meetings"):
+            if meeting_id in self.state.owned_meetings:
+                debug(f"{str(self)}: Broadcasting to meeting {meeting_id} as owner")
                 await self.meeting_manager.broadcast_to_meeting_as_owner(
                     meeting_id, message
                 )
                 return message
-            elif (
-                hasattr(self, "state")
-                and hasattr(self.state, "joined_meetings")
-                and meeting_id in self.state.joined_meetings
-            ):
+
+        if hasattr(self, "state") and hasattr(self.state, "joined_meetings"):
+            if meeting_id in self.state.joined_meetings:
                 debug(
-                    f"{str(self)}: Broadcasting to meeting {meeting_id} as participant: {message}"
+                    f"{str(self)}: Broadcasting to meeting {meeting_id} as participant"
                 )
                 await self.meeting_manager.broadcast_to_meeting_as_participant(
                     meeting_id, message
                 )
                 return message
-            else:
-                # Error: not in this meeting
-                debug(f"{str(self)}: state {self.state.joined_meetings}")
-                debug(
-                    f"{str(self)}: Cannot broadcast to meeting {meeting_id} - not a participant"
-                )
-                self.state.session_log.append(
-                    f"Cannot broadcast to meeting {meeting_id} - not a participant"
-                )
-                return message
 
-        # Track last message target (only for 1:1 messages, not meetings)
-        if not (
-            SpecUtils.is_meeting_spec(resolved_target) or resolved_target == "human"
-        ):
+        # Not a participant - log error
+        debug(
+            f"{str(self)}: Cannot broadcast to meeting {meeting_id} - not a participant"
+        )
+        self.state.session_log.append(
+            f"Cannot broadcast to meeting {meeting_id} - not a participant"
+        )
+        return message
+
+    async def _say_direct(self, resolved_target: str, message: str) -> str:
+        """Send direct message to agent or human.
+
+        Handles streaming for human recipients and direct delivery for agents.
+
+        Args:
+            resolved_target: Resolved target identifier (agent ID or "human")
+            message: Message content to send
+
+        Returns:
+            The message content
+        """
+        # Track conversation context (skip for human and meetings)
+        if resolved_target not in ["human", "user"]:
             self.state.last_message_target = resolved_target
 
-        # Check if we're currently streaming (executing freshly-streamed code)
-        # If so, skip the streaming output since it was already shown
+        # Check if we're re-executing already-streamed code
         already_streamed = getattr(self, "_currently_streaming", False)
 
-        # Use channel streaming for all messages (not just human)
         if not already_streamed and self.program:
-            stream_id = await self.start_streaming_say_via_channel(resolved_target)
-            await self.stream_say_update_via_channel(
-                stream_id, resolved_target, message
-            )
-            await self.complete_streaming_say_via_channel(
-                stream_id, resolved_target, message
-            )
+            await self._say_with_streaming(resolved_target, message)
         else:
-            await self.SendMessage(resolved_target, message)
+            await self._say_without_streaming(resolved_target, message)
 
         return message
 
-    async def SendMessage(self, target_agent_id: str, message: str):
-        """Send a message to another agent."""
+    async def _say_with_streaming(self, resolved_target: str, message: str) -> None:
+        """Send message with streaming support (for human recipients).
+
+        Args:
+            resolved_target: Resolved target identifier
+            message: Message content to send
+        """
+        stream_result = await self.start_streaming_say_via_channel(resolved_target)
+
+        if stream_result.should_stream:
+            # Human recipient - use streaming
+            await self.stream_say_update_via_channel(
+                stream_result.stream_id, resolved_target, message
+            )
+            await self.complete_streaming_say_via_channel(
+                stream_result.stream_id, resolved_target, message
+            )
+        else:
+            # Agent recipient - send directly without streaming
+            target_agent_id = self._extract_agent_id(resolved_target)
+            await self.SendMessage(target_agent_id, message)
+
+    async def _say_without_streaming(self, resolved_target: str, message: str) -> None:
+        """Send message without streaming (already streamed or no program).
+
+        Args:
+            resolved_target: Resolved target identifier
+            message: Message content to send
+        """
+        if resolved_target in ["human", "user"]:
+            await self.SendMessage(resolved_target, message)
+        else:
+            target_agent_id = self._extract_agent_id(resolved_target)
+            await self.SendMessage(target_agent_id, message)
+
+    def _extract_agent_id(self, target: str) -> str:
+        """Extract agent ID from target specification.
+
+        Args:
+            target: Target specification (could be "agent 1001" or "1001")
+
+        Returns:
+            Plain agent ID string
+        """
+        if target.startswith("agent "):
+            return AgentID.parse(target).id
+        return target
+
+    async def SendMessage(self, target_agent_id: str, message: str) -> None:
+        """Send a message to another agent.
+
+        Routes message through program runtime and adds communication
+        context to the call stack for LLM awareness.
+
+        Args:
+            target_agent_id: ID of the target agent (or "human"/"user")
+            message: Message content to send
+        """
         if not self.program:
             return
 
@@ -147,7 +245,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             target_name = (
                 str(target_agent)
                 if target_agent
-                else self.unknown_agent_str(target_agent_id)
+                else f"UnknownAgent({target_agent_id})"
             )
             agent_comm_msg = AgentCommunicationLLMMessage(
                 f"I {str(self)} sent message to {target_name}: {message}",
@@ -157,43 +255,73 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             current_frame.add_llm_message(agent_comm_msg)
 
         # Route through program runtime
+        # target_agent_id is a raw ID, convert to spec format for routing
+        receiver_spec = (
+            f"agent {target_agent_id}"
+            if not target_agent_id.startswith("agent ")
+            else target_agent_id
+        )
         await self.program.route_message(
             sender_id=self.id,
             sender_klass=self.klass,
-            receiver_spec=target_agent_id,
+            receiver_spec=receiver_spec,
             message=message,
         )
 
-    async def start_streaming_say(self, recipient=None):
-        """Start displaying a streaming Say() message. Override in subclasses (legacy)."""
+    async def start_streaming_say(self, recipient: Optional[str] = None) -> None:
+        """Start displaying a streaming Say() message. Override in subclasses (legacy).
+
+        Args:
+            recipient: Optional recipient identifier (legacy parameter)
+        """
         pass
 
-    async def stream_say_update(self, content: str):
-        """Add content to the current streaming Say() message. Override in subclasses (legacy)."""
+    async def stream_say_update(self, content: str) -> None:
+        """Add content to the current streaming Say() message. Override in subclasses (legacy).
+
+        Args:
+            content: Content chunk to add to the stream
+        """
         pass
 
-    async def complete_streaming_say(self):
+    async def complete_streaming_say(self) -> None:
         """Complete the current streaming Say() message. Override in subclasses (legacy)."""
         pass
 
-    async def start_streaming_say_via_channel(self, target: str) -> str:
-        """Start streaming via channel infrastructure."""
+    async def start_streaming_say_via_channel(self, target: str) -> "StreamResult":
+        """Start streaming via channel infrastructure.
+
+        Args:
+            target: Target specification for the stream
+
+        Returns:
+            StreamResult indicating if streaming was started and the stream ID
+        """
         import uuid
+        from ..stream_result import StreamResult
 
         stream_id = str(uuid.uuid4())
         if self.program:
-            await self.program.start_stream(
+            result = await self.program.start_stream(
                 sender_id=self.id,
                 sender_klass=self.klass,
                 receiver_spec=target,
                 stream_id=stream_id,
             )
-        return stream_id
+            return result
+        # No program, skip streaming
+        return StreamResult.skip()
 
     async def stream_say_update_via_channel(
         self, stream_id: str, target: str, content: str
-    ):
-        """Stream content chunk via channel infrastructure."""
+    ) -> None:
+        """Stream content chunk via channel infrastructure.
+
+        Args:
+            stream_id: ID of the active stream
+            target: Target specification
+            content: Content chunk to stream
+        """
         if self.program:
             await self.program.stream_chunk(
                 stream_id=stream_id,
@@ -204,8 +332,14 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
 
     async def complete_streaming_say_via_channel(
         self, stream_id: str, target: str, final_content: str
-    ):
-        """Complete streaming via channel infrastructure."""
+    ) -> None:
+        """Complete streaming via channel infrastructure.
+
+        Args:
+            stream_id: ID of the active stream
+            target: Target specification
+            final_content: Final complete message content
+        """
         if self.program:
             await self.program.complete_stream(
                 stream_id=stream_id,
@@ -215,20 +349,38 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             )
 
     def to_dict(self) -> Dict[str, Any]:
+        """Convert agent to dictionary representation.
+
+        Returns:
+            Dictionary with agent type, ID, and any additional kwargs
+        """
         return {**self.kwargs, "type": self.klass, "agent_id": self.id}
 
-    def get_debug_thread_id(self) -> int:
-        """Get the debug thread ID for this agent."""
+    def get_debug_thread_id(self) -> Optional[int]:
+        """Get the debug thread ID for this agent.
+
+        Returns:
+            Debug thread ID if set, None otherwise
+        """
         return self._debug_thread_id
 
-    def set_debug_thread_id(self, thread_id: int) -> None:
-        """Set the debug thread ID for this agent."""
+    def set_debug_thread_id(self, thread_id: Optional[int]) -> None:
+        """Set the debug thread ID for this agent.
+
+        Args:
+            thread_id: Debug thread ID to set (None to clear)
+        """
         self._debug_thread_id = thread_id
 
     def emit_agent_paused_event(
         self, reason: str = "pause", source_line_number: int = 0
     ) -> None:
-        """Emit an agent paused event for debugging."""
+        """Emit an agent paused event for debugging.
+
+        Args:
+            reason: Reason for pausing (e.g., "pause", "breakpoint")
+            source_line_number: Line number where pause occurred
+        """
         if (
             self.program
             and hasattr(self.program, "event_bus")
@@ -243,7 +395,10 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             self.program.event_bus.publish(event)
 
     def emit_agent_resumed_event(self) -> None:
-        """Emit an agent resumed event for debugging."""
+        """Emit an agent resumed event for debugging.
+
+        Called when execution resumes after a pause.
+        """
         if (
             self.program
             and hasattr(self.program, "event_bus")

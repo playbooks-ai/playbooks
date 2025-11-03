@@ -1,6 +1,12 @@
+"""LLM response processing and execution.
+
+This module handles the processing of LLM responses, including code execution,
+artifact extraction, and integration with the playbook execution environment.
+"""
+
 import logging
 import re
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from playbooks.event_bus import EventBus
 from playbooks.python_executor import ExecutionResult, PythonExecutor
@@ -36,21 +42,37 @@ def _strip_code_block_markers(code: str) -> str:
 
 
 class LLMResponse(AsyncInitMixin):
-    def __init__(self, response: str, event_bus: EventBus, agent: "LocalAIAgent"):
+    """Processes and executes LLM-generated code responses.
+
+    Handles code extraction, preprocessing, metadata parsing, and execution
+    of LLM-generated Python code for playbook execution.
+    """
+
+    def __init__(
+        self, response: str, event_bus: EventBus, agent: "LocalAIAgent"
+    ) -> None:
+        """Initialize LLM response processor.
+
+        Args:
+            response: Raw LLM response containing Python code
+            event_bus: Event bus for publishing events
+            agent: Agent executing this response
+        """
         super().__init__()
         self.response = response
         self.event_bus = event_bus
         self.agent = agent
         self.agent.state.last_llm_response = self.response
-        self.preprocessed_code = None
-        self.execution_result: ExecutionResult = None
+        self.preprocessed_code: Optional[str] = None
+        self.execution_result: Optional[ExecutionResult] = None
 
         # Metadata parsed from comments
         self.execution_id: Optional[int] = None
-        self.recap = None
-        self.plan = None
+        self.recap: Optional[str] = None
+        self.plan: Optional[str] = None
 
-    async def _async_init(self):
+    async def _async_init(self) -> None:
+        """Initialize asynchronously - preprocess code and extract metadata."""
         # Strip code block markers if present
         self.preprocessed_code = _strip_code_block_markers(self.response)
 
@@ -61,9 +83,18 @@ class LLMResponse(AsyncInitMixin):
         self.preprocessed_code = preprocess_program(self.preprocessed_code)
 
     def _extract_metadata_from_code(self, code: str) -> None:
-        """Extract execution_id from first line comment in code.
+        """Extract execution_id, recap, and plan from code comments.
 
-        Expected format: # execution_id: N
+        Expected format:
+            # execution_id: N
+            # recap: ...
+            # plan: ...
+
+        Args:
+            code: Code string with metadata comments
+
+        Raises:
+            ValueError: If expected comment format is not found
         """
         lines = code.strip().split("\n")
 
@@ -88,8 +119,13 @@ class LLMResponse(AsyncInitMixin):
         else:
             raise ValueError(f"Third line is not a comment: {third_line}")
 
-    async def execute_generated_code(self, playbook_args: dict = None):
+    async def execute_generated_code(
+        self, playbook_args: Optional[Dict[str, Any]] = None
+    ) -> None:
         """Execute the generated code.
+
+        Creates a PythonExecutor and executes the preprocessed code,
+        storing the result in self.execution_result.
 
         Args:
             playbook_args: Optional dict of playbook argument names to values

@@ -14,6 +14,9 @@ import websockets
 
 from playbooks import Playbooks
 from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.applications.streaming_observer import (
+    ChannelStreamObserver as BaseChannelStreamObserver,
+)
 from playbooks.channels.stream_events import (
     StreamChunkEvent,
     StreamCompleteEvent,
@@ -23,10 +26,10 @@ from playbooks.constants import EOM
 from playbooks.debug_logger import debug
 from playbooks.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
-from playbooks.message import Message, MessageType
+from playbooks.message import MessageType
 from playbooks.program import Program
 from playbooks.streaming_session_log import StreamingSessionLog
-from playbooks.utils.spec_utils import SpecUtils
+from playbooks.identifiers import AgentID
 
 
 class EventType(Enum):
@@ -133,78 +136,81 @@ class AgentCreatedEvent(BaseEvent):
     agent_klass: str
 
 
-class ChannelStreamObserver:
-    """Observer for channel streaming events - broadcasts to WebSocket clients."""
+class ChannelStreamObserver(BaseChannelStreamObserver):
+    """WebSocket-based streaming observer - broadcasts to connected clients."""
 
-    def __init__(self, playbook_run: "PlaybookRun"):
+    def __init__(self, playbook_run: "PlaybookRun", target_human_id: str = None):
+        super().__init__(
+            playbook_run.playbooks.program,
+            streaming_enabled=True,
+            target_human_id=target_human_id,
+        )
         self.playbook_run = playbook_run
-        self.subscribed_channels = set()
 
-    async def subscribe_to_all_channels(self):
-        """Subscribe to all existing channels."""
-        program = self.playbook_run.playbooks.program
-        for channel_id, channel in program.channels.items():
-            if channel_id not in self.subscribed_channels:
-                channel.add_observer(self.on_channel_event)
-                self.subscribed_channels.add(channel_id)
-                debug(f"ChannelStreamObserver: Subscribed to channel {channel_id}")
-
-    async def on_channel_event(self, event):
-        """Handle events from channels (messages and streaming events)."""
-        if isinstance(event, StreamStartEvent):
-            await self.on_stream_start(event)
-        elif isinstance(event, StreamChunkEvent):
-            await self.on_stream_chunk(event)
-        elif isinstance(event, StreamCompleteEvent):
-            await self.on_stream_complete(event)
-        elif isinstance(event, Message):
-            # Regular message delivery - agent will handle it
-            pass
-
-    async def on_stream_start(self, event: StreamStartEvent):
-        """Handle stream start - broadcast to WebSocket clients."""
-        sender = self.playbook_run.playbooks.program.agents_by_id.get(event.sender_id)
-        agent_klass = sender.klass if sender else "Agent"
-
+    async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
+        """Broadcast stream start to WebSocket clients."""
         web_event = AgentStreamingEvent(
             type=EventType.AGENT_STREAMING_START,
             timestamp=datetime.now().isoformat(),
             run_id=self.playbook_run.run_id,
             agent_id=event.sender_id,
-            agent_klass=agent_klass,
+            agent_klass=agent_name,
             content="",
         )
         await self.playbook_run._broadcast_event(web_event)
 
-    async def on_stream_chunk(self, event: StreamChunkEvent):
-        """Handle stream chunk - broadcast to WebSocket clients."""
-        sender = self.playbook_run.playbooks.program.agents_by_id.get(event.sender_id)
+    async def _display_chunk(self, event: StreamChunkEvent) -> None:
+        """Broadcast stream chunk to WebSocket clients."""
+        # Need to get agent info from stream_id
+        sender = (
+            self.program.agents_by_id.get(event.sender_id)
+            if hasattr(event, "sender_id")
+            else None
+        )
         agent_klass = sender.klass if sender else "Agent"
+
+        # Get sender from active stream tracking
+        for stream_id, channel in self.program.channels.items():
+            if event.stream_id in getattr(channel, "_active_streams", {}):
+                stream_info = channel._active_streams[event.stream_id]
+                sender_id = stream_info.get("sender_id")
+                sender = self.program.agents_by_id.get(sender_id)
+                agent_klass = sender.klass if sender else agent_klass
+                agent_id = sender_id
+                break
+        else:
+            agent_id = "unknown"
 
         web_event = AgentStreamingEvent(
             type=EventType.AGENT_STREAMING_UPDATE,
             timestamp=datetime.now().isoformat(),
             run_id=self.playbook_run.run_id,
-            agent_id=event.sender_id,
+            agent_id=agent_id,
             agent_klass=agent_klass,
-            content=event.content,
+            content=event.chunk,
         )
         await self.playbook_run._broadcast_event(web_event)
 
-    async def on_stream_complete(self, event: StreamCompleteEvent):
-        """Handle stream completion - broadcast to WebSocket clients."""
-        sender = self.playbook_run.playbooks.program.agents_by_id.get(event.sender_id)
+    async def _display_complete(self, event: StreamCompleteEvent) -> None:
+        """Broadcast stream completion to WebSocket clients."""
+        # Get sender info from final message
+        sender_id = event.final_message.sender_id.id
+        sender = self.program.agents_by_id.get(sender_id)
         agent_klass = sender.klass if sender else "Agent"
 
         web_event = AgentStreamingEvent(
             type=EventType.AGENT_STREAMING_COMPLETE,
             timestamp=datetime.now().isoformat(),
             run_id=self.playbook_run.run_id,
-            agent_id=event.sender_id,
+            agent_id=sender_id,
             agent_klass=agent_klass,
-            content=event.final_content or "",
+            content=event.final_message.content or "",
         )
         await self.playbook_run._broadcast_event(web_event)
+
+    async def _display_buffered(self, event: StreamCompleteEvent) -> None:
+        """Display buffered complete message (same as streaming for WebSocket)."""
+        await self._display_complete(event)
 
 
 class PlaybookRun:
@@ -225,7 +231,6 @@ class PlaybookRun:
 
         # Initialize channel stream observer
         self.stream_observer = ChannelStreamObserver(self)
-        self.auto_subscribe_task = None
 
         # Setup message interception (but not streaming logs yet)
         self._setup_message_interception()
@@ -390,16 +395,8 @@ class PlaybookRun:
         self._setup_streaming_session_logs()
 
         # Setup channel stream observer for agent messages
+        # The observer automatically subscribes to ChannelCreatedEvent via EventBus
         await self.stream_observer.subscribe_to_all_channels()
-
-        # Start auto-subscription task for new channels
-        async def auto_subscribe_to_new_channels():
-            """Periodically check for and subscribe to new channels."""
-            while not self.terminated and not self.playbooks.program.execution_finished:
-                await self.stream_observer.subscribe_to_all_channels()
-                await asyncio.sleep(0.5)  # Check every 500ms
-
-        self.auto_subscribe_task = asyncio.create_task(auto_subscribe_to_new_channels())
 
     async def _setup_streaming_for_new_agent(self, agent):
         """Set up streaming for a newly created agent."""
@@ -479,7 +476,8 @@ class PlaybookRun:
         """Intercept and broadcast route_message calls."""
 
         # Extract recipient info
-        recipient_id = SpecUtils.extract_agent_id(receiver_spec)
+        recipient_agent_id = AgentID.parse(receiver_spec)
+        recipient_id = recipient_agent_id.id
         recipient = self.playbooks.program.agents_by_id.get(recipient_id)
         recipient_klass = recipient.klass if recipient else "Unknown"
 
@@ -662,14 +660,6 @@ class PlaybookRun:
 
     async def cleanup(self):
         """Cleanup resources and restore original methods."""
-        # Cancel the auto-subscription task
-        if self.auto_subscribe_task:
-            self.auto_subscribe_task.cancel()
-            try:
-                await self.auto_subscribe_task
-            except asyncio.CancelledError:
-                pass
-
         Program.route_message = self._original_methods["route_message"]
         MessagingMixin.WaitForMessage = self._original_methods["wait_for_message"]
         MeetingManager.broadcast_to_meeting_as_owner = self._original_methods[

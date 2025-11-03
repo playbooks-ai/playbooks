@@ -1,3 +1,10 @@
+"""Agent classes for the playbooks framework.
+
+This package provides various agent implementations including AI agents,
+human agents, and specialized agent types for different communication
+protocols and execution modes.
+"""
+
 from .ai_agent import AIAgent
 from .base_agent import BaseAgent
 from .human_agent import HumanAgent

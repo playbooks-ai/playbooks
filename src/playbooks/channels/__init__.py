@@ -11,7 +11,7 @@ Key components:
 - Stream events: Support for streaming communication
 """
 
-from .channel import Channel, MessageObserver, StreamObserver
+from .channel import Channel, StreamObserver
 from .participant import AgentParticipant, HumanParticipant, Participant
 from .stream_events import StreamChunkEvent, StreamCompleteEvent, StreamStartEvent
 
@@ -20,7 +20,6 @@ __all__ = [
     "Participant",
     "AgentParticipant",
     "HumanParticipant",
-    "MessageObserver",
     "StreamObserver",
     "StreamStartEvent",
     "StreamChunkEvent",

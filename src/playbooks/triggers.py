@@ -1,3 +1,9 @@
+"""Playbook trigger system for reactive execution.
+
+This module provides the trigger system that allows playbooks to be started
+based on various conditions and events, enabling reactive agent behavior.
+"""
+
 from typing import List, Optional
 
 

@@ -39,5 +39,12 @@ HANDLER_SILENT: str = "silent"
 
 
 def parse_boolean_env(value: str) -> bool:
-    """Parse a string environment variable to boolean."""
+    """Parse a string environment variable to boolean.
+
+    Args:
+        value: String value to parse (case-insensitive)
+
+    Returns:
+        True if value is in TRUTHY_VALUES, False otherwise
+    """
     return value.lower() in TRUTHY_VALUES

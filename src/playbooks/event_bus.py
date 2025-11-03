@@ -1,7 +1,14 @@
+"""Event bus system for decoupled communication.
+
+This module provides a typed event bus for publishing and subscribing to events
+throughout the playbooks framework, supporting both synchronous and asynchronous
+event handlers with automatic cleanup.
+"""
+
 import asyncio
 import logging
 from collections import defaultdict
-from typing import Awaitable, Callable, Dict, List, Type, TypeVar, Union
+from typing import Any, Awaitable, Callable, Dict, List, Optional, Type, TypeVar, Union
 from weakref import WeakSet
 
 from .events import Event
@@ -12,9 +19,22 @@ T = TypeVar("T", bound=Event)
 
 
 class EventBus:
-    """Event bus for typed events with sync and async support."""
+    """Event bus for typed events with sync and async support.
 
-    def __init__(self, session_id: str):
+    Provides a decoupled communication mechanism where components can publish
+    and subscribe to events without direct dependencies. Supports both synchronous
+    and asynchronous event handlers with automatic task management.
+
+    Attributes:
+        session_id: Unique identifier for this event bus session
+    """
+
+    def __init__(self, session_id: str) -> None:
+        """Initialize event bus.
+
+        Args:
+            session_id: Unique identifier for this event bus session
+        """
         self.session_id = session_id
         self._handlers: Dict[Type[Event], List[Callable]] = defaultdict(list)
         self._global_handlers: List[Callable] = []
@@ -26,7 +46,15 @@ class EventBus:
         event_type: Union[Type[T], str],
         callback: Callable[[T], Union[None, Awaitable[None]]],
     ) -> None:
-        """Subscribe to events of a specific type."""
+        """Subscribe to events of a specific type.
+
+        Args:
+            event_type: Event class type or "*" for all events
+            callback: Handler function (can be sync or async)
+
+        Raises:
+            RuntimeError: If event bus is closing
+        """
         if self._closing:
             raise RuntimeError("Cannot subscribe to closing event bus")
 
@@ -40,7 +68,15 @@ class EventBus:
         event_type: Union[Type[T], str],
         callback: Callable[[T], Union[None, Awaitable[None]]],
     ) -> None:
-        """Remove a previously registered callback."""
+        """Remove a previously registered callback.
+
+        Args:
+            event_type: Event class type or "*" for global handlers
+            callback: Handler function to remove
+
+        Note:
+            Silently ignores if callback is not found
+        """
         try:
             if isinstance(event_type, str) and event_type == "*":
                 self._global_handlers.remove(callback)
@@ -52,7 +88,15 @@ class EventBus:
             pass
 
     def publish(self, event: Event) -> None:
-        """Publish an event synchronously."""
+        """Publish an event synchronously.
+
+        Executes all registered handlers for the event type. Async handlers
+        are scheduled as tasks. Errors in handlers are logged but don't
+        stop execution of other handlers.
+
+        Args:
+            event: Event instance to publish
+        """
         # Events are frozen, so session_id should be set during construction
 
         # Get handlers
@@ -79,7 +123,17 @@ class EventBus:
                 )
 
     async def publish_async(self, event: Event) -> None:
-        """Publish an event asynchronously."""
+        """Publish an event asynchronously.
+
+        Executes all registered handlers concurrently with error isolation.
+        Each handler's errors are logged separately and don't affect others.
+
+        Args:
+            event: Event instance to publish
+
+        Raises:
+            RuntimeError: If event bus is closing
+        """
         if self._closing:
             raise RuntimeError("Cannot publish to closing event bus")
 
@@ -112,7 +166,15 @@ class EventBus:
                 )
 
     async def _safe_handler(self, handler: Callable, event: Event) -> None:
-        """Execute handler with error isolation."""
+        """Execute handler with error isolation.
+
+        Args:
+            handler: Handler function to execute
+            event: Event to pass to handler
+
+        Raises:
+            Exception: Re-raises exceptions after logging (except CancelledError)
+        """
         try:
             result = handler(event)
             if asyncio.iscoroutine(result):
@@ -123,8 +185,12 @@ class EventBus:
             logger.error(f"Exception in handler {handler.__name__}: {e}", exc_info=True)
             raise
 
-    def clear_subscribers(self, event_type: Type[Event] = None) -> None:
-        """Clear all subscribers or subscribers of a specific event type."""
+    def clear_subscribers(self, event_type: Optional[Type[Event]] = None) -> None:
+        """Clear all subscribers or subscribers of a specific event type.
+
+        Args:
+            event_type: Event type to clear subscribers for, or None to clear all
+        """
         if event_type:
             self._handlers.pop(event_type, None)
         else:
@@ -152,12 +218,27 @@ class EventBus:
 
         self.clear_subscribers()
 
-    async def __aenter__(self):
-        """Context manager entry."""
+    async def __aenter__(self) -> "EventBus":
+        """Context manager entry.
+
+        Returns:
+            EventBus instance
+        """
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit with cleanup."""
+    async def __aexit__(
+        self,
+        exc_type: Optional[type],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[Any],
+    ) -> None:
+        """Context manager exit with cleanup.
+
+        Args:
+            exc_type: Exception type (if any)
+            exc_val: Exception value (if any)
+            exc_tb: Exception traceback (if any)
+        """
         await self.close()
 
     @property

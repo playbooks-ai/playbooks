@@ -1,7 +1,14 @@
+"""Langfuse trace export utilities.
+
+This module provides functionality to export traces and observations from
+Langfuse for debugging and analysis purposes.
+"""
+
 import argparse
 import json
 import tempfile
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 import dotenv
 from langfuse import Langfuse
@@ -13,7 +20,7 @@ dotenv.load_dotenv()
 class DateTimeEncoder(json.JSONEncoder):
     """Custom JSON encoder that handles datetime objects and other non-serializable types."""
 
-    def default(self, obj):
+    def default(self, obj: Any) -> Any:
         if isinstance(obj, datetime):
             return "[redacted]"
         # Handle Pydantic models
@@ -39,8 +46,15 @@ if not langfuse:
     )
 
 
-def get_nested_observations(observations):
-    """Organize observations hierarchically, maintaining chronological order."""
+def get_nested_observations(observations: List[Any]) -> List[Dict[str, Any]]:
+    """Organize observations hierarchically, maintaining chronological order.
+
+    Args:
+        observations: List of observation objects or dictionaries
+
+    Returns:
+        Root observations with children nested hierarchically
+    """
     # Convert observations to dictionaries if they're objects
     obs_list = []
     for obs in observations:
@@ -73,8 +87,16 @@ def get_nested_observations(observations):
     return root_obs
 
 
-def remove_keys_for_diff(obj, keys_to_remove=None):
-    """Recursively remove specified keys from nested dictionaries and lists."""
+def remove_keys_for_diff(obj: Any, keys_to_remove: Optional[set] = None) -> Any:
+    """Recursively remove specified keys from nested dictionaries and lists.
+
+    Args:
+        obj: Object to clean (dict, list, or primitive)
+        keys_to_remove: Set of keys to remove, uses default if None
+
+    Returns:
+        Cleaned object with specified keys removed
+    """
     if keys_to_remove is None:
         keys_to_remove = {
             # "createdAt",
@@ -102,7 +124,9 @@ def remove_keys_for_diff(obj, keys_to_remove=None):
         return obj
 
 
-def export_observations(trace_id, save_to_file=False, for_diff=False):
+def export_observations(
+    trace_id: str, save_to_file: bool = False, for_diff: bool = False
+) -> None:
     try:
         # Fetch the trace and its observations
         trace_response = langfuse.fetch_trace(trace_id)

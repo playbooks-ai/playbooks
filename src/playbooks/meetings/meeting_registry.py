@@ -15,11 +15,8 @@ class MeetingRegistry:
     def generate_meeting_id(self) -> str:
         """Generate a new unique meeting ID.
 
-        Args:
-            owner_agent_id: The ID of the agent creating the meeting
-
         Returns:
-            New unique meeting ID as string
+            New unique meeting ID as string (sequential, starting from start_id)
         """
         meeting_id = str(self._next_id)
         self._next_id += 1

@@ -1,6 +1,6 @@
 """Raw LLM call execution without loops or structure."""
 
-from typing import TYPE_CHECKING, Any, List
+from typing import TYPE_CHECKING, Any, Dict, List
 
 from ..enums import LLMMessageType
 from ..events import PlaybookEndEvent, PlaybookStartEvent
@@ -28,8 +28,19 @@ class RawLLMExecution(LLMExecution):
     - Direct prompt → response
     """
 
-    async def execute(self, *args, **kwargs) -> Any:
-        """Execute with a raw LLM call."""
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        """Execute with a raw LLM call.
+
+        Makes a single LLM call without loops or structured steps.
+        Publishes playbook start/end events for observability.
+
+        Args:
+            *args: Positional arguments for the playbook
+            **kwargs: Keyword arguments for the playbook
+
+        Returns:
+            Parsed response from the LLM
+        """
         # Note: Call stack management is handled by the agent's execute_playbook method
         # No need to push/pop here as it would create double management
 
@@ -63,7 +74,19 @@ class RawLLMExecution(LLMExecution):
 
         return result
 
-    async def _build_prompt(self, *args, **kwargs) -> str:
+    async def _build_prompt(self, *args: Any, **kwargs: Any) -> List[Dict[str, str]]:
+        """Build the prompt for raw LLM execution.
+
+        Resolves description placeholders and includes file load messages
+        from the call stack.
+
+        Args:
+            *args: Positional arguments for the playbook
+            **kwargs: Keyword arguments for the playbook
+
+        Returns:
+            List of message dictionaries for LLM API
+        """
         call = PlaybookCall(self.playbook.name, args, kwargs)
 
         context = ExpressionContext(agent=self.agent, state=self.agent.state, call=call)
@@ -81,8 +104,17 @@ class RawLLMExecution(LLMExecution):
         messages.append(UserInputLLMMessage(resolved_description).to_full_message())
         return messages
 
-    async def _get_llm_response(self, messages: List[dict]) -> str:
-        """Get response from LLM."""
+    async def _get_llm_response(self, messages: List[Dict[str, str]]) -> str:
+        """Get response from LLM.
+
+        Makes a single completion call and caches the response in the call stack.
+
+        Args:
+            messages: List of message dictionaries for LLM API
+
+        Returns:
+            Response string from the LLM
+        """
         # Get completion
         response_generator = get_completion(
             messages=messages,
@@ -103,7 +135,13 @@ class RawLLMExecution(LLMExecution):
     def _parse_response(self, response: str) -> Any:
         """Parse the LLM response.
 
-        For raw mode, we return the response as-is.
+        For raw mode, we return the response as-is (stripped of whitespace).
         In the future, this could be enhanced to parse structured outputs.
+
+        Args:
+            response: Raw response string from LLM
+
+        Returns:
+            Parsed response (currently just stripped string)
         """
         return response.strip()

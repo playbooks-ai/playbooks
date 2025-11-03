@@ -1,3 +1,9 @@
+"""Agent namespace management for execution environments.
+
+This module provides utilities for managing Python namespaces during
+agent execution, including playbook function registration and variable scoping.
+"""
+
 from typing import Any, Dict
 
 from playbooks.playbook_decorator import playbook_decorator

@@ -106,6 +106,7 @@ Already running agents are listed in state. Agents can be created dynamically wi
 - 03:RET Return the story
 
 *(first call)*
+
 ```python
 # execution_id: 1
 # recap: beginning
@@ -121,6 +122,7 @@ await Yld("user")
 ```
 
 *(second call)*
+
 ```python
 # execution_id: 2
 # recap: user provided name as Amol
@@ -148,6 +150,7 @@ $__ = "Welcome() asked user for name and told user a story"
 - 02:YLD for exit
 
 *(first call)*
+
 ```python
 # execution_id: 1
 # recap: beginning
@@ -206,6 +209,7 @@ await Yld("call")
 
 **Ex 4 – Exit program**
 - 09:EXE Exit program
+
 ```python
 # execution_id: 4
 # recap: user's issue was resolved
@@ -220,6 +224,7 @@ await Yld("exit")
 
 **Ex 5 - Handling unexpected situation**
 For example, say there is no playbook listed to compute magic operator.
+
 ```python
 # execution_id: 5
 # recap: got number from user
@@ -242,6 +247,7 @@ Assuming MyWorker agent is defined
 - PB:02:QUE Start a daily status meeting with $agents and user
 
 *first call*
+
 ```python
 # execution_id: 6
 # ...
@@ -256,6 +262,7 @@ await Yld("call")
 ```
 
 *second call*
+
 ```python
 # execution_id: 7
 # ...
@@ -300,9 +307,10 @@ $__ = "Research() generated comprehensive answer about topic"
 || - PB:06:QUE Show answer to user | Answer was saved as artifact variable earlier | await Say("user", answer) or await Say("user", f"Here's the answer: {answer}")|
 || - PB:04:EXE Summarize full_report | full_report is previously created artifact but its contents are not loaded | await Step("PB:04:EXE")<br>await LoadArtifact("full_report")<br>await Yld("call")|
 || - PB:01:EXE Start a Q3 planning meeting with Manager and Programmer | Planning is a playbooks with meeting:true | await Planning(topic="Q3 planning meeting", attendees=["agent 2345", "agent 1001"])|
-|| - Planning:05:QUE Add Banker to the meeting | BankerAgent is the banker but no running instance | await CreateAgent("BankerAgent")<br># trig? no<br># yld? yes, need agent ID to invite<br>await Yld("call")<br>await InviteToMeeting("meeting 2334", ["agent 8765"])|
+|| - Planning:05:QUE Add Banker to the meeting | BankerAgent is the banker but no running instance | await CreateAgent("BankerAgent")<br># trig? no<br># yld? yes, need agent ID to invite<br>await Yld("call"); after BankerAgent 8765 is created; InviteToMeeting("meeting 2334", ["agent 8765"])|
 ||                                             | BankerAgent is the banker with an instance with agent id 1002 | await InviteToMeeting("meeting 2334", ["agent 1002"])|
-|| - Planning:06:QUE Create a new tax accountant agent | AccountantForTax is defined | await CreateAgent("AccountantForTax")|
+|| - Planning:06:QUE Ask Tax accountant for tax rate | AccountantForTax is defined, but no AccountantForTax instance in state | await CreateAgent("AccountantForTax")<br>await Yld("call"); after AccountantForTax 1010 is created; await Say("agent 1010", "Get tax rate")<br>await Yld("call")|
+||                                                   | AccountantForTax id 2300 in state | await Say("agent 2300", "Get tax rate")<br>await Yld("call")|
 
 ====SYSTEM_PROMPT_DELIMITER====
 *Current state*
@@ -314,4 +322,4 @@ $__ = "Research() generated comprehensive answer about topic"
 
 {{INSTRUCTION}}
 
-**Follow the contract exactly; deviations break execution. Wrap ALL generated Python code in ```python and ``` delimiters.**
+**Follow the contract exactly; deviations break execution. Generate one python code block surrounded by ```python and ```.**

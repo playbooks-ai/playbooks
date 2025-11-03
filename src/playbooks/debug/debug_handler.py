@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING, Dict
+from typing import TYPE_CHECKING, Dict, Optional
 
 from playbooks.debug_logger import debug
 
@@ -32,9 +32,17 @@ class DebugHandler:
     async def pause_if_needed(
         self,
         instruction_pointer: InstructionPointer,
-        agent_id: str = None,
-    ):
-        """Handle pause operations."""
+        agent_id: Optional[str] = None,
+    ) -> None:
+        """Handle pause operations.
+
+        Checks for breakpoints, stop-on-entry, pause requests, and step modes.
+        Pauses execution and waits for continue command if needed.
+
+        Args:
+            instruction_pointer: Current execution position
+            agent_id: ID of the agent executing (optional)
+        """
         should_pause = False
         reason = None
 

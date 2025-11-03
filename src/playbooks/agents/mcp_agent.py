@@ -1,3 +1,9 @@
+"""MCP (Model Context Protocol) agent implementation.
+
+This module provides agents that communicate with external MCP servers
+for tool execution and remote playbook processing.
+"""
+
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Type
 

@@ -1,7 +1,14 @@
+"""LLM interpreter prompt construction.
+
+This module handles the construction of prompts sent to LLMs for playbook
+interpretation, including context management, agent information, and
+execution state formatting.
+"""
+
 import json
 import os
 import types
-from typing import TYPE_CHECKING, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from playbooks.debug_logger import debug
 from playbooks.llm_context_compactor import LLMContextCompactor
@@ -21,7 +28,17 @@ if TYPE_CHECKING:
 
 
 class SetEncoder(json.JSONEncoder):
-    def default(self, obj):
+    """Custom JSON encoder for handling sets and other non-serializable types."""
+
+    def default(self, obj: Any) -> Any:
+        """Encode non-serializable objects.
+
+        Args:
+            obj: Object to encode
+
+        Returns:
+            JSON-serializable representation of the object
+        """
         if isinstance(obj, set):
             return list(obj)
         if obj is Ellipsis:
@@ -54,19 +71,21 @@ class InterpreterPrompt:
         trigger_instructions: List[str],
         agent_information: str,
         other_agent_klasses_information: List[str],
-        execution_id: Optional[int] = None,  # NEW: Track execution sequence
-    ):
-        """
-        Initializes the InterpreterPrompt.
+        execution_id: Optional[int] = None,
+    ) -> None:
+        """Initialize the InterpreterPrompt.
 
         Args:
-            execution_state: The current execution state.
-            playbooks: A dictionary of available playbooks.
-            current_playbook: The currently executing playbook, if any.
-            instruction: The user's latest instruction.
-            agent_instructions: General instructions for the agent.
-            artifacts_to_load: List of artifact names to load.
-            execution_id: Sequential execution counter for this LLM call.
+            execution_state: The current execution state
+            playbooks: Dictionary of available playbooks
+            current_playbook: The currently executing playbook, if any
+            instruction: The user's latest instruction
+            agent_instructions: General instructions for the agent
+            artifacts_to_load: List of artifact names to load
+            trigger_instructions: List of trigger instruction strings
+            agent_information: Information about the current agent
+            other_agent_klasses_information: List of information strings about other agents
+            execution_id: Sequential execution counter for this LLM call
         """
         self.execution_state = execution_state
         self.playbooks = playbooks

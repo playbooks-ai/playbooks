@@ -23,8 +23,19 @@ class ReActLLMExecution(PlaybookLLMExecution):
     - Continue or complete
     """
 
-    async def execute(self, *args, **kwargs) -> Any:
-        """Execute with react looping behavior."""
+    async def execute(self, *args: Any, **kwargs: Any) -> Any:
+        """Execute with react looping behavior.
+
+        Adds react loop steps if the playbook doesn't have steps defined,
+        then delegates to parent's playbook execution.
+
+        Args:
+            *args: Positional arguments for the playbook
+            **kwargs: Keyword arguments for the playbook
+
+        Returns:
+            Return value from the playbook execution (if any)
+        """
         # Add react loop steps if not present
         if not self._has_steps():
             self._add_react_steps()

@@ -13,18 +13,22 @@ from playbooks.llm_messages import (
 
 @dataclass
 class CompactionConfig:
-    """Configuration for LLM context compaction."""
+    """Configuration for LLM context compaction.
+
+    Attributes:
+        min_preserved_assistant_messages: Always keep last N assistant messages
+        batch_size: Compact in batches of N messages
+        enabled: Master enable/disable flag for compaction
+    """
 
     # Core strategy parameters
-    min_preserved_assistant_messages: int = (
-        None  # Always keep last N assistant messages
-    )
-    batch_size: int = None  # Compact in batches of N
+    min_preserved_assistant_messages: Optional[int] = None
+    batch_size: Optional[int] = None
 
     # Feature toggles
-    enabled: bool = None  # Master enable/disable
+    enabled: Optional[bool] = None
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Initialize from environment variables if values not provided."""
         if self.enabled is None:
             self.enabled = os.getenv("LLM_COMPACTION_ENABLED", "true").lower() == "true"
@@ -39,13 +43,32 @@ class CompactionConfig:
 
 
 class LLMContextCompactor:
-    """Handles progressive compaction of LLM messages."""
+    """Handles progressive compaction of LLM messages.
 
-    def __init__(self, config: Optional[CompactionConfig] = None):
+    Compacts older messages while preserving recent conversation context
+    to manage token limits and improve performance.
+    """
+
+    def __init__(self, config: Optional[CompactionConfig] = None) -> None:
+        """Initialize context compactor.
+
+        Args:
+            config: Compaction configuration, uses defaults if None
+        """
         self.config = config or CompactionConfig()
 
     def compact_messages(self, messages: List[LLMMessage]) -> List[Dict[str, Any]]:
-        """Main entry point for message compaction - returns LLM API format."""
+        """Main entry point for message compaction - returns LLM API format.
+
+        Compacts messages before a safe point (recent assistant responses)
+        while keeping recent conversation intact.
+
+        Args:
+            messages: List of LLM messages to compact
+
+        Returns:
+            List of message dictionaries in LLM API format (with compacted older messages)
+        """
         if not self.config.enabled or len(messages) == 0:
             return [msg.to_full_message() for msg in messages]
 

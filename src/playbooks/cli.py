@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-"""
-Command line interface for the playbooks framework.
+"""Command line interface for the playbooks framework.
 
 Provides commands for running and compiling playbooks.
 """

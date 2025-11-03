@@ -22,15 +22,23 @@ class StreamingSessionLog(SessionLog):
         super().__init__(klass, agent_id)
         self.stream_callback = stream_callback
 
-    def set_stream_callback(self, callback: Callable):
-        """Set or update the stream callback and optionally stream existing entries."""
+    def set_stream_callback(self, callback: Optional[Callable]) -> None:
+        """Set or update the stream callback and optionally stream existing entries.
+
+        Args:
+            callback: Callback function to receive log entries. Can be sync or async.
+        """
         self.stream_callback = callback
 
     def append(
         self,
         item: SessionLogItem | str,
-    ):
-        """Override append to stream entries to callback."""
+    ) -> None:
+        """Override append to stream entries to callback.
+
+        Args:
+            item: Session log item or string message to append and stream
+        """
         # Call parent append first
         super().append(item)
 

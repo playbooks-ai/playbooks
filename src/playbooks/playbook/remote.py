@@ -1,3 +1,9 @@
+"""Remote playbook implementations for external server execution.
+
+This module provides playbooks that execute on remote servers via protocols
+like MCP (Model Context Protocol), enabling distributed agent execution.
+"""
+
 import logging
 from typing import Any, Callable, Dict, Optional
 

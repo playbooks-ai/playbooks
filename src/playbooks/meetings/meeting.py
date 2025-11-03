@@ -52,7 +52,80 @@ class Meeting:
             invitation.status = MeetingInvitationStatus.ACCEPTED
             invitation.resolved_at = datetime.now()
 
+    def get_humans(self) -> List["BaseAgent"]:
+        """Get all human participants in the meeting.
+
+        Returns:
+            List of HumanAgent instances in joined_attendees
+        """
+        from playbooks.agents.human_agent import HumanAgent
+
+        return [
+            agent for agent in self.joined_attendees if isinstance(agent, HumanAgent)
+        ]
+
+    def should_stream_to_human(self, human_id: str, message: "Message") -> bool:
+        """Determine if a message should be streamed to a specific human.
+
+        Checks the human's delivery preferences to decide if streaming should
+        be used for this message.
+
+        Args:
+            human_id: The human agent ID to check
+            message: The message being sent
+
+        Returns:
+            True if message should be streamed to this human, False otherwise
+        """
+        from playbooks.agents.human_agent import HumanAgent
+
+        # Find the human in participants
+        human = None
+        for agent in self.joined_attendees:
+            if isinstance(agent, HumanAgent) and agent.id == human_id:
+                human = agent
+                break
+
+        if not human:
+            return False
+
+        # Check if streaming is enabled for this human
+        if not human.delivery_preferences.streaming_enabled:
+            return False
+
+        # Check meeting notification preferences
+        prefs = human.delivery_preferences.meeting_notifications
+
+        if prefs == "none":
+            # Human doesn't want meeting notifications
+            return False
+
+        if prefs == "all":
+            # Human wants all meeting messages
+            return True
+
+        # prefs == "targeted" - only stream if human is targeted
+        if message.target_agent_ids and human_id in [
+            aid.id for aid in message.target_agent_ids
+        ]:
+            return True
+
+        # Check if human is mentioned in message content
+        if human.name.lower() in message.content.lower():
+            return True
+
+        if human.klass.lower() in message.content.lower():
+            return True
+
+        # Not targeted - don't stream
+        return False
+
     def agent_rejected(self, agent: BaseAgent) -> None:
+        """Mark an agent's invitation as rejected.
+
+        Args:
+            agent: The agent that rejected the invitation
+        """
         invitation = self.invitations.get(agent.id)
         if invitation:
             invitation.status = MeetingInvitationStatus.REJECTED
@@ -79,24 +152,53 @@ class Meeting:
         ]
 
     def log_message(self, message: "Message") -> None:
-        """Add a message to the meeting history."""
+        """Add a message to the meeting history.
+
+        Args:
+            message: Message to add to the history
+        """
         self.message_history.append(message)
 
     def get_unread_messages(self, agent: BaseAgent) -> List["Message"]:
-        """Get unread messages for a specific agent."""
+        """Get unread messages for a specific agent.
+
+        Args:
+            agent: Agent to get unread messages for
+
+        Returns:
+            List of unread messages since the agent's last read index
+        """
         last_index = self.agent_last_message_index.get(agent.id, 0)
         return self.message_history[last_index:]
 
     def mark_messages_read(self, agent: BaseAgent) -> None:
-        """Mark all messages as read for a specific agent."""
+        """Mark all messages as read for a specific agent.
+
+        Args:
+            agent: Agent whose messages should be marked as read
+        """
         self.agent_last_message_index[agent.id] = len(self.message_history)
 
     def is_participant(self, agent: BaseAgent) -> bool:
-        """Check if an agent is a participant in the meeting."""
+        """Check if an agent is a participant in the meeting.
+
+        Args:
+            agent: Agent to check
+
+        Returns:
+            True if agent is in joined_attendees, False otherwise
+        """
         return agent in self.joined_attendees
 
     def has_pending_invitation(self, agent: BaseAgent) -> bool:
-        """Check if an agent has a pending invitation."""
+        """Check if an agent has a pending invitation.
+
+        Args:
+            agent: Agent to check
+
+        Returns:
+            True if agent has a pending invitation, False otherwise
+        """
         return (
             agent.id in self.invitations
             and self.invitations[agent.id].status == MeetingInvitationStatus.PENDING

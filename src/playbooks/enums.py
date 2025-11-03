@@ -1,3 +1,10 @@
+"""Enumeration types used throughout the playbooks framework.
+
+This module defines various enum types for agent types, routing modes,
+LLM message roles and types, execution modes, and other categorical values
+used in the system.
+"""
+
 from enum import Enum
 
 

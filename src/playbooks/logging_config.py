@@ -23,7 +23,11 @@ from .logging_constants import (
 
 
 class Config:
-    """Minimal logging configuration with sensible defaults."""
+    """Minimal logging configuration with sensible defaults.
+
+    Provides configuration for debug logging, output handlers, and debug file
+    output based on environment variables.
+    """
 
     DEBUG_ENABLED: bool = parse_boolean_env(
         os.getenv(ENV_DEBUG_ENABLED, DEFAULT_DEBUG_ENABLED)

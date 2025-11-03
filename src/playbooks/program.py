@@ -1,3 +1,10 @@
+"""Program execution orchestration for playbooks.
+
+This module provides the Program class that orchestrates the execution of
+playbooks, manages agent lifecycles, handles event routing, and coordinates
+communication between all system components.
+"""
+
 import asyncio
 import json
 import logging
@@ -5,7 +12,7 @@ import re
 from pathlib import Path
 
 # Removed threading import - using asyncio only
-from typing import Any, Dict, List, Type, Union
+from typing import Any, Dict, List, Optional, Type, Union
 
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
@@ -17,32 +24,53 @@ from .debug.server import (
 )
 from .debug_logger import debug
 from .event_bus import EventBus
-from .events import ProgramTerminatedEvent
+from .events import ChannelCreatedEvent, ProgramTerminatedEvent
 from .exceptions import ExecutionFinished, KlassNotFoundError
+from .identifiers import AgentID, MeetingID
 from .meetings import MeetingRegistry
 from .message import Message, MessageType
+from .stream_result import StreamResult
 from .utils import file_utils
 from .utils.markdown_to_ast import markdown_to_ast
-from .utils.spec_utils import SpecUtils
 from .variables import Artifact
 
 logger = logging.getLogger(__name__)
 
 
 class AsyncAgentRuntime:
-    """
-    Asyncio-based runtime that manages agent execution.
+    """Asyncio-based runtime that manages agent execution.
 
     Uses asyncio tasks instead of threads for concurrent agent execution.
+    Manages agent lifecycle, task tracking, and graceful shutdown.
+
+    Attributes:
+        program: Reference to the Program instance
+        agent_tasks: Dictionary mapping agent IDs to their asyncio tasks
+        running_agents: Dictionary tracking which agents are currently running
     """
 
-    def __init__(self, program: "Program"):
+    def __init__(self, program: "Program") -> None:
+        """Initialize the async agent runtime.
+
+        Args:
+            program: The Program instance managing this runtime
+        """
         self.program = program
         self.agent_tasks: Dict[str, asyncio.Task] = {}
         self.running_agents: Dict[str, bool] = {}
 
-    async def start_agent(self, agent):
-        """Start an agent as an asyncio task."""
+    async def start_agent(self, agent: BaseAgent) -> Optional[asyncio.Task]:
+        """Start an agent as an asyncio task.
+
+        Creates an asyncio task for the agent and tracks it. If the agent
+        is already running, this is a no-op.
+
+        Args:
+            agent: The agent instance to start
+
+        Returns:
+            The created asyncio task, or None if agent was already running
+        """
         if agent.id in self.running_agents and self.running_agents[agent.id]:
             return
 
@@ -55,8 +83,18 @@ class AsyncAgentRuntime:
         # Don't await - let it run independently
         return task
 
-    async def stop_agent(self, agent_id: str):
-        """Stop an agent gracefully."""
+    async def stop_agent(self, agent_id: str) -> None:
+        """Stop an agent gracefully.
+
+        Signals the agent to stop, cancels its task, and waits for cleanup.
+        Handles cancellation errors and notifies the debug server.
+
+        Args:
+            agent_id: ID of the agent to stop
+
+        Note:
+            Silently handles agents that are not running
+        """
         if agent_id not in self.running_agents:
             return
 
@@ -89,14 +127,29 @@ class AsyncAgentRuntime:
         self.agent_tasks.pop(agent_id, None)
         self.running_agents.pop(agent_id, None)
 
-    async def stop_all_agents(self):
-        """Stop all running agents."""
+    async def stop_all_agents(self) -> None:
+        """Stop all running agents.
+
+        Stops all agents tracked in running_agents, useful for shutdown.
+        """
         agent_ids = list(self.running_agents.keys())
         for agent_id in agent_ids:
             await self.stop_agent(agent_id)
 
-    async def _agent_main(self, agent):
-        """Main coroutine for agent execution."""
+    async def _agent_main(self, agent: BaseAgent) -> None:
+        """Main coroutine for agent execution.
+
+        Wraps agent.begin() with error handling and cleanup. Catches
+        ExecutionFinished exceptions and handles agent errors gracefully.
+
+        Args:
+            agent: The agent instance to execute
+
+        Raises:
+            ExecutionFinished: Handled internally, signals normal completion
+            asyncio.CancelledError: Re-raised for proper cancellation handling
+            Exception: Other exceptions are logged and re-raised
+        """
         try:
             # Initialize and start the agent
             # await agent.initialize()
@@ -180,9 +233,9 @@ class ProgramAgentsCommunicationMixin:
         receiver_spec: str,
         message: str,
         message_type: MessageType = MessageType.DIRECT,
-        meeting_id: str = None,
-        stream_id: str = None,
-    ):
+        meeting_id: Optional[str] = None,
+        stream_id: Optional[str] = None,
+    ) -> None:
         """Routes a message to receiver agent(s) via the unified channel architecture.
 
         Features:
@@ -207,6 +260,10 @@ class ProgramAgentsCommunicationMixin:
             message_length=len(message_str) if message_str else 0,
         )
 
+        # Parse IDs at entry point - convert strings to structured types
+        sender_agent_id = AgentID.parse(sender_id)
+        parsed_meeting_id = MeetingID.parse(meeting_id) if meeting_id else None
+
         # Parse target agents from receiver_spec (for meetings with targeting)
         target_agent_ids = None
         if receiver_spec.startswith("meeting "):
@@ -215,7 +272,7 @@ class ProgramAgentsCommunicationMixin:
             if len(parts) > 1:
                 # Extract meeting ID from first part
                 meeting_spec = parts[0].strip()
-                meeting_id = SpecUtils.extract_meeting_id(meeting_spec)
+                parsed_meeting_id = MeetingID.parse(meeting_spec)
                 receiver_spec = (
                     meeting_spec  # Use clean meeting spec for channel lookup
                 )
@@ -225,54 +282,58 @@ class ProgramAgentsCommunicationMixin:
                 for part in parts[1:]:
                     part = part.strip()
                     if part.startswith("agent "):
-                        agent_id = SpecUtils.extract_agent_id(part)
-                        target_agent_ids.append(agent_id)
+                        target_agent_ids.append(AgentID.parse(part))
 
                 debug(
-                    f"Parsed meeting targeting: meeting={meeting_id}, targets={target_agent_ids}"
+                    f"Parsed meeting targeting: meeting={parsed_meeting_id}, targets={target_agent_ids}"
+                )
+            elif not parsed_meeting_id:
+                # No targeting, just extract meeting ID
+                parsed_meeting_id = MeetingID.parse(
+                    meeting_spec if "meeting_spec" in locals() else receiver_spec
                 )
 
         # Get sender agent
         sender_agent = self.agents_by_id.get(sender_id)
         if not sender_agent:
-            debug(f"Warning: Sender agent {sender_id} not found")
-            return
+            raise ValueError(f"Sender agent {sender_id} not found")
 
         # Get or create channel for this communication
         try:
-            channel = self.get_or_create_channel(sender_agent, receiver_spec)
+            channel = await self.get_or_create_channel(sender_agent, receiver_spec)
         except ValueError as e:
             debug(f"Error getting channel: {e}")
             return
 
         # Determine recipient info for the message
+        recipient_agent_id = None
+        recipient_klass = None
+
         if receiver_spec.startswith("meeting "):
-            # Meeting message
-            recipient_id = None
-            recipient_klass = None
-            if not meeting_id:
-                meeting_id = SpecUtils.extract_meeting_id(receiver_spec)
+            # Meeting message - no specific recipient
+            if not parsed_meeting_id:
+                parsed_meeting_id = MeetingID.parse(receiver_spec)
         else:
-            # Direct message
-            recipient_id = SpecUtils.extract_agent_id(receiver_spec)
-            recipient = self.agents_by_id.get(recipient_id)
+            # Direct message - parse recipient
+            recipient_agent_id = AgentID.parse(receiver_spec)
+            recipient = self.agents_by_id.get(recipient_agent_id.id)
             recipient_klass = recipient.klass if recipient else None
 
-        # Create message with targeting metadata and streaming info
+        # Create message with structured IDs
         msg = Message(
-            sender_id=sender_id,
+            sender_id=sender_agent_id,
             sender_klass=sender_klass,
             content=message_str,
             recipient_klass=recipient_klass,
-            recipient_id=recipient_id,
+            recipient_id=recipient_agent_id,
             message_type=message_type,
-            meeting_id=meeting_id,
+            meeting_id=parsed_meeting_id,
             target_agent_ids=target_agent_ids,
             stream_id=stream_id,
         )
 
         # Send via channel (channel handles delivery to all participants)
-        await channel.send(msg, sender_id)
+        await channel.send(msg, sender_agent_id.id)
 
     async def start_stream(
         self: "Program",
@@ -281,23 +342,58 @@ class ProgramAgentsCommunicationMixin:
         receiver_spec: str,
         stream_id: str,
         message_type: MessageType = MessageType.DIRECT,
-        meeting_id: str = None,
-    ):
+        meeting_id: Optional[str] = None,
+    ) -> StreamResult:
         """Start a streaming message via channel.
 
+        Streaming is only used when the recipient is human. For agent-to-agent
+        messages, returns a result indicating streaming should be skipped.
+
         Returns:
-            stream_id for tracking this stream
+            StreamResult indicating whether streaming was started and providing stream_id
         """
         sender_agent = self.agents_by_id.get(sender_id)
         if not sender_agent:
-            return stream_id
+            return StreamResult.start(stream_id)
 
         try:
-            channel = self.get_or_create_channel(sender_agent, receiver_spec)
-            await channel.start_stream(stream_id, sender_id)
-            return stream_id
+            channel = await self.get_or_create_channel(sender_agent, receiver_spec)
+
+            # Check if any participant is human (streaming is human-only)
+            has_human = any(
+                isinstance(p, HumanParticipant) for p in channel.participants
+            )
+
+            if not has_human:
+                # Agent-to-agent communication: skip streaming
+                return StreamResult.skip()
+
+            # Resolve recipient info for stream events
+            recipient_id = None
+            recipient_klass = None
+
+            if receiver_spec in ["human", "user"]:
+                recipient_id = "human"
+                recipient_klass = "human"
+            elif not receiver_spec.startswith("meeting "):
+                # Direct agent communication - parse to structured ID
+                recipient_agent_id = AgentID.parse(receiver_spec)
+                recipient_id = recipient_agent_id.id
+                recipient_agent = self.agents_by_id.get(recipient_id)
+                if recipient_agent:
+                    recipient_klass = recipient_agent.klass
+
+            await channel.start_stream(
+                stream_id,
+                sender_id,
+                sender_klass,
+                receiver_spec,
+                recipient_id,
+                recipient_klass,
+            )
+            return StreamResult.start(stream_id)
         except ValueError:
-            return stream_id
+            return StreamResult.skip()
 
     async def stream_chunk(
         self: "Program",
@@ -305,14 +401,14 @@ class ProgramAgentsCommunicationMixin:
         sender_id: str,
         receiver_spec: str,
         content: str,
-    ):
+    ) -> None:
         """Send a chunk of streaming content via channel."""
         sender_agent = self.agents_by_id.get(sender_id)
         if not sender_agent:
             return
 
         try:
-            channel = self.get_or_create_channel(sender_agent, receiver_spec)
+            channel = await self.get_or_create_channel(sender_agent, receiver_spec)
             await channel.stream_chunk(stream_id, content)
         except ValueError:
             pass
@@ -322,38 +418,67 @@ class ProgramAgentsCommunicationMixin:
         stream_id: str,
         sender_id: str,
         receiver_spec: str,
-        final_content: str = None,
-    ):
+        final_content: Optional[str] = None,
+    ) -> None:
         """Complete a streaming message via channel."""
         sender_agent = self.agents_by_id.get(sender_id)
         if not sender_agent:
             return
 
         try:
-            channel = self.get_or_create_channel(sender_agent, receiver_spec)
-            await channel.complete_stream(stream_id, final_content)
+            channel = await self.get_or_create_channel(sender_agent, receiver_spec)
 
-            # Also send the final complete message
-            if final_content:
-                await self.route_message(
-                    sender_id=sender_id,
-                    sender_klass=sender_agent.klass,
-                    receiver_spec=receiver_spec,
-                    message=final_content,
-                    stream_id=stream_id,
-                )
+            # Determine recipient info for the message
+            if receiver_spec.startswith("meeting "):
+                # Meeting message - parse to structured ID
+                meeting_id_obj = MeetingID.parse(receiver_spec)
+                meeting_id = meeting_id_obj.id
+                recipient_id = None
+                recipient_klass = None
+                message_type = MessageType.MEETING_BROADCAST
+            else:
+                # Direct message - parse to structured ID
+                recipient_agent_id = AgentID.parse(receiver_spec)
+                recipient_id = recipient_agent_id.id
+                recipient = self.agents_by_id.get(recipient_id)
+                recipient_klass = recipient.klass if recipient else None
+                meeting_id = None
+                message_type = MessageType.DIRECT
+
+            # Create the final message with structured IDs
+            final_message = Message(
+                sender_id=AgentID(sender_id),
+                sender_klass=sender_agent.klass,
+                content=final_content or "",
+                recipient_klass=recipient_klass,
+                recipient_id=AgentID(recipient_id) if recipient_id else None,
+                message_type=message_type,
+                meeting_id=MeetingID(meeting_id) if meeting_id else None,
+                stream_id=stream_id,
+            )
+
+            # Complete the stream (this will send the message via channel)
+            await channel.complete_stream(stream_id, final_message)
         except ValueError:
             pass
 
 
 class AgentIdRegistry:
-    """Manages sequential agent ID generation."""
+    """Manages sequential agent ID generation.
 
-    def __init__(self):
+    Provides unique sequential IDs starting from 1000 for agent instances.
+    """
+
+    def __init__(self) -> None:
+        """Initialize the registry with starting ID 1000."""
         self._next_id = 1000
 
     def get_next_id(self) -> str:
-        """Get the next sequential agent ID."""
+        """Get the next sequential agent ID.
+
+        Returns:
+            String representation of the next available agent ID
+        """
         current_id = self._next_id
         self._next_id += 1
         return str(current_id)
@@ -423,44 +548,72 @@ class Program(ProgramAgentsCommunicationMixin):
             False  # Track if any agents have had errors for test visibility
         )
 
-    async def initialize(self):
+    async def initialize(self) -> None:
         self.agents = [
             await self.create_agent(klass)
             for klass in self.agent_klasses.values()
             if klass.should_create_instance_at_start()
         ]
-        if len(self.agent_klasses) != len(self.public_jsons):
-            raise ValueError(
-                "Number of agents and public jsons must be the same. "
-                f"Got {len(self.agent_klasses)} agents and {len(self.public_jsons)} public jsons"
-            )
-
-        agent_klass_list = list(self.agent_klasses.values())
-        for i in range(len(agent_klass_list)):
-            agent_klass = agent_klass_list[i]
-            agent_klass.public_json = self.public_jsons[i]
-            if agent_klass.public_json:
-                for playbook in agent_klass.playbooks.values():
-                    if not playbook.description:
-                        playbook_jsons = list(
-                            filter(
-                                lambda x: x["name"] == playbook.klass,
-                                agent_klass.public_json,
-                            )
-                        )
-                        if playbook_jsons:
-                            playbook.description = playbook_jsons[0].get(
-                                "description", ""
-                            )
-
-        self.agents.append(
-            HumanAgent(
-                klass=HUMAN_AGENT_KLASS,
-                agent_id="human",
-                program=self,
-                event_bus=self.event_bus,
-            )
+        # Validate public.json count (only for AI agents, humans don't need public.json)
+        # Allow empty or missing public.json for testing scenarios
+        ai_agent_count = sum(
+            1
+            for klass in self.agent_klasses.values()
+            if not issubclass(klass, HumanAgent)
         )
+
+        # Filter out empty public.json arrays
+        non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
+
+        # Only validate if there are non-empty public.jsons
+        # (Allow tests without public.json blocks)
+        if len(non_empty_public_jsons) > 0 and ai_agent_count != len(
+            non_empty_public_jsons
+        ):
+            raise ValueError(
+                "Number of AI agents and public jsons must be the same. "
+                f"Got {ai_agent_count} AI agents and {len(non_empty_public_jsons)} non-empty public jsons"
+            )
+
+        # Assign public.json to AI agents only (humans don't have playbooks)
+        ai_agent_klasses = [
+            klass
+            for klass in self.agent_klasses.values()
+            if not issubclass(klass, HumanAgent)
+        ]
+        for i, agent_klass in enumerate(ai_agent_klasses):
+            if i < len(non_empty_public_jsons):
+                agent_klass.public_json = non_empty_public_jsons[i]
+                if agent_klass.public_json:
+                    for playbook in agent_klass.playbooks.values():
+                        if not playbook.description:
+                            playbook_jsons = list(
+                                filter(
+                                    lambda x: x["name"] == playbook.klass,
+                                    agent_klass.public_json,
+                                )
+                            )
+                            if playbook_jsons:
+                                playbook.description = playbook_jsons[0].get(
+                                    "description", ""
+                                )
+
+        # Create default human agent if none declared
+        has_human_agents = any(
+            issubclass(klass, HumanAgent) for klass in self.agent_klasses.values()
+        )
+
+        if not has_human_agents:
+            # No human agents declared - create default "User:Human" agent
+            self.agents.append(
+                HumanAgent(
+                    event_bus=self.event_bus,
+                    agent_id="human",
+                    program=self,
+                    klass="User",
+                    name="User",
+                )
+            )
 
         # Agent registration
         for agent in self.agents:
@@ -479,12 +632,14 @@ class Program(ProgramAgentsCommunicationMixin):
             return [self.program_content]
         return [file_utils.read_file(path) for path in self.compiled_program_paths]
 
-    def event_agents_changed(self):
+    def event_agents_changed(self) -> None:
         for agent in self.agents:
             if isinstance(agent, AIAgent):
                 agent.event_agents_changed()
 
-    async def create_agent(self, agent_klass: Union[str, Type[BaseAgent]], **kwargs):
+    async def create_agent(
+        self, agent_klass: Union[str, Type[BaseAgent]], **kwargs
+    ) -> BaseAgent:
         if isinstance(agent_klass, str):
             klass = self.agent_klasses.get(agent_klass)
             if not klass:
@@ -513,7 +668,7 @@ class Program(ProgramAgentsCommunicationMixin):
 
         return agent
 
-    async def _start_new_agent(self, agent):
+    async def _start_new_agent(self, agent: BaseAgent) -> None:
         """Initialize and start a newly created agent."""
         try:
             # Start agent as asyncio task
@@ -535,7 +690,7 @@ class Program(ProgramAgentsCommunicationMixin):
         """Generate the compiled file name based on the first original file."""
         return self.compiled_program_paths[0]
 
-    def _emit_compiled_program_event(self):
+    def _emit_compiled_program_event(self) -> None:
         """Emit an event with the compiled program content for debugging."""
         from .events import CompiledProgramEvent
 
@@ -548,11 +703,11 @@ class Program(ProgramAgentsCommunicationMixin):
         )
         self.event_bus.publish(event)
 
-    def parse_metadata(self):
+    def parse_metadata(self) -> None:
         self.title = self.metadata.get("title", None)
         self.description = self.metadata.get("description", None)
 
-    def extract_public_json(self):
+    def extract_public_json(self) -> None:
         # Extract publics.json from full_program
         self.public_jsons = []
 
@@ -566,7 +721,12 @@ class Program(ProgramAgentsCommunicationMixin):
                     self.public_jsons.append(public_json)
                     markdown_content = markdown_content.replace(match[0], "")
 
-    async def begin(self):
+    async def begin(self) -> None:
+        """Start all agents asynchronously.
+
+        Initializes all agents sequentially, then starts them as concurrent
+        asyncio tasks. Agents run independently and don't block each other.
+        """
         # Start all agents as asyncio tasks concurrently
         # Use task creation instead of gather to let them run independently
         tasks = []
@@ -578,7 +738,16 @@ class Program(ProgramAgentsCommunicationMixin):
                 tasks.append(task)
         # Don't wait for tasks - let them run independently
 
-    async def run_till_exit(self):
+    async def run_till_exit(self) -> None:
+        """Run the program until execution finishes.
+
+        Starts all agents and waits for execution to complete. Handles
+        ExecutionFinished exceptions and ensures proper shutdown.
+
+        Raises:
+            ValueError: If program is not initialized
+            Exception: Re-raises unexpected errors after logging
+        """
         if not self.initialized:
             raise ValueError("Program not initialized. Call initialize() first.")
         try:
@@ -644,10 +813,25 @@ class Program(ProgramAgentsCommunicationMixin):
         return errors
 
     def has_agent_errors(self) -> bool:
-        """Check if any agents have had errors."""
+        """Check if any agents have had errors.
+
+        Returns:
+            True if any agent has encountered an execution error, False otherwise
+        """
         return self._has_agent_errors or len(self.get_agent_errors()) > 0
 
-    def set_execution_finished(self, reason: str = "normal", exit_code: int = 0):
+    def set_execution_finished(
+        self, reason: str = "normal", exit_code: int = 0
+    ) -> None:
+        """Signal that program execution has finished.
+
+        Sets the execution_finished flag and notifies waiting coroutines
+        via the execution_finished_event.
+
+        Args:
+            reason: Reason for finishing (e.g., "normal", "error")
+            exit_code: Exit code (0 for success, non-zero for errors)
+        """
         self.execution_finished = True
         if hasattr(self, "execution_finished_event"):
             self.execution_finished_event.set()
@@ -657,7 +841,7 @@ class Program(ProgramAgentsCommunicationMixin):
             )
             self.event_bus.publish(termination_event)
 
-    async def shutdown(self):
+    async def shutdown(self) -> None:
         """Shutdown all agents and clean up resources."""
         self.set_execution_finished(reason="normal", exit_code=0)
 
@@ -721,9 +905,7 @@ class Program(ProgramAgentsCommunicationMixin):
     def get_agents_by_specs(self, specs: List[str]) -> List[BaseAgent]:
         """Get agents by specs."""
         try:
-            return [
-                self.agents_by_id[SpecUtils.extract_agent_id(spec)] for spec in specs
-            ]
+            return [self.agents_by_id[AgentID.parse(spec).id] for spec in specs]
         except KeyError:
             pass
 
@@ -833,8 +1015,13 @@ class Program(ProgramAgentsCommunicationMixin):
         ids = sorted([sender_id, receiver_id])
         return f"channel_{ids[0]}_{ids[1]}"
 
-    def get_or_create_channel(self, sender: BaseAgent, receiver_spec: str) -> Channel:
+    async def get_or_create_channel(
+        self, sender: BaseAgent, receiver_spec: str
+    ) -> Channel:
         """Get or create a channel for communication.
+
+        When a new channel is created, all registered callbacks are invoked immediately
+        to enable event-driven channel discovery.
 
         Args:
             sender: The sending agent
@@ -845,8 +1032,8 @@ class Program(ProgramAgentsCommunicationMixin):
         """
         # Handle meeting channels
         if receiver_spec.startswith("meeting "):
-            meeting_id = SpecUtils.extract_meeting_id(receiver_spec)
-            channel_id = f"meeting_{meeting_id}"
+            meeting_id_obj = MeetingID.parse(receiver_spec)
+            channel_id = f"meeting_{meeting_id_obj.id}"
 
             # Return existing meeting channel if it exists
             if channel_id in self.channels:
@@ -863,7 +1050,8 @@ class Program(ProgramAgentsCommunicationMixin):
             receiver_id = "human"
             receiver = self.agents_by_id.get("human")
         else:
-            receiver_id = SpecUtils.extract_agent_id(receiver_spec)
+            receiver_agent_id = AgentID.parse(receiver_spec)
+            receiver_id = receiver_agent_id.id
             receiver = self.agents_by_id.get(receiver_id)
 
         if not receiver:
@@ -872,22 +1060,42 @@ class Program(ProgramAgentsCommunicationMixin):
         # Create channel ID (consistent ordering)
         channel_id = self._make_channel_id(sender.id, receiver_id)
 
-        # Return existing channel or create new one
-        if channel_id not in self.channels:
-            participants = [
-                self._to_participant(sender),
-                self._to_participant(receiver),
-            ]
-            self.channels[channel_id] = Channel(channel_id, participants)
+        # Atomic check-and-set to avoid race conditions
+        existing_channel = self.channels.get(channel_id)
+        if existing_channel is not None:
+            return existing_channel
 
-        return self.channels[channel_id]
+        # Create new channel
+        participants = [
+            self._to_participant(sender),
+            self._to_participant(receiver),
+        ]
+        new_channel = Channel(channel_id, participants)
 
-    def create_meeting_channel(
+        # Use setdefault for atomic insertion (returns existing if already set)
+        channel = self.channels.setdefault(channel_id, new_channel)
+
+        # Publish event if we actually created a new channel
+        if channel is new_channel:
+            participant_ids = [p.id for p in participants]
+            event = ChannelCreatedEvent(
+                session_id=self.event_bus.session_id,
+                agent_id="",
+                channel_id=channel_id,
+                is_meeting=False,
+                participant_ids=participant_ids,
+            )
+            self.event_bus.publish(event)
+
+        return channel
+
+    async def create_meeting_channel(
         self, meeting_id: str, participants: List[BaseAgent]
     ) -> Channel:
         """Create a channel for a meeting.
 
         This is called by MeetingManager when creating a meeting.
+        When a new channel is created, all registered callbacks are invoked immediately.
 
         Args:
             meeting_id: ID of the meeting
@@ -898,14 +1106,30 @@ class Program(ProgramAgentsCommunicationMixin):
         """
         channel_id = f"meeting_{meeting_id}"
 
-        if channel_id in self.channels:
-            # Channel already exists, just return it
-            return self.channels[channel_id]
+        # Atomic check-and-set to avoid race conditions
+        existing_channel = self.channels.get(channel_id)
+        if existing_channel is not None:
+            return existing_channel
 
         # Convert all participants to Participant instances
         channel_participants = [self._to_participant(p) for p in participants]
 
-        # Create and store the channel
-        self.channels[channel_id] = Channel(channel_id, channel_participants)
+        # Create new channel
+        new_channel = Channel(channel_id, channel_participants)
 
-        return self.channels[channel_id]
+        # Use setdefault for atomic insertion
+        channel = self.channels.setdefault(channel_id, new_channel)
+
+        # Publish event if we actually created a new channel
+        if channel is new_channel:
+            participant_ids = [p.id for p in channel_participants]
+            event = ChannelCreatedEvent(
+                session_id=self.event_bus.session_id,
+                agent_id="",
+                channel_id=channel_id,
+                is_meeting=True,
+                participant_ids=participant_ids,
+            )
+            self.event_bus.publish(event)
+
+        return channel

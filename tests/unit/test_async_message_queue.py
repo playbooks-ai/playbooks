@@ -17,11 +17,8 @@ import time
 
 import pytest
 
-from playbooks.async_message_queue import (
-    AsyncMessageQueue,
-    MessageBuffer,
-    PriorityAsyncMessageQueue,
-)
+from playbooks.async_message_queue import AsyncMessageQueue
+from playbooks.identifiers import AgentID, MeetingID
 from playbooks.message import Message, MessageType
 
 
@@ -33,13 +30,13 @@ def create_test_message(
 ) -> Message:
     """Create a test message."""
     return Message(
-        sender_id=sender_id,
+        sender_id=AgentID.parse(sender_id),
         sender_klass="TestAgent",
         content=content,
-        recipient_id=recipient_id,
+        recipient_id=AgentID.parse(recipient_id),
         recipient_klass="TestAgent",
         message_type=MessageType.DIRECT,
-        meeting_id=meeting_id,
+        meeting_id=MeetingID.parse(meeting_id) if meeting_id else None,
     )
 
 
@@ -70,8 +67,8 @@ class TestAsyncMessageQueue:
         await queue.put(create_test_message("msg2", sender_id="agent2"))
         await queue.put(create_test_message("msg3", sender_id="agent1"))
 
-        # Get message from specific agent
-        msg = await queue.get(lambda m: m.sender_id == "agent2")
+        # Get message from specific agent (compare with AgentID)
+        msg = await queue.get(lambda m: m.sender_id.id == "agent2")
         assert msg.content == "msg2"
         assert queue.size == 2
 
@@ -116,7 +113,7 @@ class TestAsyncMessageQueue:
 
         # Get batch with predicate
         batch = await queue.get_batch(
-            predicate=lambda m: m.sender_id == "target", max_messages=10, timeout=0.1
+            predicate=lambda m: m.sender_id.id == "target", max_messages=10, timeout=0.1
         )
 
         assert len(batch) == 2
@@ -356,144 +353,3 @@ class TestAsyncMessageQueue:
         assert stats["total_messages"] == 2
         assert stats["total_gets"] == 1
         assert stats["uptime_seconds"] > 0
-
-
-@pytest.mark.asyncio
-class TestPriorityAsyncMessageQueue:
-    """Test cases for PriorityAsyncMessageQueue."""
-
-    async def test_priority_ordering(self):
-        """Test messages are returned by priority."""
-        queue = PriorityAsyncMessageQueue(max_priority=5)
-
-        # Add messages with different priorities
-        await queue.put(create_test_message("low"), priority=5)
-        await queue.put(create_test_message("high"), priority=0)
-        await queue.put(create_test_message("medium"), priority=2)
-        await queue.put(create_test_message("urgent"), priority=0)
-
-        # Should get highest priority first
-        msg = await queue.get()
-        assert msg.content in ["high", "urgent"]  # Both priority 0
-
-        msg = await queue.get()
-        assert msg.content in ["high", "urgent"]  # Other priority 0
-
-        msg = await queue.get()
-        assert msg.content == "medium"  # Priority 2
-
-        msg = await queue.get()
-        assert msg.content == "low"  # Priority 5
-
-    async def test_priority_stats(self):
-        """Test priority queue statistics."""
-        queue = PriorityAsyncMessageQueue(max_priority=3)
-
-        # Add messages to different priorities
-        await queue.put(create_test_message("p0"), priority=0)
-        await queue.put(create_test_message("p1"), priority=1)
-        await queue.put(create_test_message("p1-2"), priority=1)
-
-        stats = queue.priority_stats
-        assert stats[0] == 1
-        assert stats[1] == 2
-        assert 2 not in stats  # No messages at priority 2
-
-    async def test_invalid_priority(self):
-        """Test handling of invalid priority values."""
-        queue = PriorityAsyncMessageQueue(max_priority=5)
-
-        with pytest.raises(ValueError, match="Priority must be between"):
-            await queue.put(create_test_message("invalid"), priority=10)
-
-        with pytest.raises(ValueError, match="Priority must be between"):
-            await queue.put(create_test_message("invalid"), priority=-1)
-
-
-@pytest.mark.asyncio
-class TestMessageBuffer:
-    """Test cases for MessageBuffer."""
-
-    async def test_wait_for_any_message(self):
-        """Test waiting for any message."""
-        queue = AsyncMessageQueue()
-        buffer = MessageBuffer(queue)
-
-        # Start waiting in background
-        wait_task = asyncio.create_task(buffer.wait_for_messages("*"))
-
-        # Give it time to start waiting
-        await asyncio.sleep(0.01)
-
-        # Send message
-        await queue.put(create_test_message("test"))
-
-        # Should receive the message
-        messages = await wait_task
-        assert len(messages) == 1
-        assert messages[0].content == "test"
-
-    async def test_wait_for_specific_sender(self):
-        """Test waiting for messages from specific sender."""
-        queue = AsyncMessageQueue()
-        buffer = MessageBuffer(queue)
-
-        # Add messages from different senders
-        await queue.put(create_test_message("msg1", sender_id="agent1"))
-        await queue.put(create_test_message("msg2", sender_id="agent2"))
-        await queue.put(create_test_message("msg3", sender_id="agent1"))
-
-        # Wait for messages from agent1
-        messages = await buffer.wait_for_messages("agent1")
-
-        # Should get messages from agent1 only
-        assert len(messages) == 2
-        contents = [m.content for m in messages]
-        assert "msg1" in contents
-        assert "msg3" in contents
-
-    async def test_wait_for_human_messages(self):
-        """Test waiting for human messages."""
-        queue = AsyncMessageQueue()
-        buffer = MessageBuffer(queue)
-
-        # Add mixed messages
-        await queue.put(create_test_message("bot", sender_id="agent1"))
-        await queue.put(create_test_message("human", sender_id="human"))
-
-        # Wait for human messages
-        messages = await buffer.wait_for_messages("human")
-
-        assert len(messages) == 1
-        assert messages[0].content == "human"
-        assert messages[0].sender_id == "human"
-
-    async def test_buffer_timeout(self):
-        """Test buffer timeout behavior."""
-        queue = AsyncMessageQueue()
-        buffer = MessageBuffer(queue, buffer_timeout=0.1)
-
-        # Add one message
-        await queue.put(create_test_message("immediate"))
-
-        start_time = time.time()
-        messages = await buffer.wait_for_messages("*", timeout=0.2)
-        elapsed = time.time() - start_time
-
-        # Should return quickly with available message
-        assert len(messages) == 1
-        assert elapsed < 0.05
-
-    async def test_empty_result_on_timeout(self):
-        """Test empty result when no matching messages."""
-        queue = AsyncMessageQueue()
-        buffer = MessageBuffer(queue, buffer_timeout=0.1)
-
-        # Add non-matching message
-        await queue.put(create_test_message("wrong", sender_id="other"))
-
-        # Wait for specific sender that doesn't exist
-        messages = await buffer.wait_for_messages("target", timeout=0.1)
-
-        # Should return empty list
-        assert len(messages) == 0

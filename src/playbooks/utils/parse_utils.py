@@ -27,7 +27,20 @@ import yaml
 
 
 def parse_metadata_and_description(input: str) -> tuple[dict, str]:
-    """Parse the input into a metadata and description."""
+    """Parse the input into a metadata dictionary and description string.
+
+    Handles various input formats:
+    - Input with both metadata and description (separated by ---)
+    - Input with only description
+    - Input with only metadata
+    - Empty input
+
+    Args:
+        input: String containing metadata YAML and/or description text
+
+    Returns:
+        Tuple of (metadata dict, description string). Both may be empty.
+    """
     if not input or not input.strip():
         return {}, ""
 

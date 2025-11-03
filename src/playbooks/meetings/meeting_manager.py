@@ -3,35 +3,74 @@
 import asyncio
 import logging
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
 from playbooks.constants import HUMAN_AGENT_KLASS
 from playbooks.exceptions import KlassNotFoundError
 from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
-from playbooks.utils.spec_utils import SpecUtils
 
-from ..agents.base_agent import BaseAgent
 from ..debug.debug_handler import debug
+from ..identifiers import MeetingID
 from ..llm_messages import MeetingLLMMessage, SessionLogLLMMessage
 from ..message import Message, MessageType
 from ..playbook import LLMPlaybook, Playbook
 from .meeting import JoinedMeeting, Meeting, MeetingInvitation, MeetingInvitationStatus
 
+if TYPE_CHECKING:
+    from ..agents.base_agent import BaseAgent
+    from ..execution_state import ExecutionState
+    from ..program import Program
+
 logger = logging.getLogger(__name__)
 
 
-class MeetingManager:
-    """Manages meeting-related functionality for AI agents."""
+class PlaybookExecutor(Protocol):
+    """Protocol for executing playbooks."""
 
-    def __init__(self, agent: BaseAgent):
-        """Initialize meeting manager.
+    playbooks: Dict[str, Playbook]
+
+    async def execute_playbook(
+        self, name: str, args: List[Any] = None, kwargs: Dict[str, Any] = None
+    ) -> Any:
+        """Execute a playbook by name."""
+        ...
+
+
+class MeetingManager:
+    """Manages meeting-related functionality for AI agents.
+
+    Uses dependency injection for clean separation of concerns:
+    - agent_id, agent_klass: Simple identity data
+    - state: ExecutionState or HumanState for meeting tracking
+    - program: Program instance for message routing and agent lookup
+    - playbook_executor: Protocol for executing playbooks
+    """
+
+    def __init__(
+        self,
+        agent_id: str,
+        agent_klass: str,
+        state: "ExecutionState",
+        program: "Program",
+        playbook_executor: PlaybookExecutor,
+    ):
+        """Initialize meeting manager with injected dependencies.
 
         Args:
-            agent: The agent
+            agent_id: The agent's unique identifier
+            agent_klass: The agent's class/type
+            state: ExecutionState for tracking meetings and session
+            program: Program instance for routing and lookups
+            playbook_executor: Protocol implementation for playbook execution
         """
-        self.agent = agent
+        self.agent_id = agent_id
+        self.agent_klass = agent_klass
+        self.state = state
+        self.program = program
+        self.playbook_executor = playbook_executor
+
         self.meeting_message_handler = MeetingMessageHandler(
-            self.agent.id, self.agent.klass
+            self.agent_id, self.agent_klass
         )
 
     def ensure_meeting_playbook_kwargs(self, playbooks: Dict[str, Any]) -> None:
@@ -118,18 +157,19 @@ class MeetingManager:
         Returns:
             The created meeting
         """
-        meeting_id = self.agent.program.meeting_id_registry.generate_meeting_id()
+        meeting_id = self.program.meeting_id_registry.generate_meeting_id()
 
         # Create meeting record
         meeting = Meeting(
             id=meeting_id,
-            owner_id=self.agent.id,
+            owner_id=self.agent_id,
             created_at=datetime.now(),
             topic=kwargs.get("topic", f"{playbook.name} meeting"),
         )
 
-        self.agent.state.owned_meetings[meeting_id] = meeting
-        meeting.agent_joined(self.agent)
+        self.state.owned_meetings[meeting_id] = meeting
+        # Note: Meeting class requires BaseAgent object - playbook_executor is the agent
+        meeting.agent_joined(self.playbook_executor)
 
         # Create asyncio.Event for tracking invitation responses
         meeting.invitation_event = asyncio.Event()
@@ -138,9 +178,7 @@ class MeetingManager:
         if "attendees" in kwargs and kwargs["attendees"]:
             # Either provided in the playbook call, e.g. attendees=["agent 1000", "agent 1001", "human"]
             meeting.required_attendees = (
-                await self.agent.program.get_agents_by_klasses_or_specs(
-                    kwargs["attendees"]
-                )
+                await self.program.get_agents_by_klasses_or_specs(kwargs["attendees"])
             )
 
             if not meeting.required_attendees:
@@ -153,13 +191,13 @@ class MeetingManager:
             if playbook.required_attendees or playbook.optional_attendees:
                 try:
                     meeting.required_attendees = (
-                        await self.agent.program.get_agents_by_klasses(
+                        await self.program.get_agents_by_klasses(
                             playbook.required_attendees
                         )
                     )
 
                     meeting.optional_attendees = (
-                        await self.agent.program.get_agents_by_klasses(
+                        await self.program.get_agents_by_klasses(
                             playbook.optional_attendees
                         )
                     )
@@ -175,11 +213,13 @@ class MeetingManager:
 
         # Create meeting channel with all potential participants
         all_participants = (
-            [self.agent] + meeting.required_attendees + meeting.optional_attendees
+            [self.playbook_executor]
+            + meeting.required_attendees
+            + meeting.optional_attendees
         )
-        self.agent.program.create_meeting_channel(meeting_id, all_participants)
+        await self.program.create_meeting_channel(meeting_id, all_participants)
         debug(
-            f"{str(self.agent)}: Created meeting channel {meeting_id} with {len(all_participants)} participants"
+            f"Agent {self.agent_id}: Created meeting channel {meeting_id} with {len(all_participants)} participants"
         )
 
         # Send invitations concurrently
@@ -197,8 +237,8 @@ class MeetingManager:
             if future:
                 invitation_tasks.append(asyncio.create_task(future))
 
-        # Yield for other tasks
-        await asyncio.sleep(0.1)
+        # Yield for other tasks (async yield point)
+        await asyncio.sleep(0)
 
         # Wait for all invitations to be sent
         if invitation_tasks:
@@ -206,12 +246,20 @@ class MeetingManager:
 
         return meeting
 
-    async def _invite_to_meeting(self, meeting: Meeting, target_agent: BaseAgent):
+    async def _invite_to_meeting(
+        self, meeting: Meeting, target_agent: "BaseAgent"
+    ) -> str:
         """Invite an agent to a meeting.
+
+        Creates invitation record and sends invitation message. Human agents
+        are automatically joined without invitation.
 
         Args:
             meeting: The meeting to invite to
             target_agent: The agent to invite
+
+        Returns:
+            Response message describing the invitation result
         """
         # Check if the target agent is already a participant
         if meeting.is_participant(target_agent.id):
@@ -228,27 +276,34 @@ class MeetingManager:
             response = f"Inviting {str(target_agent)} to meeting {meeting.id}: {meeting.topic or 'Meeting'}"
             await self._send_invitation(meeting, target_agent)
 
-        self.agent.state.session_log.append(response)
+        self.state.session_log.append(response)
         meeting_msg = MeetingLLMMessage(response, meeting_id=meeting.id)
-        self.agent.state.call_stack.add_llm_message(meeting_msg)
+        self.state.call_stack.add_llm_message(meeting_msg)
 
         return response
 
-    async def _send_invitation(self, meeting: Meeting, target_agent: BaseAgent):
+    async def _send_invitation(
+        self, meeting: Meeting, target_agent: "BaseAgent"
+    ) -> str:
         """Send meeting invitation to an agent using the message system.
+
+        Routes a MEETING_INVITATION message to the target agent and logs it.
 
         Args:
             meeting: The meeting to send the invitation to
             target_agent: The agent to send the invitation to
+
+        Returns:
+            Response message confirming invitation was sent
         """
 
         # Send structured invitation message
         invitation_content = meeting.topic or "Meeting"
 
-        await self.agent.program.route_message(
-            sender_id=self.agent.id,
-            sender_klass=self.agent.klass,
-            receiver_spec=SpecUtils.to_agent_spec(target_agent.id),
+        await self.program.route_message(
+            sender_id=self.agent_id,
+            sender_klass=self.agent_klass,
+            receiver_spec=f"agent {target_agent.id}",
             message=invitation_content,
             message_type=MessageType.MEETING_INVITATION,
             meeting_id=meeting.id,
@@ -257,24 +312,32 @@ class MeetingManager:
         response = (
             f"Invited {str(target_agent)} to meeting {meeting.id}: {invitation_content}"
         )
-        self.agent.state.session_log.append(response)
+        self.state.session_log.append(response)
         meeting_msg = MeetingLLMMessage(response, meeting_id=meeting.id)
-        self.agent.state.call_stack.add_llm_message(meeting_msg)
+        self.state.call_stack.add_llm_message(meeting_msg)
 
         return response
 
-    async def InviteToMeeting(self, meeting_id: str, attendees: List[str]):
-        """Invite an agent to a meeting.
+    async def InviteToMeeting(
+        self, meeting_id: str, attendees: List[str]
+    ) -> Optional[str]:
+        """Invite agents to a meeting.
+
+        Only the meeting owner can invite attendees. Sends invitations
+        concurrently to all specified attendees.
 
         Args:
             meeting_id: The ID of the meeting to invite to
-            attendees: The agents to invite
+            attendees: List of agent specs to invite
+
+        Returns:
+            Error message if not owner, None if successful
         """
-        if meeting_id not in self.agent.state.owned_meetings:
+        if meeting_id not in self.state.owned_meetings:
             return f"I am not the owner of meeting {meeting_id}, so cannot invite attendees"
 
-        meeting = self.agent.state.owned_meetings[meeting_id]
-        attendees = self.agent.program.get_agents_by_specs(attendees)
+        meeting = self.state.owned_meetings[meeting_id]
+        attendees = self.program.get_agents_by_specs(attendees)
 
         # Send invitations concurrently
         invitation_tasks = []
@@ -305,15 +368,15 @@ class MeetingManager:
         # If no attendees to wait for, proceed immediately
         if not meeting.required_attendees:
             message = f"No required attendees to wait for in meeting {meeting.id} - proceeding immediately"
-            self.agent.state.session_log.append(message)
+            self.state.session_log.append(message)
             meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
-            self.agent.state.call_stack.add_llm_message(meeting_msg)
+            self.state.call_stack.add_llm_message(meeting_msg)
             return
 
         messages = f"Waiting for required attendees to join meeting {meeting.id}: {[attendee.__repr__() for attendee in meeting.required_attendees]}"
-        self.agent.state.session_log.append(messages)
+        self.state.session_log.append(messages)
         meeting_msg = MeetingLLMMessage(messages, meeting_id=meeting.id)
-        self.agent.state.call_stack.add_llm_message(meeting_msg)
+        self.state.call_stack.add_llm_message(meeting_msg)
 
         # Event-driven waiting: wait for invitation responses
         start_time = asyncio.get_event_loop().time()
@@ -342,7 +405,7 @@ class MeetingManager:
 
                 # Log progress
                 message = f"Waiting for remaining attendees: {[attendee.__repr__() for attendee in meeting.missing_required_attendees()]}"
-                self.agent.state.session_log.append(message)
+                self.state.session_log.append(message)
 
             except asyncio.TimeoutError:
                 raise TimeoutError(
@@ -351,12 +414,12 @@ class MeetingManager:
                 )
 
         message = f"All required attendees have joined meeting {meeting.id}: {[attendee.__repr__() for attendee in meeting.joined_attendees]}"
-        self.agent.state.session_log.append(message)
+        self.state.session_log.append(message)
         meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
-        self.agent.state.call_stack.add_llm_message(meeting_msg)
+        self.state.call_stack.add_llm_message(meeting_msg)
 
         # Finally, set the meeting ID as the current meeting ID in the call stack
-        self.agent.state.call_stack.peek().meeting_id = meeting.id
+        self.state.call_stack.peek().meeting_id = meeting.id
 
     def get_current_meeting_from_call_stack(self) -> Optional[str]:
         """Get meeting ID from top meeting playbook in call stack.
@@ -367,7 +430,7 @@ class MeetingManager:
         Returns:
             Meeting ID if currently in a meeting, None otherwise
         """
-        call_stack = self.agent.state.call_stack
+        call_stack = self.state.call_stack
         for frame in reversed(call_stack.frames):
             if frame.is_meeting and frame.meeting_id:
                 return frame.meeting_id
@@ -390,21 +453,21 @@ class MeetingManager:
         """
         # Check if I'm the owner of this meeting
         assert (
-            hasattr(self.agent, "state")
-            and hasattr(self.agent.state, "owned_meetings")
-            and meeting_id in self.agent.state.owned_meetings
+            hasattr(self.state, "owned_meetings")
+            and hasattr(self.state, "owned_meetings")
+            and meeting_id in self.state.owned_meetings
         )
 
         if not from_agent_id or not from_agent_klass:
-            from_agent_id = self.agent.id
-            from_agent_klass = self.agent.klass
+            from_agent_id = self.agent_id
+            from_agent_klass = self.agent_klass
 
-        self.agent.state.session_log.append(
+        self.state.session_log.append(
             f"Broadcasting to meeting {meeting_id}: {message}"
         )
 
         # Use unified channel architecture - route_message handles channel multicast
-        await self.agent.program.route_message(
+        await self.program.route_message(
             sender_id=from_agent_id,
             sender_klass=from_agent_klass,
             receiver_spec=f"meeting {meeting_id}",
@@ -413,7 +476,9 @@ class MeetingManager:
             meeting_id=meeting_id,
         )
 
-    async def broadcast_to_meeting_as_participant(self, meeting_id: str, message: str):
+    async def broadcast_to_meeting_as_participant(
+        self, meeting_id: str, message: str
+    ) -> None:
         """Broadcast a message to all participants via unified channel.
 
         Args:
@@ -421,19 +486,19 @@ class MeetingManager:
             message: Message content to send
         """
         assert (
-            hasattr(self.agent, "state")
-            and hasattr(self.agent.state, "joined_meetings")
-            and meeting_id in self.agent.state.joined_meetings
+            hasattr(self.state, "owned_meetings")
+            and hasattr(self.state, "joined_meetings")
+            and meeting_id in self.state.joined_meetings
         )
 
-        self.agent.state.session_log.append(
+        self.state.session_log.append(
             f"Broadcasting to meeting {meeting_id} as participant: {message}"
         )
 
         # Use unified channel architecture - participants can send directly to meeting channel
-        await self.agent.program.route_message(
-            sender_id=self.agent.id,
-            sender_klass=self.agent.klass,
+        await self.program.route_message(
+            sender_id=self.agent_id,
+            sender_klass=self.agent_klass,
             receiver_spec=f"meeting {meeting_id}",
             message=message,
             message_type=MessageType.MEETING_BROADCAST,
@@ -444,6 +509,13 @@ class MeetingManager:
         """Add a message to buffer and notify waiting processes.
 
         This is the single entry point for all incoming messages.
+        Handles meeting invitations and responses immediately.
+
+        Args:
+            message: Message to add to buffer
+
+        Returns:
+            True if message was handled, False otherwise
         """
         if message.message_type == MessageType.MEETING_INVITATION:
             # Process meeting invitation immediately
@@ -453,17 +525,17 @@ class MeetingManager:
             await self._handle_meeting_response_immediately(message)
 
             # Signal the meeting's invitation event to wake up _wait_for_required_attendees
-            meeting_id = message.meeting_id
+            meeting_id_obj = message.meeting_id
             if (
-                meeting_id
-                and hasattr(self.agent.state, "owned_meetings")
-                and meeting_id in self.agent.state.owned_meetings
+                meeting_id_obj
+                and hasattr(self.state, "owned_meetings")
+                and meeting_id_obj.id in self.state.owned_meetings
             ):
-                meeting = self.agent.state.owned_meetings[meeting_id]
+                meeting = self.state.owned_meetings[meeting_id_obj.id]
                 if hasattr(meeting, "invitation_event"):
                     meeting.invitation_event.set()
                     debug(
-                        f"{str(self.agent)}: Signaled invitation event for meeting {meeting_id}"
+                        f"Agent {self.agent_id}: Signaled invitation event for meeting {meeting_id_obj.id}"
                     )
 
             return True
@@ -472,33 +544,29 @@ class MeetingManager:
     async def _handle_meeting_invitation_immediately(self, message) -> None:
         """Handle meeting invitation immediately without buffering."""
         # Extract meeting information from the message
-        meeting_id = getattr(message, "meeting_id", None)
-        sender_id = message.sender_id
+        meeting_id_obj = getattr(message, "meeting_id", None)
+        sender_id = message.sender_id.id
         topic = message.content  # The invitation content contains the topic
+
+        meeting_id = meeting_id_obj.id if meeting_id_obj else None
 
         if meeting_id:
             # Use async task to handle the invitation since this is called synchronously
             return await self._process_meeting_invitation(sender_id, meeting_id, topic)
         else:
             log = f"Received meeting invitation from {sender_id} without meeting_id"
-            self.agent.state.session_log.append(log)
+            self.state.session_log.append(log)
             session_msg = SessionLogLLMMessage(log, log_level="warning")
-            self.agent.state.call_stack.add_llm_message(session_msg)
+            self.state.call_stack.add_llm_message(session_msg)
             return True
 
     async def _handle_meeting_response_immediately(self, message) -> None:
         """Handle meeting response immediately without buffering."""
-        # Use existing meeting message handler for responses
-        if hasattr(self, "meeting_message_handler"):
-            # Create task to handle response asynchronously
-            await self.meeting_message_handler.handle_meeting_response(
-                message,
-                self.agent,
-            )
-        else:
-            self.agent.state.session_log.append(
-                f"Received meeting response from {message.sender_id} but no handler available"
-            )
+        # This method is currently unused and should be removed
+        # Meeting responses are now handled through normal message processing
+        self.state.session_log.append(
+            f"Received meeting response from {message.sender_id.id}"
+        )
 
     async def _process_meeting_invitation(
         self, inviter_id: str, meeting_id: str, topic: str
@@ -511,24 +579,21 @@ class MeetingManager:
             topic: Topic/description of the meeting
         """
         log = f"Received meeting invitation for meeting {meeting_id} from {inviter_id} for '{topic}'"
-        self.agent.state.session_log.append(log)
+        self.state.session_log.append(log)
         meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
-        self.agent.state.call_stack.add_llm_message(meeting_msg)
+        self.state.call_stack.add_llm_message(meeting_msg)
 
         # Check if agent is busy (has active call stack)
-        if (
-            "$_busy" in self.agent.state.variables
-            and self.agent.state.variables["$_busy"].value
-        ):
+        if "$_busy" in self.state.variables and self.state.variables["$_busy"].value:
             log = f"Rejecting meeting {meeting_id} - agent is busy"
-            self.agent.state.session_log.append(log)
+            self.state.session_log.append(log)
             meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
-            self.agent.state.call_stack.add_llm_message(meeting_msg)
-            if self.agent.program:
-                await self.agent.program.route_message(
-                    sender_id=self.agent.id,
-                    sender_klass=self.agent.klass,
-                    receiver_spec=SpecUtils.to_agent_spec(inviter_id),
+            self.state.call_stack.add_llm_message(meeting_msg)
+            if self.program:
+                await self.program.route_message(
+                    sender_id=self.agent_id,
+                    sender_klass=self.agent_klass,
+                    receiver_spec=f"agent {inviter_id}",
                     message=f"REJECTED {meeting_id}",
                     message_type=MessageType.MEETING_INVITATION_RESPONSE,
                     meeting_id=meeting_id,
@@ -536,58 +601,34 @@ class MeetingManager:
             return True
         return False
 
-        # # Find matching meeting playbooks
-        # meeting_playbooks = []
-        # for playbook in self.agent.playbooks.values():
-        #     if playbook.meeting:
-        #         meeting_playbooks.append(playbook)
-
-        # if not meeting_playbooks:
-        #     # No meeting playbooks available
-        #     log = f"Rejecting meeting {meeting_id} - no meeting playbooks available"
-        #     self.agent.state.session_log.append(log)
-        #     meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
-        #     self.agent.state.call_stack.add_llm_message(meeting_msg)
-        #     available_types = self.get_meeting_playbooks()
-        #     rejection_message = f"Meeting invitation rejected: Cannot handle this type of meeting. Available meeting types: {available_types}"
-
-        #     if self.agent.program:
-        #         await self.agent.program.route_message(
-        #             self.agent.id,
-        #             inviter_id,
-        #             f"REJECTED {meeting_id}: {rejection_message}",
-        #             message_type="meeting_response",
-        #             meeting_id=meeting_id,
-        #         )
-        #     return
-
     async def _accept_meeting_invitation(
         self, meeting_id: str, inviter_id: str, topic: str, playbook_name: str
     ) -> bool:
         # Accept the invitation and join the meeting
-        debug(f"{str(self.agent)}: Accepting meeting invitation {meeting_id}")
+        debug(f"Agent {self.agent_id}: Accepting meeting invitation {meeting_id}")
         log = f"Accepting meeting invitation {meeting_id}"
-        meeting_id = SpecUtils.extract_meeting_id(meeting_id)
-        self.agent.state.session_log.append(log)
+        meeting_id_obj = MeetingID.parse(meeting_id)
+        meeting_id = meeting_id_obj.id
+        self.state.session_log.append(log)
         meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
-        self.agent.state.call_stack.add_llm_message(meeting_msg)
+        self.state.call_stack.add_llm_message(meeting_msg)
 
         # Store meeting info in joined_meetings for future message routing
 
-        self.agent.state.joined_meetings[meeting_id] = JoinedMeeting(
+        self.state.joined_meetings[meeting_id] = JoinedMeeting(
             id=meeting_id,
             owner_id=inviter_id,
             topic=topic,
             joined_at=datetime.now(),
         )
-        debug(f"{str(self.agent)}: joined_meetings {self.agent.state.joined_meetings}")
+        debug(f"Agent {self.agent_id}: joined_meetings {self.state.joined_meetings}")
 
         # Send structured JOINED response
-        if self.agent.program:
-            await self.agent.program.route_message(
-                sender_id=self.agent.id,
-                sender_klass=self.agent.klass,
-                receiver_spec=SpecUtils.to_agent_spec(inviter_id),
+        if self.program:
+            await self.program.route_message(
+                sender_id=self.agent_id,
+                sender_klass=self.agent_klass,
+                receiver_spec=f"agent {inviter_id}",
                 message=f"JOINED {meeting_id}",
                 message_type=MessageType.MEETING_INVITATION_RESPONSE,
                 meeting_id=meeting_id,
@@ -596,27 +637,29 @@ class MeetingManager:
         # The initiator will add us as a participant when they receive our JOINED message
         # We don't directly access the meeting object here to support remote agents
 
-    async def _execute_meeting_playbook(self, meeting_id: str, playbook_name: str):
+    async def _execute_meeting_playbook(
+        self, meeting_id: str, playbook_name: str
+    ) -> None:
         try:
-            meeting_playbook = self.agent.playbooks[playbook_name]
+            meeting_playbook = self.playbook_executor.playbooks[playbook_name]
 
-            meeting = self.agent.state.joined_meetings[meeting_id]
+            meeting = self.state.joined_meetings[meeting_id]
             topic = meeting.topic
 
             log = f"Starting meeting playbook '{meeting_playbook.name}' for meeting {meeting_id}"
-            debug(f"{str(self.agent)}: {log}")
-            self.agent.state.session_log.append(log)
+            debug(f"Agent {self.agent_id}: {log}")
+            self.state.session_log.append(log)
             meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
-            self.agent.state.call_stack.add_llm_message(meeting_msg)
+            self.state.call_stack.add_llm_message(meeting_msg)
 
             # Execute the meeting playbook with meeting context
             debug(
                 "Agent executing meeting playbook",
-                agent_id=self.agent.id,
+                agent_id=self.agent_id,
                 playbook_name=meeting_playbook.name,
             )
             task = asyncio.create_task(
-                self.agent.execute_playbook(
+                self.playbook_executor.execute_playbook(
                     meeting_playbook.name,
                     args=[],
                     kwargs={"meeting_id": meeting_id, "topic": topic},
@@ -625,7 +668,7 @@ class MeetingManager:
             task.add_done_callback(
                 lambda t: debug(
                     "Meeting playbook task done",
-                    agent=str(self.agent),
+                    agent_id=self.agent_id,
                     playbook_name=meeting_playbook.name,
                 )
             )
@@ -633,15 +676,15 @@ class MeetingManager:
 
         except Exception as e:
             log = f"Error executing meeting playbook for {meeting_id}: {str(e)}"
-            self.agent.state.session_log.append(log)
+            self.state.session_log.append(log)
             meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
-            self.agent.state.call_stack.add_llm_message(meeting_msg)
+            self.state.call_stack.add_llm_message(meeting_msg)
             # Send error message to meeting
-            if self.agent.program:
-                await self.agent.program.route_message(
-                    sender_id=self.agent.id,
-                    sender_klass=self.agent.klass,
-                    receiver_spec=SpecUtils.to_agent_spec(meeting.owner_id),
+            if self.program:
+                await self.program.route_message(
+                    sender_id=self.agent_id,
+                    sender_klass=self.agent_klass,
+                    receiver_spec=f"agent {meeting.owner_id}",
                     message=f"Meeting {meeting_id}: Error in playbook execution - {str(e)}",
                     message_type=MessageType.MEETING_INVITATION_RESPONSE,
                     meeting_id=meeting_id,

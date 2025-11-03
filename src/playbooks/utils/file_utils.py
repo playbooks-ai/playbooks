@@ -78,8 +78,16 @@ def get_file_type_description(file_path: str) -> str:
 
 
 def read_file(file_path: str) -> str:
-    """
-    Read a file and return its content.
+    """Read a file and return its content as a string.
+
+    Args:
+        file_path: Path to the file to read
+
+    Returns:
+        File content as a string
+
+    Raises:
+        IOError: If the file cannot be read
     """
     with open(file_path, "r") as file:
         return file.read()

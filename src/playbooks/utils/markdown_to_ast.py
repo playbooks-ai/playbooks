@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from markdown_it import MarkdownIt
 from markdown_it.token import Token
@@ -306,18 +306,21 @@ def _set_source_file_path_recursively(
                 _set_source_file_path_recursively(child, source_file_path)
 
 
-def markdown_to_ast(markdown: str, source_file_path: str = None) -> Dict[str, Any]:
-    """
-    Convert markdown text to an Abstract Syntax Tree (AST) representation
-    with line numbers and source file path.
+def markdown_to_ast(
+    markdown: str, source_file_path: Optional[str] = None
+) -> Dict[str, Any]:
+    """Convert markdown text to an Abstract Syntax Tree (AST) representation.
+
+    Converts markdown to AST with line numbers and source file path.
+    Refreshes markdown attributes and ensures document structure.
 
     Args:
         markdown: The markdown text to convert
         source_file_path: Optional path to the source file (typically .pbasm cache file)
 
     Returns:
-        A dictionary representing the AST of the markdown text with a
-        'document' root, line numbers, and source file path on all nodes
+        Dictionary representing the AST with 'document' root, line numbers,
+        and source file path on all nodes
     """
     tree = parse_markdown_to_dict(markdown)
     refresh_markdown_attributes(tree)

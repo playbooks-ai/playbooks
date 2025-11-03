@@ -1,17 +1,29 @@
+"""AST transformer for injecting variable tracking calls.
+
+This module provides functionality to transform Python AST to automatically
+inject Var() calls after variable assignments, enabling runtime variable
+tracking in playbook execution.
+"""
+
 import ast
+from typing import List, Set
 
 
 class InjectVar(ast.NodeTransformer):
     """Inject Var calls after all assignments."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
-        self.assigned_vars = set()  # Track variables assigned in current scope
+        self.assigned_vars: Set[str] = (
+            set()
+        )  # Track variables assigned in current scope
 
-    def visit_AsyncFunctionDef(self, node):
+    def visit_AsyncFunctionDef(
+        self, node: ast.AsyncFunctionDef
+    ) -> ast.AsyncFunctionDef:
         return self.visit_FunctionDef(node)
 
-    def visit_FunctionDef(self, node):
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.FunctionDef:
         # Save the current assigned_vars set and start fresh for this function scope
         saved_assigned_vars = self.assigned_vars
         self.assigned_vars = set()
@@ -29,7 +41,7 @@ class InjectVar(ast.NodeTransformer):
         self.assigned_vars = saved_assigned_vars
         return node
 
-    def visit_If(self, node):
+    def visit_If(self, node: ast.If) -> ast.If:
         # First, recursively visit child nodes
         self.generic_visit(node)
 
@@ -38,7 +50,7 @@ class InjectVar(ast.NodeTransformer):
         node.orelse = self._transform_body(node.orelse)
         return node
 
-    def visit_While(self, node):
+    def visit_While(self, node: ast.While) -> ast.While:
         # First, recursively visit child nodes
         self.generic_visit(node)
 
@@ -47,7 +59,7 @@ class InjectVar(ast.NodeTransformer):
         node.orelse = self._transform_body(node.orelse)
         return node
 
-    def visit_For(self, node):
+    def visit_For(self, node: ast.For) -> ast.For:
         # First, recursively visit child nodes
         self.generic_visit(node)
 
@@ -63,7 +75,7 @@ class InjectVar(ast.NodeTransformer):
 
         return node
 
-    def visit_With(self, node):
+    def visit_With(self, node: ast.With) -> ast.With:
         # First, recursively visit child nodes
         self.generic_visit(node)
 
@@ -80,7 +92,7 @@ class InjectVar(ast.NodeTransformer):
 
         return node
 
-    def visit_Try(self, node):
+    def visit_Try(self, node: ast.Try) -> ast.Try:
         # First, recursively visit child nodes
         self.generic_visit(node)
 
@@ -92,7 +104,7 @@ class InjectVar(ast.NodeTransformer):
         node.finalbody = self._transform_body(node.finalbody)
         return node
 
-    def _transform_body(self, body):
+    def _transform_body(self, body: List[ast.stmt]) -> List[ast.stmt]:
         """Transform a list of statements to inject Var calls after assignments."""
         new_body = []
 
@@ -125,7 +137,7 @@ class InjectVar(ast.NodeTransformer):
 
         return new_body
 
-    def _get_target_names(self, target):
+    def _get_target_names(self, target: ast.expr) -> List[str]:
         """Extract variable names from an assignment target."""
         if isinstance(target, ast.Name):
             return [target.id]
@@ -278,8 +290,15 @@ class InjectVar(ast.NodeTransformer):
         return result
 
 
-def inject_setvar(code):
-    """Transform code to inject Var calls after all assignments."""
+def inject_setvar(code: str) -> str:
+    """Transform code to inject Var calls after all assignments.
+
+    Args:
+        code: Python source code to transform
+
+    Returns:
+        Transformed code with Var() calls injected after assignments
+    """
     tree = ast.parse(code)
     transformer = InjectVar()
     new_tree = transformer.visit(tree)
