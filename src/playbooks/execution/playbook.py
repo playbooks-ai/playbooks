@@ -88,7 +88,7 @@ class PlaybookLLMExecution(LLMExecution):
             )
 
         llm_message.append(
-            f"{self.playbook.name} playbook implementation:\n\n```md\n{markdown_for_llm}\n```"
+            f"{self.playbook.name} playbook implementation:\n\n````md\n{markdown_for_llm}\n````"
         )
 
         # Add a cached message whenever we add a stack frame
