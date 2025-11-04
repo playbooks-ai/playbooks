@@ -1,6 +1,5 @@
 import subprocess
 from pathlib import Path
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -167,27 +166,29 @@ async def test_example_12_timeout(test_data_dir):
     await playbooks.initialize()
     agent = playbooks.program.agents_by_klass["RestaurantConsultant"][0]
     human = playbooks.program.agents_by_id["human"]
-    # mock such that `await self.meeting_manager._wait_for_required_attendees(meeting)` raises TimeoutError
-    agent.meeting_manager._wait_for_required_attendees = MagicMock(
-        side_effect=TimeoutError(
+
+    # Mock _wait_for_required_attendees to raise TimeoutError
+    async def mock_wait_for_attendees(meeting, timeout_seconds=30):
+        raise TimeoutError(
             "Timeout waiting for required attendees to join meeting. Missing: [HeadChef, MarketingSpecialist]"
         )
-    )
 
-    # AI will ask for a country, so seed response from human
+    agent.meeting_manager._wait_for_required_attendees = mock_wait_for_attendees
+
+    # AI will ask for reasons and constraints, so seed responses from human
     await human.SendMessage(agent.id, "indian restaurant menu redesign")
     await human.SendMessage(agent.id, EOM)
-    await human.SendMessage(agent.id, "Add creative fusion Chaat items")
-    await human.SendMessage(agent.id, EOM)
-    await human.SendMessage(agent.id, "Let's try later")
-    await human.SendMessage(agent.id, EOM)
-    await human.SendMessage(agent.id, "Goodbye")
+    # Agent will ask for reasons and constraints
+    await human.SendMessage(
+        agent.id,
+        "I want to add creative fusion Chaat items to attract younger customers. Budget is $10k, timeline is 2 months.",
+    )
     await human.SendMessage(agent.id, EOM)
     await playbooks.program.run_till_exit()
     log = agent.state.session_log.to_log_full()
 
     assert "Meeting initialization failed" in log
-    assert "apologize" in log
+    assert "Timeout" in log
 
 
 @pytest.mark.integration

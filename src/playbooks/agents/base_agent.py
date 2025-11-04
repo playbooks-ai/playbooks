@@ -200,10 +200,19 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
     async def _say_without_streaming(self, resolved_target: str, message: str) -> None:
         """Send message without streaming (already streamed or no program).
 
+        When _currently_streaming is True, the message was already delivered
+        via the streaming path (channel.complete_stream), so we skip sending
+        it again to avoid duplicate delivery.
+
         Args:
             resolved_target: Resolved target identifier
             message: Message content to send
         """
+        # If currently in streaming context, message was already delivered - skip to avoid duplication
+        if getattr(self, "_currently_streaming", False):
+            return
+
+        # Not in streaming context - send message normally
         if resolved_target in ["human", "user"]:
             await self.SendMessage(resolved_target, message)
         else:

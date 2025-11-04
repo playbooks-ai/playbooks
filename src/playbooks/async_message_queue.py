@@ -7,11 +7,12 @@ timeout-based polling with pure event-driven patterns using asyncio.Condition.
 
 import asyncio
 import logging
-from typing import Any, Callable, Dict, List, Optional
-from collections import deque
-from weakref import WeakSet
 import time
+from collections import deque
+from typing import Any, Callable, Dict, List, Optional
+from weakref import WeakSet
 
+from playbooks.constants import EOM
 from playbooks.message import Message
 
 logger = logging.getLogger(__name__)
@@ -193,18 +194,31 @@ class AsyncMessageQueue:
                 # Collect all currently available matching messages
                 messages_found = 0
                 i = 0
+                eom_encountered = False
                 while i < len(self._messages) and len(collected) < max_messages:
                     message = self._messages[i]
                     if predicate is None or predicate(message):
-                        # Remove and collect the message
-                        collected.append(self._messages[i])
-                        del self._messages[i]
-                        messages_found += 1
+                        # Check if this is an EOM marker
+                        if message.content == EOM:
+                            # Consume the EOM (remove from queue) but don't add to collected
+                            del self._messages[i]
+                            messages_found += 1
+                            eom_encountered = True
+                            break  # Stop collecting messages at EOM
+                        else:
+                            # Remove and collect the message
+                            collected.append(self._messages[i])
+                            del self._messages[i]
+                            messages_found += 1
                     else:
                         i += 1
 
                 # Update stats
                 self._total_gets += messages_found
+
+                # If we encountered EOM, stop collecting even if we haven't reached min_messages
+                if eom_encountered:
+                    break
 
                 # Check if we have enough messages or timeout
                 elapsed = asyncio.get_event_loop().time() - start_time

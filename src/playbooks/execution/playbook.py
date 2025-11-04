@@ -373,8 +373,18 @@ class PlaybookLLMExecution(LLMExecution):
                         # Extract the recipient
                         say_recipient = buffer[recipient_start:recipient_end_pos]
 
-                        # Only start streaming if recipient is user, human, or Human
-                        if say_recipient.lower() in ["user", "human"]:
+                        # Determine if we should stream this Say() call
+                        is_human_recipient = say_recipient.lower() in ["user", "human"]
+                        enable_agent_streaming = (
+                            self.agent.program.enable_agent_streaming
+                            if self.agent.program
+                            else False
+                        )
+                        should_attempt_streaming = (
+                            is_human_recipient or enable_agent_streaming
+                        )
+
+                        if should_attempt_streaming:
                             in_say_call = True
                             say_start_pos = recipient_end_pos + len(
                                 recipient_end_pattern
@@ -397,7 +407,7 @@ class PlaybookLLMExecution(LLMExecution):
                                 else None
                             )
                         else:
-                            # Not a user/human recipient, skip streaming for this Say call
+                            # Not streaming this Say call
                             processed_up_to = recipient_end_pos + len(
                                 recipient_end_pattern
                             )

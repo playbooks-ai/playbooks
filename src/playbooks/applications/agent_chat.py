@@ -337,6 +337,7 @@ async def main(
     wait_for_client: bool = False,
     stop_on_entry: bool = False,
     stream: bool = True,
+    snoop: bool = False,
 ):
     """
     Playbooks application host for agent chat. You can execute a playbooks program within this application container.
@@ -355,6 +356,7 @@ async def main(
         wait_for_client: Whether to wait for a client to connect before starting
         stop_on_entry: Whether to stop at the beginning of playbook execution
         stream: Whether to stream the output
+        snoop: Whether to display agent-to-agent messages
 
     """
     #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
@@ -374,6 +376,9 @@ async def main(
     except litellm.exceptions.AuthenticationError as e:
         user_output.error("Authentication error", details=str(e))
         raise
+
+    # Enable agent streaming if snoop mode is on
+    playbooks.program.enable_agent_streaming = snoop
 
     # Store original methods and apply patches after playbooks are loaded
     global original_broadcast_to_meeting

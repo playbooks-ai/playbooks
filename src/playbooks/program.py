@@ -359,13 +359,13 @@ class ProgramAgentsCommunicationMixin:
         try:
             channel = await self.get_or_create_channel(sender_agent, receiver_spec)
 
-            # Check if any participant is human (streaming is human-only)
+            # Check if any participant is human (streaming is human-only by default)
             has_human = any(
                 isinstance(p, HumanParticipant) for p in channel.participants
             )
 
-            if not has_human:
-                # Agent-to-agent communication: skip streaming
+            if not has_human and not self.enable_agent_streaming:
+                # Agent-to-agent communication: skip streaming unless snoop mode is enabled
                 return StreamResult.skip()
 
             # Resolve recipient info for stream events
@@ -547,6 +547,9 @@ class Program(ProgramAgentsCommunicationMixin):
         self.initialized = False
         self._has_agent_errors = (
             False  # Track if any agents have had errors for test visibility
+        )
+        self.enable_agent_streaming = (
+            False  # Enable streaming for agent-to-agent messages (for snoop mode)
         )
 
     async def initialize(self) -> None:

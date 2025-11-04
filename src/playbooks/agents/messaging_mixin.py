@@ -153,18 +153,12 @@ class MessagingMixin:
         """Process and format messages retrieved from AsyncMessageQueue.
 
         Args:
-            messages: List of messages from the queue
+            messages: List of messages from the queue (EOM already consumed by queue)
 
         Returns:
-            List of Message objects (EOM filtered out)
+            List of Message objects
         """
         debug(f"{str(self)}: Processing {len(messages)} messages from queue")
-
-        if not messages:
-            return []
-
-        # Filter out EOM messages before processing
-        messages = [msg for msg in messages if msg.content != EOM]
 
         if not messages:
             return []
