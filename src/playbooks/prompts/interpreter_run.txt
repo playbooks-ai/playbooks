@@ -194,11 +194,8 @@ e.g. - When checkout amount is more than $50, trigger the Offer playbook
 
 ```python
 # execution_id: 3
-# recap: set $amount
+# recap: user provided $amount
 # plan: continue checkout
-
-$amount = 99
-
 # trig? Trigger["Offer:01:CND"] because checkout amount is more than $50
 await Trigger("Offer:01:CND")
 await Offer(code="SPRING", total=amount)
