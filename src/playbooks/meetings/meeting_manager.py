@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
-from playbooks.constants import HUMAN_AGENT_KLASS
+from playbooks.agents.human_agent import HumanAgent
 from playbooks.exceptions import KlassNotFoundError
 from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
 
@@ -264,7 +264,7 @@ class MeetingManager:
         # Check if the target agent is already a participant
         if meeting.is_participant(target_agent.id):
             response = f"Agent {target_agent.id} is already a participant of meeting {meeting.id}"
-        elif target_agent.klass == HUMAN_AGENT_KLASS:
+        elif isinstance(target_agent, HumanAgent):
             response = f"User joined meeting {meeting.id}"
             meeting.agent_joined(target_agent)
         else:
@@ -562,10 +562,9 @@ class MeetingManager:
 
     async def _handle_meeting_response_immediately(self, message) -> None:
         """Handle meeting response immediately without buffering."""
-        # This method is currently unused and should be removed
-        # Meeting responses are now handled through normal message processing
-        self.state.session_log.append(
-            f"Received meeting response from {message.sender_id.id}"
+        # Process the meeting response using the handler that updates meeting state
+        await self.meeting_message_handler.handle_meeting_response(
+            message, self.playbook_executor
         )
 
     async def _process_meeting_invitation(
