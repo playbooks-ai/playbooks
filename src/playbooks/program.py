@@ -566,17 +566,14 @@ class Program(ProgramAgentsCommunicationMixin):
             if not issubclass(klass, HumanAgent)
         )
 
-        # Filter out empty public.json arrays
         non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
 
         # Only validate if there are non-empty public.jsons
         # (Allow tests without public.json blocks)
-        if len(non_empty_public_jsons) > 0 and ai_agent_count != len(
-            non_empty_public_jsons
-        ):
+        if len(non_empty_public_jsons) > 0 and ai_agent_count != len(self.public_jsons):
             raise ValueError(
                 "Number of AI agents and public jsons must be the same. "
-                f"Got {ai_agent_count} AI agents and {len(non_empty_public_jsons)} non-empty public jsons"
+                f"Got {ai_agent_count} AI agents and {len(self.public_jsons)} public jsons"
             )
 
         # Assign public.json to AI agents only (humans don't have playbooks)
@@ -614,7 +611,7 @@ class Program(ProgramAgentsCommunicationMixin):
                     event_bus=self.event_bus,
                     agent_id="human",
                     program=self,
-                    klass="User",
+                    klass="HumanAgent",
                     name="User",
                 )
             )
