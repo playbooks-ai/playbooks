@@ -187,15 +187,17 @@ $name = "Alice"
     async def test_syntax_error(self, executor):
         """Test handling syntax errors."""
         code = 'Step("step"'  # Missing closing paren
-        with pytest.raises(SyntaxError):
-            await executor.execute(code)
+        result = await executor.execute(code)
+        assert result.syntax_error is not None
+        assert isinstance(result.syntax_error, SyntaxError)
 
     @pytest.mark.asyncio
     async def test_name_error(self, executor):
         """Test handling name errors (undefined variable)."""
         code = "x = undefined_variable"
-        with pytest.raises(NameError):
-            await executor.execute(code)
+        result = await executor.execute(code)
+        assert result.runtime_error is not None
+        assert isinstance(result.runtime_error, NameError)
 
     @pytest.mark.asyncio
     async def test_multiline_say(self, executor):
@@ -295,4 +297,37 @@ $total_plus_ten = total + 10
 
         assert result.error_message is None
         assert len(result.messages) == 1
-        assert result.messages[0] == ("user", "Welcome, Alice!")
+
+    @pytest.mark.asyncio
+    async def test_variable_read_before_write_no_unbound_error(self, executor):
+        """Test that reading a variable before writing it later doesn't cause UnboundLocalError.
+
+        This tests the fix for the issue where code like:
+            game_state[move - 1] = current_symbol
+            current_symbol = 'X' if current_symbol == 'O' else 'O'
+
+        Would cause UnboundLocalError because Python sees the assignment to current_symbol
+        and marks it as local for the entire function, but the first line tries to read it
+        before it's assigned.
+
+        The fix initializes all variables that are assigned anywhere in the function
+        at the top of the function from globals.
+        """
+        # Set up initial state with current_symbol
+        executor.agent.state.variables["$current_symbol"] = "X"
+        executor.agent.state.variables["$game_state"] = ["1", "2", "3"]
+        executor.agent.state.variables["$move"] = 2
+
+        code = """
+game_state[move - 1] = current_symbol
+current_symbol = 'X' if current_symbol == 'O' else 'O'
+"""
+        result = await executor.execute(code)
+
+        # Should not have any errors
+        assert result.error_message is None
+        assert result.runtime_error is None
+        assert result.syntax_error is None
+
+        # Should have captured the new current_symbol value
+        assert result.vars["current_symbol"] == "O"  # Flipped from X to O

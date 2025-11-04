@@ -855,7 +855,7 @@ async def {self.bgn_playbook_name}() -> None:
                     and existing_meeting_id not in self.state.joined_meetings
                 ):
                     # We're joining an existing meeting - accept the invitation first
-                    inviter_id = kwargs.get("inviter_id")
+                    inviter_id = AgentID.parse(kwargs.get("inviter_id")).id
                     topic = kwargs.get("topic", "Meeting")
 
                     debug(

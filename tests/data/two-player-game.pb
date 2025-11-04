@@ -26,9 +26,10 @@ meeting: true
   - Increment turn_count
   - Show current game state, ideally by creating string using info from $game_state e.g. Say(meeting, f'Board:\n{"\n".join($game_state)}')
   - Select the player whose turn it is based on the game rules or your decision as the host
-    - If the player hasn't provided their next move yet
+    - While the player hasn't provided their next move yet, up to 2 retries
       - Openly say player your move
       - Wait for player to respond
+    - If no reply from player after retries, apologize to everyone that you need to abort, and return to end meeting
     - If the move is not valid, openly say so and ask player for a different move, loop till valid move
     - Surgically update game state based on the move, e.g. $game_board[2][3] = "○"
   - Check for win condition or draw

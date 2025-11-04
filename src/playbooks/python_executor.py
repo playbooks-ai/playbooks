@@ -126,6 +126,7 @@ class ExecutionResult:
         self.syntax_error: Optional[SyntaxError] = None
         self.runtime_error: Optional[Exception] = None
         self.error_message: Optional[str] = None
+        self.error_traceback: Optional[str] = None
 
 
 class PythonExecutor:
@@ -313,7 +314,10 @@ class PythonExecutor:
                 self.result.syntax_error = e
                 self.result.error_message = f"SyntaxError: {e}"
                 logger.error(f"Syntax error during preprocessing: {e}")
-                raise
+                backtrace = traceback.format_exc()
+                logger.error(f"Backtrace: {backtrace}")
+                self.result.error_traceback = backtrace
+                return self.result
 
             # Compile code to check for syntax errors early
             try:
@@ -322,7 +326,10 @@ class PythonExecutor:
                 self.result.syntax_error = e
                 self.result.error_message = f"SyntaxError: {e}"
                 logger.error(f"Syntax error executing code: {e}")
-                raise
+                backtrace = traceback.format_exc()
+                logger.error(f"Backtrace: {backtrace}")
+                self.result.error_traceback = backtrace
+                return self.result
 
             # Execute the compiled code in the controlled namespace
             # This populates namespace with function definitions and executes statements
@@ -347,7 +354,8 @@ class PythonExecutor:
             logger.error(f"Syntax error executing code: {e}")
             backtrace = traceback.format_exc()
             logger.error(f"Backtrace: {backtrace}")
-            raise
+            # Store full traceback for LLM feedback
+            self.result.error_traceback = backtrace
 
         except Exception as e:
             self.result.runtime_error = e
@@ -355,7 +363,8 @@ class PythonExecutor:
             logger.error(f"Error executing code: {type(e).__name__}: {e}")
             backtrace = traceback.format_exc()
             logger.error(f"Backtrace: {backtrace}")
-            raise
+            # Store full traceback for LLM feedback
+            self.result.error_traceback = backtrace
 
         return self.result
 

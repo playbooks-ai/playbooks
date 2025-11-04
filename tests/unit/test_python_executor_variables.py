@@ -275,7 +275,7 @@ else:
         assert result.vars["result"] == "greater"
 
     async def test_execute_preserves_error_handling(self):
-        """Test that execution errors are still captured and raised."""
+        """Test that execution errors are captured in the result."""
         agent = MagicMock()
         agent.playbooks = {}
         agent.state = MagicMock()
@@ -288,11 +288,13 @@ else:
         executor = PythonExecutor(agent)
         code = "x = undefined_variable"
 
-        with pytest.raises(NameError):
-            await executor.execute(code)
+        result = await executor.execute(code)
+        assert result.runtime_error is not None
+        assert isinstance(result.runtime_error, NameError)
+        assert "undefined_variable" in str(result.runtime_error)
 
     async def test_execute_syntax_error_still_captured(self):
-        """Test that syntax errors are captured and raised."""
+        """Test that syntax errors are captured in the result."""
         agent = MagicMock()
         agent.playbooks = {}
         agent.state = MagicMock()
@@ -305,5 +307,6 @@ else:
         executor = PythonExecutor(agent)
         code = "x = ("  # Invalid syntax
 
-        with pytest.raises(SyntaxError):
-            await executor.execute(code)
+        result = await executor.execute(code)
+        assert result.syntax_error is not None
+        assert isinstance(result.syntax_error, SyntaxError)

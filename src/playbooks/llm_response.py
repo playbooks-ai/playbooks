@@ -125,7 +125,9 @@ class LLMResponse(AsyncInitMixin):
         """Execute the generated code.
 
         Creates a PythonExecutor and executes the preprocessed code,
-        storing the result in self.execution_result.
+        storing the result in self.execution_result. If execution fails,
+        the error is captured in the result rather than raising an exception,
+        allowing the LLM to see the error and retry with corrected code.
 
         Args:
             playbook_args: Optional dict of playbook argument names to values
@@ -133,4 +135,15 @@ class LLMResponse(AsyncInitMixin):
         executor = PythonExecutor(self.agent)
         self.execution_result = await executor.execute(
             self.preprocessed_code, playbook_args=playbook_args
+        )
+
+    def has_execution_error(self) -> bool:
+        """Check if the code execution resulted in an error.
+
+        Returns:
+            True if there was a syntax or runtime error during execution
+        """
+        return self.execution_result is not None and (
+            self.execution_result.syntax_error is not None
+            or self.execution_result.runtime_error is not None
         )

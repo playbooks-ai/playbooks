@@ -153,6 +153,29 @@ class PlaybookLLMExecution(LLMExecution):
             if hasattr(self.agent, "_currently_streaming"):
                 self.agent._currently_streaming = False
 
+            # Check if code execution resulted in an error
+            # If so, send error message back to LLM for correction
+            if llm_response.has_execution_error():
+                result = llm_response.execution_result
+                error_content = (
+                    f"ERROR: Code execution failed:\n\n"
+                    f"{result.error_message}\n\n"
+                    f"Please fix the error."
+                )
+
+                # Add error message to call stack for LLM to see
+                from playbooks.llm_messages.types import ExecutionResultLLMMessage
+
+                error_msg = ExecutionResultLLMMessage(
+                    content=error_content,
+                    playbook_name=self.playbook.name,
+                    success=False,
+                )
+                self.agent.state.call_stack.add_llm_message(error_msg)
+
+                # Continue the loop to let LLM retry
+                continue
+
             # artifacts_to_load = []
 
             # all_steps = []
