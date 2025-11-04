@@ -352,8 +352,18 @@ class LLMPlaybook(LocalPlaybook):
         self.step_collection = step_collection
 
         # Set execution mode from metadata
+        # Default to REACT if no steps and no execution_mode specified
+        if "execution_mode" not in merged_metadata:
+            default_mode = (
+                LLMExecutionMode.REACT
+                if step_collection is None
+                else LLMExecutionMode.PLAYBOOK
+            )
+        else:
+            default_mode = LLMExecutionMode.PLAYBOOK
+
         self.execution_mode = LLMExecutionMode(
-            merged_metadata.get("execution_mode", LLMExecutionMode.PLAYBOOK)
+            merged_metadata.get("execution_mode", default_mode)
         )
 
     async def execute_with_agent(self, agent, *args, **kwargs) -> Any:

@@ -82,6 +82,7 @@ Each meeting must have a corresponding playbook, e.g. "TaxPreparation" with meta
 
 #### 5. Agents
 Already running agents are listed in state. Agents can be created dynamically with `CreateAgent("Agent type", kwargs...)` `yld for call`
+Don't make up agent or meeting ids. Use only those ids that are listed in current state.
 
 #### 6. Say() rules
 - `Say("user", "message")` - Send only to human

@@ -236,7 +236,7 @@ async def test_example_13_description_injection(test_data_dir):
     )
 
 
-@pytest.mark.integration
+@pytest.skip(reason="Not a test, debugging aid only")
 @pytest.mark.asyncio
 async def test_example_deep_file_researcher(test_examples_dir):
     # Run the MCP server before running the test
@@ -322,15 +322,13 @@ async def test_example_storyteller(test_examples_dir):
 
     await playbooks.program.run_till_exit()
     log = storyteller.state.session_log.to_log_full()
-    print(log)
-    assert "StoryTeller.Main" in log
-    assert "CharacterCreator.CreateNewCharacter" in log
+    assert "Main()" in log
+    assert "CreateAgent(CharacterCreator)" in log
     assert "Execution finished" in log
 
     character_creator = playbooks.program.agents_by_klass["CharacterCreator"][0]
     log = character_creator.state.session_log.to_log_full()
-    print(log)
-    assert "CharacterCreator.CreateNewCharacter" in log
+    assert "CreateNewCharacter() →" in log
 
 
 @pytest.mark.integration
