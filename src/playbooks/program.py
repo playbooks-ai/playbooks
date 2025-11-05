@@ -611,7 +611,7 @@ class Program(ProgramAgentsCommunicationMixin):
                     event_bus=self.event_bus,
                     agent_id="human",
                     program=self,
-                    klass="HumanAgent",
+                    klass="User",
                     name="User",
                 )
             )

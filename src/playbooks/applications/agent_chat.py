@@ -121,6 +121,24 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
         super().__init__(program, stream_enabled, target_human_id)
         self.active_streams = {}  # stream_id -> {"agent_klass": str, "content": str}
 
+    @staticmethod
+    def _format_agent_display(klass: str, agent_id: str) -> str:
+        """Format agent display string.
+
+        Human agents show as just their klass name (e.g., "User").
+        AI agents show as klass(id) (e.g., "Assistant(1000)").
+
+        Args:
+            klass: Agent class name
+            agent_id: Agent ID
+
+        Returns:
+            Formatted display string
+        """
+        if agent_id == "human":
+            return klass
+        return f"{klass}({agent_id})"
+
     async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
         """Display stream start in terminal."""
         self.active_streams[event.stream_id] = {
@@ -130,10 +148,13 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             "recipient_klass": event.recipient_klass,
             "content": "",
         }
-        # Format: 💬 HelloWorld(agent 1000) → Human(user):
-        sender_display = f"{agent_name}(agent {event.sender_id})"
+        # Format: 💬 HelloWorld(1000) → User:
+        sender_display = self._format_agent_display(agent_name, event.sender_id)
+
         if event.recipient_id and event.recipient_klass:
-            recipient_display = f"{event.recipient_klass}({event.recipient_id})"
+            recipient_display = self._format_agent_display(
+                event.recipient_klass, event.recipient_id
+            )
             console.print(
                 f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: ",
                 end="",
@@ -183,10 +204,13 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             recipient_klass = event.final_message.recipient_klass
             content = event.final_message.content
 
-        # Format: 💬 HelloWorld(agent 1000) → Human(user): message
-        sender_display = f"{sender_klass}(agent {sender_id})"
+        # Format: 💬 HelloWorld(1000) → User: message
+        sender_display = self._format_agent_display(sender_klass, sender_id)
+
         if recipient_id and recipient_klass:
-            recipient_display = f"{recipient_klass}({recipient_id})"
+            recipient_display = self._format_agent_display(
+                recipient_klass, recipient_id
+            )
             console.print(
                 f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: {content}"
             )

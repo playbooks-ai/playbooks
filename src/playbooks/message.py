@@ -85,21 +85,25 @@ class Message:
     def to_compact_str(self) -> str:
         """Return compact string representation for LLM context.
 
-        Format: "SenderKlass(agent sender_id) → RecipientKlass(recipient_id): content"
-        Example: "StoryTeller(agent 1000) → CharacterCreator(agent 1001): Hi! Could you..."
+        Format: "SenderKlass(sender_id) → RecipientKlass(recipient_id): content"
+        Example: "StoryTeller(1000) → CharacterCreator(1001): Hi! Could you..."
+        Human agents show as just "User" without ID.
 
         Returns:
             Compact string representation similar to CLI output format
         """
-        # Format sender
-        sender = f"{self.sender_klass}(agent {self.sender_id})"
+        # Format sender - just name for human, name(id) for agents
+        if self.sender_id == "human":
+            sender = self.sender_klass
+        else:
+            sender = f"{self.sender_klass}({self.sender_id})"
 
         # Format recipient
         if self.recipient_id and self.recipient_klass:
-            if self.recipient_id == "user" or self.recipient_klass == "Human":
-                recipient = f"{self.recipient_klass}({self.recipient_id})"
+            if self.recipient_id == "human":
+                recipient = self.recipient_klass
             else:
-                recipient = f"{self.recipient_klass}(agent {self.recipient_id})"
+                recipient = f"{self.recipient_klass}({self.recipient_id})"
         else:
             recipient = "all"
 

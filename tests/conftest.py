@@ -61,7 +61,7 @@ def extract_messages_from_cli_output(output: str) -> list[str]:
     """Extract message content from CLI output.
 
     Parses lines like:
-    💬 HelloWorld(agent 1000) → User(human): Hello! Welcome to the Playbooks system!
+    💬 HelloWorld(1000) → User: Hello! Welcome to the Playbooks system!
 
     Returns list of message contents (the part after the colon).
     """

@@ -42,7 +42,7 @@ jobs:
         ANTHROPIC_API_KEY: "test-key"  # Tests should use cache, not make actual API calls
         MODEL: "claude-sonnet-4-20250514"  # Match the model in .env.test
       run: |
-        poetry run pytest tests/ -vv --cov=src/playbooks --cov-report=xml -m "not integration"
+        poetry run pytest tests/unit -vv --cov=src/playbooks --cov-report=xml
         
         
     - name: Upload Playbooks package coverage

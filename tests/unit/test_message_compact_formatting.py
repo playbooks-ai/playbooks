@@ -18,9 +18,9 @@ def test_message_compact_str():
 
     compact = msg.to_compact_str()
 
-    # Check format: "SenderKlass(agent sender_id) → RecipientKlass(agent recipient_id): content"
-    assert "StoryTeller(agent 1000)" in compact
-    assert "CharacterCreator(agent 1001)" in compact
+    # Check format: "SenderKlass(sender_id) → RecipientKlass(recipient_id): content"
+    assert "StoryTeller(1000)" in compact
+    assert "CharacterCreator(1001)" in compact
     assert "Hi! Could you please create" in compact
     assert " → " in compact
 
@@ -30,8 +30,8 @@ def test_message_compact_str_human():
     msg = Message(
         sender_id="1000",
         sender_klass="StoryTeller",
-        recipient_id="user",
-        recipient_klass="Human",
+        recipient_id="human",
+        recipient_klass="User",
         message_type=MessageType.DIRECT,
         content="Hello!",
         meeting_id=None,
@@ -39,9 +39,27 @@ def test_message_compact_str_human():
 
     compact = msg.to_compact_str()
 
-    assert "StoryTeller(agent 1000)" in compact
-    assert "Human(user)" in compact
+    assert "StoryTeller(1000)" in compact
+    assert "StoryTeller(1000) → User:" in compact
     assert "Hello!" in compact
+
+
+def test_message_compact_str_from_human():
+    """Test compact formatting for messages from human to agent."""
+    msg = Message(
+        sender_id="human",
+        sender_klass="User",
+        recipient_id="1000",
+        recipient_klass="Assistant",
+        message_type=MessageType.DIRECT,
+        content="Help me with this task",
+        meeting_id=None,
+    )
+
+    compact = msg.to_compact_str()
+
+    assert "User → Assistant(1000):" in compact
+    assert "Help me with this task" in compact
 
 
 def test_message_compact_str_truncation():
@@ -83,7 +101,7 @@ def test_playbook_call_with_messages():
 
     # Should use compact format, not verbose Python repr
     assert "ProcessMessages([" in call_str
-    assert "StoryTeller(agent 1000) → CharacterCreator(agent 1001)" in call_str
+    assert "StoryTeller(1000) → CharacterCreator(1001)" in call_str
     assert "Hi! Could you please create" in call_str
 
     # Should NOT contain verbose repr elements
@@ -108,8 +126,8 @@ def test_playbook_call_with_multiple_messages():
         Message(
             sender_id="1002",
             sender_klass="WorldBuilder",
-            recipient_id="user",
-            recipient_klass="Human",
+            recipient_id="human",
+            recipient_klass="User",
             message_type=MessageType.DIRECT,
             content="Message 2",
             meeting_id=None,
@@ -120,10 +138,8 @@ def test_playbook_call_with_multiple_messages():
     call_str = str(call)
 
     # Both messages should be formatted compactly
-    assert (
-        "StoryTeller(agent 1000) → CharacterCreator(agent 1001): Message 1" in call_str
-    )
-    assert "WorldBuilder(agent 1002) → Human(user): Message 2" in call_str
+    assert "StoryTeller(1000) → CharacterCreator(1001): Message 1" in call_str
+    assert "WorldBuilder(1002) → User: Message 2" in call_str
 
     # Should NOT contain verbose repr elements
     assert "MessageType" not in call_str
