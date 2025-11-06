@@ -337,8 +337,8 @@ async def patched_broadcast_to_meeting_as_owner(
     """Patched version of broadcast_to_meeting_as_owner that displays meeting messages nicely."""
     # Display the meeting message with formatting
     if not from_agent_id or not from_agent_klass:
-        from_agent_id = self.agent.id
-        from_agent_klass = self.agent.klass
+        from_agent_id = self.agent_id
+        from_agent_klass = self.agent_klass
 
     # Format and display the meeting broadcast
     console.print(
