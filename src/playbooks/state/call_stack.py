@@ -7,11 +7,15 @@ execution and debugging.
 
 from typing import Any, Dict, List, Optional
 
-from playbooks.llm_messages import LLMMessage
+from playbooks.llm.messages import LLMMessage
 
-from .event_bus import EventBus
-from .events import CallStackPopEvent, CallStackPushEvent, InstructionPointerEvent
-from .playbook_step import PlaybookStep
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.events import (
+    CallStackPopEvent,
+    CallStackPushEvent,
+    InstructionPointerEvent,
+)
+from playbooks.execution.step import PlaybookStep
 
 
 class InstructionPointer:

@@ -4,8 +4,8 @@ import asyncio
 from datetime import datetime
 from typing import Callable, Optional
 
-from playbooks.session_log import SessionLog, SessionLogItem
-from playbooks.session_log_items import SessionLogItemBase
+from playbooks.state.session_log import SessionLog, SessionLogItem
+from playbooks.state.session_log_items import SessionLogItemBase
 
 
 class StreamingSessionLog(SessionLog):

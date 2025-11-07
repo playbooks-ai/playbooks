@@ -3,7 +3,7 @@
 import pytest
 
 from playbooks.agents.agent_builder import AgentBuilder
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.utils.markdown_to_ast import markdown_to_ast
 
 

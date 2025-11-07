@@ -7,7 +7,7 @@ call stacks, variables, or session logs.
 
 from typing import Dict, Optional
 
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.meetings import JoinedMeeting
 
 

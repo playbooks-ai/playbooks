@@ -5,13 +5,13 @@ from unittest.mock import Mock
 import pytest
 
 from playbooks.agents.ai_agent import AIAgent
-from playbooks.call_stack import CallStackFrame, InstructionPointer
-from playbooks.event_bus import EventBus
-from playbooks.execution_state import ExecutionState
+from playbooks.state.call_stack import CallStackFrame, InstructionPointer
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.execution_state import ExecutionState
 from playbooks.llm_messages.types import ArtifactLLMMessage
-from playbooks.python_executor import LLMNamespace, PythonExecutor
+from playbooks.execution.python_executor import LLMNamespace, PythonExecutor
 from playbooks.utils.expression_engine import ExpressionContext
-from playbooks.variables import Artifact
+from playbooks.state.variables import Artifact
 
 
 @pytest.fixture

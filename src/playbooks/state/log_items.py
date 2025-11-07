@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from playbooks.session_log import SessionLogItem
+from playbooks.state.session_log import SessionLogItem
 
 
 @dataclass

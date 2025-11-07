@@ -11,22 +11,22 @@ import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from playbooks.config import config
-from playbooks.debug_logger import debug
-from playbooks.llm_context_compactor import LLMContextCompactor
-from playbooks.llm_messages import (
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.llm.llm_context_compactor import LLMContextCompactor
+from playbooks.llm.messages import (
     AgentInfoLLMMessage,
     OtherAgentInfoLLMMessage,
     TriggerInstructionsLLMMessage,
     UserInputLLMMessage,
 )
-from playbooks.llm_messages.types import FrameType
+from playbooks.llm.messages.types import FrameType
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import get_messages_for_prompt
 from playbooks.utils.token_counter import get_messages_token_count
-from playbooks.variables import Variable
+from playbooks.state.variables import Variable
 
 if TYPE_CHECKING:
-    from playbooks.execution_state import ExecutionState
+    from playbooks.state.execution_state import ExecutionState
 
 
 class SetEncoder(json.JSONEncoder):

@@ -11,8 +11,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from playbooks.python_executor import LLMNamespace, PythonExecutor
-from playbooks.variables import Variable
+from playbooks.execution.python_executor import LLMNamespace, PythonExecutor
+from playbooks.state.variables import Variable
 
 
 @pytest.mark.asyncio

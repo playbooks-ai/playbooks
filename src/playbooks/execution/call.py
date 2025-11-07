@@ -6,8 +6,8 @@ their arguments, and execution results during playbook runtime.
 
 from typing import Any, Dict, List, Optional
 
-from playbooks.session_log import SessionLogItem
-from playbooks.variables import Artifact
+from playbooks.state.session_log import SessionLogItem
+from playbooks.state.variables import Artifact
 
 
 class PlaybookCall(SessionLogItem):
@@ -45,8 +45,8 @@ class PlaybookCall(SessionLogItem):
         Returns:
             String like "PlaybookName(arg1, arg2, kwarg=value)"
         """
-        from playbooks.argument_types import LiteralValue, VariableReference
-        from playbooks.variables import Artifact
+        from playbooks.core.argument_types import LiteralValue, VariableReference
+        from playbooks.state.variables import Artifact
 
         code = [self.playbook_klass, "("]
 
@@ -94,7 +94,7 @@ class PlaybookCall(SessionLogItem):
         Returns:
             Formatted string representation of the argument
         """
-        from playbooks.message import Message
+        from playbooks.core.message import Message
 
         # Handle list of messages compactly
         if isinstance(arg, list) and len(arg) > 0 and isinstance(arg[0], Message):

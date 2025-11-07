@@ -2,10 +2,10 @@
 
 import pytest
 
-from playbooks.python_executor import PythonExecutor
-from playbooks.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.event_bus import EventBus
-from playbooks.variables import Variables
+from playbooks.execution.python_executor import PythonExecutor
+from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.variables import Variables
 
 
 class MockProgram:

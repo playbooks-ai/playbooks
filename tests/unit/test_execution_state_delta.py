@@ -2,9 +2,9 @@
 
 import pytest
 
-from playbooks.call_stack import CallStackFrame, InstructionPointer
-from playbooks.event_bus import EventBus
-from playbooks.execution_state import ExecutionState
+from playbooks.state.call_stack import CallStackFrame, InstructionPointer
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.execution_state import ExecutionState
 from playbooks.playbook_step import PlaybookStep
 
 

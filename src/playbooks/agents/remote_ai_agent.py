@@ -7,7 +7,7 @@ for playbook execution and processing.
 import logging
 from typing import Any, Dict
 
-from ..event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from .ai_agent import AIAgent
 
 logger = logging.getLogger(__name__)

@@ -1,6 +1,6 @@
 """Tests for Artifact string operations support."""
 
-from playbooks.variables import Artifact
+from playbooks.state.variables import Artifact
 
 
 def test_artifact_len():

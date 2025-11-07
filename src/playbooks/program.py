@@ -18,21 +18,21 @@ from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
 from .agents.base_agent import BaseAgent
 from .channels import AgentParticipant, Channel, HumanParticipant
-from .constants import HUMAN_AGENT_KLASS
+from playbooks.core.constants import HUMAN_AGENT_KLASS
 from .debug.server import (
     DebugServer,  # Note: Actually a debug client that connects to VSCode
 )
-from .debug_logger import debug
-from .event_bus import EventBus
-from .events import ChannelCreatedEvent, ProgramTerminatedEvent
-from .exceptions import ExecutionFinished, KlassNotFoundError
-from .identifiers import AgentID, MeetingID
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
+from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
+from playbooks.core.identifiers import AgentID, MeetingID
 from .meetings import MeetingRegistry
-from .message import Message, MessageType
-from .stream_result import StreamResult
+from playbooks.core.message import Message, MessageType
+from playbooks.core.stream_result import StreamResult
 from .utils import file_utils
-from .utils.markdown_to_ast import markdown_to_ast
-from .variables import Artifact
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.state.variables import Artifact
 
 logger = logging.getLogger(__name__)
 
@@ -205,7 +205,7 @@ class AsyncAgentRuntime:
             self.program._has_agent_errors = True
 
             # Log agent error using error_utils for consistency
-            from .utils.error_utils import log_agent_errors
+            from playbooks.utils.error_utils import log_agent_errors
 
             error_info = [
                 {

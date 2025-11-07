@@ -19,13 +19,13 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
-from playbooks.enums import LLMMessageRole
-from playbooks.llm_messages import SystemPromptLLMMessage, UserInputLLMMessage
+from playbooks.core.enums import LLMMessageRole
+from playbooks.llm.messages import SystemPromptLLMMessage, UserInputLLMMessage
 
-from ..config import config
-from ..constants import SYSTEM_PROMPT_DELIMITER
-from ..debug_logger import debug
-from ..exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
+from playbooks.config import config
+from playbooks.core.constants import SYSTEM_PROMPT_DELIMITER
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
 from .langfuse_helper import LangfuseHelper
 from .llm_config import LLMConfig
 from .playbooks_lm_handler import PlaybooksLMHandler
@@ -522,7 +522,7 @@ def consolidate_messages(messages: List[dict]) -> List[dict]:
         contents = "\n\n".join(contents)
 
         # Add the consolidated message to the list
-        from playbooks.llm_messages import LLMMessage
+        from playbooks.llm.messages import LLMMessage
 
         if cache_control:
             llm_msg = LLMMessage(

@@ -15,8 +15,8 @@ import time
 import tracemalloc
 from typing import List
 
-from playbooks.event_bus import EventBus
-from playbooks.events import Event
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.events import Event
 
 
 class BenchmarkEvent(Event):

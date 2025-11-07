@@ -1,7 +1,7 @@
 from unittest.mock import Mock, patch
 
 from playbooks.agents.ai_agent import AIAgent
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.playbook.python_playbook import PythonPlaybook
 
 

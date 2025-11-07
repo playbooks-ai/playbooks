@@ -2,7 +2,7 @@
 
 from typing import List, Optional, Protocol
 
-from ..message import Message
+from playbooks.core.message import Message
 from .participant import Participant
 from .stream_events import StreamChunkEvent, StreamCompleteEvent, StreamStartEvent
 

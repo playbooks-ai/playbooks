@@ -8,10 +8,10 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from playbooks.event_bus import EventBus
-from playbooks.python_executor import ExecutionResult, PythonExecutor
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.execution.python_executor import ExecutionResult, PythonExecutor
 from playbooks.utils.async_init_mixin import AsyncInitMixin
-from playbooks.utils.expression_engine import preprocess_program
+from playbooks.compilation.expression_engine import preprocess_program
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent

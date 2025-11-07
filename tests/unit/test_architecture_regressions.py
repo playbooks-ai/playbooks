@@ -15,8 +15,8 @@ from playbooks.channels.stream_events import (
     StreamCompleteEvent,
     StreamStartEvent,
 )
-from playbooks.event_bus import EventBus
-from playbooks.events import ChannelCreatedEvent
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.events import ChannelCreatedEvent
 from playbooks.program import Program
 
 

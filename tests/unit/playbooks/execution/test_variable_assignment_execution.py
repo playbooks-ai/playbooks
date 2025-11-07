@@ -6,10 +6,10 @@ import pytest
 
 from playbooks.agents.ai_agent import AIAgent
 from playbooks.config import config
-from playbooks.event_bus import EventBus
-from playbooks.execution_state import ExecutionState
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.execution_state import ExecutionState
 from playbooks.playbook_call import PlaybookCall
-from playbooks.variables import Artifact
+from playbooks.state.variables import Artifact
 
 
 class MockAgent(AIAgent):

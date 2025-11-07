@@ -9,10 +9,10 @@ import pytest
 
 from playbooks.agents.ai_agent import AIAgent
 from playbooks.config import config
-from playbooks.event_bus import EventBus
-from playbooks.execution_state import ExecutionState
-from playbooks.python_executor import PythonExecutor
-from playbooks.variables import Artifact
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.execution_state import ExecutionState
+from playbooks.execution.python_executor import PythonExecutor
+from playbooks.state.variables import Artifact
 
 
 class MockProgram:

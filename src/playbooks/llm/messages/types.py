@@ -3,8 +3,8 @@
 from enum import Enum
 from typing import Any, Dict, Optional
 
-from ..enums import LLMMessageRole, LLMMessageType
-from ..variables import Artifact
+from playbooks.core.enums import LLMMessageRole, LLMMessageType
+from playbooks.state.variables import Artifact
 from .base import LLMMessage
 
 

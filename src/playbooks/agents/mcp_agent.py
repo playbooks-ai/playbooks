@@ -7,8 +7,8 @@ for tool execution and remote playbook processing.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Type
 
-from playbooks.event_bus import EventBus
-from playbooks.exceptions import AgentConfigurationError
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.playbook import RemotePlaybook
 from playbooks.transport import MCPTransport
 

@@ -11,12 +11,16 @@ from typing import List
 
 import frontmatter
 
-from .compiler import Compiler, FileCompilationResult, FileCompilationSpec
-from .event_bus import EventBus
-from .loader import Loader
-from .logging_setup import configure_logging
+from playbooks.compilation.compiler import (
+    Compiler,
+    FileCompilationResult,
+    FileCompilationSpec,
+)
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.compilation.loader import Loader
+from playbooks.infrastructure.logging.setup import configure_logging
 from .program import Program
-from .utils.llm_config import LLMConfig
+from playbooks.utils.llm_config import LLMConfig
 
 # Configure logging at module import
 configure_logging()

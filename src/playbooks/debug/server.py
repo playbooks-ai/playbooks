@@ -9,7 +9,7 @@ from logging import error
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from ..debug_logger import debug
+from playbooks.infrastructure.logging.debug_logger import debug
 
 if TYPE_CHECKING:
     from playbooks.program import Program

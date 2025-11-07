@@ -3,7 +3,7 @@
 import pytest
 
 from playbooks import Playbooks
-from playbooks.constants import EOM
+from playbooks.core.constants import EOM
 
 
 @pytest.mark.integration

@@ -1,6 +1,6 @@
 """Test compact message formatting in LLM context."""
 
-from playbooks.message import Message, MessageType
+from playbooks.core.message import Message, MessageType
 from playbooks.playbook_call import PlaybookCall
 
 

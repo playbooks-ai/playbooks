@@ -4,7 +4,7 @@ from datetime import datetime
 
 import pytest
 
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.human_state import HumanState
 from playbooks.meetings import JoinedMeeting
 

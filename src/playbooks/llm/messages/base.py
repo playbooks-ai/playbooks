@@ -2,7 +2,7 @@
 
 from typing import Any, Dict, Optional
 
-from ..enums import LLMMessageRole, LLMMessageType
+from playbooks.core.enums import LLMMessageRole, LLMMessageType
 
 
 class LLMMessage:

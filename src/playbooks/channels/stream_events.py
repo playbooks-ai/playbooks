@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
-from ..message import Message
+from playbooks.core.message import Message
 
 
 @dataclass

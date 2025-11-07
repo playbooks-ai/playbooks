@@ -4,8 +4,8 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from ..playbook_call import PlaybookCall
-from ..utils.expression_engine import (
+from playbooks.execution.call import PlaybookCall
+from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
 )

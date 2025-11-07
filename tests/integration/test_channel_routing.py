@@ -4,8 +4,8 @@ import pytest
 import pytest_asyncio
 
 from playbooks.agents.human_agent import HumanAgent
-from playbooks.event_bus import EventBus
-from playbooks.message import MessageType
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.message import MessageType
 from playbooks.program import Program
 
 

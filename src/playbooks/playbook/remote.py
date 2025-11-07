@@ -7,7 +7,7 @@ like MCP (Model Context Protocol), enabling distributed agent execution.
 import logging
 from typing import Any, Callable, Dict, Optional
 
-from playbooks.variables import Variable
+from playbooks.state.variables import Variable
 
 from .base import Playbook
 

@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from playbooks.agents.human_agent import HumanAgent
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.program import Program
 
 

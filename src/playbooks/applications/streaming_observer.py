@@ -14,8 +14,8 @@ from playbooks.channels.stream_events import (
     StreamCompleteEvent,
     StreamStartEvent,
 )
-from playbooks.debug_logger import debug
-from playbooks.events import ChannelCreatedEvent
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.events import ChannelCreatedEvent
 
 if TYPE_CHECKING:
     from playbooks.program import Program

@@ -4,13 +4,13 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from playbooks.debug_logger import debug
-from playbooks.llm_messages import (
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     LLMMessage,
     UserInputLLMMessage,
 )
-from playbooks.llm_messages.types import FrameType
+from playbooks.llm.messages.types import FrameType
 
 
 @dataclass

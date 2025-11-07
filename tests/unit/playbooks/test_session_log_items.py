@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from playbooks.session_log_items import (
+from playbooks.state.session_log_items import (
     SessionLogItemAgentMessage,
     SessionLogItemBase,
     SessionLogItemDebug,

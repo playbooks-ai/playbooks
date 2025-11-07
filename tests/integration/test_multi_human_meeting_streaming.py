@@ -5,7 +5,7 @@ import uuid
 import pytest
 
 from playbooks.channels.stream_events import StreamChunkEvent, StreamStartEvent
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.program import Program
 
 

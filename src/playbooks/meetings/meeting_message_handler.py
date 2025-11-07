@@ -4,10 +4,10 @@ import logging
 from typing import TYPE_CHECKING
 
 from playbooks.agents.base_agent import BaseAgent
-from playbooks.message import MessageType
+from playbooks.core.message import MessageType
 
 if TYPE_CHECKING:
-    from playbooks.message import Message
+    from playbooks.core.message import Message
 
 logger = logging.getLogger(__name__)
 

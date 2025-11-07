@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
-from .debug_logger import debug
-from .exceptions import ProgramLoadError
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.exceptions import ProgramLoadError
 
 
 class CircularImportError(ProgramLoadError):

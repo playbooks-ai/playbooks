@@ -5,13 +5,13 @@ MessagingMixin for event-driven message processing.
 import asyncio
 from typing import List
 
-from ..async_message_queue import AsyncMessageQueue
-from ..constants import EOM, EXECUTION_FINISHED
-from ..debug_logger import debug
-from ..exceptions import ExecutionFinished
-from ..identifiers import AgentID, MeetingID
-from ..llm_messages import AgentCommunicationLLMMessage
-from ..message import Message, MessageType
+from playbooks.agents.async_queue import AsyncMessageQueue
+from playbooks.core.constants import EOM, EXECUTION_FINISHED
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.exceptions import ExecutionFinished
+from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.llm.messages import AgentCommunicationLLMMessage
+from playbooks.core.message import Message, MessageType
 
 
 class MessagingMixin:

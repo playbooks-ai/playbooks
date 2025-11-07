@@ -8,10 +8,10 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 from playbooks.agents.namespace_manager import AgentNamespaceManager
-from playbooks.event_bus import EventBus
-from playbooks.exceptions import AgentConfigurationError
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.playbook import LLMPlaybook, PythonPlaybook
-from playbooks.utils.markdown_to_ast import refresh_markdown_attributes
+from playbooks.compilation.markdown_to_ast import refresh_markdown_attributes
 
 from .ai_agent import AIAgent
 from .registry import AgentClassRegistry

@@ -11,7 +11,7 @@ import sys
 import threading
 from typing import Optional
 
-from .logging_constants import (
+from playbooks.infrastructure.logging.constants import (
     ENV_LOG_LEVEL,
     ENV_LOG_FILE,
     DEFAULT_LOG_LEVEL,
@@ -110,7 +110,7 @@ def configure_logging() -> None:
         setup_production_logging()
 
         # Apply user output configuration
-        from playbooks.logging_config import apply_config
+        from playbooks.infrastructure.logging.config import apply_config
 
         apply_config()
 

@@ -6,10 +6,10 @@ in playbook execution, handling user input and state management.
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from ..constants import HUMAN_AGENT_KLASS
-from ..delivery_preferences import DeliveryPreferences
-from ..event_bus import EventBus
-from ..human_state import HumanState
+from playbooks.core.constants import HUMAN_AGENT_KLASS
+from playbooks.agents.delivery_preferences import DeliveryPreferences
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.human_state import HumanState
 from .base_agent import BaseAgent
 
 if TYPE_CHECKING:

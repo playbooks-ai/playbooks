@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from playbooks.enums import LLMMessageRole
-from playbooks.exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
+from playbooks.core.enums import LLMMessageRole
+from playbooks.core.exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
 from playbooks.llm_messages import LLMMessage
 from playbooks.utils.llm_helper import (
     _make_completion_request,

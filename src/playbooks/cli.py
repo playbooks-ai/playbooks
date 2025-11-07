@@ -18,12 +18,12 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from .compiler import Compiler, FileCompilationSpec
-from .exceptions import ProgramLoadError
-from .loader import Loader
-from .logging_setup import configure_logging
-from .utils.llm_config import LLMConfig
-from .utils.version import get_playbooks_version
+from playbooks.compilation.compiler import Compiler, FileCompilationSpec
+from playbooks.core.exceptions import ProgramLoadError
+from playbooks.compilation.loader import Loader
+from playbooks.infrastructure.logging.setup import configure_logging
+from playbooks.utils.llm_config import LLMConfig
+from playbooks.utils.version import get_playbooks_version
 
 # Suppress deprecation warnings from external libraries
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="httpx")

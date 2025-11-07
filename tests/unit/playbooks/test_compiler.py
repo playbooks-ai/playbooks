@@ -12,8 +12,12 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
-from playbooks.compiler import Compiler, FileCompilationResult, FileCompilationSpec
-from playbooks.exceptions import ProgramLoadError
+from playbooks.compilation.compiler import (
+    Compiler,
+    FileCompilationResult,
+    FileCompilationSpec,
+)
+from playbooks.core.exceptions import ProgramLoadError
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.version import get_playbooks_version
 

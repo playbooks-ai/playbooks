@@ -8,10 +8,10 @@ and configuration.
 import re
 from typing import TYPE_CHECKING, Dict, Optional, Type, Union
 
-from playbooks.delivery_preferences import DeliveryPreferences
-from playbooks.exceptions import AgentConfigurationError
-from playbooks.utils.markdown_to_ast import refresh_markdown_attributes
-from playbooks.utils.parse_utils import parse_metadata_and_description
+from playbooks.agents.delivery_preferences import DeliveryPreferences
+from playbooks.core.exceptions import AgentConfigurationError
+from playbooks.compilation.markdown_to_ast import refresh_markdown_attributes
+from playbooks.compilation.parse_utils import parse_metadata_and_description
 from playbooks.utils.text_utils import is_camel_case, to_camel_case
 
 from . import LocalAIAgent, MCPAgent

@@ -41,13 +41,13 @@ from playbooks.channels.stream_events import (
     StreamCompleteEvent,
     StreamStartEvent,
 )
-from playbooks.constants import EOM, EXECUTION_FINISHED
-from playbooks.debug_logger import debug
-from playbooks.events import Event
-from playbooks.exceptions import ExecutionFinished
+from playbooks.core.constants import EOM, EXECUTION_FINISHED
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.events import Event
+from playbooks.core.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.program import Program
-from playbooks.user_output import user_output
+from playbooks.infrastructure.user_output import user_output
 from playbooks.utils.error_utils import check_playbooks_health
 
 # Add the src directory to the Python path to import playbooks

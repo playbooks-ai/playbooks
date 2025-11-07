@@ -1,6 +1,6 @@
 """Tests for using Artifacts in messages (e.g., Say)."""
 
-from playbooks.variables import Artifact
+from playbooks.state.variables import Artifact
 
 
 class TestArtifactConversion:

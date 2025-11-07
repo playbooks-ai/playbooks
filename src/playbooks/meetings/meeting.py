@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
 
-from ..agents.base_agent import BaseAgent
-from ..message import Message
+from playbooks.agents.base_agent import BaseAgent
+from playbooks.core.message import Message
 
 
 class MeetingInvitationStatus(enum.Enum):

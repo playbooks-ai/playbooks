@@ -22,14 +22,14 @@ from playbooks.channels.stream_events import (
     StreamCompleteEvent,
     StreamStartEvent,
 )
-from playbooks.constants import EOM
-from playbooks.debug_logger import debug
-from playbooks.exceptions import ExecutionFinished
+from playbooks.core.constants import EOM
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.exceptions import ExecutionFinished
 from playbooks.meetings.meeting_manager import MeetingManager
-from playbooks.message import MessageType
+from playbooks.core.message import MessageType
 from playbooks.program import Program
-from playbooks.streaming_session_log import StreamingSessionLog
-from playbooks.identifiers import AgentID
+from playbooks.state.streaming_log import StreamingSessionLog
+from playbooks.core.identifiers import AgentID
 
 
 class EventType(Enum):

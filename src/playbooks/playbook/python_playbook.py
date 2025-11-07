@@ -150,7 +150,7 @@ class PythonPlaybook(LocalPlaybook):
         import inspect
         import re
 
-        from ..triggers import PlaybookTriggers
+        from playbooks.triggers import PlaybookTriggers
 
         sig = inspect.signature(func)
         signature = func.__name__ + str(sig)

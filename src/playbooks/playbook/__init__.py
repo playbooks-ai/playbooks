@@ -5,7 +5,7 @@ tasks, including LLM-based playbooks, Python function playbooks, local execution
 and remote server execution.
 """
 
-from ..triggers import PlaybookTrigger, PlaybookTriggers
+from playbooks.triggers import PlaybookTrigger, PlaybookTriggers
 from .base import Playbook
 from .local import LocalPlaybook
 from .llm_playbook import LLMPlaybook

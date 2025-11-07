@@ -11,13 +11,13 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
-from ..llm_messages.types import ArtifactLLMMessage
-from ..variables import Artifact
+from playbooks.llm.messages.types import ArtifactLLMMessage
+from playbooks.state.variables import Artifact
 
 if TYPE_CHECKING:
     from ..agents.base_agent import Agent
-    from ..execution_state import ExecutionState
-    from ..playbook_call import PlaybookCall
+    from ..state.execution_state import ExecutionState
+    from ..execution.call import PlaybookCall
 
 # ============================================================================
 # Core Processing Functions (Pure, Stateless)
@@ -663,7 +663,7 @@ def parse_playbook_call(
         >>> call.args
         ['$order_id']
     """
-    from ..playbook_call import PlaybookCall
+    from ..execution.call import PlaybookCall
 
     try:
         # Preprocess the call string
@@ -888,7 +888,7 @@ def _node_to_value(
     node: ast.AST, original_expr: str, context: Optional[ExpressionContext]
 ) -> Any:
     """Convert AST node to typed value (LiteralValue or VariableReference)."""
-    from playbooks.argument_types import LiteralValue, VariableReference
+    from playbooks.core.argument_types import LiteralValue, VariableReference
 
     if isinstance(node, ast.Constant):
         # Literal value

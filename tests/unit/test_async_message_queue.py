@@ -18,8 +18,8 @@ import time
 import pytest
 
 from playbooks.async_message_queue import AsyncMessageQueue
-from playbooks.identifiers import AgentID, MeetingID
-from playbooks.message import Message, MessageType
+from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.core.message import Message, MessageType
 
 
 def create_test_message(

@@ -1,7 +1,7 @@
 import pytest
 
 from playbooks import Playbooks
-from playbooks.constants import EOM, HUMAN_AGENT_KLASS
+from playbooks.core.constants import EOM, HUMAN_AGENT_KLASS
 
 
 @pytest.mark.asyncio

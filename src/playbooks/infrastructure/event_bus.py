@@ -11,7 +11,7 @@ from collections import defaultdict
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Type, TypeVar, Union
 from weakref import WeakSet
 
-from .events import Event
+from playbooks.core.events import Event
 
 logger = logging.getLogger(__name__)
 

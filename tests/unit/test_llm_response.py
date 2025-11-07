@@ -2,8 +2,8 @@
 
 import pytest
 
-from playbooks.event_bus import EventBus
-from playbooks.llm_response import LLMResponse, _strip_code_block_markers
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.execution.llm_response import LLMResponse, _strip_code_block_markers
 
 
 class MockAgent:

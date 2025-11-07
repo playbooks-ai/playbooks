@@ -6,7 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from playbooks.argument_types import LiteralValue, VariableReference
+from playbooks.core.argument_types import LiteralValue, VariableReference
 from playbooks.utils.expression_engine import (
     ExpressionContext,
     ExpressionError,

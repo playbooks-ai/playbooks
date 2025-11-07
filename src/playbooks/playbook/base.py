@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, List, Optional
 
-from ..triggers import PlaybookTriggers
+from playbooks.triggers import PlaybookTriggers
 
 
 class Playbook(ABC):

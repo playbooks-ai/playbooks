@@ -2,7 +2,7 @@
 Clean user-facing output for all Playbooks applications.
 
 Usage:
-    from playbooks.user_output import user_output
+    from playbooks.infrastructure.user_output import user_output
 
     user_output.agent_message("assistant", "Processing your request...")
     user_output.success("Playbook completed successfully")

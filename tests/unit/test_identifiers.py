@@ -2,7 +2,7 @@
 
 import pytest
 
-from playbooks.identifiers import AgentID, MeetingID, IDParser
+from playbooks.core.identifiers import AgentID, MeetingID, IDParser
 
 
 class TestAgentID:

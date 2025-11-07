@@ -6,7 +6,7 @@ import pytest
 
 from playbooks.agents import MCPAgent
 from playbooks.agents.ai_agent import AIAgent
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.playbook import RemotePlaybook
 from playbooks.program import Program
 

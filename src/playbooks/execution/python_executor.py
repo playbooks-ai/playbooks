@@ -12,13 +12,13 @@ import types
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from playbooks.agent_proxy import create_agent_proxies, create_playbook_wrapper
-from playbooks.call_stack import InstructionPointer
+from playbooks.state.call_stack import InstructionPointer
 from playbooks.debug.debug_handler import NoOpDebugHandler
-from playbooks.identifiers import MeetingID
-from playbooks.llm_messages.types import ArtifactLLMMessage
-from playbooks.playbook_call import PlaybookCall
-from playbooks.utils.inject_setvar import inject_setvar
-from playbooks.variables import Artifact
+from playbooks.core.identifiers import MeetingID
+from playbooks.llm.messages.types import ArtifactLLMMessage
+from playbooks.execution.call import PlaybookCall
+from playbooks.compilation.inject_setvar import inject_setvar
+from playbooks.state.variables import Artifact
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
@@ -293,7 +293,7 @@ class PythonExecutor:
         try:
             # Pre-process code to handle $variable syntax
             # Convert $variable → variable so the code is valid Python
-            from playbooks.utils.expression_engine import preprocess_program
+            from playbooks.compilation.expression_engine import preprocess_program
 
             code = preprocess_program(code)
 

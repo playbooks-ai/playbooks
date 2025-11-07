@@ -7,10 +7,10 @@ inherit from, along with the BaseAgentMeta metaclass for agent configuration.
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from ..debug_logger import debug
-from ..events import AgentPausedEvent, AgentResumedEvent
-from ..identifiers import AgentID, MeetingID
-from ..llm_messages import AgentCommunicationLLMMessage
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.events import AgentPausedEvent, AgentResumedEvent
+from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.llm.messages import AgentCommunicationLLMMessage
 from .messaging_mixin import MessagingMixin
 
 if TYPE_CHECKING:

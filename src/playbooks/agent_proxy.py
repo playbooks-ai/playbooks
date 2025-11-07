@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Callable, Optional
 
 if TYPE_CHECKING:
     from playbooks.agents import AIAgent
-    from playbooks.python_executor import LLMNamespace
+    from playbooks.execution.python_executor import LLMNamespace
 
 
 def create_playbook_wrapper(

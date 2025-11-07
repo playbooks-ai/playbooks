@@ -4,9 +4,9 @@ import asyncio
 import logging
 from typing import TYPE_CHECKING, Dict, Optional
 
-from playbooks.debug_logger import debug
+from playbooks.infrastructure.logging.debug_logger import debug
 
-from ..call_stack import InstructionPointer
+from playbooks.state.call_stack import InstructionPointer
 from .server import DebugServer
 
 # Constants

@@ -8,9 +8,9 @@ and reactive updates.
 import types
 from typing import Any, Dict, List, Optional, Union
 
-from .call_stack import InstructionPointer
-from .event_bus import EventBus
-from .events import VariableUpdateEvent
+from playbooks.state.call_stack import InstructionPointer
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.events import VariableUpdateEvent
 
 
 class VariableChangeHistoryEntry:

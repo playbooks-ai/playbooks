@@ -3,15 +3,13 @@
 import re
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from ..enums import LLMExecutionMode
-from ..execution import (
-    PlaybookLLMExecution,
-    RawLLMExecution,
-    ReActLLMExecution,
-)
-from ..playbook_step import PlaybookStep, PlaybookStepCollection
-from ..triggers import PlaybookTriggers
-from ..utils.parse_utils import parse_metadata_and_description
+from playbooks.core.enums import LLMExecutionMode
+from playbooks.execution.playbook import PlaybookLLMExecution
+from playbooks.execution.raw import RawLLMExecution
+from playbooks.execution.react import ReActLLMExecution
+from playbooks.execution.step import PlaybookStep, PlaybookStepCollection
+from playbooks.triggers import PlaybookTriggers
+from playbooks.compilation.parse_utils import parse_metadata_and_description
 from .local import LocalPlaybook
 
 

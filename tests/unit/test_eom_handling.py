@@ -2,8 +2,8 @@
 
 import pytest
 from playbooks.async_message_queue import AsyncMessageQueue
-from playbooks.constants import EOM
-from playbooks.message import Message, MessageType
+from playbooks.core.constants import EOM
+from playbooks.core.message import Message, MessageType
 
 
 @pytest.mark.asyncio

@@ -8,8 +8,8 @@ from unittest.mock import patch
 
 import pytest
 
-from playbooks.exceptions import ProgramLoadError
-from playbooks.loader import Loader
+from playbooks.core.exceptions import ProgramLoadError
+from playbooks.compilation.loader import Loader
 
 
 @pytest.fixture

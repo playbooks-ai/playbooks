@@ -10,7 +10,7 @@ Environment Variables:
 import os
 from typing import Optional
 
-from .logging_constants import (
+from playbooks.infrastructure.logging.constants import (
     ENV_DEBUG_ENABLED,
     ENV_OUTPUT_HANDLER,
     ENV_DEBUG_FILE,
@@ -53,7 +53,10 @@ class Config:
 
 def apply_config() -> None:
     """Apply configuration to logging system."""
-    from playbooks.user_output import setup_for_console, setup_for_testing
+    from playbooks.infrastructure.user_output import (
+        setup_for_console,
+        setup_for_testing,
+    )
 
     handler_type = Config.get_output_handler()
 

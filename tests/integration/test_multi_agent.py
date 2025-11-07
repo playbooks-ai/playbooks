@@ -1,7 +1,7 @@
 import pytest
 
 from playbooks import Playbooks
-from playbooks.constants import EOM, EXECUTION_FINISHED
+from playbooks.core.constants import EOM, EXECUTION_FINISHED
 
 
 @pytest.mark.integration

@@ -8,9 +8,9 @@ from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
-from .exceptions import ProgramLoadError
+from playbooks.core.exceptions import ProgramLoadError
 from .import_processor import ImportProcessor
-from .utils.file_utils import is_compiled_playbook_file
+from playbooks.utils.file_utils import is_compiled_playbook_file
 
 
 class Loader:

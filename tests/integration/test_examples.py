@@ -6,7 +6,7 @@ import pytest
 from playbooks import Playbooks
 from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.agents.mcp_agent import MCPAgent
-from playbooks.constants import EOM, EXECUTION_FINISHED
+from playbooks.core.constants import EOM, EXECUTION_FINISHED
 from tests.conftest import extract_messages_from_cli_output
 from tests.unit.playbooks.test_mcp_end_to_end import InMemoryMCPTransport
 

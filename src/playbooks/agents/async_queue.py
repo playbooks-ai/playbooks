@@ -12,8 +12,8 @@ from collections import deque
 from typing import Any, Callable, Dict, List, Optional
 from weakref import WeakSet
 
-from playbooks.constants import EOM
-from playbooks.message import Message
+from playbooks.core.constants import EOM
+from playbooks.core.message import Message
 
 logger = logging.getLogger(__name__)
 

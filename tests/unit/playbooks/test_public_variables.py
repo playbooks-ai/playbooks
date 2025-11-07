@@ -4,8 +4,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from playbooks.event_bus import EventBus
-from playbooks.variables import Artifact, Variables
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.variables import Artifact, Variables
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ class TestPublicVariables:
 
     def test_public_variables_returns_variable_objects(self, variables):
         """Test that public_variables() returns Variable objects."""
-        from playbooks.variables import Variable
+        from playbooks.state.variables import Variable
 
         variables["$test"] = "value"
 

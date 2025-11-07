@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 
 from rich.console import Console
 
-from playbooks.debug_logger import debug
-from playbooks.exceptions import ExecutionFinished
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.exceptions import ExecutionFinished
 
 from .base import Playbook
 

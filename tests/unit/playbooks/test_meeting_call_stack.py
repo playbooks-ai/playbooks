@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 from playbooks.agents.ai_agent import AIAgent
 from playbooks.playbook import PythonPlaybook
-from playbooks.event_bus import EventBus
+from playbooks.infrastructure.event_bus import EventBus
 
 
 class MeetingTestAgent(AIAgent):

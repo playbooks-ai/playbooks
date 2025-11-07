@@ -9,8 +9,8 @@ from playbooks.channels.stream_events import (
     StreamStartEvent,
 )
 from playbooks.channels.participant import HumanParticipant
-from playbooks.identifiers import AgentID
-from playbooks.message import Message, MessageType
+from playbooks.core.identifiers import AgentID
+from playbooks.core.message import Message, MessageType
 
 
 class MockStreamObserver:

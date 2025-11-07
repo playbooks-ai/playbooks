@@ -4,9 +4,9 @@ This module provides standard playbooks that are automatically available
 to all agents, including messaging, artifact handling, and system operations.
 """
 
-from ..compiler import Compiler
-from ..utils.llm_config import LLMConfig
-from ..utils.markdown_to_ast import markdown_to_ast
+from playbooks.compilation.compiler import Compiler
+from playbooks.utils.llm_config import LLMConfig
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class BuiltinPlaybooks:
@@ -33,8 +33,8 @@ class BuiltinPlaybooks:
         """
         code_block = '''
 ```python
-from playbooks.llm_messages.types import ArtifactLLMMessage
-from playbooks.variables import Artifact
+from playbooks.llm.messages.types import ArtifactLLMMessage
+from playbooks.state.variables import Artifact
 
 @playbook(hidden=True)
 async def SendMessage(target_agent_id: str, message: str):

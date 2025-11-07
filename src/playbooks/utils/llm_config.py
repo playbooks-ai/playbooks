@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from ..config import config
+from playbooks.config import config
 from .env_loader import load_environment
 
 # Load environment variables from .env files

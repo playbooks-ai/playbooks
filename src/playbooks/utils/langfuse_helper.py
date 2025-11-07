@@ -5,7 +5,7 @@ from typing import Any
 
 from langfuse import Langfuse
 
-from ..config import config
+from playbooks.config import config
 
 
 class PlaybooksLangfuseSpan:

@@ -15,10 +15,10 @@ import pytest
 from playbooks.agents.human_agent import HumanAgent
 from playbooks.channels.stream_events import StreamChunkEvent, StreamStartEvent
 from playbooks.delivery_preferences import DeliveryPreferences
-from playbooks.event_bus import EventBus
-from playbooks.identifiers import AgentID
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.identifiers import AgentID
 from playbooks.meetings.meeting import Meeting
-from playbooks.message import Message, MessageType
+from playbooks.core.message import Message, MessageType
 from playbooks.program import Program
 
 

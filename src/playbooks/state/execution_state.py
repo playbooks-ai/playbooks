@@ -7,13 +7,13 @@ and execution control flags.
 
 from typing import Any, Dict, List, Optional
 
-from playbooks.call_stack import CallStack
+from playbooks.state.call_stack import CallStack
 from playbooks.config import config as global_config
-from playbooks.event_bus import EventBus
-from playbooks.llm_messages.types import FrameType
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.llm.messages.types import FrameType
 from playbooks.meetings import JoinedMeeting, Meeting
-from playbooks.session_log import SessionLog
-from playbooks.variables import Variables
+from playbooks.state.session_log import SessionLog
+from playbooks.state.variables import Variables
 
 
 class ExecutionState:

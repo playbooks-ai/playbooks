@@ -8,8 +8,8 @@ from textwrap import dedent
 
 import pytest
 
-from playbooks.compiler import FileCompilationSpec
-from playbooks.loader import Loader
+from playbooks.compilation.compiler import FileCompilationSpec
+from playbooks.compilation.loader import Loader
 
 
 class TestImportIntegration:

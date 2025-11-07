@@ -3,21 +3,24 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from ..config import config
-from ..constants import EXECUTION_FINISHED
-from ..debug.debug_handler import DebugHandler, NoOpDebugHandler
-from ..exceptions import ExecutionFinished
-from ..interpreter_prompt import InterpreterPrompt
-from ..llm_messages import AssistantResponseLLMMessage, PlaybookImplementationLLMMessage
-from ..llm_response import LLMResponse
-from ..playbook_call import PlaybookCall
-from ..utils.expression_engine import (
+from playbooks.config import config
+from playbooks.core.constants import EXECUTION_FINISHED
+from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
+from playbooks.core.exceptions import ExecutionFinished
+from playbooks.execution.interpreter_prompt import InterpreterPrompt
+from playbooks.llm.messages import (
+    AssistantResponseLLMMessage,
+    PlaybookImplementationLLMMessage,
+)
+from playbooks.execution.llm_response import LLMResponse
+from playbooks.execution.call import PlaybookCall
+from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
     update_description_in_markdown,
 )
-from ..utils.llm_config import LLMConfig
-from ..utils.llm_helper import get_completion
+from playbooks.utils.llm_config import LLMConfig
+from playbooks.utils.llm_helper import get_completion
 from .base import LLMExecution
 
 if TYPE_CHECKING:
@@ -164,7 +167,7 @@ class PlaybookLLMExecution(LLMExecution):
                 )
 
                 # Add error message to call stack for LLM to see
-                from playbooks.llm_messages.types import ExecutionResultLLMMessage
+                from playbooks.llm.messages.types import ExecutionResultLLMMessage
 
                 error_msg = ExecutionResultLLMMessage(
                     content=error_content,
@@ -585,7 +588,7 @@ class PlaybookLLMExecution(LLMExecution):
                         state_key = f"${ref}"
                         if state_key in self.agent.state.variables:
                             var = self.agent.state.variables[state_key]
-                            from ..variables import Variable
+                            from ..state.variables import Variable
 
                             if isinstance(var, Variable):
                                 result[param_name] = var.value

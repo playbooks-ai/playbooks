@@ -9,8 +9,8 @@ from unittest.mock import Mock, patch
 import pytest
 
 from playbooks.cli import compile as cli_compile
-from playbooks.compiler import FileCompilationResult
-from playbooks.exceptions import ProgramLoadError
+from playbooks.compilation.compiler import FileCompilationResult
+from playbooks.core.exceptions import ProgramLoadError
 
 
 @pytest.fixture

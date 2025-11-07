@@ -3,7 +3,7 @@
 import pytest
 
 from playbooks.agents.agent_builder import AgentBuilder
-from playbooks.exceptions import AgentConfigurationError
+from playbooks.core.exceptions import AgentConfigurationError
 
 
 class TestParseAgentHeader:

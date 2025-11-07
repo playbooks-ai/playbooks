@@ -2,16 +2,16 @@
 
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from ..enums import LLMMessageType
-from ..events import PlaybookEndEvent, PlaybookStartEvent
-from ..llm_messages import AssistantResponseLLMMessage, UserInputLLMMessage
-from ..playbook_call import PlaybookCall
-from ..utils.expression_engine import (
+from playbooks.core.enums import LLMMessageType
+from playbooks.core.events import PlaybookEndEvent, PlaybookStartEvent
+from playbooks.llm.messages import AssistantResponseLLMMessage, UserInputLLMMessage
+from playbooks.execution.call import PlaybookCall
+from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
 )
-from ..utils.llm_config import LLMConfig
-from ..utils.llm_helper import get_completion
+from playbooks.utils.llm_config import LLMConfig
+from playbooks.utils.llm_helper import get_completion
 from .base import LLMExecution
 
 if TYPE_CHECKING:

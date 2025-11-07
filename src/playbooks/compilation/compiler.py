@@ -14,13 +14,13 @@ from typing import Dict, Iterator, List, NamedTuple, Optional, Tuple
 import frontmatter
 from rich.console import Console
 
-from .config import config
-from .exceptions import ProgramLoadError
-from .utils.langfuse_helper import LangfuseHelper
-from .utils.llm_config import LLMConfig
-from .utils.llm_helper import get_completion, get_messages_for_prompt
-from .utils.markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
-from .utils.version import get_playbooks_version
+from playbooks.config import config
+from playbooks.core.exceptions import ProgramLoadError
+from playbooks.utils.langfuse_helper import LangfuseHelper
+from playbooks.utils.llm_config import LLMConfig
+from playbooks.utils.llm_helper import get_completion, get_messages_for_prompt
+from .markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
+from playbooks.utils.version import get_playbooks_version
 
 console = Console()
 

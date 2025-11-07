@@ -11,7 +11,7 @@ Verifies that:
 import pytest
 
 from playbooks import Playbooks
-from playbooks.constants import EOM
+from playbooks.core.constants import EOM
 
 
 @pytest.mark.asyncio
@@ -224,7 +224,7 @@ async def test_agent_handles_multiple_message_cycles(test_data_dir):
 @pytest.mark.asyncio
 async def test_message_type_routing():
     """Test that different message types are created and handled correctly."""
-    from playbooks.message import Message, MessageType
+    from playbooks.core.message import Message, MessageType
 
     # Test direct message
     direct_msg = Message(

@@ -5,12 +5,12 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from playbooks.agents.ai_agent import AIAgent
-from playbooks.argument_types import LiteralValue, VariableReference
-from playbooks.call_stack import CallStackFrame, InstructionPointer
-from playbooks.event_bus import EventBus
-from playbooks.execution_state import ExecutionState
+from playbooks.core.argument_types import LiteralValue, VariableReference
+from playbooks.state.call_stack import CallStackFrame, InstructionPointer
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.execution_state import ExecutionState
 from playbooks.playbook_call import PlaybookCall
-from playbooks.variables import Artifact
+from playbooks.state.variables import Artifact
 
 
 class MockAIAgent(AIAgent):

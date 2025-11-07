@@ -2,7 +2,7 @@
 
 import pytest
 
-from playbooks.exceptions import AgentConfigurationError
+from playbooks.core.exceptions import AgentConfigurationError
 from src.playbooks.agents import LocalAIAgent, MCPAgent
 from src.playbooks.agents.agent_builder import AgentBuilder
 from src.playbooks.event_bus import EventBus

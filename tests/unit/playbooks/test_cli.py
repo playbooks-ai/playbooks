@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from playbooks.cli import compile, run_application
-from playbooks.exceptions import ProgramLoadError
+from playbooks.core.exceptions import ProgramLoadError
 
 
 class TestCLICompile:

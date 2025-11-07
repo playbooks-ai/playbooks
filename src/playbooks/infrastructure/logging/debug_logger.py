@@ -2,7 +2,7 @@
 Zero-overhead debug logging for Playbooks framework development.
 
 Usage:
-    from playbooks.debug_logger import debug
+    from playbooks.infrastructure.logging.debug_logger import debug
 
     # Basic usage
     debug("Agent processing message", agent_id="1234", message_type="USER_INPUT")
@@ -28,8 +28,8 @@ from typing import Any, Optional
 from rich.console import Console
 from rich.text import Text
 
-from .config import config
-from .logging_constants import (
+from playbooks.config import config
+from .constants import (
     DEBUG_LOGGER_NAME,
     DEBUG_PREFIX,
     ENV_DEBUG_FILE,

@@ -1,7 +1,7 @@
 import pytest
 
 from playbooks import Playbooks
-from playbooks.enums import LLMExecutionMode
+from playbooks.core.enums import LLMExecutionMode
 from playbooks.execution.react import ReActLLMExecution
 
 
