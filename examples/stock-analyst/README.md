@@ -1,6 +1,6 @@
 # Stock Analysis with Playbooks
 
-**Python 3.12+ is required**
+**Required: Python 3.12+**
 **Required: Anthropic API key ANTHROPIC_API_KEY in environment**
 **Required: Serper Dev API key SERPER_API_KEY in environment**
 
