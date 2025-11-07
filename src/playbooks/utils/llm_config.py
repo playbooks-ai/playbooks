@@ -64,7 +64,7 @@ class LLMConfig:
         except Exception:
             # Fallback to constants/defaults if config loading fails
             if self.model is None:
-                from ..constants import DEFAULT_MODEL
+                from playbooks.core.constants import DEFAULT_MODEL
 
                 self.model = DEFAULT_MODEL
             if self.provider is None:

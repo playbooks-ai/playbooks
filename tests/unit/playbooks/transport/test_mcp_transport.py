@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.playbooks.transport.mcp_transport import MCPTransport
+from playbooks.transport.mcp_transport import MCPTransport
 
 
 class TestMCPTransport:
@@ -46,8 +46,8 @@ class TestMCPTransport:
         assert transport.auth == {}  # Default
 
     @pytest.mark.asyncio
-    @patch("src.playbooks.transport.mcp_transport.Client")
-    @patch("src.playbooks.transport.mcp_transport.SSETransport")
+    @patch("playbooks.transport.mcp_transport.Client")
+    @patch("playbooks.transport.mcp_transport.SSETransport")
     async def test_connect_sse(self, mock_sse_transport, mock_client_class):
         """Test connecting with SSE transport."""
         config = {"url": "http://localhost:8000/mcp", "transport": "sse"}
@@ -75,8 +75,8 @@ class TestMCPTransport:
         assert transport.client is mock_client_instance
 
     @pytest.mark.asyncio
-    @patch("src.playbooks.transport.mcp_transport.Client")
-    @patch("src.playbooks.transport.mcp_transport.PythonStdioTransport")
+    @patch("playbooks.transport.mcp_transport.Client")
+    @patch("playbooks.transport.mcp_transport.PythonStdioTransport")
     async def test_connect_stdio(self, mock_stdio_transport, mock_client_class):
         """Test connecting with stdio transport."""
         config = {"url": "path/to/server.py", "transport": "stdio"}
@@ -100,13 +100,20 @@ class TestMCPTransport:
         assert transport.is_connected
 
     @pytest.mark.asyncio
-    @patch("src.playbooks.transport.mcp_transport.Client")
-    async def test_connect_auto_detect(self, mock_client_class):
-        """Test connecting with auto-detected transport."""
+    @patch("playbooks.transport.mcp_transport.Client")
+    @patch("playbooks.transport.mcp_transport.StreamableHttpTransport")
+    async def test_connect_auto_detect(
+        self, mock_streamable_transport, mock_client_class
+    ):
+        """Test connecting with streamable-http transport."""
         config = {
-            "url": "ws://localhost:8000/mcp",
-            "transport": "websocket",  # Not explicitly handled, should auto-detect
+            "url": "http://localhost:8000/mcp",
+            "transport": "streamable-http",  # Explicitly handled transport type
         }
+
+        # Mock the transport and client
+        mock_transport_instance = MagicMock()
+        mock_streamable_transport.return_value = mock_transport_instance
 
         mock_client_instance = AsyncMock()
         mock_client_class.return_value = mock_client_instance
@@ -114,8 +121,11 @@ class TestMCPTransport:
         transport = MCPTransport(config)
         await transport.connect()
 
-        # Verify client was created with URL directly (auto-detect)
-        mock_client_class.assert_called_once_with("ws://localhost:8000/mcp")
+        # Verify StreamableHttpTransport was created
+        mock_streamable_transport.assert_called_once_with("http://localhost:8000/mcp")
+
+        # Verify client was created with transport
+        mock_client_class.assert_called_once_with(mock_transport_instance)
 
         assert transport.is_connected
 
@@ -133,10 +143,15 @@ class TestMCPTransport:
         assert transport.is_connected
 
     @pytest.mark.asyncio
-    @patch("src.playbooks.transport.mcp_transport.Client")
-    async def test_connect_failure(self, mock_client_class):
+    @patch("playbooks.transport.mcp_transport.SSETransport")
+    @patch("playbooks.transport.mcp_transport.Client")
+    async def test_connect_failure(self, mock_client_class, mock_sse_transport):
         """Test connection failure handling."""
         config = {"url": "http://localhost:8000/mcp"}
+
+        # Mock the transport
+        mock_transport_instance = MagicMock()
+        mock_sse_transport.return_value = mock_transport_instance
 
         # Mock client to raise exception on connect
         mock_client_instance = AsyncMock()

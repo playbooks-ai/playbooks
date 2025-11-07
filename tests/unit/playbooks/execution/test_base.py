@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from playbooks.execution.base import LLMExecution
-from playbooks.utils.expression_engine import ExpressionContext
+from playbooks.compilation.expression_engine import ExpressionContext
 
 
 class ConcreteLLMExecution(LLMExecution):

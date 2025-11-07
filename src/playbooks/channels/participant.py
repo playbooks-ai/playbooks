@@ -76,8 +76,8 @@ from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from ..agents.base_agent import BaseAgent
-    from ..message import Message
+    from playbooks.agents.base_agent import BaseAgent
+    from playbooks.core.message import Message
 
 
 class Participant(ABC):

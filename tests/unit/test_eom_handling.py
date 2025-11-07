@@ -1,7 +1,7 @@
 """Test EOM (End of Message) handling in AsyncMessageQueue."""
 
 import pytest
-from playbooks.async_message_queue import AsyncMessageQueue
+from playbooks.agents.async_queue import AsyncMessageQueue
 from playbooks.core.constants import EOM
 from playbooks.core.message import Message, MessageType
 

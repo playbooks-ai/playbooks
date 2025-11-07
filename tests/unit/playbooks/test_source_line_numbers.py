@@ -4,7 +4,7 @@ import pytest
 
 from playbooks.agents.agent_builder import AgentBuilder
 from playbooks.infrastructure.event_bus import EventBus
-from playbooks.utils.markdown_to_ast import markdown_to_ast
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 def test_source_line_numbers_simple_playbook():

@@ -8,9 +8,9 @@ from playbooks.agents.ai_agent import AIAgent
 from playbooks.state.call_stack import CallStackFrame, InstructionPointer
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.execution_state import ExecutionState
-from playbooks.llm_messages import ExecutionResultLLMMessage
-from playbooks.llm_messages.types import ArtifactLLMMessage
-from playbooks.playbook_call import PlaybookCall
+from playbooks.llm.messages import ExecutionResultLLMMessage
+from playbooks.llm.messages.types import ArtifactLLMMessage
+from playbooks.execution.call import PlaybookCall
 from playbooks.state.variables import Artifact
 
 

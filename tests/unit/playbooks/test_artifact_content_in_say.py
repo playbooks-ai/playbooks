@@ -9,7 +9,7 @@ from playbooks.core.argument_types import LiteralValue, VariableReference
 from playbooks.state.call_stack import CallStackFrame, InstructionPointer
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.execution_state import ExecutionState
-from playbooks.playbook_call import PlaybookCall
+from playbooks.execution.call import PlaybookCall
 from playbooks.state.variables import Artifact
 
 
@@ -352,7 +352,7 @@ async def test_interpolation_with_expressions(agent):
 @pytest.mark.asyncio
 async def test_format_value_with_artifact():
     """Test that format_value handles Artifact objects correctly."""
-    from playbooks.utils.expression_engine import format_value
+    from playbooks.compilation.expression_engine import format_value
 
     artifact = Artifact(
         name="test",

@@ -17,7 +17,7 @@ import time
 
 import pytest
 
-from playbooks.async_message_queue import AsyncMessageQueue
+from playbooks.agents.async_queue import AsyncMessageQueue
 from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.core.message import Message, MessageType
 

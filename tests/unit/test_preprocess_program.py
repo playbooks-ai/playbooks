@@ -1,6 +1,6 @@
 """Tests for preprocess_program function."""
 
-from playbooks.utils.expression_engine import preprocess_program
+from playbooks.compilation.expression_engine import preprocess_program
 
 
 class TestPreprocessProgram:

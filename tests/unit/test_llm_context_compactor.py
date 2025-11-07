@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from playbooks.llm_context_compactor import CompactionConfig, LLMContextCompactor
-from playbooks.llm_messages import (
+from playbooks.llm.llm_context_compactor import CompactionConfig, LLMContextCompactor
+from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     SystemPromptLLMMessage,
     UserInputLLMMessage,

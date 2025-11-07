@@ -1,4 +1,4 @@
-from src.playbooks.utils.parse_utils import parse_metadata_and_description
+from playbooks.compilation.parse_utils import parse_metadata_and_description
 
 
 class TestParseMetadataAndDescription:

@@ -14,8 +14,8 @@ from playbooks.llm.messages import AgentCommunicationLLMMessage
 from .messaging_mixin import MessagingMixin
 
 if TYPE_CHECKING:
-    from ..program import Program
-    from ..stream_result import StreamResult
+    from playbooks.program import Program
+    from playbooks.core.stream_result import StreamResult
 
 
 class BaseAgentMeta(ABCMeta):
@@ -311,7 +311,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             StreamResult indicating if streaming was started and the stream ID
         """
         import uuid
-        from ..stream_result import StreamResult
+        from playbooks.core.stream_result import StreamResult
 
         stream_id = str(uuid.uuid4())
         if self.program:

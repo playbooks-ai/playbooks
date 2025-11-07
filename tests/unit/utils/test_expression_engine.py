@@ -7,7 +7,7 @@ from unittest.mock import Mock
 import pytest
 
 from playbooks.core.argument_types import LiteralValue, VariableReference
-from playbooks.utils.expression_engine import (
+from playbooks.compilation.expression_engine import (
     ExpressionContext,
     ExpressionError,
     bind_call_parameters,

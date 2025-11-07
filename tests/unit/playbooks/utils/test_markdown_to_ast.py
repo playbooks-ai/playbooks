@@ -1,6 +1,6 @@
 import pytest
 
-from playbooks.utils.markdown_to_ast import (
+from playbooks.compilation.markdown_to_ast import (
     markdown_to_ast,
     parse_markdown_to_dict,
     refresh_markdown_attributes,

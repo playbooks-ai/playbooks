@@ -29,7 +29,7 @@ from rich.console import Console
 from rich.text import Text
 
 from playbooks.config import config
-from .constants import (
+from playbooks.infrastructure.logging.constants import (
     DEBUG_LOGGER_NAME,
     DEBUG_PREFIX,
     ENV_DEBUG_FILE,

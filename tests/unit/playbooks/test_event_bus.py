@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from src.playbooks.event_bus import EventBus
-from src.playbooks.events import (
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.core.events import (
     AgentStartedEvent,
     CallStackPushEvent,
     VariableUpdateEvent,

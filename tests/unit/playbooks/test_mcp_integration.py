@@ -5,11 +5,11 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from src.playbooks.agents import MCPAgent
-from src.playbooks.agents.agent_builder import AgentBuilder
-from src.playbooks.event_bus import EventBus
-from src.playbooks.program import Program
-from src.playbooks.utils.markdown_to_ast import markdown_to_ast
+from playbooks.agents import MCPAgent
+from playbooks.agents.agent_builder import AgentBuilder
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.program import Program
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class TestMCPIntegration:

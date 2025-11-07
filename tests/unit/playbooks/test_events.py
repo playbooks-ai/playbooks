@@ -10,7 +10,7 @@ from datetime import datetime
 
 import pytest
 
-from src.playbooks.events import (
+from playbooks.core.events import (
     AgentPausedEvent,
     AgentResumedEvent,
     AgentStartedEvent,

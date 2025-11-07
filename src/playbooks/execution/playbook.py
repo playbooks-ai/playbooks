@@ -3,29 +3,30 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from playbooks.config import config
-from playbooks.core.constants import EXECUTION_FINISHED
-from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
-from playbooks.core.exceptions import ExecutionFinished
-from playbooks.execution.interpreter_prompt import InterpreterPrompt
-from playbooks.llm.messages import (
-    AssistantResponseLLMMessage,
-    PlaybookImplementationLLMMessage,
-)
-from playbooks.execution.llm_response import LLMResponse
-from playbooks.execution.call import PlaybookCall
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
     update_description_in_markdown,
 )
+from playbooks.config import config
+from playbooks.core.constants import EXECUTION_FINISHED
+from playbooks.core.exceptions import ExecutionFinished
+from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
+from playbooks.execution.call import PlaybookCall
+from playbooks.execution.interpreter_prompt import InterpreterPrompt
+from playbooks.execution.llm_response import LLMResponse
+from playbooks.llm.messages import (
+    AssistantResponseLLMMessage,
+    PlaybookImplementationLLMMessage,
+)
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import get_completion
+
 from .base import LLMExecution
 
 if TYPE_CHECKING:
-    from ..agents.base_agent import Agent
-    from ..playbook.llm_playbook import LLMPlaybook
+    from playbooks.agents.base_agent import Agent
+    from playbooks.playbook.llm_playbook import LLMPlaybook
 
 logger = logging.getLogger(__name__)
 
@@ -556,8 +557,8 @@ class PlaybookLLMExecution(LLMExecution):
         Returns:
             Dictionary mapping parameter names to resolved values
         """
-        from ..argument_types import LiteralValue, VariableReference
-        from ..utils.expression_engine import bind_call_parameters
+        from playbooks.core.argument_types import LiteralValue, VariableReference
+        from playbooks.utils.expression_engine import bind_call_parameters
 
         result = {}
 
@@ -588,7 +589,7 @@ class PlaybookLLMExecution(LLMExecution):
                         state_key = f"${ref}"
                         if state_key in self.agent.state.variables:
                             var = self.agent.state.variables[state_key]
-                            from ..state.variables import Variable
+                            from playbooks.state.variables import Variable
 
                             if isinstance(var, Variable):
                                 result[param_name] = var.value

@@ -15,9 +15,9 @@ from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.variables import Artifact
 
 if TYPE_CHECKING:
-    from ..agents.base_agent import Agent
-    from ..state.execution_state import ExecutionState
-    from ..execution.call import PlaybookCall
+    from playbooks.agents.base_agent import Agent
+    from playbooks.state.execution_state import ExecutionState
+    from playbooks.execution.call import PlaybookCall
 
 # ============================================================================
 # Core Processing Functions (Pure, Stateless)
@@ -507,7 +507,7 @@ class ExpressionContext:
         bound_params = bind_call_parameters(playbook.signature, args, kwargs)
 
         # Resolve VariableReference and LiteralValue types to actual values
-        from ..argument_types import LiteralValue, VariableReference
+        from playbooks.core.argument_types import LiteralValue, VariableReference
 
         for param_name, value in bound_params.items():
             if isinstance(value, LiteralValue):
@@ -663,7 +663,7 @@ def parse_playbook_call(
         >>> call.args
         ['$order_id']
     """
-    from ..execution.call import PlaybookCall
+    from playbooks.execution.call import PlaybookCall
 
     try:
         # Preprocess the call string

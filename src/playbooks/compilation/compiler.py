@@ -14,12 +14,15 @@ from typing import Dict, Iterator, List, NamedTuple, Optional, Tuple
 import frontmatter
 from rich.console import Console
 
+from playbooks.compilation.markdown_to_ast import (
+    markdown_to_ast,
+    refresh_markdown_attributes,
+)
 from playbooks.config import config
 from playbooks.core.exceptions import ProgramLoadError
 from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import get_completion, get_messages_for_prompt
-from .markdown_to_ast import markdown_to_ast, refresh_markdown_attributes
 from playbooks.utils.version import get_playbooks_version
 
 console = Console()
@@ -79,7 +82,8 @@ class Compiler:
 
         self.use_cache = use_cache
         self.prompt_path = os.path.join(
-            os.path.dirname(__file__), "prompts/preprocess_playbooks.txt"
+            os.path.dirname(os.path.dirname(__file__)),
+            "prompts/preprocess_playbooks.txt",
         )
 
         # Load compiler prompt once

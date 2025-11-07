@@ -8,8 +8,8 @@ from glob import glob
 from pathlib import Path
 from typing import List, Tuple
 
+from playbooks.compilation.import_processor import ImportProcessor
 from playbooks.core.exceptions import ProgramLoadError
-from .import_processor import ImportProcessor
 from playbooks.utils.file_utils import is_compiled_playbook_file
 
 

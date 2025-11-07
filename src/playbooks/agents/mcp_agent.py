@@ -19,7 +19,7 @@ from .remote_ai_agent import RemoteAIAgent
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from ..program import Program
+    from playbooks.program import Program
 
 
 class MCPAgentMeta(AIAgentMeta):

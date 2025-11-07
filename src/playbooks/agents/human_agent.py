@@ -13,7 +13,7 @@ from playbooks.state.human_state import HumanState
 from .base_agent import BaseAgent
 
 if TYPE_CHECKING:
-    from ..program import Program
+    from playbooks.program import Program
 
 
 class HumanAgent(BaseAgent):

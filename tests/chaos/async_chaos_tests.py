@@ -14,7 +14,7 @@ from contextlib import asynccontextmanager
 
 import pytest
 
-from playbooks.async_message_queue import AsyncMessageQueue
+from playbooks.agents.async_queue import AsyncMessageQueue
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.core.events import Event
 from playbooks.core.message import Message, MessageType

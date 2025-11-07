@@ -5,7 +5,7 @@ import pytest
 from playbooks.state.call_stack import CallStackFrame, InstructionPointer
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.execution_state import ExecutionState
-from playbooks.playbook_step import PlaybookStep
+from playbooks.execution.step import PlaybookStep
 
 
 @pytest.fixture
@@ -245,7 +245,7 @@ class TestGetStateForLLM:
     def test_first_call_returns_full_state(self, execution_state):
         """Test that first call returns full state."""
         from playbooks.config import StateCompressionConfig
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         execution_state.variables["$var1"] = "value1"
         compression_config = StateCompressionConfig(
@@ -265,7 +265,7 @@ class TestGetStateForLLM:
     def test_second_call_returns_delta(self, execution_state):
         """Test that second call returns delta."""
         from playbooks.config import StateCompressionConfig
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         compression_config = StateCompressionConfig(
             enabled=True, full_state_interval=10
@@ -292,7 +292,7 @@ class TestGetStateForLLM:
     def test_second_call_with_no_changes_returns_none(self, execution_state):
         """Test that second call with no changes returns None."""
         from playbooks.config import StateCompressionConfig
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         compression_config = StateCompressionConfig(
             enabled=True, full_state_interval=10
@@ -315,7 +315,7 @@ class TestGetStateForLLM:
     def test_interval_triggers_full_state(self, execution_state):
         """Test that interval triggers full state."""
         from playbooks.config import StateCompressionConfig
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         compression_config = StateCompressionConfig(enabled=True, full_state_interval=3)
 
@@ -352,7 +352,7 @@ class TestGetStateForLLM:
     def test_compression_disabled_always_returns_full(self, execution_state):
         """Test that disabled compression always returns full state."""
         from playbooks.config import StateCompressionConfig
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         compression_config = StateCompressionConfig(
             enabled=False, full_state_interval=10
@@ -377,7 +377,7 @@ class TestGetStateForLLM:
     def test_none_execution_id_returns_full(self, execution_state):
         """Test that None execution_id returns full state."""
         from playbooks.config import StateCompressionConfig
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         compression_config = StateCompressionConfig(
             enabled=True, full_state_interval=10
@@ -394,7 +394,7 @@ class TestGetStateForLLM:
 
     def test_uses_default_config_when_none(self, execution_state):
         """Test that default config is used when none provided."""
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         execution_state.variables["$var1"] = "value1"
 
@@ -411,7 +411,7 @@ class TestStateCompressionMessageCompactionCoordination:
 
     def test_i_frame_message_has_frame_type(self):
         """Test that I-frame messages have frame_type set."""
-        from playbooks.llm_messages.types import FrameType, UserInputLLMMessage
+        from playbooks.llm.messages.types import FrameType, UserInputLLMMessage
 
         msg = UserInputLLMMessage("test content", frame_type=FrameType.I)
 
@@ -419,7 +419,7 @@ class TestStateCompressionMessageCompactionCoordination:
 
     def test_p_frame_message_has_frame_type(self):
         """Test that P-frame messages have frame_type set."""
-        from playbooks.llm_messages.types import FrameType, UserInputLLMMessage
+        from playbooks.llm.messages.types import FrameType, UserInputLLMMessage
 
         msg = UserInputLLMMessage("test content", frame_type=FrameType.P)
 
@@ -427,7 +427,7 @@ class TestStateCompressionMessageCompactionCoordination:
 
     def test_default_frame_type_is_i(self):
         """Test that default frame_type is I."""
-        from playbooks.llm_messages.types import FrameType, UserInputLLMMessage
+        from playbooks.llm.messages.types import FrameType, UserInputLLMMessage
 
         msg = UserInputLLMMessage("test content")
 
@@ -435,8 +435,8 @@ class TestStateCompressionMessageCompactionCoordination:
 
     def test_compactor_preserves_last_i_frame(self):
         """Test that compactor preserves the last I-frame."""
-        from playbooks.llm_context_compactor import LLMContextCompactor
-        from playbooks.llm_messages.types import (
+        from playbooks.llm.llm_context_compactor import LLMContextCompactor
+        from playbooks.llm.messages.types import (
             AssistantResponseLLMMessage,
             FrameType,
             UserInputLLMMessage,
@@ -483,8 +483,8 @@ class TestStateCompressionMessageCompactionCoordination:
 
     def test_compactor_without_i_frames(self):
         """Test compactor behavior when no I-frames are present."""
-        from playbooks.llm_context_compactor import LLMContextCompactor
-        from playbooks.llm_messages.types import (
+        from playbooks.llm.llm_context_compactor import LLMContextCompactor
+        from playbooks.llm.messages.types import (
             AssistantResponseLLMMessage,
             FrameType,
             UserInputLLMMessage,
@@ -507,7 +507,7 @@ class TestStateCompressionMessageCompactionCoordination:
     def test_empty_delta_produces_p_frame(self, execution_state):
         """Test that empty delta still produces P-frame marker."""
         from playbooks.config import StateCompressionConfig
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.llm.messages.types import FrameType
 
         compression_config = StateCompressionConfig(
             enabled=True, full_state_interval=10
@@ -614,7 +614,7 @@ class TestInterpreterPromptIntegration:
 
     def test_prompt_includes_state_block_for_full_state(self, execution_state):
         """Test that prompt includes state block for I-frames."""
-        from playbooks.interpreter_prompt import InterpreterPrompt
+        from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         execution_state.variables["$var1"] = "test_value"
 
@@ -642,7 +642,7 @@ class TestInterpreterPromptIntegration:
 
     def test_prompt_omits_state_block_for_empty_delta(self, execution_state):
         """Test that prompt omits state block for empty P-frames."""
-        from playbooks.interpreter_prompt import InterpreterPrompt
+        from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         # Set up initial state
         execution_state.variables["$var1"] = "test_value"
@@ -671,7 +671,7 @@ class TestInterpreterPromptIntegration:
 
     def test_prompt_includes_delta_state_with_changes(self, execution_state):
         """Test that prompt includes delta state for P-frames with changes."""
-        from playbooks.interpreter_prompt import InterpreterPrompt
+        from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         # Set up initial state
         execution_state.variables["$var1"] = "initial"
@@ -706,8 +706,8 @@ class TestInterpreterPromptIntegration:
 
     def test_i_frame_type_propagates_to_message(self, execution_state):
         """Test that I-frame type is properly set on UserInputLLMMessage."""
-        from playbooks.interpreter_prompt import InterpreterPrompt
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.execution.interpreter_prompt import InterpreterPrompt
+        from playbooks.llm.messages.types import FrameType
 
         # Ensure clean state for I-frame (first call scenario)
         execution_state.variables["$var1"] = "test"
@@ -747,8 +747,8 @@ class TestInterpreterPromptIntegration:
 
     def test_p_frame_type_propagates_to_message(self, execution_state):
         """Test that P-frame type is properly set on UserInputLLMMessage."""
-        from playbooks.interpreter_prompt import InterpreterPrompt
-        from playbooks.llm_messages.types import FrameType
+        from playbooks.execution.interpreter_prompt import InterpreterPrompt
+        from playbooks.llm.messages.types import FrameType
 
         # Setup for P-frame (subsequent call with delta)
         execution_state.variables["$var1"] = "initial"
@@ -779,7 +779,7 @@ class TestInterpreterPromptIntegration:
 
     def test_agent_instructions_included_for_i_frame(self, execution_state):
         """Test that agent instructions are included for I-frames."""
-        from playbooks.interpreter_prompt import InterpreterPrompt
+        from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         execution_state.variables["$var1"] = "test"
 
@@ -804,7 +804,7 @@ class TestInterpreterPromptIntegration:
 
     def test_agent_instructions_omitted_for_p_frame(self, execution_state):
         """Test that agent instructions are omitted for P-frames (token optimization)."""
-        from playbooks.interpreter_prompt import InterpreterPrompt
+        from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         # Setup for P-frame
         execution_state.variables["$var1"] = "initial"
@@ -839,8 +839,8 @@ class TestCompactorIFrameBoundary:
 
     def test_i_frame_at_beginning_not_compacted(self):
         """Test that I-frame at beginning is preserved."""
-        from playbooks.llm_context_compactor import LLMContextCompactor
-        from playbooks.llm_messages.types import (
+        from playbooks.llm.llm_context_compactor import LLMContextCompactor
+        from playbooks.llm.messages.types import (
             AssistantResponseLLMMessage,
             FrameType,
             UserInputLLMMessage,
@@ -864,11 +864,11 @@ class TestCompactorIFrameBoundary:
 
     def test_multiple_i_frames_only_preserves_last(self):
         """Test that only the last I-frame is preserved."""
-        from playbooks.llm_context_compactor import (
+        from playbooks.llm.llm_context_compactor import (
             CompactionConfig,
             LLMContextCompactor,
         )
-        from playbooks.llm_messages.types import (
+        from playbooks.llm.messages.types import (
             AssistantResponseLLMMessage,
             FrameType,
             UserInputLLMMessage,
@@ -899,8 +899,8 @@ class TestCompactorIFrameBoundary:
 
     def test_compactor_with_only_i_frames(self):
         """Test compactor when all user messages are I-frames."""
-        from playbooks.llm_context_compactor import LLMContextCompactor
-        from playbooks.llm_messages.types import (
+        from playbooks.llm.llm_context_compactor import LLMContextCompactor
+        from playbooks.llm.messages.types import (
             AssistantResponseLLMMessage,
             FrameType,
             UserInputLLMMessage,

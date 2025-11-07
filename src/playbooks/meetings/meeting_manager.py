@@ -7,19 +7,23 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
 from playbooks.agents.human_agent import HumanAgent
 from playbooks.core.exceptions import KlassNotFoundError
-from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
-
-from playbooks.debug.debug_handler import debug
 from playbooks.core.identifiers import MeetingID
-from playbooks.llm.messages import MeetingLLMMessage, SessionLogLLMMessage
 from playbooks.core.message import Message, MessageType
+from playbooks.debug.debug_handler import debug
+from playbooks.llm.messages import MeetingLLMMessage, SessionLogLLMMessage
+from playbooks.meetings.meeting import (
+    JoinedMeeting,
+    Meeting,
+    MeetingInvitation,
+    MeetingInvitationStatus,
+)
+from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
 from playbooks.playbook import LLMPlaybook, Playbook
-from .meeting import JoinedMeeting, Meeting, MeetingInvitation, MeetingInvitationStatus
 
 if TYPE_CHECKING:
-    from ..agents.base_agent import BaseAgent
-    from ..state.execution_state import ExecutionState
-    from ..program import Program
+    from playbooks.agents.base_agent import BaseAgent
+    from playbooks.program import Program
+    from playbooks.state.execution_state import ExecutionState
 
 logger = logging.getLogger(__name__)
 

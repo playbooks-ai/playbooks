@@ -4,8 +4,8 @@ import pytest
 
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.execution_state import ExecutionState
-from playbooks.playbook_call import PlaybookCall
-from playbooks.utils.expression_engine import ExpressionContext
+from playbooks.execution.call import PlaybookCall
+from playbooks.compilation.expression_engine import ExpressionContext
 from playbooks.state.variables import Artifact
 
 

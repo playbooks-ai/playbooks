@@ -37,7 +37,7 @@ def llm_config():
 @pytest.fixture
 def compiler(llm_config):
     """Create a compiler instance with mock LLM config."""
-    with patch("playbooks.compiler.config") as mock_config:
+    with patch("playbooks.compilation.compiler.config") as mock_config:
         mock_config.model.compilation.name = "test-model"
         mock_config.model.compilation.provider = "test-provider"
         mock_config.model.compilation.temperature = 0.7
@@ -47,7 +47,7 @@ def compiler(llm_config):
 @pytest.fixture
 def compiler_no_cache(llm_config):
     """Create a compiler instance with caching disabled."""
-    with patch("playbooks.compiler.config") as mock_config:
+    with patch("playbooks.compilation.compiler.config") as mock_config:
         mock_config.model.compilation.name = "test-model"
         mock_config.model.compilation.provider = "test-provider"
         mock_config.model.compilation.temperature = 0.7
@@ -287,7 +287,7 @@ class TestCacheKeyGeneration:
 class TestAgentCompilation:
     """Test agent-level compilation functionality."""
 
-    @patch("playbooks.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.get_completion")
     def test_compile_single_agent(
         self, mock_completion, compiler, single_agent_content
     ):
@@ -300,8 +300,8 @@ class TestAgentCompilation:
         assert "Playbooks Assembly Language" in compiled  # Version header
         mock_completion.assert_called_once()
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
     def test_compile_agent_with_caching(
         self,
@@ -346,8 +346,8 @@ Compiled content"""
         # Results should be identical
         assert result1.content == result2.content
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     def test_compile_without_cache(
         self, mock_langfuse, mock_completion, compiler_no_cache, single_agent_content
     ):
@@ -367,8 +367,8 @@ Compiled content"""
         compiler_no_cache._compile_agent_with_caching(agent_info)
         assert mock_completion.call_count == 2
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.write_text")
     def test_cache_write_failure_handling(
         self, mock_write, mock_langfuse, mock_completion, compiler, single_agent_content
@@ -389,8 +389,8 @@ Compiled content"""
 class TestFileProcessing:
     """Test file processing with agent-level compilation."""
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
     def test_process_single_pb_file(
         self,
@@ -436,8 +436,8 @@ class TestFileProcessing:
             assert "AlreadyCompiled" in results[0].content
             mock_compile.assert_not_called()  # No compilation needed
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
     def test_process_multiple_pb_files(
         self, mock_exists, mock_langfuse, mock_completion, compiler, multi_agent_content
@@ -463,8 +463,8 @@ class TestFileProcessing:
         assert all(r.is_compiled for r in results)
         assert mock_completion.call_count == 2
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
     def test_process_mixed_files(
         self,
@@ -523,8 +523,8 @@ class TestFileProcessing:
             assert all(r.is_compiled for r in results)
             mock_compile.assert_not_called()  # No compilation needed
 
-    @patch("playbooks.compiler.ThreadPoolExecutor")
-    @patch("playbooks.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.ThreadPoolExecutor")
+    @patch("playbooks.compilation.compiler.get_completion")
     def test_parallel_compilation(
         self, mock_completion, mock_executor_class, compiler, multi_agent_content
     ):
@@ -562,7 +562,7 @@ class TestFileProcessing:
             )
         ]
 
-        with patch("playbooks.compiler.as_completed") as mock_as_completed:
+        with patch("playbooks.compilation.compiler.as_completed") as mock_as_completed:
             mock_as_completed.return_value = [future1, future2]
             results = compiler.process_files(files)
 
@@ -584,7 +584,7 @@ class TestFrontmatterHandling:
         assert fm_data.metadata["author"] == "Test Author"
         assert fm_data.metadata["version"] == "1.0"
 
-    @patch("playbooks.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.get_completion")
     def test_frontmatter_preservation(
         self, mock_completion, compiler, content_with_frontmatter
     ):
@@ -656,8 +656,8 @@ Already compiled content"""
 class TestBackwardCompatibility:
     """Test backward compatibility with the compile() method."""
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
     def test_compile_method_single_file(
         self,
@@ -682,8 +682,8 @@ class TestBackwardCompatibility:
         assert isinstance(cache_path, Path)
         mock_completion.assert_called_once()
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     def test_compile_method_with_content(
         self, mock_langfuse, mock_completion, compiler, single_agent_content
     ):
@@ -741,8 +741,8 @@ No H1 headers here
         with pytest.raises(ProgramLoadError, match="No agents found"):
             compiler.process_files(files)
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
     def test_llm_failure_handling(
         self,
@@ -766,8 +766,8 @@ No H1 headers here
         with pytest.raises(Exception, match="LLM API error"):
             compiler.process_files(files)
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
     def test_partial_compilation_failure(
         self, mock_exists, mock_langfuse, mock_completion, compiler, multi_agent_content
@@ -796,7 +796,7 @@ class TestLLMConfiguration:
 
     def test_llm_config_initialization(self, llm_config):
         """Test that LLM config is properly initialized."""
-        with patch("playbooks.compiler.config") as mock_config:
+        with patch("playbooks.compilation.compiler.config") as mock_config:
             mock_config.model.compilation.name = "claude-3"
             mock_config.model.compilation.provider = "anthropic"
             mock_config.model.compilation.temperature = 0.5
@@ -818,7 +818,7 @@ class TestLLMConfiguration:
         ]
 
         for model, env_var, expected_key in test_cases:
-            with patch("playbooks.compiler.config") as mock_config:
+            with patch("playbooks.compilation.compiler.config") as mock_config:
                 mock_config.model.compilation.name = model
                 mock_config.model.compilation.provider = "test"
                 mock_config.model.compilation.temperature = 0.7
@@ -833,7 +833,7 @@ class TestPromptHandling:
 
     def test_prompt_loading(self, llm_config):
         """Test that compiler prompt is loaded correctly."""
-        with patch("playbooks.compiler.config") as mock_config:
+        with patch("playbooks.compilation.compiler.config") as mock_config:
             mock_config.model.compilation.name = "test-model"
             mock_config.model.compilation.provider = "test"
             mock_config.model.compilation.temperature = 0.7
@@ -845,7 +845,7 @@ class TestPromptHandling:
 
     def test_prompt_file_not_found(self, llm_config):
         """Test error handling when prompt file is not found."""
-        with patch("playbooks.compiler.config") as mock_config:
+        with patch("playbooks.compilation.compiler.config") as mock_config:
             mock_config.model.compilation.name = "test-model"
             mock_config.model.compilation.provider = "test"
             mock_config.model.compilation.temperature = 0.7
@@ -862,8 +862,8 @@ class TestPromptHandling:
 class TestParallelCompilation:
     """Test parallel compilation of multiple agents."""
 
-    @patch("playbooks.compiler.get_completion")
-    @patch("playbooks.compiler.LangfuseHelper")
+    @patch("playbooks.compilation.compiler.get_completion")
+    @patch("playbooks.compilation.compiler.LangfuseHelper")
     def test_agents_compiled_in_parallel(
         self, mock_langfuse, mock_completion, compiler
     ):

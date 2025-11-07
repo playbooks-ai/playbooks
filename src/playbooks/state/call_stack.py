@@ -330,7 +330,7 @@ class CallStack:
         Returns:
             True if the artifact is loaded in any frame, False otherwise.
         """
-        from .llm_messages.types import ArtifactLLMMessage
+        from playbooks.llm.messages.types import ArtifactLLMMessage
 
         # Normalize artifact name to include $ prefix
         if not artifact_name.startswith("$"):

@@ -11,8 +11,8 @@ from playbooks.compilation.expression_engine import (
 )
 
 if TYPE_CHECKING:
-    from ..agents.local_ai_agent import LocalAIAgent
-    from ..playbook import LLMPlaybook
+    from playbooks.agents.local_ai_agent import LocalAIAgent
+    from playbooks.playbook import LLMPlaybook
 
 
 class LLMExecution(ABC):

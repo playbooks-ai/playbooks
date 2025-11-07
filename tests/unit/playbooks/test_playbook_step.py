@@ -2,7 +2,7 @@
 
 from unittest.mock import Mock, patch
 
-from playbooks.playbook_step import PlaybookStep, PlaybookStepCollection
+from playbooks.execution.step import PlaybookStep, PlaybookStepCollection
 
 
 class TestPlaybookStep:
@@ -102,7 +102,7 @@ class TestPlaybookStep:
         mock_match_obj = Mock()
         mock_match_obj.group.side_effect = Exception("Parse error")
 
-        with patch("playbooks.playbook_step.re.match") as mock_match:
+        with patch("playbooks.execution.step.re.match") as mock_match:
             mock_match.return_value = mock_match_obj
             step = PlaybookStep.from_text("01:YLD: Test")
             assert step is None

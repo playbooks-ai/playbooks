@@ -7,12 +7,12 @@ import pytest
 from fastmcp import Client
 
 from playbooks.core.exceptions import AgentConfigurationError
-from src.playbooks.agents import MCPAgent
-from src.playbooks.agents.agent_builder import AgentBuilder
-from src.playbooks.event_bus import EventBus
-from src.playbooks.program import Program
-from src.playbooks.transport.mcp_transport import MCPTransport
-from src.playbooks.utils.markdown_to_ast import markdown_to_ast
+from playbooks.agents import MCPAgent
+from playbooks.agents.agent_builder import AgentBuilder
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.program import Program
+from playbooks.transport.mcp_transport import MCPTransport
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 from .test_mcp_server import get_test_server
 

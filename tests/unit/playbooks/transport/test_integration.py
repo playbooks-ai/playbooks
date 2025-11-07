@@ -3,7 +3,7 @@
 import pytest
 from fastmcp import FastMCP
 
-from src.playbooks.transport.mcp_transport import MCPTransport
+from playbooks.transport.mcp_transport import MCPTransport
 
 
 # Create a simple test MCP server

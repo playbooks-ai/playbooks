@@ -7,7 +7,7 @@ Python code to inject Var() calls and handle variable scoping issues.
 import ast
 
 
-from playbooks.utils.inject_setvar import inject_setvar
+from playbooks.compilation.inject_setvar import inject_setvar
 
 
 class TestInjectSetvar:

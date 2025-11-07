@@ -5,7 +5,7 @@ from datetime import datetime
 import pytest
 
 from playbooks.agents.human_agent import HumanAgent
-from playbooks.delivery_preferences import DeliveryPreferences
+from playbooks.agents.delivery_preferences import DeliveryPreferences
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.core.identifiers import AgentID
 from playbooks.meetings.meeting import Meeting

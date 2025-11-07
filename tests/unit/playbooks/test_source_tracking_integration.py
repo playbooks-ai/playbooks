@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from src.playbooks.utils.markdown_to_ast import markdown_to_ast
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class TestSourceTrackingIntegration:
@@ -89,7 +89,7 @@ Say the greeting to the user.
                 print("🔄 Step 4: Testing Program-like flow...")
 
                 # This is what Program would do - create agent classes from AST
-                from src.playbooks.agents.agent_builder import AgentBuilder
+                from playbooks.agents.agent_builder import AgentBuilder
 
                 try:
                     agent_classes = AgentBuilder.create_agent_classes_from_ast(ast)
@@ -98,7 +98,7 @@ Say the greeting to the user.
 
                     # Test agent instantiation if we have agents
                     if "TestAgent" in agent_classes:
-                        from src.playbooks.event_bus import EventBus
+                        from playbooks.infrastructure.event_bus import EventBus
 
                         event_bus = EventBus()
                         agent_class = agent_classes["TestAgent"]

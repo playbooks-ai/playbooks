@@ -1,7 +1,7 @@
 """Tests for the semantic LLMMessage subclasses."""
 
 from playbooks.core.enums import LLMMessageRole, LLMMessageType
-from playbooks.llm_messages import (
+from playbooks.llm.messages import (
     AgentCommunicationLLMMessage,
     AgentInfoLLMMessage,
     AssistantResponseLLMMessage,

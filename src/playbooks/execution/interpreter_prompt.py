@@ -154,7 +154,8 @@ class InterpreterPrompt:
         try:
             with open(
                 os.path.join(
-                    os.path.dirname(__file__), "./prompts/interpreter_run.txt"
+                    os.path.dirname(os.path.dirname(__file__)),
+                    "./prompts/interpreter_run.txt",
                 ),
                 "r",
             ) as f:

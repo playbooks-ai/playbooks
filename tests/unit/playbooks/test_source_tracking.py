@@ -3,9 +3,9 @@
 import tempfile
 from pathlib import Path
 
-from src.playbooks.agents.agent_builder import AgentBuilder
-from src.playbooks.event_bus import EventBus
-from src.playbooks.utils.markdown_to_ast import markdown_to_ast
+from playbooks.agents.agent_builder import AgentBuilder
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class TestSourceTracking:
@@ -95,7 +95,7 @@ Say hello to {name}.
 
     def test_program_passes_cache_paths(self):
         """Test that Program class correctly passes cache file paths to markdown_to_ast."""
-        from src.playbooks.program import Program
+        from playbooks.program import Program
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmpdir_path = Path(tmpdir)

@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 import pytest
 
-from src.playbooks.transport.protocol import TransportProtocol
+from playbooks.transport.protocol import TransportProtocol
 
 
 class MockTransport(TransportProtocol):

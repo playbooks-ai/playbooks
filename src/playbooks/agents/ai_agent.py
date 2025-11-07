@@ -43,7 +43,7 @@ from .base_agent import BaseAgent, BaseAgentMeta
 from .namespace_manager import AgentNamespaceManager
 
 if TYPE_CHECKING:
-    from ..program import Program
+    from playbooks.program import Program
 
 
 class AIAgentMeta(BaseAgentMeta):
@@ -803,7 +803,7 @@ async def {self.bgn_playbook_name}() -> None:
             agent_name, agent_id_spec = agent_part.split(":", 1)
 
             # Parse agent ID to handle both "agent 1020" and "1020" formats
-            from ..identifiers import AgentID
+            from playbooks.core.identifiers import AgentID
 
             try:
                 agent_id_obj = AgentID.parse(agent_id_spec)

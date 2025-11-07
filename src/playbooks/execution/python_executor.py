@@ -76,7 +76,7 @@ class LLMNamespace(dict):
             if state_key in self.executor.agent.state.variables:
                 var = self.executor.agent.state.variables[state_key]
                 # Extract the actual value from Variable objects
-                from .variables import Variable
+                from playbooks.state.variables import Variable
 
                 if isinstance(var, Artifact):
                     # Auto-load artifact if not already loaded in any frame

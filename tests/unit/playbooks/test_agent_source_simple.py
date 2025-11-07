@@ -3,9 +3,9 @@
 import tempfile
 from pathlib import Path
 
-from src.playbooks.agents.local_ai_agent import LocalAIAgent
-from src.playbooks.event_bus import EventBus
-from src.playbooks.utils.markdown_to_ast import markdown_to_ast
+from playbooks.agents.local_ai_agent import LocalAIAgent
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class TestAgentSourceSimple:
@@ -48,7 +48,7 @@ Say hello to the user.
                 print(f"✅ H1 node line_number: {h1_node.get('line_number')}")
 
                 # Create agent class using LocalAIAgent.create_class
-                from src.playbooks.agents.namespace_manager import AgentNamespaceManager
+                from playbooks.agents.namespace_manager import AgentNamespaceManager
 
                 namespace_manager = AgentNamespaceManager()
 
@@ -79,7 +79,7 @@ Say hello to the user.
 
     def test_base_agent_initialization(self):
         """Test that BaseAgent correctly accepts and stores source tracking parameters."""
-        from src.playbooks.agents.base_agent import BaseAgent
+        from playbooks.agents.base_agent import BaseAgent
 
         # Create a dummy agent class that extends BaseAgent
         class DummyAgent(BaseAgent):

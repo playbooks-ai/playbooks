@@ -8,7 +8,7 @@ from textwrap import dedent
 
 import pytest
 
-from playbooks.import_processor import (
+from playbooks.compilation.import_processor import (
     CircularImportError,
     ImportDepthError,
     ImportNotFoundError,

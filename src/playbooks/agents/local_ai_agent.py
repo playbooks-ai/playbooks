@@ -19,7 +19,7 @@ from .registry import AgentClassRegistry
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from ..program import Program
+    from playbooks.program import Program
 
 
 class LocalAIAgent(AIAgent):
