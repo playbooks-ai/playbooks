@@ -9,12 +9,13 @@ This module provides a unified interface for LLM interactions, including:
 """
 
 import hashlib
+import inspect
 import logging
 import os
 import tempfile
 import time
 from functools import wraps
-from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
+from typing import Any, Callable, Iterator, List, Optional, Tuple, TypeVar, Union
 
 import litellm
 from litellm import completion, get_supported_openai_params
@@ -269,6 +270,49 @@ def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
             continue
 
 
+def _check_unit_test_llm_call() -> Tuple[bool, Optional[str]]:
+    """Check if this is an unmocked LLM call from a unit test.
+
+    Uses stateless stack inspection to detect:
+    1. If the call originates from /tests/unit/
+    2. If the call is mocked (unittest.mock or pytest mock in stack)
+
+    This approach works correctly with parallel test execution (pytest-xdist).
+
+    Returns:
+        Tuple of (is_unmocked_unit_test, test_file_path)
+        - is_unmocked_unit_test: True if this is a real LLM call from unit test
+        - test_file_path: Path to the unit test file, or None if not a unit test
+    """
+    stack = inspect.stack()
+
+    unit_test_file = None
+    is_mocked = False
+
+    # Look through the call stack
+    for frame_info in stack:
+        filename = frame_info.filename
+
+        # Check if this frame is from a unit test
+        if "/tests/unit/" in filename:
+            unit_test_file = filename
+
+        # Check if this frame is from a mock library
+        # This indicates the call is mocked
+        if "unittest/mock.py" in filename or "unittest\\mock.py" in filename:
+            is_mocked = True
+        if "_pytest" in filename and "mock" in filename.lower():
+            is_mocked = True
+        # Check for pytest-mock plugin
+        if "pytest_mock" in filename:
+            is_mocked = True
+
+    # Return True only if it's from a unit test AND not mocked
+    is_unmocked_unit_test = unit_test_file is not None and not is_mocked
+
+    return is_unmocked_unit_test, unit_test_file
+
+
 def get_completion(
     llm_config: LLMConfig,
     messages: List[dict],
@@ -294,6 +338,15 @@ def get_completion(
     Returns:
         An iterator of response text (single item for non-streaming)
     """
+    # Check if this is an unmocked LLM call from a unit test
+    is_unmocked_unit_test, test_file = _check_unit_test_llm_call()
+    if is_unmocked_unit_test:
+        raise RuntimeError(
+            f"LLM calls are not allowed in unit tests.\n"
+            f"Test file: {test_file}\n"
+            f"This test should be moved to tests/integration/ or the LLM call should be mocked.\n"
+            f"Use @patch('playbooks.utils.llm_helper.get_completion') to mock LLM calls in unit tests."
+        )
 
     messages = remove_empty_messages(messages)
     # messages = consolidate_messages(messages)

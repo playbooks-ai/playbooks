@@ -78,6 +78,15 @@ class LitellmConfig(BaseModel):
     verbose: bool = False
 
 
+class StateCompressionConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")  # catch typos early
+
+    enabled: bool = True
+    full_state_interval: int = Field(
+        10, gt=0
+    )  # Send full state every N LLM calls (I-frame interval)
+
+
 class PlaybooksConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
@@ -91,6 +100,7 @@ class PlaybooksConfig(BaseModel):
     llm_cache: LLMCacheConfig = LLMCacheConfig()
     langfuse: LangfuseConfig = LangfuseConfig()
     litellm: LitellmConfig = LitellmConfig()
+    state_compression: StateCompressionConfig = StateCompressionConfig()
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump()
@@ -298,6 +308,7 @@ __all__ = [
     "ModelsConfig",
     "LLMCacheConfig",
     "LangfuseConfig",
+    "StateCompressionConfig",
     "config",
     "load_config",
     "resolve_config_files",

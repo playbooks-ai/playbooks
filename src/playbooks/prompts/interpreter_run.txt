@@ -338,10 +338,7 @@ Note how specific agent instance is selected - AccountantExpert["agent 1020"]
 ||                                             | BankerAgent is the banker with an instance with agent id 1002 | await InviteToMeeting("meeting 2334", ["agent 1002"])|
 
 ====SYSTEM_PROMPT_DELIMITER====
-*Current state*
-```json
 {{INITIAL_STATE}}
-```
 
 {{AGENT_INSTRUCTIONS}}
 

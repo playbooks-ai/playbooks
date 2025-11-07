@@ -6,6 +6,8 @@ that cover all use cases in the playbook execution system.
 
 from .base import LLMMessage
 from .types import (
+    # Enums
+    FrameType,
     # Core semantic types
     SystemPromptLLMMessage,
     UserInputLLMMessage,
@@ -27,6 +29,8 @@ from .types import (
 
 __all__ = [
     "LLMMessage",
+    # Enums
+    "FrameType",
     # Core semantic types
     "SystemPromptLLMMessage",
     "UserInputLLMMessage",

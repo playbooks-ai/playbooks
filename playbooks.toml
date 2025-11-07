@@ -3,6 +3,10 @@ timeout_s = 60
 artifact_result_threshold = 500  # Auto-create artifact for playbook results longer than this (# of chars)
 max_llm_calls = 50
 
+[state_compression]
+enabled = true
+full_state_interval = 4  # Send full state every N LLM calls (I-frame interval)
+
 [model]
 provider = "anthropic"
 name = "claude-sonnet-4-5-20250929"

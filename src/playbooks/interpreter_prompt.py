@@ -10,6 +10,7 @@ import os
 import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from playbooks.config import config
 from playbooks.debug_logger import debug
 from playbooks.llm_context_compactor import LLMContextCompactor
 from playbooks.llm_messages import (
@@ -18,6 +19,7 @@ from playbooks.llm_messages import (
     TriggerInstructionsLLMMessage,
     UserInputLLMMessage,
 )
+from playbooks.llm_messages.types import FrameType
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import get_messages_for_prompt
 from playbooks.utils.token_counter import get_messages_token_count
@@ -98,6 +100,7 @@ class InterpreterPrompt:
         self.other_agent_klasses_information = other_agent_klasses_information
         self.execution_id = execution_id  # NEW: Store execution_id
         self.compactor = LLMContextCompactor()
+        self.frame_type = None  # Will be set when generating prompt
 
     def _get_trigger_instructions_message(self) -> str:
         if len(self.trigger_instructions) > 0:
@@ -160,9 +163,28 @@ class InterpreterPrompt:
             debug("Error: Prompt template file not found")
             return "Error: Prompt template missing."
 
-        initial_state = json.dumps(
-            self.execution_state.to_dict(), indent=2, cls=SetEncoder
+        # Get state with compression applied
+        state_dict, self.frame_type = self.execution_state.get_state_for_llm(
+            self.execution_id, config.state_compression
         )
+
+        # Generate state block in code (not template)
+        if state_dict is not None:
+            title = (
+                "Current state" if self.frame_type == FrameType.I else "State changes"
+            )
+            state_json = json.dumps(state_dict, indent=2, cls=SetEncoder)
+            state_block = f"""*{title}*
+```json
+{state_json}
+```
+
+"""
+        else:
+            # Empty delta - no state block
+            state_block = ""
+
+        prompt = prompt.replace("{{INITIAL_STATE}}", state_block)
 
         # session_log_str = str(self.execution_state.session_log)
 
@@ -171,9 +193,11 @@ class InterpreterPrompt:
         #     "{{CURRENT_PLAYBOOK_MARKDOWN}}", current_playbook_markdown
         # )
         # prompt = prompt.replace("{{SESSION_LOG}}", session_log_str)
-        prompt = prompt.replace("{{INITIAL_STATE}}", initial_state)
         prompt = prompt.replace("{{INSTRUCTION}}", self.instruction)
-        if self.agent_instructions:
+
+        # Only include agent instructions for I-frames (full state)
+        # P-frames skip this since it was already in the last I-frame
+        if self.agent_instructions and self.frame_type == FrameType.I:
             prompt = prompt.replace("{{AGENT_INSTRUCTIONS}}", self.agent_instructions)
         else:
             prompt = prompt.replace("{{AGENT_INSTRUCTIONS}}", "")
@@ -201,7 +225,12 @@ class InterpreterPrompt:
 
         # Convert the prompt message dict back to a proper message object
         if len(prompt_messages) > 1:
-            user_instruction_msg = UserInputLLMMessage(prompt_messages[1]["content"])
+            # Use frame_type from prompt generation (set in self.prompt property)
+
+            frame_type = self.frame_type if self.frame_type is not None else FrameType.I
+            user_instruction_msg = UserInputLLMMessage(
+                prompt_messages[1]["content"], frame_type=frame_type
+            )
             self.execution_state.call_stack.add_llm_message(user_instruction_msg)
 
         # Original call stack messages (as LLMMessage objects)
