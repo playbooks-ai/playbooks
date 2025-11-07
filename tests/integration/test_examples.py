@@ -8,7 +8,7 @@ from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.agents.mcp_agent import MCPAgent
 from playbooks.core.constants import EOM, EXECUTION_FINISHED
 from tests.conftest import extract_messages_from_cli_output
-from tests.unit.playbooks.test_mcp_end_to_end import InMemoryMCPTransport
+from tests.unit.agents.test_mcp_end_to_end import InMemoryMCPTransport
 
 
 @pytest.mark.asyncio

@@ -12,16 +12,19 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from playbooks.core.argument_types import LiteralValue, VariableReference
-from playbooks.state.call_stack import CallStackFrame, InstructionPointer
+from playbooks.compilation.expression_engine import (
+    ExpressionContext,
+    resolve_description_placeholders,
+)
 from playbooks.config import config
+from playbooks.core.argument_types import LiteralValue, VariableReference
 from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
-from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.core.enums import StartupMode
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.core.exceptions import ExecutionFinished
-from playbooks.state.execution_state import ExecutionState
 from playbooks.core.identifiers import AgentID
+from playbooks.execution.call import PlaybookCall, PlaybookCallResult
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.messages import (
     ExecutionResultLLMMessage,
     FileLoadLLMMessage,
@@ -30,15 +33,13 @@ from playbooks.llm.messages import (
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.meetings import MeetingManager
 from playbooks.playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
-from playbooks.execution.call import PlaybookCall, PlaybookCallResult
-from playbooks.compilation.expression_engine import (
-    ExpressionContext,
-    resolve_description_placeholders,
-)
+from playbooks.state.call_stack import CallStackFrame, InstructionPointer
+from playbooks.state.execution_state import ExecutionState
+from playbooks.state.variables import Artifact
 from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.misc import copy_func
 from playbooks.utils.text_utils import indent, simple_shorten
-from playbooks.state.variables import Artifact
+
 from .base_agent import BaseAgent, BaseAgentMeta
 from .namespace_manager import AgentNamespaceManager
 

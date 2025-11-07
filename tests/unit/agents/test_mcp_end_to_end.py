@@ -14,7 +14,7 @@ from playbooks.program import Program
 from playbooks.transport.mcp_transport import MCPTransport
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
-from .test_mcp_server import get_test_server
+from tests.unit.applications.test_mcp_server import get_test_server
 
 
 class MCPTestAgent(MCPAgent):
