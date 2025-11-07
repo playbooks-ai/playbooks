@@ -96,18 +96,29 @@ class AIAgentInstanceProxy:
             A callable that will execute the playbook on the specific agent instance
 
         Raises:
-            AttributeError: If the method name starts with '_' (private)
+            AttributeError: If the method name starts with '_' (private) or if the
+                playbook doesn't exist for local agents
 
         Note:
-            We don't check if the playbook exists here because remote agents
-            (like MCP agents) discover their playbooks asynchronously after initialization.
-            Instead, we let execute_playbook handle validation and error reporting.
+            For remote agents (like MCP agents) that discover playbooks asynchronously,
+            we cannot check if the playbook exists at attribute access time. For local
+            agents, we check against the playbooks dict to provide early error detection.
         """
         # Prevent access to private attributes
         if method_name.startswith("_"):
             raise AttributeError(
                 f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
             )
+
+        # For local agents, check if the playbook exists in the playbooks dict
+        # For MCP agents, hasattr will return False and we skip validation
+        if hasattr(self._proxied_agent_klass, "playbooks") and isinstance(
+            self._proxied_agent_klass.playbooks, dict
+        ):
+            if method_name not in self._proxied_agent_klass.playbooks:
+                raise AttributeError(
+                    f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
+                )
 
         return create_playbook_wrapper(
             playbook_name=f"{self._proxied_agent_klass_name}.{method_name}",
@@ -191,18 +202,29 @@ class AIAgentProxy:
             A callable that will execute the playbook on the target agent
 
         Raises:
-            AttributeError: If the method name starts with '_' (private)
+            AttributeError: If the method name starts with '_' (private) or if the
+                playbook doesn't exist for local agents
 
         Note:
-            We don't check if the playbook exists here because remote agents
-            (like MCP agents) discover their playbooks asynchronously after initialization.
-            Instead, we let execute_playbook handle validation and error reporting.
+            For remote agents (like MCP agents) that discover playbooks asynchronously,
+            we cannot check if the playbook exists at attribute access time. For local
+            agents, we check against the playbooks dict to provide early error detection.
         """
         # Prevent access to private attributes
         if method_name.startswith("_"):
             raise AttributeError(
                 f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
             )
+
+        # For local agents, check if the playbook exists in the playbooks dict
+        # For MCP agents, hasattr will return False and we skip validation
+        if hasattr(self._proxied_agent_klass, "playbooks") and isinstance(
+            self._proxied_agent_klass.playbooks, dict
+        ):
+            if method_name not in self._proxied_agent_klass.playbooks:
+                raise AttributeError(
+                    f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
+                )
 
         return create_playbook_wrapper(
             playbook_name=f"{self._proxied_agent_klass_name}.{method_name}",

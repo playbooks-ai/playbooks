@@ -991,6 +991,9 @@ async def {self.bgn_playbook_name}() -> None:
 
         if "$__" in self.state.variables:
             execution_summary = self.state.variables.variables["$__"].value
+            # Convert to string if it's an Artifact to ensure it can be used in string operations
+            if isinstance(execution_summary, Artifact):
+                execution_summary = str(execution_summary)
         else:
             execution_summary = None
 
