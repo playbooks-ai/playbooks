@@ -332,6 +332,7 @@ Note how specific agent instance is selected - AccountantExpert["agent 1020"]
 || - PB:05:EXE Synthesize a comprehensive answer | | await Step("PB:05:EXE")<br>await Artifact("answer", "How to swim guide", """# How to swim<br>Swimming is a great way to stay fit...""")|
 || - PB:06:QUE Show answer to user | Answer was saved as artifact variable earlier | await Say("user", answer) or await Say("user", f"Here's the answer: {answer}")|
 || - PB:04:EXE Summarize full_report | full_report is previously created artifact but its contents are not loaded | await Step("PB:04:EXE")<br>await LoadArtifact("full_report")<br>await Yld("call")|
+||                                   | full_report is previously created artifact that is already loaded | await Step("PB:04:EXE")<br>await Say("user", $report)<br>await Yld("call")|
 || - PB:01:EXE Start a Q3 planning meeting with Manager and Programmer | Planning is a playbooks with meeting:true | await Planning(topic="Q3 planning meeting", attendees=["agent 2345", "agent 1001"])|
 || - Planning:05:QUE Add Banker to the meeting | BankerAgent is the banker but no running instance | await CreateAgent("BankerAgent")<br># trig? no<br># yld? yes, need agent ID to invite<br>await Yld("call"); after BankerAgent 8765 is created; InviteToMeeting("meeting 2334", ["agent 8765"])|
 ||                                             | BankerAgent is the banker with an instance with agent id 1002 | await InviteToMeeting("meeting 2334", ["agent 1002"])|

@@ -96,7 +96,12 @@ class AIAgentInstanceProxy:
             A callable that will execute the playbook on the specific agent instance
 
         Raises:
-            AttributeError: If the method name starts with '_' (private) or playbook doesn't exist
+            AttributeError: If the method name starts with '_' (private)
+
+        Note:
+            We don't check if the playbook exists here because remote agents
+            (like MCP agents) discover their playbooks asynchronously after initialization.
+            Instead, we let execute_playbook handle validation and error reporting.
         """
         # Prevent access to private attributes
         if method_name.startswith("_"):
@@ -104,17 +109,12 @@ class AIAgentInstanceProxy:
                 f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
             )
 
-        if method_name in self._proxied_agent_klass.playbooks:
-            return create_playbook_wrapper(
-                playbook_name=f"{self._proxied_agent_klass_name}.{method_name}",
-                current_agent=self._current_agent,
-                namespace=self._namespace,
-                target_agent_id=self._target_agent_id,
-            )
-        else:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
-            )
+        return create_playbook_wrapper(
+            playbook_name=f"{self._proxied_agent_klass_name}.{method_name}",
+            current_agent=self._current_agent,
+            namespace=self._namespace,
+            target_agent_id=self._target_agent_id,
+        )
 
     def _is_coroutine_marker(self) -> bool:
         """Mark that proxy methods return coroutines.
@@ -148,14 +148,14 @@ class AIAgentProxy:
         self,
         proxied_agent_klass_name: str,
         current_agent: "AIAgent",
-        namespace: "LLMNamespace",
+        namespace: Optional["LLMNamespace"] = None,
     ) -> None:
         """Initialize the agent proxy.
 
         Args:
             proxied_agent_klass_name: The class name of the agent (e.g., "FileSystemAgent")
             current_agent: The current agent executing the code (needed to access the program)
-            namespace: The namespace context for execution
+            namespace: Optional namespace context for execution (not currently used)
         """
         self._proxied_agent_klass_name = proxied_agent_klass_name
         self._proxied_agent_klass = current_agent.program.agent_klasses[
@@ -191,7 +191,12 @@ class AIAgentProxy:
             A callable that will execute the playbook on the target agent
 
         Raises:
-            AttributeError: If the method name starts with '_' (private) or playbook doesn't exist
+            AttributeError: If the method name starts with '_' (private)
+
+        Note:
+            We don't check if the playbook exists here because remote agents
+            (like MCP agents) discover their playbooks asynchronously after initialization.
+            Instead, we let execute_playbook handle validation and error reporting.
         """
         # Prevent access to private attributes
         if method_name.startswith("_"):
@@ -199,16 +204,11 @@ class AIAgentProxy:
                 f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
             )
 
-        if method_name in self._proxied_agent_klass.playbooks:
-            return create_playbook_wrapper(
-                playbook_name=f"{self._proxied_agent_klass_name}.{method_name}",
-                current_agent=self._current_agent,
-                namespace=self._namespace,
-            )
-        else:
-            raise AttributeError(
-                f"'{self.__class__.__name__}' object has no attribute '{method_name}'"
-            )
+        return create_playbook_wrapper(
+            playbook_name=f"{self._proxied_agent_klass_name}.{method_name}",
+            current_agent=self._current_agent,
+            namespace=self._namespace,
+        )
 
     def _is_coroutine_marker(self) -> bool:
         """Mark that proxy methods return coroutines.

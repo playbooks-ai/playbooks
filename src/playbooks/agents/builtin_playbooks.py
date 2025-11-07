@@ -74,13 +74,13 @@ async def InviteToMeeting(meeting_id: str, attendees: list):
 async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
     return await agent.load_file(file_path, inline, silent)
 
-@playbook(hidden=True)
-async def SetVar(name: str, value):
-    """Set a variable in the agent's state and return the value."""
-    if not name.startswith("$"):
-        name = f"${name}"
-    agent.state.variables[name] = value
-    return value
+# @playbook(hidden=True)
+# async def SetVar(name: str, value):
+#     """Set a variable in the agent's state and return the value."""
+#     if not name.startswith("$"):
+#         name = f"${name}"
+#     agent.state.variables[name] = value
+#     return value
 
 @playbook
 async def Exit():

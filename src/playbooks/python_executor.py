@@ -4,6 +4,7 @@ This module provides execution of LLM-generated Python code with injected
 capture functions (Step, Say, Var, etc.) that record directives.
 """
 
+import ast
 import asyncio
 import logging
 import traceback
@@ -303,11 +304,25 @@ class PythonExecutor:
             # These can raise SyntaxError if the code has syntax issues
             try:
                 # Wrap code in async function for execution first
-                indented_lines = [f"    {line}" for line in code.splitlines()]
-                indented_code = "\n".join(indented_lines)
-                code = f"""async def __async_exec__():
-{indented_code}
-"""
+                # Use AST to properly indent without mangling string literals
+                parsed = ast.parse(code)
+                func_def = ast.AsyncFunctionDef(
+                    name="__async_exec__",
+                    args=ast.arguments(
+                        posonlyargs=[],
+                        args=[],
+                        kwonlyargs=[],
+                        kw_defaults=[],
+                        defaults=[],
+                    ),
+                    body=parsed.body,
+                    decorator_list=[],
+                    returns=None,
+                )
+                module = ast.Module(body=[func_def], type_ignores=[])
+                # Fix missing location information for manually created AST nodes
+                ast.fix_missing_locations(module)
+                code = ast.unparse(module)
                 # Now inject SetVar calls (works on function bodies)
                 code = inject_setvar(code)
             except SyntaxError as e:
@@ -407,14 +422,36 @@ class PythonExecutor:
             name: Variable name (without $ prefix, e.g., "x")
             value: Variable value
         """
-        self.result.vars[name] = value
-        # Update the actual state variables with $ prefix
-        if self.agent.state and hasattr(self.agent.state, "variables"):
-            self.agent.state.variables.__setitem__(
+        from playbooks.config import config
+
+        # Check if value should be stored as an artifact (similar to playbook results)
+        # Convert to artifact if value string representation exceeds threshold
+        if len(str(value)) > config.artifact_result_threshold:
+            # Create an artifact to store the large value
+            artifact_summary = f"Variable: {name}"
+            artifact_contents = str(value)
+
+            artifact = Artifact(
                 name=f"${name}",
-                value=value,
-                instruction_pointer=self.current_instruction_pointer,
+                summary=artifact_summary,
+                value=artifact_contents,
             )
+
+            self.result.vars[name] = artifact
+
+            # Update the actual state variables with $ prefix
+            if self.agent.state and hasattr(self.agent.state, "variables"):
+                self.agent.state.variables[f"${name}"] = artifact
+        else:
+            # Store as regular variable if below threshold
+            self.result.vars[name] = value
+            # Update the actual state variables with $ prefix
+            if self.agent.state and hasattr(self.agent.state, "variables"):
+                self.agent.state.variables.__setitem__(
+                    name=f"${name}",
+                    value=value,
+                    instruction_pointer=self.current_instruction_pointer,
+                )
 
     async def _capture_artifact(self, name: str, summary: str, content: str) -> None:
         """Capture Artifact() call.

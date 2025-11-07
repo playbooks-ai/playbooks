@@ -1,11 +1,11 @@
-debug = true
+debug = false
 timeout_s = 60
 artifact_result_threshold = 500  # Auto-create artifact for playbook results longer than this (# of chars)
 max_llm_calls = 50
 
 [model]
 provider = "anthropic"
-name = "claude-haiku-4-5-20251001"
+name = "claude-sonnet-4-5-20250929"
 temperature = 0.2
 max_completion_tokens=15000
 

@@ -203,6 +203,10 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             self.namespace_manager.namespace[playbook_name] = call_through
             playbook.agent_name = str(self)
 
+        # Add agent proxies for cross-agent playbook calls in expressions
+        # These are needed for description placeholder resolution (e.g., {FileSystemAgent.read_file(...)})
+        self._add_agent_proxies_to_namespace()
+
         for playbook_name, playbook in self.playbooks.items():
             if (
                 hasattr(playbook, "create_agent_specific_function")
@@ -217,6 +221,28 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                         **self.namespace_manager.namespace,
                     },
                 )
+
+    def _add_agent_proxies_to_namespace(self):
+        """Add agent proxies to namespace for cross-agent playbook calls in expressions.
+
+        Uses the same AIAgentProxy class as PythonExecutor for consistency.
+        These proxies enable expressions like {FileSystemAgent.read_file(...)} in playbook descriptions.
+        """
+        if not self.program or not hasattr(self.program, "agent_klasses"):
+            return
+
+        from playbooks.agent_proxy import AIAgentProxy
+
+        # Create agent proxies for all other agents
+        for agent_klass_name in self.program.agent_klasses:
+            # Skip creating a proxy for the current agent itself
+            if agent_klass_name != self.klass:
+                proxy = AIAgentProxy(
+                    proxied_agent_klass_name=agent_klass_name,
+                    current_agent=self,
+                    namespace=None,  # Not needed for expression evaluation
+                )
+                self.namespace_manager.namespace[agent_klass_name] = proxy
 
     def create_agent_wrapper(self, agent, func):
         """Create an agent-specific wrapper that bypasses globals lookup."""
