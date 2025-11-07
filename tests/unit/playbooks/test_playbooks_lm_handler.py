@@ -215,8 +215,11 @@ class TestPlaybooksLMHandler:
 class TestCompletionWrapper:
     """Test the completion wrapper function."""
 
+    @patch("playbooks.utils.llm_helper._check_llm_calls_allowed", return_value=True)
     @patch("playbooks.utils.llm_helper._original_completion")
-    def test_playbooks_lm_preprocessing_via_get_completion(self, mock_completion):
+    def test_playbooks_lm_preprocessing_via_get_completion(
+        self, mock_completion, mock_check
+    ):
         """Test that playbooks-lm models get preprocessing through get_completion."""
         from playbooks.utils.llm_config import LLMConfig
         from playbooks.utils.llm_helper import get_completion
@@ -252,8 +255,9 @@ class TestCompletionWrapper:
         # Should contain the special prompt
         assert "interpreter" in processed_messages[0]["content"]
 
+    @patch("playbooks.utils.llm_helper._check_llm_calls_allowed", return_value=True)
     @patch("playbooks.utils.llm_helper._original_completion")
-    def test_non_playbooks_models_unchanged(self, mock_completion):
+    def test_non_playbooks_models_unchanged(self, mock_completion, mock_check):
         """Test that non-playbooks-lm models are not preprocessed."""
         mock_completion.return_value = MagicMock()
 

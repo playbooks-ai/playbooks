@@ -16,6 +16,38 @@ os.environ["PLAYBOOKS_PROFILE"] = "test"
 environment()
 
 
+# Pytest hooks to control LLM call behavior based on test type
+def pytest_runtest_setup(item):
+    """Set environment variable to control LLM calls based on test location.
+
+    Unit tests (in tests/unit/) are not allowed to make real LLM calls.
+    Integration tests (in tests/integration/) can make real LLM calls.
+
+    Note: Using _ALLOW_LLM_CALLS prefix (not PLAYBOOKS_) to avoid being picked up
+    by the Playbooks config loader which auto-loads PLAYBOOKS_* env vars.
+    """
+    test_file_path = str(item.fspath)
+
+    if "/tests/unit/" in test_file_path or "\\tests\\unit\\" in test_file_path:
+        # Unit test - block real LLM calls
+        os.environ["_ALLOW_LLM_CALLS"] = "false"
+    elif (
+        "/tests/integration/" in test_file_path
+        or "\\tests\\integration\\" in test_file_path
+    ):
+        # Integration test - allow real LLM calls
+        os.environ["_ALLOW_LLM_CALLS"] = "true"
+    else:
+        # Default: allow LLM calls for other test locations
+        os.environ["_ALLOW_LLM_CALLS"] = "true"
+
+
+def pytest_runtest_teardown(item):
+    """Clean up environment variable after test."""
+    # Remove the flag to avoid any cross-test contamination
+    os.environ.pop("_ALLOW_LLM_CALLS", None)
+
+
 @pytest.fixture
 def test_data_dir():
     """Fixture to provide path to test data directory"""
