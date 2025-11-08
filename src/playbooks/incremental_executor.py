@@ -28,10 +28,7 @@ class IncrementalStatementParser:
     def __init__(self):
         """Initialize the parser."""
         self.buffer = ""
-        self.completed_statements: List[str] = []
-        self.last_parsed_end = 0
-        self.base_indent_level = 0  # Track base indentation of current statement
-        self.parsed_lines: List[str] = []  # Accumulated lines being parsed
+        self.processed_up_to = 0  # How many characters we've processed from buffer
 
     def add_chunk(self, chunk: str) -> List[str]:
         """Add a chunk of code and return any complete statements.
@@ -48,90 +45,76 @@ class IncrementalStatementParser:
     def _extract_complete_statements(self) -> List[str]:
         """Extract complete statements from buffer.
 
-        Uses Python's AST parser and indentation tracking to determine when
-        we have complete statements. Waits for dedent before emitting indented blocks.
+        Processes complete lines (ending with \n) from the buffer.
+        Uses indentation tracking to detect when blocks are complete.
 
         Returns:
             List of complete statements
         """
         statements = []
-        lines = self.buffer.split("\n")
 
-        # Skip lines that are already in parsed_lines (from previous chunk)
-        lines_to_skip = len(self.parsed_lines)
+        # Process only content that we haven't processed yet
+        new_content = self.buffer[self.processed_up_to:]
 
-        i = lines_to_skip
-        while i < len(lines):
-            line = lines[i]
+        # Find complete lines (ending with \n)
+        while "\n" in new_content:
+            newline_pos = new_content.index("\n")
+            line = new_content[:newline_pos]
+            new_content = new_content[newline_pos + 1:]
+            self.processed_up_to += newline_pos + 1
 
-            # If we're already accumulating a statement
-            if self.parsed_lines:
-                # Check for dedent (lower indentation than base level)
-                line_indent = self._get_indent_level(line)
+            # Get current accumulated code (before this line)
+            accumulated_before = self.buffer[:self.processed_up_to - len(line) - 1].rstrip("\n")
 
-                # Skip blank lines and comments - they don't signal dedent
-                if line.strip() and not line.strip().startswith("#"):
-                    # Check if this is a dedent
-                    if line_indent < self.base_indent_level:
-                        # Dedent detected! Emit the accumulated statement
-                        # But only if not the last line
-                        if i < len(lines) - 1:
-                            statements.extend(self._finalize_parsed_lines(self.parsed_lines))
-                            self.parsed_lines = []
-                            self.base_indent_level = 0
-                            # Don't increment i - reprocess this line as new statement
-                            continue
-                        else:
-                            # Last line with dedent - keep everything in buffer
-                            # parsed_lines already has the accumulated statement
-                            # just add this new dedented line
-                            self.parsed_lines.append(line)
-                            i += 1
-                            break
+            # If we just saw a blank line and have accumulated code, emit it
+            if not line.strip() and accumulated_before:
+                if self._is_complete_statement(accumulated_before):
+                    statements.append(accumulated_before)
+                    # Clear processed content from buffer
+                    self.buffer = self.buffer[self.processed_up_to:]
+                    self.processed_up_to = 0
+                    continue
 
-                # Not a dedent - add to accumulated lines
-                self.parsed_lines.append(line)
-                i += 1
-                continue
+            # Get current accumulated code (including this line)
+            accumulated = self.buffer[:self.processed_up_to].rstrip("\n")
 
-            # Not accumulating yet - check what this line is
-            # Blank line at top level is a complete statement (separator)
-            if not line.strip():
-                if i < len(lines) - 1:
-                    statements.append("")
-                i += 1
-                continue
-
-            # Comment line at top level is a complete statement
-            if line.strip().startswith("#"):
-                if i < len(lines) - 1:
-                    statements.append(line)
+            # Check if this forms a complete statement
+            if self._is_complete_statement(accumulated):
+                # Check indentation
+                lines_in_acc = accumulated.split("\n")
+                if len(lines_in_acc) == 1:
+                    # Single line statement
+                    if not line.rstrip().endswith(":"):
+                        # Complete! Emit it
+                        statements.append(accumulated)
+                        # Clear processed content from buffer
+                        self.buffer = self.buffer[self.processed_up_to:]
+                        self.processed_up_to = 0
                 else:
-                    # Last line - might be incomplete, keep in parsed_lines
-                    self.parsed_lines.append(line)
-                i += 1
-                continue
+                    # Multi-line - check for dedent
+                    first_line_indent = self._get_indent_level(lines_in_acc[0])
+                    last_line_indent = self._get_indent_level(lines_in_acc[-1])
 
-            # Start accumulating a new statement
-            self.base_indent_level = self._get_indent_level(line)
-            self.parsed_lines.append(line)
+                    # If last line dedents to same or lower indent as first line
+                    if last_line_indent <= first_line_indent:
+                        # Check if first line starts a block (ends with :)
+                        if lines_in_acc[0].rstrip().endswith(":"):
+                            # First line starts a block - split off the last line
+                            block_statement = "\n".join(lines_in_acc[:-1])
+                            statements.append(block_statement)
 
-            # Check if this single line is already complete (syntactically)
-            # AND doesn't end with : (which needs a body)
-            if self._is_complete_statement(line) and not line.rstrip().endswith(":"):
-                # Single-line statement that's complete!
-                # But only finalize if not the last line
-                if i < len(lines) - 1:
-                    statements.extend(self._finalize_parsed_lines(self.parsed_lines))
-                    self.parsed_lines = []
-                    self.base_indent_level = 0
-                # else: Last line - keep in parsed_lines (already added above)
-            # else: incomplete or has : - continue accumulating
+                            # Keep the dedented line in buffer for reprocessing
+                            last_line_with_newline = lines_in_acc[-1] + "\n"
+                            self.buffer = last_line_with_newline + self.buffer[self.processed_up_to:]
+                            self.processed_up_to = 0
 
-            i += 1
-
-        # Rebuild buffer from parsed_lines (incomplete statement being accumulated)
-        self.buffer = "\n".join(self.parsed_lines)
+                            # Reprocess from the beginning
+                            new_content = self.buffer
+                        else:
+                            # Same indent and first line doesn't start a block - emit all
+                            statements.append(accumulated)
+                            self.buffer = self.buffer[self.processed_up_to:]
+                            self.processed_up_to = 0
 
         return statements
 
