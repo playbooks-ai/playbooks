@@ -11,9 +11,9 @@ import traceback
 import types
 from typing import Any, Dict, List, Optional, Tuple
 
-from playbooks.python_executor import ExecutionResult, LLMNamespace, PythonExecutor
-from playbooks.utils.expression_engine import preprocess_program
-from playbooks.utils.inject_setvar import inject_setvar
+from playbooks.execution.python_executor import ExecutionResult, LLMNamespace, PythonExecutor
+from playbooks.compilation.expression_engine import preprocess_program
+from playbooks.compilation.inject_setvar import inject_setvar
 
 logger = logging.getLogger(__name__)
 
