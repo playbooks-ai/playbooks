@@ -10,7 +10,7 @@
       "request": "launch",
       "program": "${workspaceFolder}/src/playbooks/applications/agent_chat.py",
       "console": "integratedTerminal",
-      "args": ["${file}"]
+      "args": ["${file}", "--snoop", "true"]
     },
     {
       "name": "Web server for agent chat",
