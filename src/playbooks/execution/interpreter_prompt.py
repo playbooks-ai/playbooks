@@ -21,9 +21,9 @@ from playbooks.llm.messages import (
 )
 from playbooks.llm.messages.types import FrameType
 from playbooks.playbook import Playbook
+from playbooks.state.variables import Variable
 from playbooks.utils.llm_helper import get_messages_for_prompt
 from playbooks.utils.token_counter import get_messages_token_count
-from playbooks.state.variables import Variable
 
 if TYPE_CHECKING:
     from playbooks.state.execution_state import ExecutionState
@@ -238,8 +238,10 @@ class InterpreterPrompt:
         call_stack_llm_messages = []
         for frame in self.execution_state.call_stack.frames:
             call_stack_llm_messages.extend(frame.llm_messages)
+            for index, message in enumerate(frame.llm_messages):
+                message.cached = index == len(frame.llm_messages) - 1
 
-        # Apply compaction - returns Dict[str, str] format ready for LLM API
+        # Apply compaction - the cached flags will be preserved through to_full_message()
         compacted_dict_messages = self.compactor.compact_messages(
             call_stack_llm_messages
         )

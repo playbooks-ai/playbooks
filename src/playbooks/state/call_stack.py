@@ -7,15 +7,14 @@ execution and debugging.
 
 from typing import Any, Dict, List, Optional
 
-from playbooks.llm.messages import LLMMessage
-
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.core.events import (
     CallStackPopEvent,
     CallStackPushEvent,
     InstructionPointerEvent,
 )
 from playbooks.execution.step import PlaybookStep
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.llm.messages import LLMMessage
 
 
 class InstructionPointer:
@@ -197,7 +196,7 @@ class CallStackFrame:
         """Get the messages for the call stack frame as dictionaries for LLM API.
 
         Returns:
-            List of message dictionaries ready for LLM API calls
+            List of message dictionaries (caching applied later by InterpreterPrompt)
         """
         return [msg.to_full_message() for msg in self.llm_messages]
 

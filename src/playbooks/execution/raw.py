@@ -2,16 +2,17 @@
 
 from typing import TYPE_CHECKING, Any, Dict, List
 
-from playbooks.core.enums import LLMMessageType
-from playbooks.core.events import PlaybookEndEvent, PlaybookStartEvent
-from playbooks.llm.messages import AssistantResponseLLMMessage, UserInputLLMMessage
-from playbooks.execution.call import PlaybookCall
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
 )
+from playbooks.core.enums import LLMMessageType
+from playbooks.core.events import PlaybookEndEvent, PlaybookStartEvent
+from playbooks.execution.call import PlaybookCall
+from playbooks.llm.messages import AssistantResponseLLMMessage, UserInputLLMMessage
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import get_completion
+
 from .base import LLMExecution
 
 if TYPE_CHECKING:
@@ -96,12 +97,19 @@ class RawLLMExecution(LLMExecution):
 
         stack_frame = self.agent.state.call_stack.peek()
         # Get file load messages from the call stack
-        messages = [
-            msg.to_full_message()
+        file_load_messages = [
+            msg
             for msg in stack_frame.llm_messages
             if msg.type == LLMMessageType.FILE_LOAD
         ]
-        messages.append(UserInputLLMMessage(resolved_description).to_full_message())
+
+        # Create user input message
+        user_msg = UserInputLLMMessage(resolved_description)
+
+        # Convert to dict format
+        messages = [msg.to_full_message() for msg in file_load_messages]
+        messages.append(user_msg.to_full_message())
+
         return messages
 
     async def _get_llm_response(self, messages: List[Dict[str, str]]) -> str:
@@ -126,8 +134,8 @@ class RawLLMExecution(LLMExecution):
 
         response = next(response_generator)
 
-        # Cache the response
-        response_msg = AssistantResponseLLMMessage(response)  # cached=True by default
+        # Add the response to call stack (will be marked for caching as last message)
+        response_msg = AssistantResponseLLMMessage(response)
         self.agent.state.call_stack.add_llm_message(response_msg)
 
         return response

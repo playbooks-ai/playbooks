@@ -126,6 +126,7 @@ class LLMContextCompactor:
             safe_index = min(safe_index, last_i_frame_index)
 
         # All messages before safe_index are compacted
+        # Messages at or after safe_index are kept full
         result = []
         for i, msg in enumerate(messages):
             if i < safe_index:

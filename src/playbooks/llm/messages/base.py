@@ -27,7 +27,6 @@ class LLMMessage:
         content: str,
         role: LLMMessageRole,
         type: LLMMessageType = LLMMessageType.USER_INPUT,
-        cached: bool = False,
     ) -> None:
         """Initialize an LLMMessage.
 
@@ -35,7 +34,6 @@ class LLMMessage:
             content: The text content of the message
             role: The role of the message sender
             type: The type of message (defaults to USER_INPUT)
-            cached: Whether this message should be cached
 
         Raises:
             TypeError: If content is not a string
@@ -48,8 +46,8 @@ class LLMMessage:
         self._role = self._validate_role(role)
         self._type = self._validate_type(type)
 
-        # Validate cached flag
-        self._cached = self._validate_cached(cached)
+        # Cached flag - set later by InterpreterPrompt based on frame position
+        self._cached = False
 
     @staticmethod
     def _validate_content(content: str) -> str:
@@ -126,23 +124,6 @@ class LLMMessage:
         return msg_type
 
     @staticmethod
-    def _validate_cached(cached: bool) -> bool:
-        """Validate cached parameter.
-
-        Args:
-            cached: The cached flag to validate
-
-        Returns:
-            The validated cached flag
-
-        Raises:
-            TypeError: If cached is not a boolean
-        """
-        if not isinstance(cached, bool):
-            raise TypeError(f"cached must be a boolean, got {type(cached).__name__}")
-        return cached
-
-    @staticmethod
     def _validate_string_param(
         value: Any, param_name: str, allow_empty: bool = False
     ) -> str:
@@ -194,11 +175,21 @@ class LLMMessage:
 
     @property
     def cached(self) -> bool:
-        """Get the cached flag."""
+        """Get whether this message should be cached."""
         return self._cached
 
-    def to_full_message(self) -> Dict[str, Any]:
+    @cached.setter
+    def cached(self, value: bool) -> None:
+        """Set whether this message should be cached."""
+        if not isinstance(value, bool):
+            raise TypeError(f"cached must be a boolean, got {type(value).__name__}")
+        self._cached = value
+
+    def to_full_message(self, is_cached: bool = False) -> Dict[str, Any]:
         """Convert to full dictionary representation for LLM APIs.
+
+        Args:
+            is_cached: Optional override for caching (uses self.cached if False)
 
         Returns:
             A dictionary with role, type, content, and optionally cache_control fields
@@ -208,7 +199,9 @@ class LLMMessage:
             "type": self.type.value,
             "content": self.content,
         }
-        if self.cached:
+        # Use is_cached parameter if provided, otherwise use self._cached
+        should_cache = is_cached or self._cached
+        if should_cache:
             message["cache_control"] = {"type": "ephemeral"}
         return message
 
@@ -227,8 +220,7 @@ class LLMMessage:
 
     def __repr__(self) -> str:
         """String representation of the message."""
-        cached_str = ", cached=True" if self.cached else ""
-        return f"{self.__class__.__name__}(role={self.role}, type={self.type}, content_length={len(self.content)}{cached_str})"
+        return f"{self.__class__.__name__}(role={self.role}, type={self.type}, content_length={len(self.content)})"
 
     def __eq__(self, other: object) -> bool:
         """Check equality with another message.
@@ -241,7 +233,6 @@ class LLMMessage:
             self.content == other.content
             and self.role == other.role
             and self.type == other.type
-            and self.cached == other.cached
         )
 
     def __hash__(self) -> int:
@@ -249,6 +240,4 @@ class LLMMessage:
 
         Subclasses should override this to include their custom attributes.
         """
-        return hash(
-            (self.__class__.__name__, self.content, self.role, self.type, self.cached)
-        )
+        return hash((self.__class__.__name__, self.content, self.role, self.type))

@@ -21,26 +21,17 @@ from playbooks.llm.messages import (
 class TestLLMMessageBase:
     """Test the updated base LLMMessage class."""
 
-    def test_base_message_with_caching(self):
-        """Test creating a base message with caching."""
-        msg = LLMMessage("Hello", LLMMessageRole.USER, cached=True)
+    def test_base_message_creation(self):
+        """Test creating a base message."""
+        msg = LLMMessage("Hello", LLMMessageRole.USER)
         assert msg.content == "Hello"
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.USER_INPUT
-        assert msg.cached is True
-
-    def test_base_message_without_caching(self):
-        """Test creating a base message without caching."""
-        msg = LLMMessage("Hello", LLMMessageRole.USER, cached=False)
-        assert msg.content == "Hello"
-        assert msg.role == LLMMessageRole.USER
-        assert msg.type == LLMMessageType.USER_INPUT
-        assert msg.cached is False
 
     def test_to_full_message_with_cache(self):
-        """Test converting cached message to dictionary."""
-        msg = LLMMessage("Test", LLMMessageRole.ASSISTANT, cached=True)
-        result = msg.to_full_message()
+        """Test converting message to dictionary with caching enabled."""
+        msg = LLMMessage("Test", LLMMessageRole.ASSISTANT)
+        result = msg.to_full_message(is_cached=True)
 
         assert result == {
             "role": LLMMessageRole.ASSISTANT,
@@ -50,9 +41,9 @@ class TestLLMMessageBase:
         }
 
     def test_to_full_message_without_cache(self):
-        """Test converting uncached message to dictionary."""
-        msg = LLMMessage("Test", LLMMessageRole.USER, cached=False)
-        result = msg.to_full_message()
+        """Test converting message to dictionary without caching."""
+        msg = LLMMessage("Test", LLMMessageRole.USER)
+        result = msg.to_full_message(is_cached=False)
 
         assert result == {
             "role": LLMMessageRole.USER,
@@ -61,32 +52,24 @@ class TestLLMMessageBase:
         }
         assert "cache_control" not in result
 
-    def test_repr_with_cache(self):
-        """Test string representation with caching."""
-        msg = LLMMessage("Test content", LLMMessageRole.SYSTEM, cached=True)
+    def test_repr(self):
+        """Test string representation."""
+        msg = LLMMessage("Test content", LLMMessageRole.SYSTEM)
         repr_str = repr(msg)
 
         assert "LLMMessage" in repr_str
         assert "role=LLMMessageRole.SYSTEM" in repr_str
         assert "content_length=12" in repr_str
-        assert "cached=True" in repr_str
+        assert "cached" not in repr_str.lower()
 
-    def test_repr_without_cache(self):
-        """Test string representation without caching."""
-        msg = LLMMessage("Test", LLMMessageRole.USER, cached=False)
-        repr_str = repr(msg)
-
-        assert "LLMMessage" in repr_str
-        assert "cached=True" not in repr_str
-
-    def test_equality_with_cache(self):
-        """Test equality comparison including cache attribute."""
-        msg1 = LLMMessage("Hello", LLMMessageRole.USER, cached=True)
-        msg2 = LLMMessage("Hello", LLMMessageRole.USER, cached=True)
-        msg3 = LLMMessage("Hello", LLMMessageRole.USER, cached=False)
+    def test_equality(self):
+        """Test equality comparison."""
+        msg1 = LLMMessage("Hello", LLMMessageRole.USER)
+        msg2 = LLMMessage("Hello", LLMMessageRole.USER)
+        msg3 = LLMMessage("Goodbye", LLMMessageRole.USER)
 
         assert msg1 == msg2
-        assert msg1 != msg3  # Different cache values
+        assert msg1 != msg3
 
 
 class TestPlaybookImplementationLLMMessage:
@@ -100,7 +83,6 @@ class TestPlaybookImplementationLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.PLAYBOOK_IMPLEMENTATION
-        assert msg.cached is True  # Should be cached by default
         assert msg.playbook_name == "test_playbook"
 
     def test_to_full_message(self):
@@ -110,7 +92,7 @@ class TestPlaybookImplementationLLMMessage:
 
         assert result["role"] == LLMMessageRole.USER
         assert result["content"] == "# Playbook"
-        assert "cache_control" in result  # Should be cached
+        # Note: caching is now applied at call stack frame level, not message type level
 
 
 class TestAssistantResponseLLMMessage:
@@ -124,7 +106,6 @@ class TestAssistantResponseLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.ASSISTANT
         assert msg.type == LLMMessageType.ASSISTANT_RESPONSE
-        assert msg.cached is True  # Should be cached by default
 
 
 class TestMeetingLLMMessage:
@@ -138,7 +119,6 @@ class TestMeetingLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.MEETING_MESSAGE
-        assert msg.cached is False  # Should not be cached by default
         assert msg.meeting_id == "meeting-123"
 
     def test_creation_without_meeting_id(self):
@@ -164,7 +144,6 @@ class TestAgentCommunicationLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.AGENT_COMMUNICATION
-        assert msg.cached is False  # Should not be cached by default
         assert msg.sender_agent == "agent-1"
         assert msg.target_agent == "agent-2"
 
@@ -189,7 +168,6 @@ class TestFileLoadLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.FILE_LOAD
-        assert msg.cached is False  # Should not be cached by default
         assert msg.file_path == "/path/to/file.txt"
 
     def test_creation_without_file_path(self):
@@ -217,7 +195,6 @@ class TestExecutionResultLLMMessage:
             msg.role == LLMMessageRole.USER
         )  # Fixed: execution results come from assistant
         assert msg.type == LLMMessageType.EXECUTION_RESULT
-        assert msg.cached is False  # Should not be cached by default
         assert msg.playbook_name == "test_playbook"
         assert msg.success is True
 
@@ -253,7 +230,6 @@ class TestSessionLogLLMMessage:
             msg.role == LLMMessageRole.SYSTEM
         )  # Fixed: logs are system-level information
         assert msg.type == LLMMessageType.SESSION_LOG
-        assert msg.cached is False  # Should not be cached by default
         assert msg.log_level == "DEBUG"
 
     def test_creation_default_log_level(self):
@@ -276,37 +252,19 @@ class TestSystemPromptLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.SYSTEM
         assert msg.type == LLMMessageType.SYSTEM_PROMPT
-        assert msg.cached is True  # Should be cached by default
 
 
 class TestUserInputLLMMessage:
     """Test the UserInputLLMMessage class."""
 
-    def test_creation_cached(self):
-        """Test creating a cached user instruction message."""
+    def test_creation(self):
+        """Test creating a user input message."""
         content = "Please execute this task"
-        msg = UserInputLLMMessage(content, cached=True)
+        msg = UserInputLLMMessage(content)
 
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.USER_INPUT
-        assert msg.cached is True
-
-    def test_creation_uncached(self):
-        """Test creating an uncached user instruction message."""
-        content = "Quick query"
-        msg = UserInputLLMMessage(content, cached=False)
-
-        assert msg.content == content
-        assert msg.cached is False
-
-    def test_creation_default(self):
-        """Test creating a user instruction with default caching."""
-        content = "Default instruction"
-        msg = UserInputLLMMessage(content)
-
-        assert msg.content == content
-        assert msg.cached is False  # Default
 
 
 class TestTriggerInstructionsLLMMessage:
@@ -320,7 +278,6 @@ class TestTriggerInstructionsLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.TRIGGER_INSTRUCTIONS
-        assert msg.cached is True  # Should be cached by default
 
 
 class TestAgentInfoLLMMessage:
@@ -334,7 +291,6 @@ class TestAgentInfoLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.AGENT_INFO
-        assert msg.cached is True  # Should be cached by default
 
 
 class TestOtherAgentInfoLLMMessage:
@@ -348,4 +304,3 @@ class TestOtherAgentInfoLLMMessage:
         assert msg.content == content
         assert msg.role == LLMMessageRole.USER
         assert msg.type == LLMMessageType.OTHER_AGENT_INFO
-        assert msg.cached is True  # Should be cached by default

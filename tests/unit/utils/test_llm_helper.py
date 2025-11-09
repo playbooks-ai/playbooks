@@ -30,15 +30,15 @@ def test_consolidate_messages_empty_list():
 def test_consolidate_messages_three_user_messages_no_cache():
     """Test consolidate_messages with 3 user messages and no cache_control."""
     messages = [
-        LLMMessage(
-            "First message", LLMMessageRole.USER, cached=False
-        ).to_full_message(),
-        LLMMessage(
-            "Second message", LLMMessageRole.USER, cached=False
-        ).to_full_message(),
-        LLMMessage(
-            "Third message", LLMMessageRole.USER, cached=False
-        ).to_full_message(),
+        LLMMessage("First message", LLMMessageRole.USER).to_full_message(
+            is_cached=False
+        ),
+        LLMMessage("Second message", LLMMessageRole.USER).to_full_message(
+            is_cached=False
+        ),
+        LLMMessage("Third message", LLMMessageRole.USER).to_full_message(
+            is_cached=False
+        ),
     ]
 
     result = consolidate_messages(messages)
@@ -53,15 +53,15 @@ def test_consolidate_messages_three_user_messages_no_cache():
 def test_consolidate_messages_three_user_messages_second_cached():
     """Test consolidate_messages with 3 user messages where second has cache_control."""
     messages = [
-        LLMMessage(
-            "First message", LLMMessageRole.USER, cached=False
-        ).to_full_message(),
-        LLMMessage(
-            "Second message", LLMMessageRole.USER, cached=True
-        ).to_full_message(),
-        LLMMessage(
-            "Third message", LLMMessageRole.USER, cached=False
-        ).to_full_message(),
+        LLMMessage("First message", LLMMessageRole.USER).to_full_message(
+            is_cached=False
+        ),
+        LLMMessage("Second message", LLMMessageRole.USER).to_full_message(
+            is_cached=True
+        ),
+        LLMMessage("Third message", LLMMessageRole.USER).to_full_message(
+            is_cached=False
+        ),
     ]
 
     result = consolidate_messages(messages)
@@ -93,7 +93,9 @@ def test_ensure_upto_N_cached_messages_empty_list():
 def test_ensure_upto_N_cached_messages_user_message_not_cached():
     """Test ensure_upto_N_cached_messages with a user message not cached."""
     messages = [
-        LLMMessage("User message", LLMMessageRole.USER, cached=False).to_full_message(),
+        LLMMessage("User message", LLMMessageRole.USER).to_full_message(
+            is_cached=False
+        ),
     ]
 
     result = ensure_upto_N_cached_messages(messages)
@@ -107,7 +109,7 @@ def test_ensure_upto_N_cached_messages_user_message_not_cached():
 def test_ensure_upto_N_cached_messages_user_message_cached():
     """Test ensure_upto_N_cached_messages with a user message cached."""
     messages = [
-        LLMMessage("User message", LLMMessageRole.USER, cached=True).to_full_message(),
+        LLMMessage("User message", LLMMessageRole.USER).to_full_message(is_cached=True),
     ]
 
     result = ensure_upto_N_cached_messages(messages)
@@ -128,9 +130,11 @@ def test_semantic_message_integration():
     )
 
     messages = [
-        SystemPromptLLMMessage("System prompt").to_full_message(),
-        UserInputLLMMessage("User input").to_full_message(),
-        AssistantResponseLLMMessage("Assistant response").to_full_message(),
+        SystemPromptLLMMessage("System prompt").to_full_message(is_cached=True),
+        UserInputLLMMessage("User input").to_full_message(is_cached=False),
+        AssistantResponseLLMMessage("Assistant response").to_full_message(
+            is_cached=False
+        ),
     ]
 
     # Test remove empty messages

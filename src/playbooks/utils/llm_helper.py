@@ -19,13 +19,13 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
-from playbooks.core.enums import LLMMessageRole
-from playbooks.llm.messages import SystemPromptLLMMessage, UserInputLLMMessage
-
 from playbooks.config import config
 from playbooks.core.constants import SYSTEM_PROMPT_DELIMITER
-from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.enums import LLMMessageRole
 from playbooks.core.exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.llm.messages import SystemPromptLLMMessage, UserInputLLMMessage
+
 from .langfuse_helper import LangfuseHelper
 from .llm_config import LLMConfig
 from .playbooks_lm_handler import PlaybooksLMHandler
@@ -459,10 +459,13 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
     if SYSTEM_PROMPT_DELIMITER in prompt:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
 
-        return [
+        messages = [
             SystemPromptLLMMessage(system.strip()).to_full_message(),
             UserInputLLMMessage(user.strip()).to_full_message(),
         ]
+        # System message should always be cached
+        messages[0]["cache_control"] = {"type": "ephemeral"}
+        return messages
     return [UserInputLLMMessage(prompt.strip()).to_full_message()]
 
 
@@ -524,15 +527,11 @@ def consolidate_messages(messages: List[dict]) -> List[dict]:
         # Add the consolidated message to the list
         from playbooks.llm.messages import LLMMessage
 
+        llm_msg = LLMMessage(contents, LLMMessageRole(group[0]["role"]))
+        msg_dict = llm_msg.to_full_message()
         if cache_control:
-            llm_msg = LLMMessage(
-                contents, LLMMessageRole(group[0]["role"]), cached=True
-            )
-        else:
-            llm_msg = LLMMessage(
-                contents, LLMMessageRole(group[0]["role"]), cached=False
-            )
-        messages.append(llm_msg.to_full_message())
+            msg_dict["cache_control"] = {"type": "ephemeral"}
+        messages.append(msg_dict)
 
     return messages
 

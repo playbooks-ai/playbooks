@@ -23,28 +23,24 @@ class FrameType(Enum):
 
 
 class SystemPromptLLMMessage(LLMMessage):
-    """System prompts and instructions - cached by default."""
+    """System prompts and instructions."""
 
     def __init__(self, content: str) -> None:
         super().__init__(
             content=content,
             role=LLMMessageRole.SYSTEM,
             type=LLMMessageType.SYSTEM_PROMPT,
-            cached=True,
         )
 
 
 class UserInputLLMMessage(LLMMessage):
-    """User inputs and instructions - not cached by default."""
+    """User inputs and instructions."""
 
-    def __init__(
-        self, content: str, cached: bool = False, frame_type: FrameType = FrameType.I
-    ) -> None:
+    def __init__(self, content: str, frame_type: FrameType = FrameType.I) -> None:
         super().__init__(
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.USER_INPUT,
-            cached=cached,
         )
         self.frame_type = frame_type
 
@@ -54,14 +50,13 @@ class UserInputLLMMessage(LLMMessage):
 
 
 class AssistantResponseLLMMessage(LLMMessage):
-    """LLM responses - cached by default for conversation context."""
+    """LLM responses."""
 
-    def __init__(self, content: str, cached: bool = True) -> None:
+    def __init__(self, content: str) -> None:
         super().__init__(
             content=content,
             role=LLMMessageRole.ASSISTANT,
             type=LLMMessageType.ASSISTANT_RESPONSE,
-            cached=cached,
         )
 
     def to_compact_message(self) -> Dict[str, Any]:
@@ -72,7 +67,7 @@ class AssistantResponseLLMMessage(LLMMessage):
 
 
 class PlaybookImplementationLLMMessage(LLMMessage):
-    """Playbook markdown implementation - cached for performance."""
+    """Playbook markdown implementation."""
 
     def __init__(self, content: str, playbook_name: str) -> None:
         self.playbook_name = self._validate_string_param(playbook_name, "playbook_name")
@@ -81,7 +76,6 @@ class PlaybookImplementationLLMMessage(LLMMessage):
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.PLAYBOOK_IMPLEMENTATION,
-            cached=True,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -98,14 +92,13 @@ class PlaybookImplementationLLMMessage(LLMMessage):
                 self.content,
                 self.role,
                 self.type,
-                self.cached,
                 self.playbook_name,
             )
         )
 
 
 class ExecutionResultLLMMessage(LLMMessage):
-    """Playbook execution results - not cached as they're context-specific."""
+    """Playbook execution results."""
 
     def __init__(self, content: str, playbook_name: str, success: bool = True) -> None:
         self.playbook_name = self._validate_string_param(playbook_name, "playbook_name")
@@ -117,7 +110,6 @@ class ExecutionResultLLMMessage(LLMMessage):
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.EXECUTION_RESULT,
-            cached=False,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -138,7 +130,6 @@ class ExecutionResultLLMMessage(LLMMessage):
                 self.content,
                 self.role,
                 self.type,
-                self.cached,
                 self.playbook_name,
                 self.success,
             )
@@ -146,7 +137,7 @@ class ExecutionResultLLMMessage(LLMMessage):
 
 
 class AgentCommunicationLLMMessage(LLMMessage):
-    """Inter-agent communications - not cached as they're event-specific."""
+    """Inter-agent communications."""
 
     def __init__(self, content: str, sender_agent: str, target_agent: str) -> None:
         self.sender_agent = self._validate_string_param(sender_agent, "sender_agent")
@@ -159,7 +150,6 @@ class AgentCommunicationLLMMessage(LLMMessage):
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.AGENT_COMMUNICATION,
-            cached=False,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -180,7 +170,6 @@ class AgentCommunicationLLMMessage(LLMMessage):
                 self.content,
                 self.role,
                 self.type,
-                self.cached,
                 self.sender_agent,
                 self.target_agent,
             )
@@ -188,7 +177,7 @@ class AgentCommunicationLLMMessage(LLMMessage):
 
 
 class MeetingLLMMessage(LLMMessage):
-    """Meeting-related communications - not cached as they're event-specific."""
+    """Meeting-related communications."""
 
     def __init__(self, content: str, meeting_id: str) -> None:
         self.meeting_id = self._validate_string_param(meeting_id, "meeting_id")
@@ -197,7 +186,6 @@ class MeetingLLMMessage(LLMMessage):
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.MEETING_MESSAGE,
-            cached=False,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -214,50 +202,46 @@ class MeetingLLMMessage(LLMMessage):
                 self.content,
                 self.role,
                 self.type,
-                self.cached,
                 self.meeting_id,
             )
         )
 
 
 class TriggerInstructionsLLMMessage(LLMMessage):
-    """Playbook trigger instructions - cached for performance."""
+    """Playbook trigger instructions."""
 
     def __init__(self, content: str) -> None:
         super().__init__(
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.TRIGGER_INSTRUCTIONS,
-            cached=True,
         )
 
 
 class AgentInfoLLMMessage(LLMMessage):
-    """Current agent information - cached as it doesn't change often."""
+    """Current agent information."""
 
     def __init__(self, content: str) -> None:
         super().__init__(
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.AGENT_INFO,
-            cached=True,
         )
 
 
 class OtherAgentInfoLLMMessage(LLMMessage):
-    """Other available agents information - cached as it doesn't change often."""
+    """Other available agents information."""
 
     def __init__(self, content: str) -> None:
         super().__init__(
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.OTHER_AGENT_INFO,
-            cached=True,
         )
 
 
 class FileLoadLLMMessage(LLMMessage):
-    """File content loading - not cached as files may change."""
+    """File content loading."""
 
     def __init__(self, content: str, file_path: str) -> None:
         self.file_path = self._validate_string_param(file_path, "file_path")
@@ -267,7 +251,6 @@ class FileLoadLLMMessage(LLMMessage):
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.FILE_LOAD,
-            cached=False,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -284,14 +267,13 @@ class FileLoadLLMMessage(LLMMessage):
                 self.content,
                 self.role,
                 self.type,
-                self.cached,
                 self.file_path,
             )
         )
 
 
 class SessionLogLLMMessage(LLMMessage):
-    """Session logging and status updates - not cached."""
+    """Session logging and status updates."""
 
     def __init__(self, content: str, log_level: str = "INFO") -> None:
         # Validate log level
@@ -310,7 +292,6 @@ class SessionLogLLMMessage(LLMMessage):
             content=content,
             role=LLMMessageRole.SYSTEM,  # Fixed: logs are system-level information
             type=LLMMessageType.SESSION_LOG,
-            cached=False,
         )
 
     def __eq__(self, other: object) -> bool:
@@ -327,14 +308,13 @@ class SessionLogLLMMessage(LLMMessage):
                 self.content,
                 self.role,
                 self.type,
-                self.cached,
                 self.log_level,
             )
         )
 
 
 class ArtifactLLMMessage(LLMMessage):
-    """Artifacts - cached for performance."""
+    """Artifacts."""
 
     def __init__(self, artifact: Artifact) -> None:
         self.artifact = artifact
@@ -343,5 +323,4 @@ class ArtifactLLMMessage(LLMMessage):
             content=f"**Artifact {('$' + artifact.name) if not artifact.name.startswith('$') else artifact.name}**\n\n*Summary:*\n{artifact.summary}\n\n*Contents:*\n{artifact.value}\n\n",
             role=LLMMessageRole.USER,
             type=LLMMessageType.ARTIFACT,
-            cached=True,
         )
