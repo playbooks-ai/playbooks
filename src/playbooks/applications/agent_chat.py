@@ -42,12 +42,12 @@ from playbooks.channels.stream_events import (
     StreamStartEvent,
 )
 from playbooks.core.constants import EOM, EXECUTION_FINISHED
-from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.core.events import Event
 from playbooks.core.exceptions import ExecutionFinished
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.infrastructure.user_output import user_output
 from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.program import Program
-from playbooks.infrastructure.user_output import user_output
 from playbooks.utils.error_utils import check_playbooks_health
 
 # Add the src directory to the Python path to import playbooks
@@ -362,7 +362,7 @@ async def main(
     stop_on_entry: bool = False,
     stream: bool = True,
     snoop: bool = False,
-):
+) -> None:
     """
     Playbooks application host for agent chat. You can execute a playbooks program within this application container.
 
@@ -519,6 +519,12 @@ if __name__ == "__main__":
         default=True,
         help="Enable/disable streaming output (default: True). Use --stream=False for buffered output",
     )
+    parser.add_argument(
+        "--snoop",
+        type=lambda x: x.lower() in ["true", "1", "yes"],
+        default=False,
+        help="Display messages exchanged between agents (default: False). Use --snoop=true to see all agent-to-agent communication",
+    )
     args = parser.parse_args()
 
     try:
@@ -532,6 +538,7 @@ if __name__ == "__main__":
                 args.wait_for_client,
                 args.stop_on_entry,
                 args.stream,
+                args.snoop,
             )
         )
     except KeyboardInterrupt:

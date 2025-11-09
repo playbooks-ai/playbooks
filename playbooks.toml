@@ -9,7 +9,8 @@ full_state_interval = 4  # Send full state every N LLM calls (I-frame interval)
 
 [model]
 provider = "anthropic"
-name = "claude-sonnet-4-5-20250929"
+# name = "claude-sonnet-4-5-20250929"
+name = "claude-haiku-4-5-20251001"
 temperature = 0.2
 max_completion_tokens=15000
 

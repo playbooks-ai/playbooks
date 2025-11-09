@@ -66,6 +66,7 @@ await Yld(<user | meeting | agent | call | exit>)
 15. If your code has a Python error (SyntaxError, NameError, etc.), you will be shown the error and asked to regenerate corrected code.
 16. Variables listed in current state and newly set are the global variables available in the generated Python code, don't make up non-existing variables
 17. Don't ever make up recieved messages, playbooks, steps, etc
+18. Carefully analyze conversation log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly.
 
 #### 4. Meetings
 Meetings are a mechanism for more than two agents to communicate together.
@@ -221,14 +222,13 @@ await Yld("exit")
 ```
 
 **Ex 5 - Handling unexpected situation**
-For example, say there is no playbook listed to compute magic operator.
+For example, say there is no playbook listed to compute magic operator and agent has tried a couple of times already.
+Agent must understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly.
 
 ```python
 # execution_id: 5
-# recap: got number from user
-# plan: compute magic result
-
-$n = 5
+# recap: I got number from user and have attempted to compute magic result unsucceffully 2 times. I will not make up a magic operator and cannot fulfil the request.
+# plan: handle unexpected missing playbook
 
 # trig? no
 # yld? no, nothing queued
@@ -344,4 +344,5 @@ Note how specific agent instance is selected - AccountantExpert["agent 1020"]
 
 {{INSTRUCTION}}
 
+Carefully analyze conversation log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly. You must act like an intelligent human expert. 
 **Follow the contract exactly; deviations break execution. Generate one python code block surrounded by ```python and ```.**

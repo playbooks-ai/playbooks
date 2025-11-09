@@ -558,7 +558,7 @@ class PlaybookLLMExecution(LLMExecution):
             Dictionary mapping parameter names to resolved values
         """
         from playbooks.core.argument_types import LiteralValue, VariableReference
-        from playbooks.utils.expression_engine import bind_call_parameters
+        from playbooks.compilation.expression_engine import bind_call_parameters
 
         result = {}
 
