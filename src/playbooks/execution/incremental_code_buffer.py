@@ -40,10 +40,11 @@ class CodeBuffer:
 
         Uses the indentation-aware algorithm from the specification:
         1. Strip code block markers (```python, ```)
-        2. Split into lines (0 to N)
-        3. Walk from bottom to find last non-whitespace-starting line (M)
-        4. Try parsing lines[0:M], if not executable try [0:M-1], etc.
-        5. Return first prefix that parses successfully
+        2. Only consider complete lines (up to last newline)
+        3. Split into lines (0 to N)
+        4. Walk from bottom to find last non-whitespace-starting line (M)
+        5. Try parsing lines[0:M], if not executable try [0:M-1], etc.
+        6. Return first prefix that parses successfully
 
         Returns:
             The longest executable prefix (original code with $var), or None if
@@ -52,8 +53,18 @@ class CodeBuffer:
         if not self._buffer.strip():
             return None
 
+        # Only consider content up to the last newline
+        # Everything after the last newline is incomplete (could be mid-token)
+        last_newline_pos = self._buffer.rfind("\n")
+        if last_newline_pos == -1:
+            # No complete lines yet
+            return None
+
+        # Include the newline itself
+        buffer_up_to_last_newline = self._buffer[: last_newline_pos + 1]
+
         # Strip code block markers
-        code_to_parse = self._strip_code_block_markers(self._buffer)
+        code_to_parse = self._strip_code_block_markers(buffer_up_to_last_newline)
 
         if not code_to_parse.strip():
             return None
@@ -191,15 +202,17 @@ class CodeBuffer:
         return None
 
     def _can_parse(self, code: str) -> bool:
-        """Check if code can be parsed as valid Python.
+        """Check if code can be parsed as valid Python and contains actual statements.
 
         Uses preprocess_program to handle $variable syntax before parsing.
+        Only returns True if the code contains at least one executable statement
+        (not just comments or empty lines).
 
         Args:
             code: Code to check
 
         Returns:
-            True if code parses successfully, False otherwise
+            True if code parses successfully and has statements, False otherwise
         """
         try:
             # Import here to avoid circular dependency
@@ -209,7 +222,10 @@ class CodeBuffer:
             preprocessed = preprocess_program(code)
 
             # Try to parse
-            ast.parse(preprocessed)
-            return True
+            parsed = ast.parse(preprocessed)
+
+            # Only return True if there's at least one actual statement
+            # (not just comments which result in an empty body)
+            return len(parsed.body) > 0
         except SyntaxError:
             return False

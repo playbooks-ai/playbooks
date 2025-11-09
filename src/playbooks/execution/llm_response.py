@@ -8,10 +8,10 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from playbooks.infrastructure.event_bus import EventBus
-from playbooks.execution.python_executor import ExecutionResult, PythonExecutor
-from playbooks.utils.async_init_mixin import AsyncInitMixin
 from playbooks.compilation.expression_engine import preprocess_program
+from playbooks.execution.python_executor import ExecutionResult, PythonExecutor
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.utils.async_init_mixin import AsyncInitMixin
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
@@ -59,6 +59,18 @@ class LLMResponse(AsyncInitMixin):
             agent: Agent executing this response
         """
         super().__init__()
+
+        # Defensive: If response is accidentally a list of chunks, concatenate them
+        if isinstance(response, list):
+            import traceback
+
+            logger.error(
+                f"LLMResponse received a list instead of string! "
+                f"List has {len(response)} items. First 3 items: {response[:3]}\n"
+                f"Call stack:\n{''.join(traceback.format_stack())}"
+            )
+            response = "".join(response)
+
         self.response = response
         self.event_bus = event_bus
         self.agent = agent
@@ -120,22 +132,31 @@ class LLMResponse(AsyncInitMixin):
             raise ValueError(f"Third line is not a comment: {third_line}")
 
     async def execute_generated_code(
-        self, playbook_args: Optional[Dict[str, Any]] = None
+        self,
+        playbook_args: Optional[Dict[str, Any]] = None,
+        execution_result: Optional[ExecutionResult] = None,
     ) -> None:
         """Execute the generated code.
 
-        Creates a PythonExecutor and executes the preprocessed code,
-        storing the result in self.execution_result. If execution fails,
+        If an execution_result is provided, uses that (from streaming execution).
+        Otherwise, creates a PythonExecutor and executes the preprocessed code.
+        The result is stored in self.execution_result. If execution fails,
         the error is captured in the result rather than raising an exception,
         allowing the LLM to see the error and retry with corrected code.
 
         Args:
             playbook_args: Optional dict of playbook argument names to values
+            execution_result: Optional pre-computed ExecutionResult from streaming execution
         """
-        executor = PythonExecutor(self.agent)
-        self.execution_result = await executor.execute(
-            self.preprocessed_code, playbook_args=playbook_args
-        )
+        if execution_result is not None:
+            # Use pre-computed result from streaming execution
+            self.execution_result = execution_result
+        else:
+            # Traditional batch execution (fallback)
+            executor = PythonExecutor(self.agent)
+            self.execution_result = await executor.execute(
+                self.preprocessed_code, playbook_args=playbook_args
+            )
 
     def has_execution_error(self) -> bool:
         """Check if the code execution resulted in an error.

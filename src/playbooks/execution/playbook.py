@@ -1,7 +1,7 @@
 """Traditional playbook execution with defined steps."""
 
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
@@ -15,6 +15,10 @@ from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
 from playbooks.execution.call import PlaybookCall
 from playbooks.execution.interpreter_prompt import InterpreterPrompt
 from playbooks.execution.llm_response import LLMResponse
+from playbooks.execution.streaming_python_executor import (
+    StreamingExecutionError,
+    StreamingPythonExecutor,
+)
 from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     PlaybookImplementationLLMMessage,
@@ -48,6 +52,9 @@ class PlaybookLLMExecution(LLMExecution):
             playbook: The LLM playbook to execute
         """
         super().__init__(agent, playbook)
+
+        # Initialize streaming execution result holder
+        self.streaming_execution_result = None
 
         # Initialize debug handler based on whether debug server is available
         if hasattr(agent, "program") and agent.program and agent.program._debug_server:
@@ -133,11 +140,16 @@ class PlaybookLLMExecution(LLMExecution):
                 break
 
             description_paragraph = self.agent.description.split("\n\n")[0]
+
+            # Extract playbook arguments to make available in generated code
+            playbook_args = self._extract_playbook_arguments(call)
+
             llm_response = await LLMResponse.create(
                 await self.make_llm_call(
                     instruction=instruction,
                     agent_instructions=f"Remember: You are {str(self.agent)}. {description_paragraph}",
                     artifacts_to_load=artifacts_to_load,
+                    playbook_args=playbook_args,
                 ),
                 event_bus=self.agent.state.event_bus,
                 agent=self.agent,
@@ -148,9 +160,12 @@ class PlaybookLLMExecution(LLMExecution):
             llm_response_msg = AssistantResponseLLMMessage(llm_response.response)
             self.agent.state.call_stack.add_llm_message(llm_response_msg)
 
-            # Extract playbook arguments to make available in generated code
-            playbook_args = self._extract_playbook_arguments(call)
-            await llm_response.execute_generated_code(playbook_args=playbook_args)
+            # Use the pre-computed execution result from streaming execution
+            # The code was already executed incrementally during LLM streaming
+            await llm_response.execute_generated_code(
+                playbook_args=playbook_args,
+                execution_result=self.streaming_execution_result,
+            )
 
             # Clear streaming flag after code execution
             # This ensures next LLM call will properly stream its Say() calls
@@ -292,6 +307,7 @@ class PlaybookLLMExecution(LLMExecution):
         instruction: str,
         agent_instructions: str,
         artifacts_to_load: List[str] = None,
+        playbook_args: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Make an LLM call for playbook execution.
 
@@ -335,14 +351,16 @@ class PlaybookLLMExecution(LLMExecution):
         )
 
         # Use streaming to handle Say() calls progressively
-        return await self._stream_llm_response(prompt)
+        return await self._stream_llm_response(prompt, playbook_args=playbook_args)
 
-    async def _stream_llm_response(self, prompt: InterpreterPrompt) -> str:
+    async def _stream_llm_response(
+        self, prompt: InterpreterPrompt, playbook_args: Optional[Dict[str, Any]] = None
+    ) -> str:
         """Stream LLM response and handle Say() calls progressively.
 
         Two-phase streaming approach:
         1. Pattern-based streaming (as tokens arrive) - detects Say("...") calls
-        2. AST validation (after complete) - validates syntax of generated Python
+        2. Incremental code execution - executes complete statements as they arrive
 
         The _currently_streaming flag mechanism:
         - When Say("human", "...") is pattern-detected during LLM token streaming,
@@ -355,6 +373,7 @@ class PlaybookLLMExecution(LLMExecution):
 
         Args:
             prompt: InterpreterPrompt instance with messages and context
+            playbook_args: Optional dict of playbook argument names to values
 
         Returns:
             Complete LLM response string (all chunks concatenated)
@@ -362,6 +381,10 @@ class PlaybookLLMExecution(LLMExecution):
         # Clear any previous streaming flag and set it for this streaming session
         # This ensures each LLM call has its own streaming cycle
         self.agent._currently_streaming = False
+
+        # Initialize streaming Python executor for incremental code execution
+        streaming_executor = StreamingPythonExecutor(self.agent, playbook_args)
+        self.streaming_execution_result = None  # Will be set after execution
 
         buffer = ""
         in_say_call = False
@@ -372,156 +395,189 @@ class PlaybookLLMExecution(LLMExecution):
         processed_up_to = 0  # Track how much of buffer we've already processed
         say_has_placeholders = False  # Track if current Say has {$var} placeholders
 
-        for chunk in get_completion(
-            messages=prompt.messages,
-            llm_config=LLMConfig(),
-            stream=True,
-            json_mode=False,
-            langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
-        ):
-            buffer += chunk
+        try:
+            for chunk in get_completion(
+                messages=prompt.messages,
+                llm_config=LLMConfig(),
+                stream=True,
+                json_mode=False,
+                langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
+            ):
+                buffer += chunk
 
-            # Only look for new Say() calls in the unprocessed part of the buffer
-            if not in_say_call:
-                # Updated pattern: no backticks (Python code format)
-                say_pattern = 'Say("'
-                say_match_pos = buffer.find(say_pattern, processed_up_to)
-                if say_match_pos != -1:
-                    # Found potential Say call - now we need to extract the recipient
-                    recipient_start = say_match_pos + len(say_pattern)
+                # Feed chunk to streaming executor for incremental execution
+                try:
+                    await streaming_executor.add_chunk(chunk)
+                except StreamingExecutionError as e:
+                    # Execution error during streaming - stop processing
+                    # The error details are already captured in streaming_executor.result
+                    logger.error(f"Streaming execution error: {e}")
+                    self.streaming_execution_result = streaming_executor.result
+                    # Return buffer so LLM can see what was generated
+                    return buffer
 
-                    # Look for the end of the recipient (first argument)
-                    recipient_end_pattern = '", "'
-                    recipient_end_pos = buffer.find(
-                        recipient_end_pattern, recipient_start
-                    )
+                # Only look for new Say() calls in the unprocessed part of the buffer
+                if not in_say_call:
+                    # Updated pattern: no backticks (Python code format)
+                    say_pattern = 'Say("'
+                    say_match_pos = buffer.find(say_pattern, processed_up_to)
+                    if say_match_pos != -1:
+                        # Found potential Say call - now we need to extract the recipient
+                        recipient_start = say_match_pos + len(say_pattern)
 
-                    if recipient_end_pos != -1:
-                        # Extract the recipient
-                        say_recipient = buffer[recipient_start:recipient_end_pos]
-
-                        # Determine if we should stream this Say() call
-                        is_human_recipient = say_recipient.lower() in ["user", "human"]
-                        enable_agent_streaming = (
-                            self.agent.program.enable_agent_streaming
-                            if self.agent.program
-                            else False
-                        )
-                        should_attempt_streaming = (
-                            is_human_recipient or enable_agent_streaming
+                        # Look for the end of the recipient (first argument)
+                        recipient_end_pattern = '", "'
+                        recipient_end_pos = buffer.find(
+                            recipient_end_pattern, recipient_start
                         )
 
-                        if should_attempt_streaming:
-                            in_say_call = True
-                            say_start_pos = recipient_end_pos + len(
-                                recipient_end_pattern
-                            )  # Position after recipient and ", "
-                            current_say_content = ""
-                            say_has_placeholders = False  # Reset for new Say call
-                            processed_up_to = say_start_pos
-                            # Set flag indicating we're actively streaming Say() calls
-                            # This prevents double-processing when the generated code executes
-                            self.agent._currently_streaming = True
-                            # Use channel-based streaming infrastructure
-                            stream_result = (
-                                await self.agent.start_streaming_say_via_channel(
-                                    say_recipient
+                        if recipient_end_pos != -1:
+                            # Extract the recipient
+                            say_recipient = buffer[recipient_start:recipient_end_pos]
+
+                            # Determine if we should stream this Say() call
+                            is_human_recipient = say_recipient.lower() in [
+                                "user",
+                                "human",
+                            ]
+                            enable_agent_streaming = (
+                                self.agent.program.enable_agent_streaming
+                                if self.agent.program
+                                else False
+                            )
+                            should_attempt_streaming = (
+                                is_human_recipient or enable_agent_streaming
+                            )
+
+                            if should_attempt_streaming:
+                                in_say_call = True
+                                say_start_pos = recipient_end_pos + len(
+                                    recipient_end_pattern
+                                )  # Position after recipient and ", "
+                                current_say_content = ""
+                                say_has_placeholders = False  # Reset for new Say call
+                                processed_up_to = say_start_pos
+                                # Set flag indicating we're actively streaming Say() calls
+                                # This prevents double-processing when the generated code executes
+                                self.agent._currently_streaming = True
+                                # Use channel-based streaming infrastructure
+                                stream_result = (
+                                    await self.agent.start_streaming_say_via_channel(
+                                        say_recipient
+                                    )
                                 )
-                            )
-                            say_stream_id = (
-                                stream_result.stream_id
-                                if stream_result.should_stream
-                                else None
-                            )
+                                say_stream_id = (
+                                    stream_result.stream_id
+                                    if stream_result.should_stream
+                                    else None
+                                )
+                            else:
+                                # Not streaming this Say call
+                                processed_up_to = recipient_end_pos + len(
+                                    recipient_end_pattern
+                                )
                         else:
-                            # Not streaming this Say call
-                            processed_up_to = recipient_end_pos + len(
-                                recipient_end_pattern
+                            # Haven't found the end of recipient yet, continue processing
+                            pass
+
+                # Stream Say content if we're in a call
+                if in_say_call:
+                    # Look for the end of the Say call
+                    # Updated pattern: no backticks (Python code format)
+                    end_pattern = '")'
+                    end_pos = buffer.find(end_pattern, say_start_pos)
+                    if end_pos != -1:
+                        # Found end - extract final content and complete
+                        final_content = buffer[say_start_pos:end_pos]
+
+                        # Resolve any {$var} placeholders in the message before streaming
+                        if "{" in final_content:
+                            final_content = await self._resolve_string_placeholders(
+                                final_content
                             )
+
+                        # If we deferred streaming due to placeholders, stream entire resolved content
+                        # Otherwise, only stream the delta
+                        if say_stream_id:
+                            if say_has_placeholders:
+                                # Stream entire resolved content
+                                if final_content:
+                                    await self.agent.stream_say_update_via_channel(
+                                        say_stream_id, say_recipient, final_content
+                                    )
+                            else:
+                                # Stream only new content since last update
+                                if len(final_content) > len(current_say_content):
+                                    new_content = final_content[
+                                        len(current_say_content) :
+                                    ]
+                                    if new_content:
+                                        await self.agent.stream_say_update_via_channel(
+                                            say_stream_id, say_recipient, new_content
+                                        )
+
+                            await self.agent.complete_streaming_say_via_channel(
+                                say_stream_id, say_recipient, final_content
+                            )
+                        in_say_call = False
+                        current_say_content = ""
+                        say_recipient = ""
+                        say_stream_id = None
+                        say_has_placeholders = False
+                        processed_up_to = end_pos + len(end_pattern)
                     else:
-                        # Haven't found the end of recipient yet, continue processing
-                        pass
+                        # Still streaming - extract new content since last update
+                        # Only look at content between say_start_pos and end of buffer
+                        # but make sure we don't include the closing quote if it's there
+                        available_content = buffer[say_start_pos:]
 
-            # Stream Say content if we're in a call
-            if in_say_call:
-                # Look for the end of the Say call
-                # Updated pattern: no backticks (Python code format)
-                end_pattern = '")'
-                end_pos = buffer.find(end_pattern, say_start_pos)
-                if end_pos != -1:
-                    # Found end - extract final content and complete
-                    final_content = buffer[say_start_pos:end_pos]
+                        # Check if content has placeholders - if so, defer streaming until complete
+                        if "{" in available_content and not say_has_placeholders:
+                            say_has_placeholders = True
 
-                    # Resolve any {$var} placeholders in the message before streaming
-                    if "{" in final_content:
-                        final_content = await self._resolve_string_placeholders(
-                            final_content
-                        )
+                        # If we see the closing quote, don't include it in streaming
+                        if available_content.endswith('")'):
+                            available_content = available_content[:-2]  # Remove ")
+                        elif available_content.endswith('"'):
+                            available_content = available_content[:-1]  # Remove just "
 
-                    # If we deferred streaming due to placeholders, stream entire resolved content
-                    # Otherwise, only stream the delta
-                    if say_stream_id:
-                        if say_has_placeholders:
-                            # Stream entire resolved content
-                            if final_content:
-                                await self.agent.stream_say_update_via_channel(
-                                    say_stream_id, say_recipient, final_content
-                                )
-                        else:
-                            # Stream only new content since last update
-                            if len(final_content) > len(current_say_content):
-                                new_content = final_content[len(current_say_content) :]
-                                if new_content:
-                                    await self.agent.stream_say_update_via_channel(
-                                        say_stream_id, say_recipient, new_content
-                                    )
+                        # Don't stream incrementally if there are placeholders to resolve
+                        # Wait until message is complete to resolve and stream
+                        if not say_has_placeholders and say_stream_id:
+                            # Don't stream if it ends with escape character (incomplete)
+                            if not available_content.endswith("\\"):
+                                if len(available_content) > len(current_say_content):
+                                    new_content = available_content[
+                                        len(current_say_content) :
+                                    ]
+                                    current_say_content = available_content
 
-                        await self.agent.complete_streaming_say_via_channel(
-                            say_stream_id, say_recipient, final_content
-                        )
-                    in_say_call = False
-                    current_say_content = ""
-                    say_recipient = ""
-                    say_stream_id = None
-                    say_has_placeholders = False
-                    processed_up_to = end_pos + len(end_pattern)
-                else:
-                    # Still streaming - extract new content since last update
-                    # Only look at content between say_start_pos and end of buffer
-                    # but make sure we don't include the closing quote if it's there
-                    available_content = buffer[say_start_pos:]
+                                    if new_content:
+                                        await self.agent.stream_say_update_via_channel(
+                                            say_stream_id, say_recipient, new_content
+                                        )
 
-                    # Check if content has placeholders - if so, defer streaming until complete
-                    if "{" in available_content and not say_has_placeholders:
-                        say_has_placeholders = True
+            # If we ended while still in a Say call, complete it
+            if in_say_call and say_stream_id:
+                await self.agent.complete_streaming_say_via_channel(
+                    say_stream_id, say_recipient, current_say_content
+                )
 
-                    # If we see the closing quote, don't include it in streaming
-                    if available_content.endswith('")'):
-                        available_content = available_content[:-2]  # Remove ")
-                    elif available_content.endswith('"'):
-                        available_content = available_content[:-1]  # Remove just "
+            # Finalize streaming execution - execute any remaining buffered code
+            self.streaming_execution_result = await streaming_executor.finalize()
 
-                    # Don't stream incrementally if there are placeholders to resolve
-                    # Wait until message is complete to resolve and stream
-                    if not say_has_placeholders and say_stream_id:
-                        # Don't stream if it ends with escape character (incomplete)
-                        if not available_content.endswith("\\"):
-                            if len(available_content) > len(current_say_content):
-                                new_content = available_content[
-                                    len(current_say_content) :
-                                ]
-                                current_say_content = available_content
-
-                                if new_content:
-                                    await self.agent.stream_say_update_via_channel(
-                                        say_stream_id, say_recipient, new_content
-                                    )
-
-        # If we ended while still in a Say call, complete it
-        if in_say_call and say_stream_id:
-            await self.agent.complete_streaming_say_via_channel(
-                say_stream_id, say_recipient, current_say_content
+        except Exception as e:
+            # Unexpected error during streaming (not a StreamingExecutionError)
+            logger.error(
+                f"Unexpected error during LLM streaming: {type(e).__name__}: {e}"
             )
+            # Try to finalize what we have so far
+            try:
+                self.streaming_execution_result = await streaming_executor.finalize()
+            except Exception:
+                # If finalization also fails, at least we have the original error
+                pass
+            raise
 
         return buffer
 
@@ -557,8 +613,8 @@ class PlaybookLLMExecution(LLMExecution):
         Returns:
             Dictionary mapping parameter names to resolved values
         """
-        from playbooks.core.argument_types import LiteralValue, VariableReference
         from playbooks.compilation.expression_engine import bind_call_parameters
+        from playbooks.core.argument_types import LiteralValue, VariableReference
 
         result = {}
 

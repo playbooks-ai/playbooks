@@ -119,8 +119,8 @@ class StreamingPythonExecutor:
         self.code_buffer.add_chunk(chunk)
 
         # Only try to execute when we have complete lines (ending with \n)
-        # This ensures we don't try to parse incomplete tokens like "$turn"
-        # when "$turn_count" is still being streamed
+        # We only consider content up to the last newline - anything after
+        # the last newline is incomplete and could be mid-token
         if "\n" in chunk:
             await self._try_execute()
 
@@ -274,6 +274,7 @@ class StreamingPythonExecutor:
         }
 
         # Find new or changed variables
+        changes = []
         for name, value in current_vars.items():
             # Skip if value is the same (using identity check first for efficiency)
             if name in self.last_namespace_vars:
@@ -287,6 +288,9 @@ class StreamingPythonExecutor:
                 except Exception:
                     # Comparison failed - treat as changed
                     pass
+                changes.append((name, "changed"))
+            else:
+                changes.append((name, "new"))
 
             # Variable is new or changed - call Var() to record it
             try:
@@ -317,8 +321,13 @@ class StreamingPythonExecutor:
         Returns:
             ExecutionResult containing all captured directives and any errors
         """
+        remaining_buffer = self.code_buffer.get_buffer().strip()
+
         # Try to execute any remaining buffered code
-        if not self.has_error and self.code_buffer.get_buffer().strip():
+        if not self.has_error and remaining_buffer:
+            # Ensure the buffer ends with a newline so get_executable_prefix() will consider it
+            if not self.code_buffer.get_buffer().endswith("\n"):
+                self.code_buffer.add_chunk("\n")
             await self._try_execute()
 
         return self.result
