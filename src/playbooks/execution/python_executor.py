@@ -12,12 +12,12 @@ import types
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
 
 from playbooks.agent_proxy import create_agent_proxies, create_playbook_wrapper
-from playbooks.state.call_stack import InstructionPointer
-from playbooks.debug.debug_handler import NoOpDebugHandler
-from playbooks.core.identifiers import MeetingID
-from playbooks.llm.messages.types import ArtifactLLMMessage
-from playbooks.execution.call import PlaybookCall
 from playbooks.compilation.inject_setvar import inject_setvar
+from playbooks.core.identifiers import MeetingID
+from playbooks.debug.debug_handler import NoOpDebugHandler
+from playbooks.execution.call import PlaybookCall
+from playbooks.llm.messages.types import ArtifactLLMMessage
+from playbooks.state.call_stack import InstructionPointer
 from playbooks.state.variables import Artifact
 
 if TYPE_CHECKING:
@@ -394,14 +394,44 @@ class PythonExecutor:
         self.agent.state.call_stack.advance_instruction_pointer(instruction_pointer)
         self.current_instruction_pointer = instruction_pointer
 
+        # Get step text for logging
+        step_text = ""
+        if instruction_pointer.step and hasattr(instruction_pointer.step, "content"):
+            step_text = instruction_pointer.step.content
+
+        # Create Langfuse span for this capture with step text
+        span = None
+        try:
+            parent_frame = self.agent.state.call_stack.peek()
+            if parent_frame and parent_frame.langfuse_span:
+                span_name = (
+                    f"Step({location}): {step_text}"
+                    if step_text
+                    else f"Step({location})"
+                )
+                span = parent_frame.langfuse_span.span(name=span_name)
+                span.update(input={"location": location, "content": step_text})
+        except Exception:
+            pass  # Don't let logging failures break execution
+
         # Check if this is a thinking step
-        if hasattr(instruction_pointer, "step") and instruction_pointer.step == "TNK":
+        is_thinking = (
+            hasattr(instruction_pointer, "step") and instruction_pointer.step == "TNK"
+        )
+        if is_thinking:
             self.result.is_thinking = True
 
         await self.debug_handler.pause_if_needed(
             instruction_pointer=instruction_pointer,
             agent_id=self.agent.id,
         )
+
+        # Complete Langfuse span
+        try:
+            if span:
+                span.update(output={"is_thinking": is_thinking})
+        except Exception:
+            pass
 
     async def _capture_say(self, target: str, message: str) -> None:
         """Capture Say() call.
@@ -424,8 +454,25 @@ class PythonExecutor:
         """
         from playbooks.config import config
 
+        # Truncate value for logging
+        value_str = str(value)
+        truncated_value = value_str[:200] + "..." if len(value_str) > 200 else value_str
+
+        # Create Langfuse span for this capture
+        span = None
+        try:
+            parent_frame = self.agent.state.call_stack.peek()
+            if parent_frame and parent_frame.langfuse_span:
+                span = parent_frame.langfuse_span.span(
+                    name=f"Var({name}, {truncated_value!r})"
+                )
+                span.update(input={"name": name, "value": truncated_value})
+        except Exception:
+            pass  # Don't let logging failures break execution
+
         # Check if value should be stored as an artifact (similar to playbook results)
         # Convert to artifact if value string representation exceeds threshold
+        is_artifact = False
         if len(str(value)) > config.artifact_result_threshold:
             # Create an artifact to store the large value
             artifact_summary = f"Variable: {name}"
@@ -438,6 +485,7 @@ class PythonExecutor:
             )
 
             self.result.vars[name] = artifact
+            is_artifact = True
 
             # Update the actual state variables with $ prefix
             if self.agent.state and hasattr(self.agent.state, "variables"):
@@ -453,6 +501,13 @@ class PythonExecutor:
                     instruction_pointer=self.current_instruction_pointer,
                 )
 
+        # Complete Langfuse span
+        try:
+            if span:
+                span.update(output={"stored_as_artifact": is_artifact})
+        except Exception:
+            pass
+
     async def _capture_artifact(self, name: str, summary: str, content: str) -> None:
         """Capture Artifact() call.
 
@@ -461,6 +516,27 @@ class PythonExecutor:
             summary: Artifact summary
             content: Artifact content
         """
+        # Truncate summary for logging
+        truncated_summary = summary[:200] + "..." if len(summary) > 200 else summary
+
+        # Create Langfuse span for this capture
+        span = None
+        try:
+            parent_frame = self.agent.state.call_stack.peek()
+            if parent_frame and parent_frame.langfuse_span:
+                span = parent_frame.langfuse_span.span(
+                    name=f"Artifact({name}, {truncated_summary!r})"
+                )
+                span.update(
+                    input={
+                        "name": name,
+                        "summary": truncated_summary,
+                        "content_length": len(content),
+                    }
+                )
+        except Exception:
+            pass  # Don't let logging failures break execution
+
         artifact = Artifact(name=name, summary=summary, value=content)
         self.result.artifacts[name] = artifact
         self.result.vars[name] = artifact
@@ -469,13 +545,37 @@ class PythonExecutor:
         if self.agent.state and hasattr(self.agent.state, "variables"):
             self.agent.state.variables[f"${name}"] = artifact
 
+        # Complete Langfuse span
+        try:
+            if span:
+                span.update(output={"artifact_created": True})
+        except Exception:
+            pass
+
     async def _capture_trigger(self, code: str) -> None:
         """Capture Trigger() call.
 
         Args:
             code: Trigger code/name
         """
+        # Create Langfuse span for this capture
+        span = None
+        try:
+            parent_frame = self.agent.state.call_stack.peek()
+            if parent_frame and parent_frame.langfuse_span:
+                span = parent_frame.langfuse_span.span(name=f"Trigger({code})")
+                span.update(input={"code": code})
+        except Exception:
+            pass  # Don't let logging failures break execution
+
         self.result.triggers.append(code)
+
+        # Complete Langfuse span
+        try:
+            if span:
+                span.update(output={"trigger_set": True})
+        except Exception:
+            pass
 
     async def _capture_return(self, value: Any = None) -> None:
         """Capture Return() call.
@@ -483,6 +583,22 @@ class PythonExecutor:
         Args:
             value: Return value
         """
+        # Truncate value for logging
+        value_str = str(value) if value is not None else "None"
+        truncated_value = value_str[:200] + "..." if len(value_str) > 200 else value_str
+
+        # Create Langfuse span for this capture
+        span = None
+        try:
+            parent_frame = self.agent.state.call_stack.peek()
+            if parent_frame and parent_frame.langfuse_span:
+                span = parent_frame.langfuse_span.span(
+                    name=f"Return({truncated_value})"
+                )
+                span.update(input={"value": truncated_value})
+        except Exception:
+            pass  # Don't let logging failures break execution
+
         self.result.return_value = value
         if self.agent.state and hasattr(self.agent.state, "variables"):
             self.agent.state.variables.__setitem__(
@@ -492,25 +608,61 @@ class PythonExecutor:
             )
         self.result.playbook_finished = True
 
+        # Complete Langfuse span
+        try:
+            if span:
+                span.update(output={"playbook_finished": True})
+        except Exception:
+            pass
+
     async def _capture_yld(self, target: str = "user") -> None:
         """Capture Yld() call.
 
         Args:
             target: Yield target ("user", "human", agent_id, etc.)
         """
-        target_lower = target.lower()
+        # Create Langfuse span for this capture
+        span = None
+        try:
+            parent_frame = self.agent.state.call_stack.peek()
+            if parent_frame and parent_frame.langfuse_span:
+                span = parent_frame.langfuse_span.span(name=f"Yld({target})")
+                span.update(input={"target": target})
+        except Exception:
+            pass  # Don't let logging failures break execution
 
+        target_lower = target.lower()
+        yield_action = None
+
+        # Determine the action type first
         if target_lower in ["user", "human"]:
             self.result.wait_for_user_input = True
-            await self.agent.WaitForMessage("human")
+            yield_action = "wait_for_user"
         elif target_lower == "exit":
             self.result.exit_program = True
+            yield_action = "exit_program"
         elif target_lower == "return":
             self.result.playbook_finished = True
+            yield_action = "playbook_finished"
         else:
             # Agent ID or meeting spec
             self.result.wait_for_agent_input = True
             self.result.wait_for_agent_target = target
+            yield_action = f"wait_for_agent:{target}"
+
+        # Complete and end Langfuse span BEFORE waiting
+        # This ensures proper ordering in Langfuse traces
+        try:
+            if span:
+                span.update(output={"action": yield_action})
+        except Exception:
+            pass
+
+        # Now perform the actual waiting operations
+        if target_lower in ["user", "human"]:
+            await self.agent.WaitForMessage("human")
+        elif target_lower not in ["exit", "return"]:
+            # Agent ID or meeting spec
             target_agent_id = self._resolve_yld_target(target)
             if target_agent_id:
                 # Check if this is a meeting target
