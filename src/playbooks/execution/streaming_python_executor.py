@@ -51,6 +51,7 @@ class StreamingPythonExecutor:
     - Executes statements as soon as they're complete
     - Tracks variable changes via runtime namespace inspection
     - Stops on errors and provides executed code for LLM retry
+    - Optional checkpointing at await statements for durable execution
     """
 
     def __init__(
@@ -90,6 +91,9 @@ class StreamingPythonExecutor:
         self.error: Optional[Exception] = None
         self.error_traceback: Optional[str] = None
 
+        # Checkpoint management
+        self._setup_checkpointing()
+
     def _initialize_namespace_snapshot(self) -> None:
         """Initialize snapshot of namespace variables for change detection."""
         # Capture initial state of namespace (excluding functions and builtins)
@@ -98,6 +102,28 @@ class StreamingPythonExecutor:
             for k, v in self.namespace.items()
             if not callable(v) and not k.startswith("_") and k not in ["asyncio"]
         }
+
+    def _setup_checkpointing(self) -> None:
+        """Initialize checkpointing if enabled."""
+        from playbooks.config import config
+        from playbooks.extensions.registry import ExtensionRegistry
+
+        self.checkpoint_enabled = config.durability.enabled
+        self.checkpoint_manager = None
+
+        if self.checkpoint_enabled:
+            provider_class = ExtensionRegistry._checkpoint_provider_class
+            if provider_class:
+                from playbooks.checkpoints.manager import CheckpointManager
+
+                provider = provider_class(
+                    base_path=config.durability.storage_path,
+                    max_size_mb=config.durability.max_checkpoint_size_mb,
+                )
+
+                self.checkpoint_manager = CheckpointManager(
+                    execution_id=self.agent.id, provider=provider
+                )
 
     async def add_chunk(self, chunk: str) -> None:
         """Add a code chunk and attempt to execute complete statements.
@@ -186,7 +212,8 @@ class StreamingPythonExecutor:
         """Execute a single AST statement.
 
         Uses exec() with proper namespace handling. For async statements containing
-        await, wraps them in a temporary async function.
+        await, wraps them in a temporary async function. Checkpoints after await
+        statements if durability is enabled.
 
         Args:
             stmt: AST statement to execute
@@ -231,6 +258,10 @@ class StreamingPythonExecutor:
             finally:
                 # Clean up the temporary function
                 dict.__delitem__(self.namespace, fn_name)
+
+            # Checkpoint after await if enabled
+            if self.checkpoint_enabled and self.checkpoint_manager:
+                await self._save_checkpoint(statement_code)
 
     def _find_assignments(self, stmt: ast.stmt) -> List[str]:
         """Find all variable names that are assigned in a statement.
@@ -311,6 +342,22 @@ class StreamingPythonExecutor:
             String containing executed code lines
         """
         return "\n".join(self.executed_lines)
+
+    async def _save_checkpoint(self, statement_code: str) -> None:
+        """Save checkpoint after executing an await statement.
+
+        Args:
+            statement_code: The statement that was just executed
+        """
+        try:
+            await self.checkpoint_manager.save_checkpoint(
+                statement_code=statement_code,
+                namespace=dict(self.namespace),
+                execution_state=self.agent.state.to_dict(full=True),
+                call_stack=self.agent.state.call_stack.to_dict(),
+            )
+        except Exception as e:
+            logger.warning(f"Failed to save checkpoint: {e}")
 
     async def finalize(self) -> ExecutionResult:
         """Finalize execution and return the result.

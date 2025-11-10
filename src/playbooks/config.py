@@ -87,6 +87,22 @@ class StateCompressionConfig(BaseModel):
     )  # Send full state every N LLM calls (I-frame interval)
 
 
+class DurabilityConfig(BaseModel):
+    """Configuration for durable execution with checkpointing.
+
+    OSS provides filesystem-based checkpointing for local development.
+    Enterprise packages can provide scalable implementations (PostgreSQL, Redis, etc.)
+    """
+
+    model_config = ConfigDict(extra="forbid")  # catch typos early
+
+    enabled: bool = False  # Opt-in feature
+    storage_type: str = "filesystem"  # "filesystem" or enterprise types
+    storage_path: str = ".checkpoints"  # Path for filesystem storage
+    max_checkpoint_size_mb: int = Field(10, gt=0)  # Max checkpoint size
+    keep_last_n: int = Field(10, gt=0)  # Number of checkpoints to retain
+
+
 class PlaybooksConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
@@ -101,6 +117,7 @@ class PlaybooksConfig(BaseModel):
     langfuse: LangfuseConfig = LangfuseConfig()
     litellm: LitellmConfig = LitellmConfig()
     state_compression: StateCompressionConfig = StateCompressionConfig()
+    durability: DurabilityConfig = DurabilityConfig()
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump()
