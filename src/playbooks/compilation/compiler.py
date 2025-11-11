@@ -22,7 +22,11 @@ from playbooks.config import config
 from playbooks.core.exceptions import ProgramLoadError
 from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.llm_config import LLMConfig
-from playbooks.utils.llm_helper import get_completion, get_messages_for_prompt
+from playbooks.utils.llm_helper import (
+    _check_llm_calls_allowed,
+    get_completion,
+    get_messages_for_prompt,
+)
 from playbooks.utils.version import get_playbooks_version
 
 console = Console()
@@ -305,6 +309,15 @@ class Compiler:
         """
         agent_name = agent_info["name"]
         agent_content = agent_info["content"]
+
+        # Check if LLM calls (including compilation) are allowed in this context
+        # This prevents unit tests from bypassing the check via compilation cache
+        if not _check_llm_calls_allowed():
+            raise RuntimeError(
+                "LLM calls (including compilation) are not allowed in this context (likely a unit test).\n"
+                "Either use pre-compiled .pbasm files or move this test to tests/integration/.\n"
+                "Compilation requires LLM calls even when using cached results."
+            )
 
         # Generate cache key and path
         cache_key = self._generate_cache_key(agent_content)
