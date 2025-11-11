@@ -1,7 +1,7 @@
 import pytest
 
 from playbooks import Playbooks
-from playbooks.core.constants import EOM, HUMAN_AGENT_KLASS
+from playbooks.core.constants import EOM
 
 
 @pytest.mark.asyncio
@@ -9,7 +9,8 @@ async def test_triggers(test_data_dir):
     playbooks = Playbooks([test_data_dir / "06-triggers.pb"])
     await playbooks.program.initialize()
 
-    human = playbooks.program.agents_by_klass[HUMAN_AGENT_KLASS][0]
+    # The default human agent is created with klass="User", not HUMAN_AGENT_KLASS
+    human = playbooks.program.agents_by_klass["User"][0]
     ai = playbooks.program.agents_by_klass["ExampleProgram"][0]
 
     # AI will ask for PIN, first user will provide an invalid PIN
@@ -21,7 +22,7 @@ async def test_triggers(test_data_dir):
     await human.SendMessage(ai.id, EOM)
 
     # Then user will provide an invalid email
-    await human.SendMessage(ai.id, "test@blah")
+    await human.SendMessage(ai.id, "test@")
     await human.SendMessage(ai.id, EOM)
 
     # Then user will provide a valid email

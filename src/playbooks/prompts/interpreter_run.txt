@@ -113,10 +113,9 @@ Don't make up agent or meeting ids. Use only those ids that are listed in curren
 # execution_id: 1
 # recap: beginning
 # plan: ask user for name
-
+# trig? no
 await Step("Welcome:01:QUE")
 await Say("user", "Hi! What's your name?")
-
 # trig? no
 # yld? yes, Welcome:02:QUE requires user's name
 await Step("Welcome:02:QUE")
@@ -129,17 +128,15 @@ await Yld("user")
 # execution_id: 2
 # recap: user provided name as Amol
 # plan: greet user
-
+# trig? no
 await Step("Welcome:02:QUE")
 await Say("user", """Here's a short story about you, Amol!
 Once upon
 a time...""")
-
 # trig? no
 # yld? no, Welcome:03:QUEs not need results of any queued calls
 await Step("Welcome:03:RET")
 await Artifact("story", "Short story about Amol", _)
-
 await Return(_)
 $__ = "Welcome() asked user for name and told user a story"
 ```
@@ -157,12 +154,11 @@ $__ = "Welcome() asked user for name and told user a story"
 # execution_id: 1
 # recap: beginning
 # plan: execute conversation loop
-
+# trig? no
 await Step("Main:01:CND")
 # think: The conversation is not finished so condition satisfied
 # trig? no
 # yld? no, nothing queued
-
 await Step("Main:01.01:QUE")
 await Yld("user")
 ```
@@ -173,18 +169,16 @@ await Yld("user")
 # execution_id: 2
 # recap: started conversation loop
 # plan: reply to user and continue
-
+# trig? no
 await Step("Main:02:QUE")
 await Say("Goodbye!")
 # trig? no
 # yld? no, "Main:01.03:JMP" can execute without first showing message to user
-
 await Step("Main:01:CND")
 # think: The user said goodbye and I replied with goodbye,
 # so conversation is over. Condition is not satisfied.
 # trig? no
 # yld? yes, "Main:02:YLD" will yield
-
 await Step("Main:02:YLD")
 await Yld("exit")
 ```
@@ -200,9 +194,22 @@ e.g. - When checkout amount is more than $50, trigger the Offer playbook
 # trig? Trigger["Offer:01:CND"] because checkout amount is more than $50
 await Trigger("Offer:01:CND")
 await Offer(code="SPRING", total=amount)
-
+# trig? yes, already triggered
 # yld? yes, execute trigger
 await Step("Offer:01")
+await Yld("call")
+```
+
+**Ex 3b – Yielding to evalute trigger**
+If a trigger condition cannot be evaluated due to a pending code execution, yield.
+e.g. - When $x > 15, `Trigger["TooBig:T1:CND"]` by enqueuing `TooBig()`
+
+```python
+# execution_id: 3
+...
+await Step("Main:08:EXE")
+$x = $x * 2
+# trig? $x has changed, pending calculation, and I cannot evaluate a trigger that depends on the value of $x, so yielding for the calculation
 await Yld("call")
 ```
 
@@ -213,9 +220,8 @@ await Yld("call")
 # execution_id: 4
 # recap: user's issue was resolved
 # plan: exit the program
-
+# trig? no
 await Step("Support:09:EXE")
-
 # trig? no trigger before exiting
 # yld? yes, exiting program
 await Yld("exit")
@@ -229,7 +235,6 @@ Agent must understand anything unexpected like infinite loops, errors, inconsist
 # execution_id: 5
 # recap: I got number from user and have attempted to compute magic result unsucceffully 2 times. I will not make up a magic operator and cannot fulfil the request.
 # plan: handle unexpected missing playbook
-
 # trig? no
 # yld? no, nothing queued
 # think: There is no playbook defined for how to compute magic operator, so I don't know how to compute magic result. I will set an error result.
@@ -252,7 +257,6 @@ Assuming MyWorker agent is defined
 await CreateAgent("MyWorker", name="MW001", age=38)
 await CreateAgent("MyWorker", name="MW002", age=22)
 await CreateAgent("MyWorker", name="MW003", age=61)
-
 # trig? no
 # yld? yes, PB:02:QUE requires agent ids that I will get after executing CreateAgent calls
 await Step("PB:02:QUE")
@@ -280,18 +284,16 @@ When generating long-form content that needs to be streamed to user AND saved as
 # execution_id: 8
 # recap: gathered research data
 # plan: generate answer, stream to user, and return as artifact
-
+# trig? no
 await Step("Research:05:QUE")
 await Say("user", """Based on my research, here...
 Also...
 Finally...""")
 await Artifact("answer", "Answer for topic", _)
-
 # trig? no
 # yld? no, returning from playbook
 await Step("Research:06:RET")
 await Return(_)
-
 $__ = "Research() generated comprehensive answer about topic"
 ```
 
