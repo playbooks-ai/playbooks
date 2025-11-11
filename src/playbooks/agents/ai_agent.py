@@ -1080,12 +1080,13 @@ async def {self.bgn_playbook_name}() -> None:
             artifact_msg = ArtifactLLMMessage(returned_artifact)
             self.state.call_stack.add_llm_message(artifact_msg)
 
-        result_msg = ExecutionResultLLMMessage(
-            call_result.to_log_full(),
-            playbook_name=call.playbook_klass,
-            success=success,
-        )
-        self.state.call_stack.add_llm_message(result_msg)
+        if call.playbook_klass not in ["WaitForMessage"]:
+            result_msg = ExecutionResultLLMMessage(
+                call_result.to_log_full(),
+                playbook_name=call.playbook_klass,
+                success=success,
+            )
+            self.state.call_stack.add_llm_message(result_msg)
 
         if artifact_result:
             langfuse_span.update(output=artifact_obj.value)
