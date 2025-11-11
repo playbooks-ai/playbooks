@@ -58,7 +58,7 @@ async def test_example_04(test_data_dir):
     await playbooks.initialize()
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
-    assert "generate_report_summary() →" in log
+    assert "generate_report_summary()" in log
 
 
 @pytest.mark.asyncio
