@@ -72,7 +72,7 @@ def md_path(test_data_dir, md_file_name):
 @pytest.fixture
 def test_mcp_server():
     """Pytest fixture for the test MCP server."""
-    from tests.unit.playbooks.test_mcp_server import get_test_server
+    from tests.unit.applications.test_mcp_server import get_test_server
 
     server = get_test_server()
     server.reset_data()  # Reset data for each test
@@ -82,7 +82,7 @@ def test_mcp_server():
 @pytest.fixture
 def test_mcp_server_instance():
     """Pytest fixture that returns the FastMCP server instance."""
-    from tests.unit.playbooks.test_mcp_server import get_test_server
+    from tests.unit.applications.test_mcp_server import get_test_server
 
     server = get_test_server()
     server.reset_data()
