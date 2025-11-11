@@ -168,9 +168,24 @@ class CallStackFrame:
         Returns:
             A dictionary representation of the frame.
         """
+        # Try to extract trace_id from langfuse span if available
+        langfuse_info = None
+        if self.langfuse_span:
+            try:
+                # Check if it's a real Langfuse span with trace_id
+                if hasattr(self.langfuse_span, "trace_id"):
+                    langfuse_info = {
+                        "trace_id": str(self.langfuse_span.trace_id),
+                        "type": "langfuse_span",
+                    }
+                else:
+                    langfuse_info = {"type": "no_op_span"}
+            except Exception:
+                langfuse_info = None
+
         result = {
             "instruction_pointer": str(self.instruction_pointer),
-            "langfuse_span": str(self.langfuse_span) if self.langfuse_span else None,
+            "langfuse_info": langfuse_info,
         }
         if self.is_meeting:
             result["is_meeting"] = self.is_meeting
@@ -281,13 +296,13 @@ class CallStack:
     def __str__(self) -> str:
         return self.__repr__()
 
-    def to_dict(self) -> List[str]:
+    def to_dict(self) -> List[Dict[str, Any]]:
         """Convert the call stack to a dictionary representation.
 
         Returns:
-            A list of string representations of instruction pointers.
+            A list of frame dictionaries with instruction pointers and langfuse info.
         """
-        return [frame.instruction_pointer.to_dict() for frame in self.frames]
+        return [frame.to_dict() for frame in self.frames]
 
     def get_llm_messages(self) -> List[Dict[str, str]]:
         """Get the messages for the call stack for the LLM."""

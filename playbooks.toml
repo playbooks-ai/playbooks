@@ -25,3 +25,6 @@ path = ".llm_cache"
 
 [langfuse]
 enabled = true
+
+[durability]
+enabled = true

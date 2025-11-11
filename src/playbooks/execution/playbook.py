@@ -130,9 +130,29 @@ class PlaybookLLMExecution(LLMExecution):
         return_value = None
 
         call = PlaybookCall(self.playbook.name, args, kwargs)
-        await self.pre_execute(call)
 
-        instruction = f"Execute {str(call)} from step 01. Refer to {self.playbook.name} playbook implementation above."
+        # Check if agent was restored from checkpoint
+        is_resuming = getattr(self.agent, "restored_from_checkpoint", False)
+
+        if is_resuming:
+            # Resuming from checkpoint - use current call stack position
+            top_of_stack = self.agent.state.call_stack.peek()
+            if top_of_stack:
+                instruction = (
+                    f"{str(top_of_stack)} was executed - "
+                    f"continue execution. Refer to {self.playbook.name} playbook implementation above."
+                )
+                logger.info(
+                    f"Resuming {self.playbook.name} execution from {top_of_stack.instruction_pointer.to_compact_str()}"
+                )
+            else:
+                # No call stack - start fresh
+                instruction = f"Execute {str(call)} from step 01. Refer to {self.playbook.name} playbook implementation above."
+        else:
+            # Normal execution - start from beginning
+            await self.pre_execute(call)
+            instruction = f"Execute {str(call)} from step 01. Refer to {self.playbook.name} playbook implementation above."
+
         artifacts_to_load = []
 
         while not done:
@@ -386,6 +406,9 @@ class PlaybookLLMExecution(LLMExecution):
         streaming_executor = StreamingPythonExecutor(self.agent, playbook_args)
         self.streaming_execution_result = None  # Will be set after execution
 
+        # Track buffer for LLM response
+        full_response = ""
+
         buffer = ""
         in_say_call = False
         current_say_content = ""
@@ -404,6 +427,7 @@ class PlaybookLLMExecution(LLMExecution):
                 langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
             ):
                 buffer += chunk
+                full_response += chunk
 
                 # Feed chunk to streaming executor for incremental execution
                 try:
@@ -562,6 +586,9 @@ class PlaybookLLMExecution(LLMExecution):
                 await self.agent.complete_streaming_say_via_channel(
                     say_stream_id, say_recipient, current_say_content
                 )
+
+            # Set the full LLM response for checkpointing
+            streaming_executor.set_llm_response(full_response)
 
             # Finalize streaming execution - execute any remaining buffered code
             self.streaming_execution_result = await streaming_executor.finalize()

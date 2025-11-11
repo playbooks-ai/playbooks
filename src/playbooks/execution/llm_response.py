@@ -60,17 +60,6 @@ class LLMResponse(AsyncInitMixin):
         """
         super().__init__()
 
-        # Defensive: If response is accidentally a list of chunks, concatenate them
-        if isinstance(response, list):
-            import traceback
-
-            logger.error(
-                f"LLMResponse received a list instead of string! "
-                f"List has {len(response)} items. First 3 items: {response[:3]}\n"
-                f"Call stack:\n{''.join(traceback.format_stack())}"
-            )
-            response = "".join(response)
-
         self.response = response
         self.event_bus = event_bus
         self.agent = agent

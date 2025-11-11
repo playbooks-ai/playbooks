@@ -12,7 +12,7 @@ import select
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, Callable, List, Optional
 
 # Platform-specific imports for stdin clearing
 try:
@@ -55,6 +55,112 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Initialize Rich console
 console = Console()
+
+
+async def _get_session_id_for_resume(
+    program_paths: List[str], explicit_session_id: Optional[str] = None
+) -> Optional[str]:
+    """Get the session ID for resume.
+
+    Args:
+        program_paths: List of playbook file paths
+        explicit_session_id: Explicit session ID provided by user, or None to auto-detect
+
+    Returns:
+        Session ID to resume, or None if no session found
+    """
+    from playbooks.config import config
+    from playbooks.checkpoints import SessionManager
+
+    if not config.durability.enabled:
+        return None
+
+    # If explicit session ID provided, use it
+    if explicit_session_id:
+        console.print(
+            f"[cyan]📂 Resuming explicit session: {explicit_session_id}[/cyan]"
+        )
+        return explicit_session_id
+
+    # Otherwise, look up the last session for these playbooks
+    session_manager = SessionManager(storage_path=config.durability.storage_path)
+    session_id = await session_manager.get_last_session(program_paths)
+
+    if session_id:
+        console.print(f"[cyan]📂 Found previous session: {session_id}[/cyan]")
+    else:
+        console.print(
+            "[yellow]⚠️  No previous session found for these playbooks[/yellow]"
+        )
+
+    return session_id
+
+
+async def _save_session_id(program_paths: List[str], session_id: str) -> None:
+    """Save the current session ID for future resume.
+
+    Args:
+        program_paths: List of playbook file paths
+        session_id: Session ID to save
+    """
+    from playbooks.config import config
+    from playbooks.checkpoints import SessionManager
+
+    if not config.durability.enabled:
+        return
+
+    session_manager = SessionManager(storage_path=config.durability.storage_path)
+    await session_manager.save_session(program_paths, session_id)
+
+
+async def _handle_checkpoint_resume(playbooks: Playbooks) -> None:
+    """Handle checkpoint resume for the entire program.
+
+    Restores all agents atomically from a program-level checkpoint.
+
+    Args:
+        playbooks: Playbooks instance with loaded program
+    """
+    from playbooks.config import config
+    from playbooks.checkpoints import ProgramCheckpointCoordinator
+
+    if not config.durability.enabled:
+        console.print("[yellow]⚠️  Resume requested but durability not enabled[/yellow]")
+        console.print(
+            "[yellow]   Set durability.enabled=true in playbooks.toml[/yellow]"
+        )
+        return
+
+    # Use program-level checkpoint coordinator
+    coordinator = ProgramCheckpointCoordinator(
+        program=playbooks.program, session_id=playbooks.session_id
+    )
+
+    if await coordinator.can_resume():
+        info = await coordinator.get_resume_info()
+
+        if info:
+            console.print(
+                f"[cyan]🔄 Found program checkpoint: {info['checkpoint_id']}[/cyan]"
+            )
+            console.print(f"[cyan]   Session: {info['session_id']}[/cyan]")
+            console.print(f"[cyan]   Agents to restore: {info['agents']}[/cyan]")
+
+            # Restore entire program state
+            success = await coordinator.restore_program_checkpoint()
+
+            if success:
+                console.print("[green]✅ Program restored successfully[/green]")
+                # Note: Some agents may not exist yet (dynamically created)
+                # They will be created during execution
+            else:
+                console.print("[red]❌ Failed to restore program checkpoint[/red]")
+        else:
+            console.print("[yellow]⚠️  Could not load checkpoint info[/yellow]")
+    else:
+        console.print(
+            f"[yellow]⚠️  No program checkpoints found for session {playbooks.session_id}[/yellow]"
+        )
 
 
 def clear_stdin():
@@ -362,6 +468,7 @@ async def main(
     stop_on_entry: bool = False,
     stream: bool = True,
     snoop: bool = False,
+    resume: Any = False,
 ) -> None:
     """
     Playbooks application host for agent chat. You can execute a playbooks program within this application container.
@@ -381,6 +488,7 @@ async def main(
         stop_on_entry: Whether to stop at the beginning of playbook execution
         stream: Whether to stream the output
         snoop: Whether to display agent-to-agent messages
+        resume: Resume from checkpoint - True for last session, or session ID string for specific session
 
     """
     #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
@@ -391,15 +499,33 @@ async def main(
 
     user_output.info(f"Loading playbooks from: {program_paths}")
 
-    session_id = str(uuid.uuid4())
+    # Normalize program_paths to list
     if isinstance(program_paths, str):
         program_paths = [program_paths]
+
+    # Get session ID - reuse previous session if resuming, otherwise create new
+    if resume:
+        # resume can be True (auto-detect) or a session ID string (explicit)
+        explicit_session_id = resume if isinstance(resume, str) else None
+        session_id = await _get_session_id_for_resume(
+            program_paths, explicit_session_id
+        )
+        if not session_id:
+            # No previous session found, create new one
+            session_id = str(uuid.uuid4())
+            console.print(f"[yellow]   Creating new session: {session_id}[/yellow]")
+    else:
+        session_id = str(uuid.uuid4())
+
     try:
         playbooks = Playbooks(program_paths, session_id=session_id)
         await playbooks.initialize()
     except litellm.exceptions.AuthenticationError as e:
         user_output.error("Authentication error", details=str(e))
         raise
+
+    # Save session ID for future resume (if durability enabled)
+    await _save_session_id(program_paths, session_id)
 
     # Enable agent streaming if snoop mode is on
     playbooks.program.enable_agent_streaming = snoop
@@ -446,6 +572,10 @@ async def main(
             )
             await playbooks.program._debug_server.wait_for_client()
             console.print("[green]Debug client connected.[/green]")
+
+    # Check for checkpoint resume if requested
+    if resume:
+        await _handle_checkpoint_resume(playbooks)
 
     # Start the program
     try:

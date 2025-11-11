@@ -154,7 +154,38 @@ class AsyncAgentRuntime:
             # Initialize and start the agent
             # await agent.initialize()
             if not self.program.execution_finished:
-                await agent.begin()
+                # Don't call begin() if agent was restored from checkpoint
+                # (it's already in the middle of execution)
+                if not getattr(agent, "restored_from_checkpoint", False):
+                    await agent.begin()
+                else:
+                    logger.info(
+                        f"Agent {agent.id} restored from checkpoint, "
+                        f"skipping begin() (call stack has {len(agent.state.call_stack.frames)} frames)"
+                    )
+                    # Restored agents: continue executing from top of call stack
+                    # The execute_playbook method will detect restored_from_checkpoint flag
+                    # and resume from the current call stack position
+                    if not agent.state.call_stack.is_empty():
+                        top_frame = agent.state.call_stack.peek()
+                        playbook_name = top_frame.instruction_pointer.playbook
+                        logger.info(
+                            f"Agent {agent.id} continuing execution from {playbook_name}"
+                        )
+                        try:
+                            # Call execute_playbook - it will detect restored_from_checkpoint
+                            # and resume from call stack position instead of starting fresh
+                            await agent.execute_playbook(playbook_name)
+                        except Exception as e:
+                            logger.error(
+                                f"Error continuing playbook {playbook_name}: {e}"
+                            )
+                        finally:
+                            # Clear the restored flag after first resume
+                            agent.restored_from_checkpoint = False
+
+                    # After playbook completes (or if call stack was empty), enter message loop
+                    await agent.message_processing_event_loop()
 
         except ExecutionFinished as e:
             # Signal that execution is finished
@@ -493,9 +524,11 @@ class Program(ProgramAgentsCommunicationMixin):
         compiled_program_paths: List[str] = None,
         program_content: str = None,
         metadata: dict = {},
+        session_id: str = None,
     ):
         self.metadata = metadata
         self.event_bus = event_bus
+        self.session_id = session_id
 
         self.program_paths = program_paths or []
         self.compiled_program_paths = compiled_program_paths or []
@@ -551,6 +584,24 @@ class Program(ProgramAgentsCommunicationMixin):
         self.enable_agent_streaming = (
             False  # Enable streaming for agent-to-agent messages (for snoop mode)
         )
+
+        # Checkpoint coordinator for program-level durability
+        self.checkpoint_coordinator = None
+        self._init_checkpoint_coordinator()
+
+    def _init_checkpoint_coordinator(self) -> None:
+        """Initialize program checkpoint coordinator if durability is enabled."""
+        from playbooks.config import config
+
+        if config.durability.enabled and self.session_id:
+            from playbooks.checkpoints import ProgramCheckpointCoordinator
+
+            self.checkpoint_coordinator = ProgramCheckpointCoordinator(
+                program=self, session_id=self.session_id
+            )
+            logger.info(
+                f"Program checkpoint coordinator initialized for session {self.session_id}"
+            )
 
     async def initialize(self) -> None:
         self.agents = [

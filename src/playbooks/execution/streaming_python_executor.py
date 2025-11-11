@@ -18,6 +18,7 @@ from playbooks.execution.python_executor import (
     PythonExecutor,
 )
 
+
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
 
@@ -93,6 +94,9 @@ class StreamingPythonExecutor:
 
         # Checkpoint management
         self._setup_checkpointing()
+
+        # LLM response tracking for resume
+        self._current_llm_response: Optional[str] = None
 
     def _initialize_namespace_snapshot(self) -> None:
         """Initialize snapshot of namespace variables for change detection."""
@@ -261,7 +265,8 @@ class StreamingPythonExecutor:
 
             # Checkpoint after await if enabled
             if self.checkpoint_enabled and self.checkpoint_manager:
-                await self._save_checkpoint(statement_code)
+                llm_response = getattr(self, "_current_llm_response", None)
+                await self._save_checkpoint(statement_code, llm_response)
 
     def _find_assignments(self, stmt: ast.stmt) -> List[str]:
         """Find all variable names that are assigned in a statement.
@@ -343,11 +348,14 @@ class StreamingPythonExecutor:
         """
         return "\n".join(self.executed_lines)
 
-    async def _save_checkpoint(self, statement_code: str) -> None:
+    async def _save_checkpoint(
+        self, statement_code: str, llm_response: Optional[str] = None
+    ) -> None:
         """Save checkpoint after executing an await statement.
 
         Args:
             statement_code: The statement that was just executed
+            llm_response: Full LLM response being executed (for resume)
         """
         try:
             await self.checkpoint_manager.save_checkpoint(
@@ -355,9 +363,89 @@ class StreamingPythonExecutor:
                 namespace=dict(self.namespace),
                 execution_state=self.agent.state.to_dict(full=True),
                 call_stack=self.agent.state.call_stack.to_dict(),
+                llm_response=llm_response,
+                executed_code=self.get_executed_code(),
             )
+
+            # Trigger program-level checkpoint after agent checkpoint
+            await self._trigger_program_checkpoint()
         except Exception as e:
             logger.warning(f"Failed to save checkpoint: {e}")
+
+    async def _trigger_program_checkpoint(self) -> None:
+        """Trigger a program-level checkpoint save.
+
+        This coordinates checkpoints across all agents in the program.
+        """
+        if not self.agent.program or not hasattr(
+            self.agent.program, "checkpoint_coordinator"
+        ):
+            return
+
+        try:
+            coordinator = self.agent.program.checkpoint_coordinator
+            if coordinator:
+                await coordinator.save_program_checkpoint()
+        except Exception as e:
+            logger.debug(f"Could not trigger program checkpoint: {e}")
+
+    def set_llm_response(self, llm_response: str) -> None:
+        """Set the current LLM response being executed.
+
+        This is needed for checkpointing so we can resume execution.
+
+        Args:
+            llm_response: Full LLM response text
+        """
+        self._current_llm_response = llm_response
+
+    @classmethod
+    async def resume_from_checkpoint(
+        cls,
+        agent: "LocalAIAgent",
+        checkpoint_data: Dict[str, Any],
+        playbook_args: Optional[Dict[str, Any]] = None,
+    ) -> "StreamingPythonExecutor":
+        """Create executor and resume from checkpoint.
+
+        Args:
+            agent: Agent to execute with
+            checkpoint_data: Checkpoint data containing state and LLM response
+            playbook_args: Playbook arguments
+
+        Returns:
+            Executor ready to continue from checkpoint
+        """
+        executor = cls(agent, playbook_args)
+
+        namespace_snapshot = checkpoint_data["namespace"]
+        executed_code = checkpoint_data["metadata"].get("executed_code", "")
+        llm_response = checkpoint_data["metadata"].get("llm_response")
+
+        executor.namespace.update(namespace_snapshot)
+
+        if executed_code:
+            executor.executed_lines = [executed_code]
+
+        if llm_response:
+            executor.set_llm_response(llm_response)
+
+            remaining_code = llm_response
+            if executed_code:
+                if executed_code in llm_response:
+                    idx = llm_response.index(executed_code) + len(executed_code)
+                    remaining_code = llm_response[idx:]
+                else:
+                    remaining_code = llm_response
+
+            for line in remaining_code.splitlines(keepends=True):
+                await executor.add_chunk(line)
+
+            await executor.finalize()
+
+        logger.info("Resumed execution from checkpoint")
+
+        return executor
 
     async def finalize(self) -> ExecutionResult:
         """Finalize execution and return the result.

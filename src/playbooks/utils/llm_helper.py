@@ -382,11 +382,7 @@ def get_completion(
                 langfuse_generation.update(cost_details={"input": 0, "output": 0})
                 LangfuseHelper.flush()
 
-            if stream:
-                for chunk in cache_value:
-                    yield chunk
-            else:
-                yield cache_value
+            yield str(cache_value)
 
             return
 
@@ -421,7 +417,8 @@ def get_completion(
             and full_response is not None
             and len(full_response) > 0
         ):
-            full_response = str(full_response)
+            if isinstance(full_response, list):
+                full_response = "".join(full_response)
             cache.set(cache_key, full_response)
 
         if langfuse_generation and not error_occurred:

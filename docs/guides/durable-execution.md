@@ -113,22 +113,44 @@ Note: Manual checkpointing API is planned for future release.
 
 ### Recovery
 
-Recovery is automatic on restart:
+Recovery restores state and resumes execution:
 
 ```python
-from playbooks.checkpoints import CheckpointManager, RecoveryCoordinator
+from playbooks.checkpoints import CheckpointManager, RecoveryCoordinator, FilesystemCheckpointProvider
+from playbooks.execution.streaming_python_executor import StreamingPythonExecutor
 
-# Check if recovery is possible
+# Setup checkpoint provider
+provider = FilesystemCheckpointProvider(base_path=".checkpoints")
 manager = CheckpointManager(execution_id=agent.id, provider=provider)
 coordinator = RecoveryCoordinator(manager)
 
+# Check if recovery is possible
 if await coordinator.can_recover():
     info = await coordinator.get_recovery_info()
-    print(f"Resuming from: {info['statement']}")
+    print(f"Resuming from checkpoint {info['checkpoint_id']}")
+    print(f"Last executed: {info['statement']}")
     
-    # Restore state
+    # Get latest checkpoint
+    checkpoint_data = await manager.get_latest_checkpoint()
+    
+    # Restore agent state
     await coordinator.recover_execution_state(agent)
+    
+    # Resume execution from checkpoint
+    executor = await StreamingPythonExecutor.resume_from_checkpoint(
+        agent=agent,
+        checkpoint_data=checkpoint_data
+    )
+    
+    print("✅ Execution resumed successfully!")
 ```
+
+**What happens during resume:**
+1. Agent state restored (variables, call stack)
+2. Namespace restored (local Python variables)
+3. Already-executed code identified and skipped
+4. Remaining code from LLM response continues executing
+5. New checkpoints saved as execution proceeds
 
 ## Caveat: Loops and Checkpointing
 

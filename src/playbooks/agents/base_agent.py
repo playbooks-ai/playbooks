@@ -62,6 +62,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         self.id = agent_id
         self.kwargs = kwargs
         self.program = program
+        self.restored_from_checkpoint = False  # Flag for checkpoint restoration
 
         # Source tracking
         self.source_line_number = source_line_number

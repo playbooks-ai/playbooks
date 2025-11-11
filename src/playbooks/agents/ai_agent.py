@@ -647,7 +647,10 @@ async def {self.bgn_playbook_name}() -> None:
         else:
             trace_str = f"External: {trace_str}"
 
-        if self.state.call_stack.peek() is not None:
+        if (
+            self.state.call_stack.peek() is not None
+            and self.state.call_stack.peek().langfuse_span is not None
+        ):
             langfuse_span = self.state.call_stack.peek().langfuse_span.span(
                 name=trace_str
             )

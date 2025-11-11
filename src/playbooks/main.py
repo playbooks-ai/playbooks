@@ -121,6 +121,7 @@ class Playbooks:
             program_paths=self.program_paths,
             compiled_program_paths=compiled_program_paths,
             metadata=self.program_metadata,
+            session_id=self.session_id,
         )
 
     async def initialize(self):

@@ -33,6 +33,8 @@ class CheckpointManager:
         namespace: Dict[str, Any],
         execution_state: Dict[str, Any],
         call_stack: list,
+        llm_response: Optional[str] = None,
+        executed_code: Optional[str] = None,
     ) -> str:
         """Save a checkpoint after statement execution.
 
@@ -41,6 +43,8 @@ class CheckpointManager:
             namespace: Current namespace state
             execution_state: Serialized execution state
             call_stack: Current call stack
+            llm_response: Full LLM response being executed (for resume)
+            executed_code: Code already executed from LLM response (for resume)
 
         Returns:
             Checkpoint ID
@@ -54,6 +58,8 @@ class CheckpointManager:
             "execution_id": self.execution_id,
             "timestamp": time.time(),
             "call_stack": call_stack,
+            "llm_response": llm_response,
+            "executed_code": executed_code,
         }
 
         serializable_namespace = self._prepare_namespace(namespace)

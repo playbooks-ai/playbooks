@@ -99,6 +99,7 @@ async def run_application(
     wait_for_client: bool = False,
     stop_on_entry: bool = False,
     snoop: bool = False,
+    resume: bool = False,
 ) -> None:
     """
     Run a playbook using the specified application.
@@ -113,6 +114,7 @@ async def run_application(
         wait_for_client: Whether to wait for a client to connect before starting
         stop_on_entry: Whether to stop at the beginning of playbook execution
         snoop: Whether to display agent-to-agent messages
+        resume: Whether to resume from last checkpoint
     """
     # Import the application module
     try:
@@ -139,6 +141,7 @@ async def run_application(
             wait_for_client=wait_for_client,
             stop_on_entry=stop_on_entry,
             snoop=snoop,
+            resume=resume,
         )
 
     except ImportError as e:
@@ -325,6 +328,14 @@ def main():
         default=False,
         help="Display messages exchanged between agents (default: False). Use --snoop=true to see all agent-to-agent communication",
     )
+    run_parser.add_argument(
+        "--resume",
+        nargs="?",
+        const=True,
+        default=False,
+        metavar="SESSION_ID",
+        help="Resume execution from checkpoint. Use --resume for last session, or --resume SESSION_ID for specific session (requires durability.enabled=true)",
+    )
 
     # Compile command
     compile_parser = subparsers.add_parser("compile", help="Compile a playbook")
@@ -418,6 +429,7 @@ def main():
                     wait_for_client=args.wait_for_client,
                     stop_on_entry=args.stop_on_entry,
                     snoop=args.snoop,
+                    resume=args.resume,
                 )
             )
         except KeyboardInterrupt:

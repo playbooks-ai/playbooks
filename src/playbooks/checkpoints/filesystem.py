@@ -114,13 +114,13 @@ class FilesystemCheckpointProvider(CheckpointProvider):
         return pickle.loads(data)
 
     async def list_checkpoints(self, execution_id: str) -> List[str]:
-        """List all checkpoints for an execution in chronological order.
+        """List all checkpoints for an execution in numeric order.
 
         Args:
             execution_id: Execution identifier
 
         Returns:
-            List of checkpoint IDs sorted by creation time
+            List of checkpoint IDs sorted by checkpoint number
         """
         execution_dir = self._get_execution_dir(execution_id)
 
@@ -130,10 +130,31 @@ class FilesystemCheckpointProvider(CheckpointProvider):
         checkpoints = []
         for checkpoint_file in execution_dir.glob("*.pkl"):
             checkpoint_id = checkpoint_file.stem
-            checkpoints.append((checkpoint_id, checkpoint_file.stat().st_mtime))
 
-        checkpoints.sort(key=lambda x: x[1])
-        return [checkpoint_id for checkpoint_id, _ in checkpoints]
+            # Validate format: must contain "_ckpt_" followed by a number
+            if "_ckpt_" in checkpoint_id:
+                parts = checkpoint_id.split("_ckpt_")
+                if len(parts) == 2:
+                    try:
+                        # Verify the second part is a valid number
+                        int(parts[1])
+                        checkpoints.append(checkpoint_id)
+                    except ValueError:
+                        # Invalid checkpoint format, skip
+                        pass
+
+        # Sort by checkpoint number (extract number from "id_ckpt_N")
+        def get_checkpoint_num(checkpoint_id: str) -> int:
+            try:
+                # Extract number from "execution_id_ckpt_123"
+                parts = checkpoint_id.split("_ckpt_")
+                if len(parts) == 2:
+                    return int(parts[1])
+            except (ValueError, IndexError):
+                pass
+            return 0
+
+        return sorted(checkpoints, key=get_checkpoint_num)
 
     async def delete_checkpoint(self, checkpoint_id: str) -> None:
         """Delete a specific checkpoint.

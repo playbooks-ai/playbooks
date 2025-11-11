@@ -56,3 +56,4 @@ Thumbs.db
 **/.llm_cache
 **/.pbasm_cache
 llms.txt
+.checkpoints
