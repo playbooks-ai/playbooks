@@ -249,9 +249,11 @@ Compiled:
 
 ### Public Playbooks
 - Generate public.json with tool info for each public python and markdown playbooks
+- **BGN playbooks are automatically public** - include them even if not explicitly marked
 - If no public playbooks, generate empty [] public.json
-- Python syntax: `@playbook(public=True)`
-- Markdown syntax: `public: true` in metadata
+- Python syntax: `@playbook(public=True)` or BGN trigger
+- Markdown syntax: `public: true` in metadata or BGN trigger
+- For BGN playbooks, include `is_bgn: true` and `cli_entry: true` if playbook has `cli_entry: true` in metadata
 
 ### Agent and Playbook metadata
 Collect any metadata in the description area into a metadata yaml block. When metadata is present, add a --- document separator and write description after that. This applies to # agent and ## playbook blocks.
@@ -335,9 +337,12 @@ MCP server for weather tools
       "type": "object",
       "properties": {
         "param1": {"type": "string", "description": "param description"}
-      }
+      },
+      "required": ["param1"]
     },
-    "triggers": ["T1:TYPE trigger text"]
+    "triggers": ["T1:TYPE trigger text"],
+    "is_bgn": false,
+    "cli_entry": false
   }
 ]
 ```
@@ -362,13 +367,15 @@ MCP server for weather tools
 7. ✓ Add `YLD for user` only when waiting for user response, `YLD for meeting` to listen to meeting, `YLD for call` for playbook execution
 8. ✓ Add JMP for while/until loops
 9. ✓ End with a public.json listing all public playbooks in the agent
-10. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
-11. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
-12. ✓ Extract metadata into yaml blocks for agents and playbooks
-13. ✓ Each YLD is expensive to execute (needs a new LLM call), so batch as many calls as possible before YLD
-14. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
-15. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as execution_mode:react unless it is marked as execution_mode:raw
-16. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
+10. ✓ **BGN playbooks are automatically public** - include in public.json with "is_bgn": true
+11. ✓ If playbook has `cli_entry: true` in metadata, include "cli_entry": true in public.json
+12. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
+13. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
+14. ✓ Extract metadata into yaml blocks for agents and playbooks
+15. ✓ Each YLD is expensive to execute (needs a new LLM call), so batch as many calls as possible before YLD
+16. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
+17. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as execution_mode:react unless it is marked as execution_mode:raw
+18. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
 
 ## Example Transformation
 
@@ -542,18 +549,24 @@ You are a processor who will take each line of the report and count how many lin
     "description": "Look up info for given query",
     "parameters": {
       "type": "object",
-      "properties": {"query": {"type": "string", "description": "Query to look up"}}
+      "properties": {"query": {"type": "string", "description": "Query to look up"}},
+      "required": ["query"]
     },
-    "triggers": ["T1:CND Whenever you need to look up additional information"]
+    "triggers": ["T1:CND Whenever you need to look up additional information"],
+    "is_bgn": false,
+    "cli_entry": false
   },
   {
     "name": "ValidateCity",
     "description": "Validation routine that ensures location input meets formatting requirements through iterative verification",
     "parameters": {
       "type": "object",
-      "properties": {"city": {"type": "string", "description": "US city and state, e.g. 'Austin, TX'"}}
+      "properties": {"city": {"type": "string", "description": "US city and state, e.g. 'Austin, TX'"}},
+      "required": ["city"]
     },
-    "triggers": ["T1:CND When user provides their city"]
+    "triggers": ["T1:CND When user provides their city"],
+    "is_bgn": false,
+    "cli_entry": false
   }
 ]
 ```
@@ -642,8 +655,12 @@ Conduct a planning meeting
     "description": "Says goodbye to the user",
     "parameters": {
       "type": "object",
-      "properties": {}
-    }
+      "properties": {},
+      "required": []
+    },
+    "triggers": [],
+    "is_bgn": false,
+    "cli_entry": false
   }
 ]
 ```

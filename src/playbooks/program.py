@@ -14,25 +14,26 @@ from pathlib import Path
 # Removed threading import - using asyncio only
 from typing import Any, Dict, List, Optional, Type, Union
 
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.core.constants import HUMAN_AGENT_KLASS
+from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
+from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
+from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.core.message import Message, MessageType
+from playbooks.core.stream_result import StreamResult
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.state.variables import Artifact
+
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
 from .agents.base_agent import BaseAgent
 from .channels import AgentParticipant, Channel, HumanParticipant
-from playbooks.core.constants import HUMAN_AGENT_KLASS
 from .debug.server import (
     DebugServer,  # Note: Actually a debug client that connects to VSCode
 )
-from playbooks.infrastructure.logging.debug_logger import debug
-from playbooks.infrastructure.event_bus import EventBus
-from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
-from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
-from playbooks.core.identifiers import AgentID, MeetingID
 from .meetings import MeetingRegistry
-from playbooks.core.message import Message, MessageType
-from playbooks.core.stream_result import StreamResult
 from .utils import file_utils
-from playbooks.compilation.markdown_to_ast import markdown_to_ast
-from playbooks.state.variables import Artifact
 
 logger = logging.getLogger(__name__)
 
@@ -493,9 +494,13 @@ class Program(ProgramAgentsCommunicationMixin):
         compiled_program_paths: List[str] = None,
         program_content: str = None,
         metadata: dict = {},
+        cli_args: Optional[Dict[str, Any]] = None,
+        initial_state: Optional[Dict[str, Any]] = None,
     ):
         self.metadata = metadata
         self.event_bus = event_bus
+        self.cli_args = cli_args or {}
+        self.initial_state = initial_state or {}
 
         self.program_paths = program_paths or []
         self.compiled_program_paths = compiled_program_paths or []
@@ -558,6 +563,33 @@ class Program(ProgramAgentsCommunicationMixin):
             for klass in self.agent_klasses.values()
             if klass.should_create_instance_at_start()
         ]
+
+        # Set initial state variables on all agents
+        if self.initial_state:
+            from playbooks.config import config as playbooks_config
+            from playbooks.state.variables import Artifact
+
+            for agent in self.agents:
+                if hasattr(agent, "state") and hasattr(agent.state, "variables"):
+                    for var_name, var_value in self.initial_state.items():
+                        # Check if should be promoted to Artifact based on threshold
+                        if (
+                            len(str(var_value))
+                            > playbooks_config.artifact_result_threshold
+                        ):
+                            artifact = Artifact(
+                                name=f"${var_name}",
+                                summary=f"Initial state variable: {var_name}",
+                                value=var_value,
+                            )
+                            agent.state.variables[f"${var_name}"] = artifact
+
+                            # Store artifact for pre-loading into first call stack frame
+                            if not hasattr(agent, "_initial_artifacts_to_load"):
+                                agent._initial_artifacts_to_load = []
+                            agent._initial_artifacts_to_load.append(f"${var_name}")
+                        else:
+                            agent.state.variables[f"${var_name}"] = var_value
         # Validate public.json count (only for AI agents, humans don't need public.json)
         # Allow empty or missing public.json for testing scenarios
         ai_agent_count = sum(

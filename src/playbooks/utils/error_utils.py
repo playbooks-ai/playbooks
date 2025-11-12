@@ -9,7 +9,7 @@ from rich.panel import Panel
 from rich.text import Text
 
 logger = logging.getLogger(__name__)
-console = Console()
+console = Console(stderr=True)  # All error output to stderr
 
 
 def print_agent_errors_summary(

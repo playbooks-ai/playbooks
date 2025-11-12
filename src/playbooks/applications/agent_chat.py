@@ -12,7 +12,7 @@ import select
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, Callable, Dict, List, Optional
 
 # Platform-specific imports for stdin clearing
 try:
@@ -53,8 +53,8 @@ from playbooks.utils.error_utils import check_playbooks_health
 # Add the src directory to the Python path to import playbooks
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Initialize Rich console
-console = Console()
+# Initialize Rich console - use stderr for all diagnostics
+console = Console(stderr=True)
 
 
 def clear_stdin():
@@ -140,7 +140,7 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
         return f"{klass}({agent_id})"
 
     async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
-        """Display stream start in terminal."""
+        """Display stream start - prefix to stderr, content to stdout."""
         self.active_streams[event.stream_id] = {
             "agent_klass": agent_name,
             "sender_id": event.sender_id,
@@ -148,37 +148,34 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             "recipient_klass": event.recipient_klass,
             "content": "",
         }
-        # Format: 💬 HelloWorld(1000) → User:
+
         sender_display = self._format_agent_display(agent_name, event.sender_id)
 
         if event.recipient_id and event.recipient_klass:
             recipient_display = self._format_agent_display(
                 event.recipient_klass, event.recipient_id
             )
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: ",
-                end="",
-            )
+            # Prefix to stderr in bracket format
+            print(f"\n[{sender_display} → {recipient_display}]", file=sys.stderr)
         else:
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple]: ",
-                end="",
-            )
+            print(f"\n[{sender_display}]", file=sys.stderr)
 
     async def _display_chunk(self, event: StreamChunkEvent) -> None:
-        """Display stream chunk in terminal."""
+        """Display stream chunk - content to stdout."""
         if event.stream_id in self.active_streams:
             self.active_streams[event.stream_id]["content"] += event.chunk
-        print(event.chunk, end="", flush=True)
+        # Content to stdout
+        sys.stdout.write(event.chunk)
+        sys.stdout.flush()
 
     async def _display_complete(self, event: StreamCompleteEvent) -> None:
-        """Display stream completion in terminal."""
-        console.print()  # Newline to finish streaming
+        """Display stream completion."""
+        print(file=sys.stdout)  # Newline to finish content
         if event.stream_id in self.active_streams:
             del self.active_streams[event.stream_id]
 
     async def _display_buffered(self, event: StreamCompleteEvent) -> None:
-        """Display buffered complete message in terminal (non-streaming mode)."""
+        """Display buffered complete message (non-streaming mode)."""
         # Get sender/recipient info from active streams or event
         if event.stream_id in self.active_streams:
             stream_data = self.active_streams[event.stream_id]
@@ -204,20 +201,19 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             recipient_klass = event.final_message.recipient_klass
             content = event.final_message.content
 
-        # Format: 💬 HelloWorld(1000) → User: message
+        # Prefix to stderr, content to stdout
         sender_display = self._format_agent_display(sender_klass, sender_id)
 
         if recipient_id and recipient_klass:
             recipient_display = self._format_agent_display(
                 recipient_klass, recipient_id
             )
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: {content}"
-            )
+            print(f"\n[{sender_display} → {recipient_display}]", file=sys.stderr)
         else:
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple]: {content}"
-            )
+            print(f"\n[{sender_display}]", file=sys.stderr)
+
+        # Content to stdout
+        print(content, file=sys.stdout)
 
 
 class SessionLogWrapper:
@@ -362,6 +358,7 @@ async def main(
     stop_on_entry: bool = False,
     stream: bool = True,
     snoop: bool = False,
+    initial_state: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Playbooks application host for agent chat. You can execute a playbooks program within this application container.
@@ -381,6 +378,7 @@ async def main(
         stop_on_entry: Whether to stop at the beginning of playbook execution
         stream: Whether to stream the output
         snoop: Whether to display agent-to-agent messages
+        initial_state: Optional initial state variables to set on agents
 
     """
     #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
@@ -395,7 +393,11 @@ async def main(
     if isinstance(program_paths, str):
         program_paths = [program_paths]
     try:
-        playbooks = Playbooks(program_paths, session_id=session_id)
+        playbooks = Playbooks(
+            program_paths,
+            session_id=session_id,
+            initial_state=initial_state or {},
+        )
         await playbooks.initialize()
     except litellm.exceptions.AuthenticationError as e:
         user_output.error("Authentication error", details=str(e))

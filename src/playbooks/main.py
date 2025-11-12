@@ -7,7 +7,7 @@ coordination between various system components.
 
 import uuid
 from functools import reduce
-from typing import List
+from typing import Dict, Any, List, Optional
 
 import frontmatter
 
@@ -38,6 +38,8 @@ class Playbooks:
         program_paths: List[str],
         llm_config: LLMConfig = None,
         session_id: str = None,
+        cli_args: Optional[Dict[str, Any]] = None,
+        initial_state: Optional[Dict[str, Any]] = None,
     ):
         """Initialize a Playbooks instance.
 
@@ -45,6 +47,8 @@ class Playbooks:
             program_paths: List of file paths to playbook files (.pb or .pbasm)
             llm_config: Configuration for LLM services, uses defaults if None
             session_id: Unique identifier for this session, generated if None
+            cli_args: Optional CLI arguments to pass to BGN playbook execution
+            initial_state: Optional initial state variables to set on all agents
         """
         self.program_paths = program_paths
         if llm_config is None:
@@ -52,6 +56,8 @@ class Playbooks:
         else:
             self.llm_config = llm_config.copy()
         self.session_id = session_id or str(uuid.uuid4())
+        self.cli_args = cli_args or {}
+        self.initial_state = initial_state or {}
 
         # Load files
         program_file_tuples = Loader.read_program_files(program_paths)
@@ -121,6 +127,8 @@ class Playbooks:
             program_paths=self.program_paths,
             compiled_program_paths=compiled_program_paths,
             metadata=self.program_metadata,
+            cli_args=self.cli_args,
+            initial_state=self.initial_state,
         )
 
     async def initialize(self):

@@ -29,7 +29,7 @@ from playbooks.utils.llm_helper import (
 )
 from playbooks.utils.version import get_playbooks_version
 
-console = Console()
+console = Console(stderr=True)  # All compiler output to stderr
 
 
 class FileCompilationSpec(NamedTuple):
@@ -327,7 +327,10 @@ class Compiler:
             # Use cached version
             compiled_agent = cache_path.read_text()
         else:
-            console.print(f"[dim pink]  Compiling agent: {agent_name}[/dim pink]")
+            # Print to stderr so it doesn't pollute stdout when piping
+            import sys
+
+            print(f"  Compiling agent: {agent_name}", file=sys.stderr)
 
             compiled_agent = self._compile_agent(agent_content)
 

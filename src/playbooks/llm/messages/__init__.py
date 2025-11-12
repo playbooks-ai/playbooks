@@ -25,6 +25,7 @@ from .types import (
     # Data types
     FileLoadLLMMessage,
     SessionLogLLMMessage,
+    ArtifactLLMMessage,
 )
 
 __all__ = [
@@ -48,4 +49,5 @@ __all__ = [
     # Data types
     "FileLoadLLMMessage",
     "SessionLogLLMMessage",
+    "ArtifactLLMMessage",
 ]
