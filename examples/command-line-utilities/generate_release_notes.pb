@@ -25,8 +25,8 @@ Agent providing file system operations through MCP integration.
 
 remote:
   type: mcp
-  transport: streamable-http
-  url: http://127.0.0.1:8000/mcp
+  transport: memory
+  url: memory://../deepagents/filesystem_mcp.py
 
 ---
 
@@ -35,6 +35,6 @@ Agent providing shell command execution through MCP integration.
 
 remote:
   type: mcp
-  transport: streamable-http
-  url: http://127.0.0.1:8002/mcp
+  transport: memory
+  url: memory://../deepagents/shell_mcp.py
 

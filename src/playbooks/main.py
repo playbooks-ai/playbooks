@@ -121,11 +121,31 @@ class Playbooks:
         compiled_program_paths = [
             result.compiled_file_path for result in self.compiled_program_files
         ]
+        # Build source_file_paths mapping - map each compiled file back to its original source
+        # Multiple compiled files can come from the same original .pb file
+        source_file_paths = []
+        for result in self.compiled_program_files:
+            # Find the original source file by matching the compiled path's base name
+            # or using direct mapping from program_files
+            original_source = None
+            for file_spec in self.program_files:
+                # The file_spec has the original path before compilation
+                if not file_spec.is_compiled:
+                    # This was a .pb file that got compiled
+                    original_source = file_spec.file_path
+                    break
+
+            if not original_source and self.program_paths:
+                # Fallback to first program path
+                original_source = self.program_paths[0]
+
+            source_file_paths.append(original_source)
 
         self.program = Program(
             event_bus=self.event_bus,
             program_paths=self.program_paths,
             compiled_program_paths=compiled_program_paths,
+            source_file_paths=source_file_paths,
             metadata=self.program_metadata,
             cli_args=self.cli_args,
             initial_state=self.initial_state,

@@ -496,6 +496,7 @@ class Program(ProgramAgentsCommunicationMixin):
         metadata: dict = {},
         cli_args: Optional[Dict[str, Any]] = None,
         initial_state: Optional[Dict[str, Any]] = None,
+        source_file_paths: List[str] = None,
     ):
         self.metadata = metadata
         self.event_bus = event_bus
@@ -504,6 +505,9 @@ class Program(ProgramAgentsCommunicationMixin):
 
         self.program_paths = program_paths or []
         self.compiled_program_paths = compiled_program_paths or []
+        self.source_file_paths = (
+            source_file_paths or []
+        )  # Original source paths for each compiled file
         self.program_content = program_content
         if self.compiled_program_paths and self.program_content:
             raise ValueError(
@@ -536,10 +540,17 @@ class Program(ProgramAgentsCommunicationMixin):
         else:
             # Using compiled program paths (cache files)
             for i, markdown_content in enumerate(self.markdown_contents):
-                cache_file_path = self.compiled_program_paths[i]
-                # Convert to absolute path for consistent tracking
-                abs_cache_path = str(Path(cache_file_path).resolve())
-                ast = markdown_to_ast(markdown_content, source_file_path=abs_cache_path)
+                # Use original source file path for relative path resolution
+                # (e.g., for memory:// MCP server paths)
+                # source_file_paths has one entry per compiled file and points to the original .pb source
+                if self.source_file_paths and i < len(self.source_file_paths):
+                    source_path = str(Path(self.source_file_paths[i]).resolve())
+                elif self.program_paths and i < len(self.program_paths):
+                    source_path = str(Path(self.program_paths[i]).resolve())
+                else:
+                    source_path = None
+
+                ast = markdown_to_ast(markdown_content, source_file_path=source_path)
                 self.agent_klasses.update(
                     AgentBuilder.create_agent_classes_from_ast(ast)
                 )
