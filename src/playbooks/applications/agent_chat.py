@@ -54,7 +54,9 @@ from playbooks.utils.error_utils import check_playbooks_health
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Initialize Rich console - use stderr for all diagnostics
-console = Console(stderr=True)
+console = console_stderr = Console(stderr=True)
+# Separate console for stdout (for colored message headers)
+console_stdout = Console(stderr=False)
 
 
 def clear_stdin():
@@ -155,10 +157,12 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             recipient_display = self._format_agent_display(
                 event.recipient_klass, event.recipient_id
             )
-            # Prefix to stderr in bracket format
-            print(f"\n[{sender_display} → {recipient_display}]", file=sys.stderr)
+            # Prefix to stdout in bracket format with color
+            console_stderr.print(
+                f"\n[cyan][{sender_display} → {recipient_display}][/cyan]"
+            )
         else:
-            print(f"\n[{sender_display}]", file=sys.stderr)
+            console_stderr.print(f"\n[cyan]{sender_display}][/cyan]")
 
     async def _display_chunk(self, event: StreamChunkEvent) -> None:
         """Display stream chunk - content to stdout."""
@@ -201,16 +205,18 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             recipient_klass = event.final_message.recipient_klass
             content = event.final_message.content
 
-        # Prefix to stderr, content to stdout
+        # Prefix to stdout, content to stdout
         sender_display = self._format_agent_display(sender_klass, sender_id)
 
         if recipient_id and recipient_klass:
             recipient_display = self._format_agent_display(
                 recipient_klass, recipient_id
             )
-            print(f"\n[{sender_display} → {recipient_display}]", file=sys.stderr)
+            console_stderr.print(
+                f"\n[cyan]{sender_display} → {recipient_display}][/cyan]"
+            )
         else:
-            print(f"\n[{sender_display}]", file=sys.stderr)
+            console_stderr.print(f"\n[cyan]{sender_display}][/cyan]")
 
         # Content to stdout
         print(content, file=sys.stdout)
