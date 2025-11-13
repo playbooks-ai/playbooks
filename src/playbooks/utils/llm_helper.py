@@ -421,6 +421,8 @@ def get_completion(
             and full_response is not None
             and len(full_response) > 0
         ):
+            if isinstance(full_response, list):
+                full_response = "".join(full_response)
             full_response = str(full_response)
             cache.set(cache_key, full_response)
 

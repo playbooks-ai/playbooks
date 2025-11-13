@@ -141,8 +141,12 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             return klass
         return f"{klass}({agent_id})"
 
-    async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
-        """Display stream start - prefix to stderr, content to stdout."""
+    async def on_stream_start(self, event: StreamStartEvent) -> None:
+        """Handle stream start - always track stream, display only if streaming."""
+        sender = self.program.agents_by_id.get(event.sender_id)
+        agent_name = sender.klass if sender else "Agent"
+
+        # Always track the stream (needed for non-streaming mode to work correctly)
         self.active_streams[event.stream_id] = {
             "agent_klass": agent_name,
             "sender_id": event.sender_id,
@@ -151,6 +155,11 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             "content": "",
         }
 
+        # Call parent to handle display logic (will call _display_start if streaming)
+        await super().on_stream_start(event)
+
+    async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
+        """Display stream start - prefix to stderr, content to stdout."""
         sender_display = self._format_agent_display(agent_name, event.sender_id)
 
         if event.recipient_id and event.recipient_klass:
@@ -213,13 +222,14 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
                 recipient_klass, recipient_id
             )
             console_stderr.print(
-                f"\n[cyan]{sender_display} → {recipient_display}][/cyan]"
+                f"\n[cyan][{sender_display} → {recipient_display}][/cyan]"
             )
         else:
-            console_stderr.print(f"\n[cyan]{sender_display}][/cyan]")
+            console_stderr.print(f"\n[cyan][{sender_display}][/cyan]")
 
         # Content to stdout
         print(content, file=sys.stdout)
+        sys.stdout.flush()  # Ensure content is displayed immediately
 
 
 class SessionLogWrapper:

@@ -13,7 +13,7 @@ from rich.console import Console
 from playbooks import Playbooks
 from playbooks.applications.streaming_observer import ChannelStreamObserver
 from playbooks.core.constants import EXECUTION_FINISHED
-from playbooks.core.exceptions import ExecutionFinished
+from playbooks.core.exceptions import ExecutionFinished, InteractiveInputRequired
 from playbooks.infrastructure.user_output import user_output
 from playbooks.utils.error_utils import check_playbooks_health
 
@@ -107,12 +107,6 @@ class CLIStreamObserver(ChannelStreamObserver):
         print(content, file=sys.stdout)
 
 
-class InteractiveInputRequired(Exception):
-    """Raised when interactive input is required but non-interactive mode is set."""
-
-    pass
-
-
 async def main(
     program_paths: List[str],
     cli_args: Dict[str, Any] = None,
@@ -203,17 +197,18 @@ async def main(
     await stream_observer.subscribe_to_all_channels()
 
     # Patch WaitForMessage to fail in non-interactive mode
+    original_wait_for_message = None
     if non_interactive:
         from playbooks.agents.messaging_mixin import MessagingMixin
 
-        original_wait = MessagingMixin.WaitForMessage
+        original_wait_for_message = MessagingMixin.WaitForMessage
 
         async def patched_wait(self, source_agent_id: str):
             if source_agent_id in ("human", "user"):
                 raise InteractiveInputRequired(
                     "Interactive input required but --non-interactive mode is enabled"
                 )
-            return await original_wait(self, source_agent_id)
+            return await original_wait_for_message(self, source_agent_id)
 
         MessagingMixin.WaitForMessage = patched_wait
 
@@ -239,6 +234,27 @@ async def main(
         console.print(f"[red]Error:[/red] {e}", file=sys.stderr)
         exit_code = 1
     finally:
+        # Restore the original WaitForMessage if it was patched
+        if original_wait_for_message is not None:
+            from playbooks.agents.messaging_mixin import MessagingMixin
+
+            MessagingMixin.WaitForMessage = original_wait_for_message
+
+        # Check agent errors for InteractiveInputRequired exceptions
+        # These should return exit code 3 even if caught as other exceptions
+        agent_errors = playbooks.get_agent_errors()
+        for error_info in agent_errors:
+            error_obj = error_info.get("error_obj")
+            # Check if the error is or contains InteractiveInputRequired
+            if isinstance(error_obj, InteractiveInputRequired):
+                exit_code = 3
+                break
+            # Also check if it's a StreamingExecutionError wrapping InteractiveInputRequired
+            if hasattr(error_obj, "original_error"):
+                if isinstance(error_obj.original_error, InteractiveInputRequired):
+                    exit_code = 3
+                    break
+
         # Check for agent errors (only print to stderr if not quiet)
         health_check = check_playbooks_health(
             playbooks,
@@ -247,8 +263,8 @@ async def main(
             raise_on_errors=False,
             context="cli_utility_execution",
         )
-        # Only set exit code to 1 if there are actual errors
-        if health_check and health_check.get("has_errors") and exit_code == 0:
+        # Only set exit code to 1 if there are actual errors and no higher exit code already set
+        if health_check and health_check.get("has_errors") and exit_code not in (3,):
             exit_code = 1
 
     return exit_code

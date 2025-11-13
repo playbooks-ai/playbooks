@@ -7,7 +7,7 @@ coordination between various system components.
 
 import uuid
 from functools import reduce
-from typing import Dict, Any, List, Optional
+from typing import Any, Dict, List, Optional
 
 import frontmatter
 
@@ -16,11 +16,12 @@ from playbooks.compilation.compiler import (
     FileCompilationResult,
     FileCompilationSpec,
 )
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.compilation.loader import Loader
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.infrastructure.logging.setup import configure_logging
-from .program import Program
 from playbooks.utils.llm_config import LLMConfig
+
+from .program import Program
 
 # Configure logging at module import
 configure_logging()

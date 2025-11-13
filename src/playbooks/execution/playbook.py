@@ -409,6 +409,15 @@ class PlaybookLLMExecution(LLMExecution):
                 try:
                     await streaming_executor.add_chunk(chunk)
                 except StreamingExecutionError as e:
+                    # Check if the underlying error is InteractiveInputRequired
+                    # These should not be retried, they should fail immediately
+                    if hasattr(e, "original_error"):
+                        from playbooks.core.exceptions import InteractiveInputRequired
+
+                        if isinstance(e.original_error, InteractiveInputRequired):
+                            # Re-raise InteractiveInputRequired exceptions
+                            raise e.original_error
+
                     # Execution error during streaming - stop processing
                     # The error details are already captured in streaming_executor.result
                     logger.error(f"Streaming execution error: {e}")

@@ -118,7 +118,7 @@ class TestMCPTransportIntegration:
 
             # Test tool listing
             tools = await transport.list_tools()
-            tool_names = [tool.name for tool in tools]
+            tool_names = [tool["name"] for tool in tools]
             assert "add_numbers" in tool_names
             assert "greet" in tool_names
 

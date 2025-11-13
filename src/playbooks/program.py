@@ -219,6 +219,10 @@ class AsyncAgentRuntime:
             ]
             log_agent_errors(error_info, "agent_runtime")
 
+            # Signal execution finished so run_till_exit doesn't hang
+            # This ensures the program terminates even if an agent fails
+            self.program.set_execution_finished(reason="error", exit_code=1)
+
             raise
         finally:
             # Cleanup agent resources
@@ -601,29 +605,46 @@ class Program(ProgramAgentsCommunicationMixin):
                             agent._initial_artifacts_to_load.append(f"${var_name}")
                         else:
                             agent.state.variables[f"${var_name}"] = var_value
-        # Validate public.json count (only for AI agents, humans don't need public.json)
+        # Validate public.json count (only for local AI agents, not remote/MCP agents)
+        # Remote agents (MCPAgent, RemoteAIAgent) don't have playbooks in the current playbook
         # Allow empty or missing public.json for testing scenarios
+        from playbooks.agents import RemoteAIAgent
+
+        # Get non-empty public json lists
+        non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
+
+        # Count only local AI agents that actually have playbooks (non-meeting-only agents)
+        # Note: All agents in agent_klasses have playbooks defined in the playbook file
+        # Meeting-only agents are those with only meeting playbooks
         ai_agent_count = sum(
             1
             for klass in self.agent_klasses.values()
             if not issubclass(klass, HumanAgent)
+            and not issubclass(klass, RemoteAIAgent)  # Exclude remote agents
         )
 
-        non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
+        # Count agents that have non-meeting playbooks (i.e., have public.json)
+        agents_with_public_json = len([pj for pj in self.public_jsons if pj])
 
-        # Only validate if there are non-empty public.jsons
-        # (Allow tests without public.json blocks)
-        if len(non_empty_public_jsons) > 0 and ai_agent_count != len(self.public_jsons):
+        # Only validate if there are explicitly defined public.jsons in the playbook
+        # If there are non-empty public jsons, they should match the agents that have them
+        # But allow agents without public.json (e.g., meeting-only agents)
+        if (
+            len(non_empty_public_jsons) > 0
+            and agents_with_public_json > 0
+            and ai_agent_count < agents_with_public_json
+        ):
             raise ValueError(
-                "Number of AI agents and public jsons must be the same. "
-                f"Got {ai_agent_count} AI agents and {len(self.public_jsons)} public jsons"
+                "Number of public json definitions exceeds number of agents. "
+                f"Got {ai_agent_count} local AI agents but {agents_with_public_json} have public.json"
             )
 
-        # Assign public.json to AI agents only (humans don't have playbooks)
+        # Assign public.json to local AI agents only (humans and remote agents don't have playbooks)
         ai_agent_klasses = [
             klass
             for klass in self.agent_klasses.values()
             if not issubclass(klass, HumanAgent)
+            and not issubclass(klass, RemoteAIAgent)  # Exclude remote agents
         ]
         for i, agent_klass in enumerate(ai_agent_klasses):
             if i < len(non_empty_public_jsons):

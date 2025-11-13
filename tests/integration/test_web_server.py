@@ -97,7 +97,7 @@ def test_data_dir():
     """Return the test data directory path."""
     import pathlib
 
-    return pathlib.Path(__file__).parent.parent.parent / "data"
+    return pathlib.Path(__file__).parent.parent / "data"
 
 
 @pytest.fixture

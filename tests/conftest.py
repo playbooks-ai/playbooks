@@ -92,32 +92,71 @@ def test_mcp_server_instance():
 def extract_messages_from_cli_output(output: str) -> list[str]:
     """Extract message content from CLI output.
 
-    Parses lines like:
-    💬 HelloWorld(1000) → User: Hello! Welcome to the Playbooks system!
+    Supports multiple formats:
+    1. Old format: 💬 HelloWorld(1000) → User: Hello! Welcome to the Playbooks system!
+    2. New format: [HelloWorld(1000) → User] followed by message on next line(s)
+    3. Message content without headers (fallback for when stdout/stderr are separated)
 
-    Returns list of message contents (the part after the colon).
+    Returns list of message contents.
     """
     messages = []
-    # Pattern to match message lines: 💬 Sender → Recipient: message
-    # The message might span multiple lines if wrapped
     lines = output.split("\n")
 
     current_message = None
-    for line in lines:
-        # Check if this is a message line (starts with 💬)
+    in_message_header = False
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        stripped = line.strip()
+
+        # Check for old format: 💬 Sender → Recipient: message
         if "💬" in line and "→" in line and ":" in line:
-            # Extract the message content (everything after the last colon)
+            if current_message:
+                messages.append(current_message)
             parts = line.split(":", 1)
             if len(parts) == 2:
-                message_content = parts[1].strip()
-                if current_message:
-                    messages.append(current_message)
-                current_message = message_content
-        elif current_message and line.strip():
-            # Continuation of previous message (wrapped line)
-            # Only add if it doesn't start a new section (like "Error" or another message)
-            if not line.startswith(("Error", "💬", "---", "Playbooks")):
-                current_message += " " + line.strip()
+                current_message = parts[1].strip()
+            in_message_header = False
+
+        # Check for new format: [Sender → Recipient]
+        elif stripped.startswith("[") and "→" in line and stripped.endswith("]"):
+            if current_message:
+                messages.append(current_message)
+            current_message = None
+            in_message_header = True
+
+        # If we just saw a header, the next non-empty line is the message content
+        elif in_message_header and stripped:
+            current_message = stripped
+            in_message_header = False
+
+        # Continuation of current message
+        elif current_message and stripped and not in_message_header:
+            # Only add if it doesn't start a new section
+            if not line.startswith(
+                ("Error", "💬", "[", "---", "Playbooks", "ℹ", "poetry")
+            ):
+                current_message += " " + stripped
+
+        # Fallback: if we have content that looks like a message (doesn't look like metadata or a header)
+        # and we're not currently tracking a message, start a new one
+        # This handles the case where stdout and stderr are separated and messages come without headers
+        elif (
+            stripped
+            and not in_message_header
+            and not current_message
+            and not stripped.startswith(("[", "---", "Playbooks", "ℹ", "poetry"))
+            and "→" not in stripped  # Not a header itself
+            and "Loading" not in stripped
+            and "Execution" not in stripped
+            and len(stripped) > 20  # Likely to be actual message content
+        ):
+            # Start a new message
+            if current_message:
+                messages.append(current_message)
+            current_message = stripped
+
+        i += 1
 
     # Add the last message if any
     if current_message:

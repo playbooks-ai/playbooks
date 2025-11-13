@@ -9,8 +9,8 @@ from typing import Any, Dict, Optional
 
 from rich.console import Console
 
-from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.core.exceptions import ExecutionFinished
+from playbooks.infrastructure.logging.debug_logger import debug
 
 from .base import Playbook
 
@@ -73,7 +73,7 @@ class LocalPlaybook(Playbook):
         except Exception as e:
             error_msg = f"Local playbook {self.name} failed: {str(e)}"
             Console(stderr=True).print(f"[bold red]ERROR:[/bold red] {error_msg}")
-            return f"Error: {str(e)}"
+            raise
 
     @abstractmethod
     async def _execute_impl(self, *args, **kwargs) -> Any:

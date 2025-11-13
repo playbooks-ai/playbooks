@@ -56,24 +56,20 @@ class MCPTransport(TransportProtocol):
         if not self.url:
             raise ValueError("MCP transport requires 'url' in configuration")
 
-        # For memory transport, validate and parse the URL early
+        # For memory transport, parse and validate the URL
         if self.transport_type.lower() == "memory":
             try:
                 self._memory_server_path, self._memory_var_name = parse_memory_url(
                     self.url
                 )
-                # Determine base directory for path resolution
-                base_dir = None
-                if source_file_path:
-                    from pathlib import Path
-
-                    base_dir = str(Path(source_file_path).parent)
-
-                # Pre-validate that the file exists (actual loading happens in connect)
-                # This provides early error feedback during initialization
-                load_mcp_server(
-                    self._memory_server_path, self._memory_var_name, base_dir=base_dir
-                )
+                # Note: Actual file existence and variable validation is deferred to connect()
+                # This allows for test scenarios where the transport may be replaced
+                # before connection is established. However, we validate the URL format here.
+                if not self._memory_server_path:
+                    raise ValueError("memory:// URL must contain a file path")
+            except ValueError:
+                # Re-raise ValueError from parse_memory_url
+                raise
             except Exception as e:
                 raise ValueError(f"Invalid memory transport configuration: {e}") from e
 
@@ -127,6 +123,12 @@ class MCPTransport(TransportProtocol):
 
             logger.info(f"Successfully connected to MCP server at {self.url}")
 
+        except (FileNotFoundError, ValueError, ImportError) as e:
+            logger.error(f"Failed to connect to MCP server at {self.url}: {str(e)}")
+            # For these validation errors, raise as ValueError for consistency with __init__
+            if isinstance(e, ValueError):
+                raise
+            raise ValueError(f"Invalid memory transport configuration: {str(e)}") from e
         except Exception as e:
             logger.error(f"Failed to connect to MCP server at {self.url}: {str(e)}")
             raise ConnectionError(f"MCP connection failed: {str(e)}") from e
@@ -179,6 +181,13 @@ class MCPTransport(TransportProtocol):
 
             if method == "list_tools":
                 result = await self.client.list_tools()
+                # Convert Tool objects to dictionaries for consistency
+                if result and hasattr(result[0] if result else None, "model_dump"):
+                    # Pydantic v2 model - convert to dict
+                    result = [tool.model_dump() for tool in result]
+                elif result and hasattr(result[0] if result else None, "dict"):
+                    # Pydantic v1 model - convert to dict
+                    result = [tool.dict() for tool in result]
                 # Cache tools for later use
                 self._tools_cache = result
                 return result
