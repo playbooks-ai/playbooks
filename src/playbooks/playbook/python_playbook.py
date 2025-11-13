@@ -33,7 +33,7 @@ class PythonPlaybook(LocalPlaybook):
         playbooks = {}
 
         for child in h1.get("children", []):
-            if child.get("type") == "code-block":
+            if child.get("type") == "code-block" and child.get("language") == "python":
                 new_playbooks = cls.create_playbooks_from_code_block(
                     child["text"],
                     namespace_manager,
