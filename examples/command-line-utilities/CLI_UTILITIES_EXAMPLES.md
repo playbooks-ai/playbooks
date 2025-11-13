@@ -8,6 +8,7 @@ This guide provides detailed examples and explanations for building command-line
 2. [MCP Agents in CLI Utilities](#mcp-agents-in-cli-utilities)
 3. [In-Process MCP Servers with Memory Transport](#in-process-mcp-servers-with-memory-transport)
 4. [Advanced Examples](#advanced-examples)
+5. [Direct Execution with Shebang](#direct-execution-with-shebang)
 
 ## Basic CLI Utilities
 
@@ -154,7 +155,7 @@ playbooks run calculator.pb --a 5 --b 3 --operation add
 
 ### Path Resolution
 
-Memory transport resolves paths relative to **the playbook file's directory** (not the current working directory). This makes playbooks portable and paths intuitive:
+Memory transport resolves paths relative to **current working directory** (not the playbook file):
 
 ```yaml
 # Relative to the .pb file's location
@@ -165,8 +166,6 @@ url: memory://tools/custom.py            # Subdirectory
 # Absolute path (note 3 slashes)
 url: memory:///absolute/path/to/server.py
 ```
-
-**Example**: If your playbook is at `/project/examples/my_app.pb` and you use `url: memory://../tools/server.py`, it will resolve to `/project/tools/server.py`.
 
 ### Custom Variable Names
 
@@ -350,6 +349,121 @@ remote:
   transport: memory
   url: memory://./tools/common_tools.py
 ```
+
+## Direct Execution with Shebang
+
+For even more convenient CLI utilities, you can add a shebang line to your playbook files and execute them directly, just like Python scripts!
+
+### Setup
+
+1. **Add shebang to your playbook file** (must be the first line):
+
+```markdown
+#!/usr/bin/env playbooks-shebang
+# ReleaseNotesGenerator
+Generates release notes by analyzing git commits
+
+## Main($start, $end)
+cli_entry: true
+
+### Triggers
+- At the beginning
+### Steps
+- Use shell command "git log --notes $start..$end" to get $commit_logs
+- ...
+```
+
+2. **Make the file executable:**
+
+```bash
+chmod +x generate_release_notes.pb
+```
+
+3. **Run directly:**
+
+```bash
+# Instead of:
+playbooks run generate_release_notes.pb --start v0.6.0 --end v0.7.0
+
+# You can now do:
+./generate_release_notes.pb --start v0.6.0 --end v0.7.0
+```
+
+### Without File Extensions
+
+Just like Python, you can remove the `.pb` extension:
+
+```bash
+# Rename the file
+mv generate_release_notes.pb generate_release_notes
+
+# Still works!
+./generate_release_notes --start v0.6.0 --end v0.7.0
+```
+
+### Adding to PATH
+
+For system-wide availability, add your CLI utilities to your PATH:
+
+```bash
+# Create a bin directory in your home folder
+mkdir -p ~/bin
+
+# Copy or link your playbook
+cp generate_release_notes.pb ~/bin/release-notes
+chmod +x ~/bin/release-notes
+
+# Add to PATH in your shell config (~/.bashrc, ~/.zshrc, etc.)
+export PATH="$HOME/bin:$PATH"
+
+# Now use it from anywhere!
+release-notes --start v0.6.0 --end v0.7.0
+```
+
+### Complete Example
+
+**File: `my-tool` (no extension)**
+
+```markdown
+#!/usr/bin/env playbooks-shebang
+# MyTool
+A useful command-line tool
+
+## Main($input, $output)
+cli_entry: true
+
+### Triggers
+- At the beginning
+### Steps
+- Process $input
+- Write result to $output
+- Say(user, "Done!")
+- End program
+```
+
+**Usage:**
+
+```bash
+chmod +x my-tool
+./my-tool --input data.txt --output result.txt
+
+# Or add to PATH and use globally
+my-tool --input data.txt --output result.txt
+```
+
+### Benefits
+
+✓ **Simpler syntax** - No need to type `playbooks run`  
+✓ **Feels native** - Works like any other command-line tool  
+✓ **No extension needed** - Name your tools anything you want  
+✓ **Standard Unix conventions** - Follows familiar patterns  
+
+### Notes
+
+- The shebang line (`#!/usr/bin/env playbooks-shebang`) must be the **first line** of the file
+- You can still use frontmatter metadata after the shebang line
+- The playbook must be installed for shebang execution to work (`pip install playbooks` or `poetry install`)
+- Both `.pb` files and extensionless files work the same way
 
 ## Troubleshooting
 

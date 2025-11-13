@@ -1,3 +1,4 @@
+#!/usr/bin/env playbooks-shebang
 # ReleaseNotesGenerator
 Generates release notes by analyzing git commits between two points
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env playbooks-shebang
 # TextSummarizer
 Summarizes text input from stdin or --message
 

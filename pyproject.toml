@@ -9,6 +9,7 @@ packages = [{include = "playbooks", from = "src"}]
 
 [tool.poetry.scripts]
 playbooks = "playbooks.cli:main"
+playbooks-shebang = "playbooks.shebang_cli:main"
 
 [tool.poetry.dependencies]
 python = "^3.12"
