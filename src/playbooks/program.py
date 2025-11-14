@@ -159,7 +159,7 @@ class AsyncAgentRuntime:
 
         except ExecutionFinished as e:
             # Signal that execution is finished
-            self.program.set_execution_finished(reason="normal", exit_code=0)
+            await self.program.set_execution_finished(reason="normal", exit_code=0)
             debug(
                 "Agent execution finished",
                 agent_id=agent.id,
@@ -221,13 +221,34 @@ class AsyncAgentRuntime:
 
             # Signal execution finished so run_till_exit doesn't hang
             # This ensures the program terminates even if an agent fails
-            self.program.set_execution_finished(reason="error", exit_code=1)
+            await self.program.set_execution_finished(reason="error", exit_code=1)
 
             raise
         finally:
             # Cleanup agent resources
             if hasattr(agent, "cleanup"):
                 await agent.cleanup()
+
+    async def wait_for_all_agents_idle(self) -> None:
+        """Wait for all agents to become idle.
+
+        Args:
+            self: The Program instance
+        """
+        done = False
+        while not done:
+            debug("Waiting for all agents to become idle")
+            done = True
+            for agent in self.program.agents:
+                if isinstance(agent, AIAgent):
+                    if "$_busy" not in agent.state.variables:
+                        done = False
+                        break
+                    if agent.state.variables["$_busy"].value is True:
+                        done = False
+                        break
+            await asyncio.sleep(1)
+        debug("All agents are idle")
 
 
 class ProgramAgentsCommunicationMixin:
@@ -830,7 +851,7 @@ class Program(ProgramAgentsCommunicationMixin):
             # Agent threads are designed to run indefinitely until this exception
             await self.execution_finished_event.wait()
         except ExecutionFinished:
-            self.set_execution_finished(reason="normal", exit_code=0)
+            await self.set_execution_finished(reason="normal", exit_code=0)
         except Exception as e:
             logger.error(
                 f"Unexpected error in run_till_exit: {e}",
@@ -842,7 +863,7 @@ class Program(ProgramAgentsCommunicationMixin):
                 error=str(e),
                 error_type=type(e).__name__,
             )
-            self.set_execution_finished(reason="error", exit_code=1)
+            await self.set_execution_finished(reason="error", exit_code=1)
             raise
         finally:
             await self.shutdown()
@@ -885,7 +906,7 @@ class Program(ProgramAgentsCommunicationMixin):
         """
         return self._has_agent_errors or len(self.get_agent_errors()) > 0
 
-    def set_execution_finished(
+    async def set_execution_finished(
         self, reason: str = "normal", exit_code: int = 0
     ) -> None:
         """Signal that program execution has finished.
@@ -897,6 +918,9 @@ class Program(ProgramAgentsCommunicationMixin):
             reason: Reason for finishing (e.g., "normal", "error")
             exit_code: Exit code (0 for success, non-zero for errors)
         """
+        # Wait for all agents to become idle
+        await self.runtime.wait_for_all_agents_idle()
+
         self.execution_finished = True
         if hasattr(self, "execution_finished_event"):
             self.execution_finished_event.set()
@@ -908,7 +932,7 @@ class Program(ProgramAgentsCommunicationMixin):
 
     async def shutdown(self) -> None:
         """Shutdown all agents and clean up resources."""
-        self.set_execution_finished(reason="normal", exit_code=0)
+        await self.set_execution_finished(reason="normal", exit_code=0)
 
         # Stop all agent tasks via runtime
         await self.runtime.stop_all_agents()

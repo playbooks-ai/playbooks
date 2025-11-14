@@ -410,3 +410,23 @@ def test_streaming_vs_nonstreaming_consistency(test_data_dir):
         and "playbooks" in messages_streaming[1].lower()
     )
     assert "Goodbye" in messages_streaming[2] or "goodbye" in messages_streaming[2]
+
+
+@pytest.mark.asyncio
+async def test_example_15(test_data_dir, capsys):
+    """Test that python-only playbook executes without any LLM calls."""
+
+    playbooks = Playbooks([test_data_dir / "15-create-bgn.pb"])
+    await playbooks.initialize()
+    await playbooks.program.run_till_exit()
+
+    assert len(playbooks.program.agents) == 4
+
+    log = playbooks.program.agents_by_klass["A"][0].state.session_log.to_log_full()
+    assert "from A" in log
+
+    log = playbooks.program.agents_by_klass["B"][0].state.session_log.to_log_full()
+    assert "from B" in log
+
+    log = playbooks.program.agents_by_klass["C"][0].state.session_log.to_log_full()
+    assert "from C" in log

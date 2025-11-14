@@ -646,7 +646,7 @@ class DebugServer:
                 "[DEBUG] Triggering program shutdown due to debug client disconnection"
             )
             # Set execution finished to trigger clean shutdown
-            self.program.set_execution_finished(
+            await self.program.set_execution_finished(
                 reason="debug_client_disconnected", exit_code=0
             )
 

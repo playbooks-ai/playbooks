@@ -976,7 +976,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 return (success, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
-                self.program.set_execution_finished(reason="normal", exit_code=0)
+                self.state.variables["$_busy"] = False
+                await self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
                 await self._post_execute(call, False, message, langfuse_span)
                 return (False, message)
