@@ -249,11 +249,11 @@ Compiled:
 
 ### Public Playbooks
 - Generate public.json with tool info for each public python and markdown playbooks
-- **BGN playbooks are automatically public** - include them even if not explicitly marked
+- Always mark BGN playbooks as public
 - If no public playbooks, generate empty [] public.json
 - Python syntax: `@playbook(public=True)` or BGN trigger
 - Markdown syntax: `public: true` in metadata or BGN trigger
-- For BGN playbooks, include `is_bgn: true` and `cli_entry: true` if playbook has `cli_entry: true` in metadata
+- For BGN playbooks, include `is_bgn: true`
 
 ### Agent and Playbook metadata
 Collect any metadata in the description area into a metadata yaml block. When metadata is present, add a --- document separator and write description after that. This applies to # agent and ## playbook blocks.
@@ -367,8 +367,7 @@ MCP server for weather tools
 7. ✓ Add `YLD for user` only when waiting for user response, `YLD for meeting` to listen to meeting, `YLD for call` for playbook execution
 8. ✓ Add JMP for while/until loops
 9. ✓ End with a public.json listing all public playbooks in the agent
-10. ✓ **BGN playbooks are automatically public** - include in public.json with "is_bgn": true
-11. ✓ If playbook has `cli_entry: true` in metadata, include "cli_entry": true in public.json
+10. ✓ Mark BGN playbooks as public and include in public.json with "is_bgn": true
 12. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
 13. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
 14. ✓ Extract metadata into yaml blocks for agents and playbooks
@@ -497,6 +496,9 @@ def LookupInfo(query:str) -> str:
 ```
 
 ## Main() -> None
+metadata:
+  public: true
+---
 Main interaction loop that guides user conversations through a friendly information-gathering and sharing process.
 ### Triggers
 - T1:BGN When program starts
@@ -549,6 +551,14 @@ You are a processor who will take each line of the report and count how many lin
 
 ```public.json
 [
+  {
+    "name": "Main",
+    "description": "Main interaction loop that guides user conversations through a friendly information-gathering and sharing process.",
+    "parameters": {},
+    "triggers": ["T1:BGN When program starts"],
+    "is_bgn": true,
+    "cli_entry": true
+  },
   {
     "name": "LookupInfo",
     "description": "Look up info for given query",
@@ -678,6 +688,6 @@ Conduct a planning meeting
 
 ====
 
-Remember: Follow the output contract exactly; deviations break execution.
+Remember: Mark BGN playbooks as public. Follow the output contract exactly; deviations break execution.
 
 **Output:**

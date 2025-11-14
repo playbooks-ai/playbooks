@@ -333,7 +333,7 @@ Think carefully when asked to communicate with or call a playbook from another a
 # plan: execute Main:04:QUE, ask tax rate from accountant and calculate tax
 ...
 await Step("Main:04:QUE")
-# think: Check if accountant type agent is available. Yes, I see AccountantExpert listed. Check if an AccountantExpert instance is available. Yes, I see AccountantExpert agent 1020, so I don't need to create one. Check if there is suitable playbook to get tax rate from AccountantExpert. Yes, I see AccountantExpert.TaxRateQuery($form_id). Check if I can call this playbook. We don't have a form id so can't call this Playbook. I will send a message to the agent instead.
+# think: AccountantExpert is an accountant agent. AccountantExpert(agent 1020) instance is in state. AccountantExpert.TaxRateQuery($form_id) is available. I don't have a $form_id so can't call this Playbook. I will send a message to the agent instead.
 await Say("agent 1020", f"Get tax rate for gross income {$gross_income}")
 # trig? no
 # yld? yes, "Main:05:QUE" needs tax rate
@@ -341,14 +341,35 @@ await Yld("call")
 ```
 
 OR, if TaxRateQuery can be called -
+
 ```
 ...
-# think: Check if accountant type agent is available. Yes, I see AccountantExpert listed. Check if an AccountantExpert instance is available. Yes, I see AccountantExpert agent 1020, so I don't need to create one. Check if there is suitable playbook to get tax rate from AccountantExpert. Yes, I see AccountantExpert.TaxRateQuery($form_id). Check if I can call this playbook. Yes.
+# think: AccountantExpert is an accountant agent. AccountantExpert(agent 1020) instance is in state. AccountantExpert.TaxRateQuery($form_id) is available. I have $form_id to call it with.
 tax_rate = await AccountantExpert["agent 1020"].TaxRateQuery($gross_income)
 await Var('tax_rate', tax_rate)
 ...
 ```
-Note how specific agent instance is selected - AccountantExpert["agent 1020"]
+Note how specific agent instance is selected for calls AccountantExpert["agent 1020"]
+
+OR, if no suitable agent type is found -
+
+```
+...
+# think: I don't see any agent type that can be used as accountant agent.
+tax_rate = "ERROR: No accountant agent found"
+await Var('tax_rate', tax_rate)
+...
+```
+
+OR, if no agent instance -
+
+```
+...
+# think: AccountantExpert is an accountant agent. There is no running instance of AccountantExpert, so I will create one.
+await CreateAgent("AccountantExpert")
+...
+```
+
 
 #### 9  Quick Mapping Cheatsheet
 || Playbook step                          | Condition     |Output (example)                                   |

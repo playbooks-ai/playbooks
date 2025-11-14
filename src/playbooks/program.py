@@ -705,7 +705,8 @@ class Program(ProgramAgentsCommunicationMixin):
         for agent in self.agents:
             if agent.klass not in self.agents_by_klass:
                 self.agents_by_klass[agent.klass] = []
-            self.agents_by_klass[agent.klass].append(agent)
+            if agent not in self.agents_by_klass[agent.klass]:
+                self.agents_by_klass[agent.klass].append(agent)
             self.agents_by_id[agent.id] = agent
             agent.program = self
 
@@ -744,7 +745,8 @@ class Program(ProgramAgentsCommunicationMixin):
         self.agents.append(agent)
         if agent.klass not in self.agents_by_klass:
             self.agents_by_klass[agent.klass] = []
-        self.agents_by_klass[agent.klass].append(agent)
+        if agent not in self.agents_by_klass[agent.klass]:
+            self.agents_by_klass[agent.klass].append(agent)
         self.agents_by_id[agent.id] = agent
         agent.program = self
 

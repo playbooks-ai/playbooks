@@ -420,13 +420,17 @@ async def test_example_15(test_data_dir, capsys):
     await playbooks.initialize()
     await playbooks.program.run_till_exit()
 
-    assert len(playbooks.program.agents) == 4
+    assert len(playbooks.program.agents) == 5
+    assert len(playbooks.program.agents_by_klass["B"]) == 2
 
     log = playbooks.program.agents_by_klass["A"][0].state.session_log.to_log_full()
     assert "from A" in log
 
     log = playbooks.program.agents_by_klass["B"][0].state.session_log.to_log_full()
     assert "from B" in log
+
+    log = playbooks.program.agents_by_klass["B"][1].state.session_log.to_log_full()
+    assert "from another B" in log
 
     log = playbooks.program.agents_by_klass["C"][0].state.session_log.to_log_full()
     assert "from C" in log
