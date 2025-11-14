@@ -376,6 +376,7 @@ MCP server for weather tools
 16. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
 17. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as execution_mode:react unless it is marked as execution_mode:raw
 18. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
+19. ✓ Don't change instructions for communication with other agents. Runtime will interpret them.
 
 ## Example Transformation
 
@@ -426,6 +427,8 @@ def LookupInfo(query:str):
 - List 5 cities near user's city
 - Think deeply about something common among these 5 cities
 - Tell user about that common thing
+- Call Accountant.GetTaxRate()
+- Ask Accountant for tax form ID
 - End program
 
 ### Notes
@@ -509,6 +512,8 @@ Main interaction loop that guides user conversations through a friendly informat
 - 09:EXE List 5 $cities:list near $city
 - 10:TNK Think deeply about something common among these 5 cities
 - 11:QUE Say(user, Tell user about that common thing)
+- 12:QUE Call Accountant.GetTaxRate()
+- 13:QUE Ask Accountant for tax form ID
 - 12:YLD for exit
 
 ### Notes
