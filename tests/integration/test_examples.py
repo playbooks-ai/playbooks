@@ -148,7 +148,7 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
     )
 
     mcp_agent.transport = InMemoryMCPTransport(test_mcp_server_instance)
-    # await mcp_agent.initialize()
+    await mcp_agent.initialize()
 
     await playbooks.program.run_till_exit()
 

@@ -274,6 +274,9 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
         )
         self.transport = MCPTransport(remote_config, source_file_path=source_file_path)
 
+        # Initialize $_busy variable to False
+        self.state.variables["$_busy"] = False
+
     async def discover_playbooks(self) -> None:
         """Discover MCP tools and create RemotePlaybook instances for each."""
         if not self._connected:
@@ -317,29 +320,35 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                     continue
 
                 # Create execution function for this tool - fix closure issue
-                def create_execute_fn(tool_name, schema):
+                def create_execute_fn(tool_name, schema, agent):
                     async def execute_fn(*args, **kwargs):
-                        # Convert positional args to kwargs if needed
-                        if args:
-                            properties = schema.get("properties", {})
-                            param_names = list(properties.keys())
-                            # Map positional args to parameter names from schema in order
-                            for i, arg in enumerate(args):
-                                if i < len(param_names):
-                                    param_name = param_names[i]
-                                    # Only set if not already in kwargs (kwargs take precedence)
-                                    if param_name not in kwargs:
-                                        kwargs[param_name] = arg
+                        # Set $_busy to True when starting execution
+                        agent.state.variables["$_busy"] = True
+                        try:
+                            # Convert positional args to kwargs if needed
+                            if args:
+                                properties = schema.get("properties", {})
+                                param_names = list(properties.keys())
+                                # Map positional args to parameter names from schema in order
+                                for i, arg in enumerate(args):
+                                    if i < len(param_names):
+                                        param_name = param_names[i]
+                                        # Only set if not already in kwargs (kwargs take precedence)
+                                        if param_name not in kwargs:
+                                            kwargs[param_name] = arg
 
-                        result = await self.transport.call_tool(tool_name, kwargs)
-                        result_str = str(result.content[0].text)
-                        if result.is_error:
-                            result_str = f"Error: {result_str}"
-                        return result_str
+                            result = await self.transport.call_tool(tool_name, kwargs)
+                            result_str = str(result.content[0].text)
+                            if result.is_error:
+                                result_str = f"Error: {result_str}"
+                            return result_str
+                        finally:
+                            # Set $_busy to False when execution completes (or on error)
+                            agent.state.variables["$_busy"] = False
 
                     return execute_fn
 
-                execute_fn = create_execute_fn(tool_name, input_schema)
+                execute_fn = create_execute_fn(tool_name, input_schema, self)
 
                 # Extract parameter schema
                 parameters = (
