@@ -342,8 +342,8 @@ def get_completion(
     # Add response_format for JSON mode if supported by the model
     if json_mode:
         params = get_supported_openai_params(model=llm_config.model)
-        if "response_format" in params:
-            completion_kwargs["response_format"] = {"type": "json_object"}
+        if "reasoning_effort" in params:
+            completion_kwargs["reasoning_effort"] = "low"
 
     # Initialize Langfuse tracing if available
     langfuse_span_obj = None
