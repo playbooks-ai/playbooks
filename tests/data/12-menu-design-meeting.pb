@@ -14,7 +14,7 @@
 ### Steps
 - Tell user that you will coordinate the menu redesign process
 - Ask user for reasons for the menu redesign and specific constraints like budget, timeline, any must-keep dishes, etc.
-- Have a menu redesign meeting to develop new menu options
+- Have a menu redesign meeting to develop new menu options. If they fail to join, end program.
 - If the meeting was successful
   - present final menu recommendations to user with rationale
 - Otherwise

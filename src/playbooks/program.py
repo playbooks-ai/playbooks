@@ -241,12 +241,13 @@ class AsyncAgentRuntime:
             done = True
             for agent in self.program.agents:
                 if isinstance(agent, AIAgent):
-                    if "$_busy" not in agent.state.variables:
-                        done = False
-                        break
-                    if agent.state.variables["$_busy"].value is True:
-                        done = False
-                        break
+                    if len(agent.state.call_stack.frames) > 0:
+                        if "$_busy" not in agent.state.variables:
+                            done = False
+                            break
+                        if agent.state.variables["$_busy"].value is True:
+                            done = False
+                            break
             await asyncio.sleep(1)
         debug("All agents are idle")
 

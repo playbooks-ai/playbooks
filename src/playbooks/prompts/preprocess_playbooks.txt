@@ -197,10 +197,12 @@ Compiled:
 
 ### Triggers
 Apply these for triggers on both Python and Markdown playbooks
-- Add prefix: `T1:BGN` (execute when program begins), `T1:CND` (when condition is met), `T1:EVT` (when event received)
-- "When program starts" → `- T1:BGN When program starts`
-- "When user provides X" → `- T1:CND When user provides X`
+- Add prefix: `T1:BGN` (only for automatic execution when program starts), `T1:CND` (when condition is met), `T1:EVT` (when something happens)
+- "When program starts", "At the start", "In the beginning", etc → `- T1:BGN When program starts`
+- "When user provides X" → `- T1:EVT When user provides X`
+- "When $amount > 1000" → `- T1:CND When $amount > 1000`
 - "Upon receiving message from Accountant agent" → `- T1:EVT Upon receiving message from Accountant agent`
+- "When you are invited to a meeting" → `- T1:EVT When you are invited to a meeting"
 
 ### Loops
 
@@ -248,12 +250,11 @@ Compiled:
 ```
 
 ### Public Playbooks
+- Python syntax: `@playbook(public=True)`
+- Markdown syntax: `public: true`
+- Automatically mark BGN playbooks as public
 - Generate public.json with tool info for each public python and markdown playbooks
-- Always mark BGN playbooks as public
 - If no public playbooks, generate empty [] public.json
-- Python syntax: `@playbook(public=True)` or BGN trigger
-- Markdown syntax: `public: true` in metadata or BGN trigger
-- For BGN playbooks, include `is_bgn: true`
 
 ### Agent and Playbook metadata
 Collect any metadata in the description area into a metadata yaml block. When metadata is present, add a --- document separator and write description after that. This applies to # agent and ## playbook blocks.
@@ -368,14 +369,14 @@ MCP server for weather tools
 8. ✓ Add JMP for while/until loops
 9. ✓ End with a public.json listing all public playbooks in the agent
 10. ✓ Mark BGN playbooks as public and include in public.json with "is_bgn": true
-12. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
-13. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
-14. ✓ Extract metadata into yaml blocks for agents and playbooks
-15. ✓ Each YLD is expensive to execute (needs a new LLM call), so batch as many calls as possible before YLD
-16. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
-17. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as execution_mode:react unless it is marked as execution_mode:raw
-18. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
-19. ✓ Don't change instructions for communication with other agents. Runtime will interpret them.
+11. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
+12. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
+13. ✓ Extract metadata into yaml blocks for agents and playbooks
+14. ✓ Each YLD is expensive to execute (needs a new LLM call), so batch as many calls as possible before YLD
+15. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
+16. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as execution_mode:react unless it is marked as execution_mode:raw
+17. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
+18. ✓ Don't change instructions for communication with other agents. Runtime will interpret them.
 
 ## Example Transformation
 

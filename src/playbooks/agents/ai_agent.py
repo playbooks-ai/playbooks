@@ -312,7 +312,17 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         # Generate playbook calls - pass **kwargs to support CLI args
         playbook_calls = []
         for playbook in begin_playbooks.values():
-            playbook_calls.append(f"    await {playbook.name}(**kwargs)")
+            playbook_calls.append(f"        await {playbook.name}(**kwargs)")
+
+        playbook_calls_str = chr(10).join(playbook_calls)
+        if playbook_calls_str:
+            playbook_calls_str = f"""
+    try:
+{playbook_calls_str}
+    except Exception as e:
+        agent.state.variables['$_busy'] = False
+        raise e
+    """
 
         code_block = f"""
 @playbook
@@ -322,7 +332,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
     # 
     # Calls any playbooks that should be executed when the program starts, followed by a loop that waits for messages and processes them.
     agent.state.variables["$_busy"] = True
-{chr(10).join(playbook_calls)}
+{playbook_calls_str}
 
     agent.state.variables["$_busy"] = False
     if agent.program and agent.program.execution_finished:
