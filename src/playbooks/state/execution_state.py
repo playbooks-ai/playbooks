@@ -7,11 +7,11 @@ and execution control flags.
 
 from typing import Any, Dict, List, Optional
 
-from playbooks.state.call_stack import CallStack
 from playbooks.config import config as global_config
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.llm.messages.types import FrameType
 from playbooks.meetings import JoinedMeeting, Meeting
+from playbooks.state.call_stack import CallStack
 from playbooks.state.session_log import SessionLog
 from playbooks.state.variables import Variables
 
@@ -22,7 +22,7 @@ class ExecutionState:
     Attributes:
         bus: The event bus
         session_log: Log of session activity
-        call_stack: Stack tracking the execution path
+        call_stack: Stack tracking the execution path (includes top-level messages)
         variables: Collection of variables with change history
         artifacts: Store for execution artifacts
     """

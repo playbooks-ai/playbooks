@@ -7,15 +7,16 @@ inherit from, along with the BaseAgentMeta metaclass for agent configuration.
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.core.events import AgentPausedEvent, AgentResumedEvent
 from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.messages import AgentCommunicationLLMMessage
+
 from .messaging_mixin import MessagingMixin
 
 if TYPE_CHECKING:
-    from playbooks.program import Program
     from playbooks.core.stream_result import StreamResult
+    from playbooks.program import Program
 
 
 class BaseAgentMeta(ABCMeta):
@@ -236,7 +237,8 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         """Send a message to another agent.
 
         Routes message through program runtime and adds communication
-        context to the call stack for LLM awareness.
+        context to the call stack for LLM awareness. Always logs the communication
+        (to call stack frame if inside playbook, to top_level_llm_messages if not).
 
         Args:
             target_agent_id: ID of the target agent (or "human"/"user")
@@ -245,27 +247,26 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         if not self.program:
             return
 
-        # Add to current frame context if available
-        if (
-            hasattr(self, "state")
-            and hasattr(self.state, "call_stack")
-            and self.state.call_stack.peek()
-        ):
+        # Create the agent communication message
+        target_agent = self.program.agents_by_id.get(target_agent_id)
+        target_name = (
+            str(target_agent) if target_agent else f"UnknownAgent({target_agent_id})"
+        )
+        agent_comm_msg = AgentCommunicationLLMMessage(
+            f"I {str(self)} sent message to {target_name}: {message}",
+            sender_agent=self.klass,
+            target_agent=target_name,
+        )
+
+        # Add to call stack (handles both frame and top-level message cases)
+        if hasattr(self, "state") and hasattr(self.state, "call_stack"):
             current_frame = self.state.call_stack.peek()
-            if current_frame.playbook == "Say":
-                current_frame = self.state.call_stack.frames[-2]
-            target_agent = self.program.agents_by_id.get(target_agent_id)
-            target_name = (
-                str(target_agent)
-                if target_agent
-                else f"UnknownAgent({target_agent_id})"
-            )
-            agent_comm_msg = AgentCommunicationLLMMessage(
-                f"I {str(self)} sent message to {target_name}: {message}",
-                sender_agent=self.klass,
-                target_agent=target_name,
-            )
-            current_frame.add_llm_message(agent_comm_msg)
+            if current_frame is not None and current_frame.playbook == "Say":
+                # If we're in Say playbook, add to its parent context
+                self.state.call_stack.add_llm_message_on_parent(agent_comm_msg)
+            else:
+                # Add to current frame or top-level if stack is empty
+                self.state.call_stack.add_llm_message(agent_comm_msg)
 
         # Route through program runtime
         # target_agent_id is a raw ID, convert to spec format for routing
@@ -311,6 +312,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             StreamResult indicating if streaming was started and the stream ID
         """
         import uuid
+
         from playbooks.core.stream_result import StreamResult
 
         stream_id = str(uuid.uuid4())

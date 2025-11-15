@@ -37,7 +37,7 @@ meeting: true
     - Display final game state
     - If there's a winner, announce the winner
     - Otherwise announce that it's a draw
-    - Thank both players for the match
+    - Thank both players for the match and say that the game is over
     - Return
 - If turn limit reached
   - Say that the game exceeded the maximum turns so it's a draw
@@ -54,6 +54,7 @@ meeting: true
 ### Steps
 - Note which game is being played, introduce yourself, ready to play
 - While the game is active
+  - When game ends, graciousy accept victory, defeat or draw
   - When asked to make a move or it's your turn according to rules
     - Think about current game state, your options and the best possible move you will make; keep thinking compact, don't rewrite the whole game state, e.g. "Diagnoal X59 threat, block 5, take center? X4X is bigger threat, must block 4."
     - Clearly announce your move concisely, no need to explain why (e.g., "O at 4")
@@ -65,9 +66,6 @@ meeting: true
       - Announce the corrected move
     - Otherwise
       - Pushback and ask the host to validate the move again with your justification
-  - When opponent makes a move
-    - Continue
-  - When game ends, graciousy accept victory, defeat or draw
 
 ### Notes
 - Keep chatter to a minimum, use compact messages

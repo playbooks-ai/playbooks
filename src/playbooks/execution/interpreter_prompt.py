@@ -234,12 +234,22 @@ class InterpreterPrompt:
             )
             self.execution_state.call_stack.add_llm_message(user_instruction_msg)
 
-        # Original call stack messages (as LLMMessage objects)
+        # Collect all LLM messages: from call stack frames + top-level messages
         call_stack_llm_messages = []
+
+        # Add messages from call stack frames
         for frame in self.execution_state.call_stack.frames:
             call_stack_llm_messages.extend(frame.llm_messages)
             for index, message in enumerate(frame.llm_messages):
                 message.cached = index == len(frame.llm_messages) - 1
+
+        # Add top-level messages (when call stack is empty or before first playbook)
+        top_level_messages = self.execution_state.call_stack.top_level_llm_messages
+        if top_level_messages:
+            call_stack_llm_messages.extend(top_level_messages)
+            # Mark the last message as cached if no call stack frames
+            if not self.execution_state.call_stack.frames and top_level_messages:
+                top_level_messages[-1].cached = True
 
         # Apply compaction - the cached flags will be preserved through to_full_message()
         compacted_dict_messages = self.compactor.compact_messages(

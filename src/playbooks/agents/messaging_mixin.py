@@ -7,11 +7,11 @@ from typing import List
 
 from playbooks.agents.async_queue import AsyncMessageQueue
 from playbooks.core.constants import EOM, EXECUTION_FINISHED
-from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.core.exceptions import ExecutionFinished
 from playbooks.core.identifiers import AgentID, MeetingID
-from playbooks.llm.messages import AgentCommunicationLLMMessage
 from playbooks.core.message import Message, MessageType
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.llm.messages import AgentCommunicationLLMMessage
 
 
 class MessagingMixin:
@@ -152,6 +152,9 @@ class MessagingMixin:
     ) -> List[Message]:
         """Process and format messages retrieved from AsyncMessageQueue.
 
+        Always logs received messages as AgentCommunicationLLMMessage,
+        adding to call stack frame if inside playbook or to top_level_llm_messages if not.
+
         Args:
             messages: List of messages from the queue (EOM already consumed by queue)
 
@@ -163,28 +166,31 @@ class MessagingMixin:
         if not messages:
             return []
 
-        if not self.state.call_stack.is_empty():
-            messages_str = []
-            for message in messages:
-                message_type_str = ""
-                if message.message_type == MessageType.MEETING_INVITATION:
-                    message_type_str = (
-                        f" [MEETING_INVITATION for meeting {message.meeting_id}]"
-                    )
-                elif message.message_type == MessageType.MEETING_BROADCAST:
-                    message_type_str = f" [in meeting {message.meeting_id}]"
-
-                messages_str.append(
-                    f"Received message from {message.sender_klass}({message.sender_id}){message_type_str}: {message.content}"
+        # Always create agent communication message for received messages
+        messages_str = []
+        for message in messages:
+            message_type_str = ""
+            if message.message_type == MessageType.MEETING_INVITATION:
+                message_type_str = (
+                    f" [MEETING_INVITATION for meeting {message.meeting_id}]"
                 )
-            debug(f"{str(self)}: Messages to process: {messages_str}")
-            # Use the first sender agent for the semantic message type
-            sender_agent = messages[0].sender_klass if messages else None
-            agent_comm_msg = AgentCommunicationLLMMessage(
-                "\n".join(messages_str),
-                sender_agent=sender_agent,
-                target_agent=self.klass,
+            elif message.message_type == MessageType.MEETING_BROADCAST:
+                message_type_str = f" [in meeting {message.meeting_id}]"
+
+            messages_str.append(
+                f"Received message from {message.sender_klass}({message.sender_id}){message_type_str}: {message.content}"
             )
-            self.state.call_stack.add_llm_message(agent_comm_msg)
+        debug(f"{str(self)}: Messages to process: {messages_str}")
+
+        # Use the first sender agent for the semantic message type
+        sender_agent = messages[0].sender_klass if messages else None
+        agent_comm_msg = AgentCommunicationLLMMessage(
+            "\n".join(messages_str),
+            sender_agent=sender_agent,
+            target_agent=self.klass,
+        )
+
+        # Add to call stack (handles both frame and top-level message cases)
+        self.state.call_stack.add_llm_message(agent_comm_msg)
 
         return messages

@@ -1202,7 +1202,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         if not self.state.call_stack.is_artifact_loaded(artifact_name):
             artifact_msg = ArtifactLLMMessage(artifact)
-            self.state.call_stack.add_llm_message_on_caller(artifact_msg)
+            self.state.call_stack.add_llm_message_on_parent(artifact_msg)
             return f"Artifact {artifact_name} is now loaded"
         else:
             return f"Artifact {artifact_name} is already loaded"

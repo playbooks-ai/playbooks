@@ -146,8 +146,8 @@ class PlaybookLLMExecution(LLMExecution):
 
             # Create an placeholder AssistantResponseLLMMessage so that it
             # appears before the execution results
-            llm_response_msg = AssistantResponseLLMMessage("Thinking...")
-            self.agent.state.call_stack.add_llm_message(llm_response_msg)
+            self.llm_response_msg = AssistantResponseLLMMessage("Thinking...")
+            self.agent.state.call_stack.add_llm_message(self.llm_response_msg)
 
             # Make the LLM call and execute the generated code streaming
             llm_response = await LLMResponse.create(
@@ -162,7 +162,7 @@ class PlaybookLLMExecution(LLMExecution):
             )
 
             # Update the AssistantResponseLLMMessage with the actual response
-            llm_response_msg.set_content(llm_response.response)
+            self.llm_response_msg.set_content(llm_response.response)
 
             # Use the pre-computed execution result from streaming execution
             # The code was already executed incrementally during LLM streaming
@@ -408,6 +408,9 @@ class PlaybookLLMExecution(LLMExecution):
                 langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
             ):
                 buffer += chunk
+
+                # Update the AssistantResponseLLMMessage with the actual response
+                self.llm_response_msg.set_content(buffer)
 
                 # Feed chunk to streaming executor for incremental execution
                 try:
