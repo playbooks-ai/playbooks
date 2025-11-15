@@ -144,6 +144,12 @@ class PlaybookLLMExecution(LLMExecution):
             # Extract playbook arguments to make available in generated code
             playbook_args = self._extract_playbook_arguments(call)
 
+            # Create an placeholder AssistantResponseLLMMessage so that it
+            # appears before the execution results
+            llm_response_msg = AssistantResponseLLMMessage("Thinking...")
+            self.agent.state.call_stack.add_llm_message(llm_response_msg)
+
+            # Make the LLM call and execute the generated code streaming
             llm_response = await LLMResponse.create(
                 await self.make_llm_call(
                     instruction=instruction,
@@ -155,10 +161,8 @@ class PlaybookLLMExecution(LLMExecution):
                 agent=self.agent,
             )
 
-            # Create an AssistantResponseLLMMessage for semantic clarity
-            # and add it directly to the call stack
-            llm_response_msg = AssistantResponseLLMMessage(llm_response.response)
-            self.agent.state.call_stack.add_llm_message(llm_response_msg)
+            # Update the AssistantResponseLLMMessage with the actual response
+            llm_response_msg.set_content(llm_response.response)
 
             # Use the pre-computed execution result from streaming execution
             # The code was already executed incrementally during LLM streaming
