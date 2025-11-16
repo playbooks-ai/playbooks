@@ -348,7 +348,10 @@ OR, if TaxRateQuery can be called -
 # think: AccountantExpert is an accountant agent. AccountantExpert(agent 1020) instance is in state. AccountantExpert.TaxRateQuery($form_id) is available. I have $form_id to call it with.
 tax_rate = await AccountantExpert["agent 1020"].TaxRateQuery($gross_income)
 await Var('tax_rate', tax_rate)
-...
+# trig? no
+# yld? yes, "Main:05:QUE" needs tax rate
+await Yld("call")
+
 ```
 Note how specific agent instance is selected for calls AccountantExpert["agent 1020"]
 
@@ -393,5 +396,5 @@ await CreateAgent("AccountantExpert")
 
 {{INSTRUCTION}}
 
-Carefully analyze conversation log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly. You must act like an intelligent human expert. 
+Carefully analyze conversation log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly. You must act like an intelligent human expert. Keep your thinking concise and don't repeat yourself.
 **Follow the contract exactly; deviations break execution. Generate one python code block surrounded by ```python and ```.**
