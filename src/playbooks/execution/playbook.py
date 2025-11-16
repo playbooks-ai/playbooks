@@ -144,11 +144,6 @@ class PlaybookLLMExecution(LLMExecution):
             # Extract playbook arguments to make available in generated code
             playbook_args = self._extract_playbook_arguments(call)
 
-            # Create an placeholder AssistantResponseLLMMessage so that it
-            # appears before the execution results
-            self.llm_response_msg = AssistantResponseLLMMessage("Thinking...")
-            self.agent.state.call_stack.add_llm_message(self.llm_response_msg)
-
             # Make the LLM call and execute the generated code streaming
             llm_response = await LLMResponse.create(
                 await self.make_llm_call(
@@ -360,7 +355,7 @@ class PlaybookLLMExecution(LLMExecution):
     async def _stream_llm_response(
         self, prompt: InterpreterPrompt, playbook_args: Optional[Dict[str, Any]] = None
     ) -> str:
-        """Stream LLM response and handle Say() calls progressively.
+        """Stream LLM response and handle code execution and Say() calls progressively.
 
         Two-phase streaming approach:
         1. Pattern-based streaming (as tokens arrive) - detects Say("...") calls
@@ -399,9 +394,17 @@ class PlaybookLLMExecution(LLMExecution):
         processed_up_to = 0  # Track how much of buffer we've already processed
         say_has_placeholders = False  # Track if current Say has {$var} placeholders
 
+        # Get LLM messages before adding the placeholder AssistantResponseLLMMessage
+        messages = prompt.messages
+
+        # Create an placeholder AssistantResponseLLMMessage so that it
+        # appears before any messages from the execution results
+        self.llm_response_msg = AssistantResponseLLMMessage("Thinking...")
+        self.agent.state.call_stack.add_llm_message(self.llm_response_msg)
+
         try:
             for chunk in get_completion(
-                messages=prompt.messages,
+                messages=messages,
                 llm_config=LLMConfig(),
                 stream=True,
                 json_mode=False,
