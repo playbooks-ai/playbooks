@@ -393,6 +393,8 @@ class PlaybookLLMExecution(LLMExecution):
         say_stream_id = None  # Track stream ID for channel-based streaming
         processed_up_to = 0  # Track how much of buffer we've already processed
         say_has_placeholders = False  # Track if current Say has {$var} placeholders
+        say_end_pattern = '")'  # Tracks closing pattern for Say content
+        say_quote_type: Optional[str] = None  # "single" or "triple"
 
         # Get LLM messages before adding the placeholder AssistantResponseLLMMessage
         messages = prompt.messages
@@ -473,6 +475,8 @@ class PlaybookLLMExecution(LLMExecution):
                                 say_start_pos = recipient_end_pos + len(
                                     recipient_end_pattern
                                 )  # Position after recipient and ", "
+                                say_end_pattern = '")'  # Default; may switch to triple
+                                say_quote_type = None  # Determine once content arrives
                                 current_say_content = ""
                                 say_has_placeholders = False  # Reset for new Say call
                                 processed_up_to = say_start_pos
@@ -501,10 +505,26 @@ class PlaybookLLMExecution(LLMExecution):
 
                 # Stream Say content if we're in a call
                 if in_say_call:
+                    # Determine quote style lazily to support triple-quoted strings
+                    if say_quote_type is None:
+                        # Need at least three characters to confirm triple quotes
+                        if len(buffer) >= say_start_pos + 3 and buffer.startswith(
+                            '""', say_start_pos
+                        ):
+                            say_quote_type = "triple"
+                            say_end_pattern = '""")'
+                            say_start_pos += 2  # Skip the extra two quotes
+                            processed_up_to = say_start_pos
+                        elif len(buffer) >= say_start_pos + 3:
+                            say_quote_type = "single"
+                            say_end_pattern = '")'
+                        else:
+                            # Not enough content yet to decide quote style
+                            continue
+
                     # Look for the end of the Say call
                     # Updated pattern: no backticks (Python code format)
-                    end_pattern = '")'
-                    end_pos = buffer.find(end_pattern, say_start_pos)
+                    end_pos = buffer.find(say_end_pattern, say_start_pos)
                     if end_pos != -1:
                         # Found end - extract final content and complete
                         final_content = buffer[say_start_pos:end_pos]
@@ -543,7 +563,9 @@ class PlaybookLLMExecution(LLMExecution):
                         say_recipient = ""
                         say_stream_id = None
                         say_has_placeholders = False
-                        processed_up_to = end_pos + len(end_pattern)
+                        processed_up_to = end_pos + len(say_end_pattern)
+                        say_quote_type = None
+                        say_end_pattern = '")'
                     else:
                         # Still streaming - extract new content since last update
                         # Only look at content between say_start_pos and end of buffer
@@ -565,6 +587,21 @@ class PlaybookLLMExecution(LLMExecution):
                         if not say_has_placeholders and say_stream_id:
                             # Don't stream if it ends with escape character (incomplete)
                             if not available_content.endswith("\\"):
+                                # Trim trailing quotes that are part of triple-quoted closing
+                                if available_content.endswith(say_end_pattern):
+                                    available_content = available_content[
+                                        : -len(say_end_pattern)
+                                    ]
+                                elif say_quote_type == "triple":
+                                    if available_content.endswith('"""'):
+                                        available_content = available_content[:-3]
+                                    elif available_content.endswith('""'):
+                                        available_content = available_content[:-2]
+                                    elif available_content.endswith('"'):
+                                        available_content = available_content[:-1]
+                                else:
+                                    if available_content.endswith('"'):
+                                        available_content = available_content[:-1]
                                 if len(available_content) > len(current_say_content):
                                     new_content = available_content[
                                         len(current_say_content) :
