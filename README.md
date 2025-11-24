@@ -1,14 +1,12 @@
 <div align="center">
-   <h1>
    <picture>
       <source media="(prefers-color-scheme: dark)" srcset="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo-dark.png">
       <img alt="Playbooks AI" src="https://playbooks-ai.github.io/playbooks-docs/assets/images/playbooks-logo.png" width=200 height=200>
    </picture>
-  <h2 align="center">Playbooks AI<br/>LLM is your new CPU<br/>Welcome to Software 3.0</h2>
 </div>
 
 <div align="center">
-
+   
 [![GitHub License](https://img.shields.io/github/license/playbooks-ai/playbooks?logo=github)](https://github.com/playbooks-ai/playbooks/blob/master/LICENSE)
 [![PyPI Version](https://img.shields.io/pypi/v/playbooks?logo=pypi&color=blue)](https://pypi.org/project/playbooks/)
 [![Python Version](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://www.python.org/)
@@ -19,11 +17,13 @@
 [![GitHub issues](https://img.shields.io/github/issues/playbooks-ai/playbooks)](https://github.com/playbooks-ai/playbooks/issues)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-green.svg)](https://github.com/playbooks-ai/playbooks/blob/master/CONTRIBUTING.md)
 [![Contributors](https://img.shields.io/github/contributors/playbooks-ai/playbooks)](https://github.com/playbooks-ai/playbooks/graphs/contributors)
-
 [![Homepage](https://img.shields.io/badge/Homepage-runplaybooks.ai-red?logo=google-chrome)](https://runplaybooks.ai/)
+
 </div>
 
-> **Playbooks is a framework and runtime for building verifiable multi-agent AI systems with Natural Language Programs.**
+### Playbooks is a framework and runtime for building verifiable multi-agent AI systems with Natural Language Programs.
+
+![Playbooks](https://docs.runplaybooks.ai/assets/images/playbooks-illustrated.jpeg)
 
 Describe what your agents should do, not how to do it. Focus on agent behavior at a high level while the LLM handles implementation details and edge cases. Mix natural language and Python seamlessly on the same call stack. Get verifiable execution, full observability, and programs that business users can actually read and approve.
 
