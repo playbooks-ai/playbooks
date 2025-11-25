@@ -6,7 +6,6 @@ Provides a simple terminal interface for communicating with AI agents.
 
 import argparse
 import asyncio
-import functools
 import os
 import select
 import sys
@@ -33,6 +32,7 @@ from rich.console import Console
 
 from playbooks import Playbooks
 from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.applications.streaming_observer import (
     ChannelStreamObserver as BaseChannelStreamObserver,
 )
@@ -259,84 +259,52 @@ original_wait_for_message = MessagingMixin.WaitForMessage
 original_broadcast_to_meeting = None  # Will be set after MeetingManager is imported
 
 
-@functools.wraps(original_wait_for_message)
-async def patched_wait_for_message(self, source_agent_id: str):
-    """Patched version of WaitForMessage that shows a prompt when waiting for human input."""
-    # For human input, show a prompt before calling the normal WaitForMessage
-    # Accept both "human" and "user" as identifiers for human input
-    if source_agent_id in ("human", "user"):
-        # Check if there are already messages waiting using queue peek
-        human_message = await self._message_queue.peek(
-            lambda msg: msg.sender_id.id == "human"
+async def prompt_for_human_input(agent_self):
+    """Prompt in CLI and enqueue a human message for the waiting agent."""
+    console.print()  # Add a newline for spacing
+    await asyncio.to_thread(clear_stdin)
+
+    program: Program = agent_self.program
+    humans = [a for a in program.agents if a.klass.endswith("Human") or a.id == "human"]
+
+    sender_id = "human"
+    sender_klass = "human"
+    message_content = ""
+
+    if len(humans) > 1:
+        console.print(
+            f"[dim]Available humans: {', '.join(h.klass for h in humans)}[/dim]"
+        )
+        console.print(
+            "[dim]Format: HumanName: your message  (e.g., 'Alice: Hello')[/dim]"
+        )
+        user_input = await asyncio.to_thread(
+            console.input, "[bold yellow]Input:[/bold yellow] "
         )
 
-        if not human_message:
-            # No human messages waiting, show prompt
-            console.print()  # Add a newline for spacing
-            # Clear stdin buffer to prevent pre-filled input
-            await asyncio.to_thread(clear_stdin)
+        message_content = user_input
+        if ": " in user_input:
+            potential_human_name, rest = user_input.split(": ", 1)
+            matching_human = next(
+                (h for h in humans if h.klass.lower() == potential_human_name.lower()),
+                None,
+            )
+            if matching_human:
+                sender_id = matching_human.id
+                sender_klass = matching_human.klass
+                message_content = rest
+    else:
+        message_content = await asyncio.to_thread(
+            console.input, "[bold yellow]User:[/bold yellow] "
+        )
 
-            # Determine which humans exist in the program
-            program: Program = self.program
-            humans = [
-                a
-                for a in program.agents
-                if a.klass.endswith("Human") or a.id == "human"
-            ]
-
-            # If multiple humans, let user specify which one is speaking
-            if len(humans) > 1:
-                console.print(
-                    f"[dim]Available humans: {', '.join(h.klass for h in humans)}[/dim]"
-                )
-                console.print(
-                    "[dim]Format: HumanName: your message  (e.g., 'Alice: Hello')[/dim]"
-                )
-                user_input = await asyncio.to_thread(
-                    console.input, "[bold yellow]Input:[/bold yellow] "
-                )
-
-                # Parse "HumanName: message" format
-                sender_id = "human"
-                sender_klass = "human"
-                message_content = user_input
-
-                if ": " in user_input:
-                    potential_human_name, rest = user_input.split(": ", 1)
-                    # Check if potential_human_name matches any human
-                    matching_human = next(
-                        (
-                            h
-                            for h in humans
-                            if h.klass.lower() == potential_human_name.lower()
-                        ),
-                        None,
-                    )
-                    if matching_human:
-                        sender_id = matching_human.id
-                        sender_klass = matching_human.klass
-                        message_content = rest
-                    # If no match, treat entire input as message from default "human"
-            else:
-                # Single human, use simple prompt
-                user_input = await asyncio.to_thread(
-                    console.input, "[bold yellow]User:[/bold yellow] "
-                )
-                sender_id = "human"
-                sender_klass = "human"
-                message_content = user_input
-
-            # Send the user input and EOM
-            for message in [message_content, EOM]:
-                await program.route_message(
-                    sender_id=sender_id,
-                    sender_klass=sender_klass,
-                    receiver_spec=f"agent {self.id}",
-                    message=message,
-                )
-
-    # Call the normal WaitForMessage which handles message delivery
-    return await original_wait_for_message(self, source_agent_id)
+    for message in [message_content, EOM]:
+        await program.route_message(
+            sender_id=sender_id,
+            sender_klass=sender_klass,
+            receiver_spec=f"agent {agent_self.id}",
+            message=message,
+        )
 
 
 async def patched_broadcast_to_meeting_as_owner(
@@ -401,7 +369,10 @@ async def main(
     # )
 
     # Patch the WaitForMessage method before loading agents
-    MessagingMixin.WaitForMessage = patched_wait_for_message
+    MessagingMixin.WaitForMessage = build_human_wait_patch(
+        original_wait_for_message,
+        on_prompt=prompt_for_human_input,
+    )
 
     user_output.info(f"Loading playbooks from: {program_paths}")
 

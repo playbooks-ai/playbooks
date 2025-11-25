@@ -17,6 +17,7 @@ from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.applications.streaming_observer import (
     ChannelStreamObserver as BaseChannelStreamObserver,
 )
+from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.channels.stream_events import (
     StreamChunkEvent,
     StreamCompleteEvent,
@@ -292,11 +293,8 @@ class PlaybookRun:
                 meeting_id,
             )
 
-        async def patched_wait_for_message(agent_self, source_agent_id: str):
+        async def on_wait(agent_self, source_agent_id: str):
             await playbook_run._intercept_wait_for_message(source_agent_id)
-            return await playbook_run._original_methods["wait_for_message"](
-                agent_self, source_agent_id
-            )
 
         async def patched_broadcast_to_meeting(
             manager_self, meeting_id, message, from_agent_id=None, from_agent_klass=None
@@ -321,7 +319,10 @@ class PlaybookRun:
 
         # Patch methods
         Program.route_message = patched_route_message
-        MessagingMixin.WaitForMessage = patched_wait_for_message
+        MessagingMixin.WaitForMessage = build_human_wait_patch(
+            self._original_methods["wait_for_message"],
+            on_wait=on_wait,
+        )
         MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting
         Program.create_agent = patched_create_agent
 
