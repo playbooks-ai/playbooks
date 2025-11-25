@@ -413,6 +413,55 @@
         );
       }
 
+      function ProgramViewer({
+        programContent,
+        programPaths,
+        isLoading,
+        error,
+      }) {
+        const hasProgram = Boolean(programContent);
+        const hasPaths = programPaths && programPaths.length > 0;
+
+        return (
+          <div className="bg-base-100 rounded-lg shadow-lg flex flex-col h-full overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-base-300">
+              <div className="space-y-1">
+                <div className="text-sm font-semibold">Loaded Program</div>
+                <div className="text-xs text-base-content/70 truncate">
+                  {hasPaths
+                    ? programPaths.join(", ")
+                    : "No program loaded yet"}
+                </div>
+              </div>
+              {isLoading && (
+                <span className="loading loading-spinner loading-sm" />
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {error && (
+                <div className="alert alert-error text-sm">
+                  <span>{error}</span>
+                </div>
+              )}
+
+              {!hasProgram && !error && (
+                <p className="text-sm text-base-content/70">
+                  {isLoading
+                    ? "Fetching program..."
+                    : "Start a run to preview the loaded program here."}
+                </p>
+              )}
+
+              {hasProgram && (
+                <pre className="whitespace-pre-wrap text-sm bg-base-200 rounded-lg p-3 border border-base-300">
+                  <code className="font-mono">{programContent}</code>
+                </pre>
+              )}
+            </div>
+          </div>
+        );
+      }
+
       // Main App component
       function App() {
         const [ws, setWs] = useState(null);
@@ -430,6 +479,10 @@
         const [showWelcome, setShowWelcome] = useState(true);
         const [showMessages, setShowMessages] = useState(true);
         const [showExecutionLogs, setShowExecutionLogs] = useState(false);
+        const [programContent, setProgramContent] = useState("");
+        const [programPaths, setProgramPaths] = useState([]);
+        const [programError, setProgramError] = useState(null);
+        const [isProgramLoading, setIsProgramLoading] = useState(false);
         const messagesEndRef = useRef(null);
 
         const scrollToBottom = () => {
@@ -470,6 +523,31 @@
         const updateStatus = (newStatus, text) => {
           setStatus(newStatus);
           setStatusText(text);
+        };
+
+        const fetchProgramDetails = async (targetRunId) => {
+          if (!targetRunId) return;
+
+          setIsProgramLoading(true);
+          setProgramError(null);
+          try {
+            const response = await fetch(
+              `http://localhost:8080/runs/${targetRunId}/program`
+            );
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`
+              );
+            }
+
+            const data = await response.json();
+            setProgramContent(data.program_content || "");
+            setProgramPaths(data.program_paths || []);
+          } catch (error) {
+            setProgramError(error.message);
+          } finally {
+            setIsProgramLoading(false);
+          }
         };
 
         const toggleEventDisplay = (eventType) => {
@@ -743,6 +821,9 @@
         const startChat = async () => {
           try {
             updateStatus("connecting", "Connecting...");
+            setProgramContent("");
+            setProgramPaths([]);
+            setProgramError(null);
 
             const response = await fetch("http://localhost:8080/runs/new", {
               method: "POST",
@@ -765,6 +846,7 @@
             const data = await response.json();
             setRunId(data.run_id);
             connectWebSocket(data.run_id);
+            fetchProgramDetails(data.run_id);
           } catch (error) {
             addMessage("system", "Error", `Failed to start chat: ${error}`);
             updateStatus("disconnected", "Error");
@@ -780,6 +862,10 @@
           setEventCounter(0);
           updateStatus("disconnected", "Disconnected");
           setIsConnected(false);
+          setProgramContent("");
+          setProgramPaths([]);
+          setProgramError(null);
+          setIsProgramLoading(false);
         };
 
         const sendMessage = () => {
@@ -869,39 +955,50 @@
               </div>
             </div>
 
-            {/* Chat Container */}
-            <div className="flex-1 flex flex-col bg-base-100 m-4 rounded-lg shadow-lg overflow-hidden">
-              {/* Messages */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                {showWelcome && <WelcomeScreen />}
-                {messages.map((message) => (
-                  <Message key={message.id} message={message} />
-                ))}
-                {Array.from(streamingMessages.values()).map((message) => (
-                  <Message key={message.id} message={message} />
-                ))}
-                <div ref={messagesEndRef} />
-              </div>
+            {/* Main Content */}
+            <div className="flex-1 overflow-hidden p-4">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+                <ProgramViewer
+                  programContent={programContent}
+                  programPaths={programPaths}
+                  isLoading={isProgramLoading}
+                  error={programError}
+                />
 
-              {/* Input Area */}
-              <div className="p-4 border-t border-base-300">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Type your message..."
-                    className="input input-bordered flex-1"
-                    value={messageInput}
-                    onChange={(e) => setMessageInput(e.target.value)}
-                    onKeyPress={handleKeyPress}
-                    disabled={!isConnected}
-                  />
-                  <button
-                    className="btn btn-primary"
-                    onClick={sendMessage}
-                    disabled={!isConnected || !messageInput.trim()}
-                  >
-                    Send
-                  </button>
+                <div className="bg-base-100 rounded-lg shadow-lg flex flex-col h-full overflow-hidden">
+                  {/* Messages */}
+                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    {showWelcome && <WelcomeScreen />}
+                    {messages.map((message) => (
+                      <Message key={message.id} message={message} />
+                    ))}
+                    {Array.from(streamingMessages.values()).map((message) => (
+                      <Message key={message.id} message={message} />
+                    ))}
+                    <div ref={messagesEndRef} />
+                  </div>
+
+                  {/* Input Area */}
+                  <div className="p-4 border-t border-base-300">
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Type your message..."
+                        className="input input-bordered flex-1"
+                        value={messageInput}
+                        onChange={(e) => setMessageInput(e.target.value)}
+                        onKeyPress={handleKeyPress}
+                        disabled={!isConnected}
+                      />
+                      <button
+                        className="btn btn-primary"
+                        onClick={sendMessage}
+                        disabled={!isConnected || !messageInput.trim()}
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
