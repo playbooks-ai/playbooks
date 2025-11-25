@@ -19,8 +19,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from playbooks.compilation.compiler import Compiler, FileCompilationSpec
-from playbooks.core.exceptions import ProgramLoadError
 from playbooks.compilation.loader import Loader
+from playbooks.core.exceptions import ProgramLoadError
 from playbooks.infrastructure.logging.setup import configure_logging
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.version import get_playbooks_version
@@ -502,10 +502,10 @@ def main():
         "--host", default="localhost", help="Host address (default: localhost)"
     )
     webserver_parser.add_argument(
-        "--http-port", type=int, default=8000, help="HTTP port (default: 8000)"
+        "--http-port", type=int, default=8080, help="HTTP port (default: 8080)"
     )
     webserver_parser.add_argument(
-        "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
+        "--ws-port", type=int, default=8081, help="WebSocket port (default: 8081)"
     )
 
     # Playground command
@@ -516,10 +516,10 @@ def main():
         "--host", default="localhost", help="Host address (default: localhost)"
     )
     playground_parser.add_argument(
-        "--http-port", type=int, default=8000, help="HTTP port (default: 8000)"
+        "--http-port", type=int, default=8080, help="HTTP port (default: 8080)"
     )
     playground_parser.add_argument(
-        "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
+        "--ws-port", type=int, default=8081, help="WebSocket port (default: 8081)"
     )
 
     # -------------------------
