@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="wireframe">
+<html lang="en" data-theme="playbooks-light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Playbooks playground</title>
 
-    <!-- Google Fonts - Lato -->
+    <!-- Fonts - Inter & Source Serif -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,100;0,300;0,400;0,700;0,900;1,100;1,300;1,400;1,700;1,900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:wght@600;700&display=swap"
       rel="stylesheet"
     />
 
@@ -52,9 +52,104 @@
     <script src="https://cdn.jsdelivr.net/npm/prismjs@1.29.0/plugins/autoloader/prism-autoloader.min.js"></script>
 
     <style>
-      /* Set Lato as the default font family */
+      html {
+        font-size: 16px;
+      }
+
+      :root {
+        --foreground-rgb: 0, 0, 0;
+        --background-start-rgb: 214, 219, 220;
+        --background-end-rgb: 255, 255, 255;
+        --font-source-serif-pro: "Source Serif 4", Georgia, Cambria,
+          "Times New Roman", Times, serif;
+
+        --background: 0 0% 99%;
+        --foreground: 0 0% 10%;
+        --card: 0 0% 100%;
+        --card-foreground: 0 0% 12%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 0 0% 12%;
+        --primary: 213 85% 54%;
+        --primary-foreground: 0 0% 98%;
+        --secondary: 28 92% 56%;
+        --secondary-foreground: 0 0% 12%;
+        --muted: 0 0% 94%;
+        --muted-foreground: 0 0% 40%;
+        --accent: 48 96% 58%;
+        --accent-foreground: 0 0% 12%;
+        --destructive: 0 72% 50%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 0 0% 85%;
+        --input: 0 0% 92%;
+        --ring: 213 85% 54%;
+        --radius: 0.75rem;
+      }
+
+      :root[data-theme="playbooks-dark"] {
+        --foreground-rgb: 245, 245, 255;
+        --background-start-rgb: 0, 0, 0;
+        --background-end-rgb: 0, 0, 0;
+
+        --background: 220 18% 10%;
+        --foreground: 0 0% 90%;
+        --card: 220 15% 13%;
+        --card-foreground: 0 0% 88%;
+        --popover: 220 15% 13%;
+        --popover-foreground: 0 0% 88%;
+        --primary: 205 100% 68%;
+        --primary-foreground: 0 0% 12%;
+        --secondary: 28 92% 62%;
+        --secondary-foreground: 0 0% 12%;
+        --muted: 220 10% 22%;
+        --muted-foreground: 0 0% 72%;
+        --accent: 48 95% 64%;
+        --accent-foreground: 0 0% 10%;
+        --destructive: 0 72% 55%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 220 10% 26%;
+        --input: 220 10% 26%;
+        --ring: 205 100% 68%;
+      }
+
+      /* Map palette to DaisyUI tokens */
+      :root[data-theme="playbooks-light"],
+      :root[data-theme="playbooks-dark"] {
+        color-scheme: light;
+        --b1: hsl(var(--card));
+        --b2: hsl(var(--background));
+        --b3: hsl(var(--muted));
+        --bc: hsl(var(--foreground));
+        --p: hsl(var(--primary));
+        --pc: hsl(var(--primary-foreground));
+        --s: hsl(var(--secondary));
+        --sc: hsl(var(--secondary-foreground));
+        --a: hsl(var(--accent));
+        --ac: hsl(var(--accent-foreground));
+        --n: hsl(var(--muted));
+        --nc: hsl(var(--foreground));
+        --in: #2563eb;
+        --su: #15803d;
+        --wa: #b45309;
+        --er: #dc2626;
+        --rounded-box: 1rem;
+        --rounded-btn: 0.75rem;
+        --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.08);
+      }
+
+      :root[data-theme="playbooks-dark"] {
+        color-scheme: dark;
+        --shadow-soft: 0 20px 60px rgba(0, 0, 0, 0.35);
+      }
+
       body {
-        font-family: "Lato", sans-serif;
+        font-family: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+        margin: 0;
+        background: hsl(var(--background));
+        color: hsl(var(--foreground));
+        min-height: 100vh;
+        letter-spacing: -0.01em;
+        overflow: hidden;
       }
 
       h1,
@@ -63,12 +158,45 @@
       h4,
       h5,
       h6 {
-        font-weight: 300 !important;
+        font-family: var(--font-source-serif-pro);
+        font-weight: 700;
+        letter-spacing: -0.03em;
+      }
+
+      /* Panels */
+      .surface-card {
+        background: hsl(var(--card));
+      }
+
+      .surface-card .section-header {
+        border-bottom: 1px solid hsla(var(--border) / 0.8);
+      }
+
+      /* Keep all borders aligned to the same tone */
+      .border-base-300 {
+        border-color: hsla(var(--border) / 0.8) !important;
+      }
+
+      /* Ensure checkbox checked state is visible */
+      .checkbox {
+        --chkbg: hsl(var(--primary));
+        --chkfg: hsl(var(--primary-foreground));
+        border-color: hsla(var(--border) / 0.9);
+      }
+
+      .checkbox:checked {
+        background-color: var(--chkbg);
+        border-color: var(--chkbg);
+      }
+
+      .app-shell {
+        width: 100%;
+        margin: 0;
       }
 
       /* Custom styles for syntax highlighting and markdown */
       .markdown-content {
-        line-height: 1.6;
+        line-height: 1.7;
       }
 
       .markdown-content p {
@@ -90,7 +218,8 @@
       .markdown-content h5,
       .markdown-content h6 {
         margin: 1rem 0 0.5rem 0;
-        font-weight: bold;
+        font-weight: 700;
+        color: hsl(var(--foreground));
       }
 
       .markdown-content ul,
@@ -104,26 +233,27 @@
       }
 
       .markdown-content blockquote {
-        border-left: 4px solid #e5e7eb;
+        border-left: 4px solid hsla(var(--border) / 0.9);
         padding-left: 1rem;
         margin: 1rem 0;
-        color: #6b7280;
+        color: hsl(var(--muted-foreground));
         font-style: italic;
       }
 
       .markdown-content pre {
-        background: #f8f9fa;
+        background: hsla(var(--muted) / 0.65);
         padding: 1rem;
-        border-radius: 0.5rem;
+        border-radius: calc(var(--radius) * 0.9);
         overflow-x: auto;
         margin: 1rem 0;
+        border: 1px solid hsla(var(--border) / 0.7);
       }
 
       .markdown-content code {
-        background: #f1f5f9;
-        padding: 0.2rem 0.4rem;
-        border-radius: 0.25rem;
-        font-size: 0.875em;
+        background: hsla(var(--accent) / 0.6);
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.4rem;
+        font-size: 0.9em;
       }
 
       .markdown-content pre code {
@@ -132,7 +262,7 @@
       }
 
       .markdown-content strong {
-        font-weight: bold;
+        font-weight: 700;
       }
 
       .markdown-content em {
@@ -140,22 +270,34 @@
       }
 
       .markdown-content a {
-        color: #3b82f6;
+        color: hsl(var(--ring));
         text-decoration: underline;
       }
 
       .markdown-content a:hover {
-        color: #1d4ed8;
+        color: hsl(var(--foreground));
+      }
+
+      .chat-bubble {
+        border-radius: 1rem;
+        box-shadow: var(--shadow-soft);
+        border: 1px solid hsla(var(--border) / 0.8);
+      }
+
+      .chat-bubble.chat-bubble-user {
+        background: hsl(var(--primary));
+        color: hsl(var(--primary-foreground));
       }
 
       .chat-bubble.chat-bubble-assistant::before {
         display: none;
       }
       .chat-bubble.chat-bubble-assistant {
-        background: none;
-        padding: 0;
+        background: hsl(var(--secondary));
+        color: hsl(var(--secondary-foreground));
+        padding: 0.9rem 1rem;
         margin: 0;
-        color: black;
+        margin-top: 0.5rem;
       }
 
       .chat.chat-log {
@@ -170,6 +312,26 @@
 
       body:not(.show-execution-logs) .event-session-log {
         display: none !important;
+      }
+
+      .status-pill {
+        border-radius: 9999px;
+        padding: 0.2rem 0.75rem;
+        border: 1px solid hsla(var(--border) / 0.8);
+        background: hsla(var(--muted) / 0.7);
+      }
+
+      .hero-eyebrow {
+        font-size: 0.9rem;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: hsl(var(--muted-foreground));
+      }
+
+      .glass-input {
+        background: hsla(var(--card) / 0.75);
+        border: 1px solid hsla(var(--border) / 0.85);
+        box-shadow: inset 0 1px 0 hsla(0, 0%, 100%, 0.08);
       }
     </style>
   </head>
@@ -345,12 +507,12 @@
         };
 
         return (
-          <div className="flex items-center gap-4 justify-center">
+          <div className="status-pill flex items-center gap-3 justify-center">
             <div className="flex items-center gap-2">
               <div className={`w-3 h-3 rounded-full ${getStatusColor()}`}></div>
-              <span className="text-sm">{text}</span>
+              <span className="text-sm font-medium">{text}</span>
             </div>
-            <div className="badge badge-outline badge-sm">
+            <div className="badge badge-outline badge-sm border-base-300">
               Events: {eventCount}
             </div>
           </div>
@@ -423,21 +585,21 @@
         const hasPaths = programPaths && programPaths.length > 0;
 
         return (
-          <div className="bg-base-100 rounded-lg shadow-lg flex flex-col h-full overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-base-300">
+          <div className="surface-card flex-col h-full min-h-0 border-r border-base-300">
+            <div className="section-header flex items-center justify-between px-6 lg:px-8 py-3">
               <div className="space-y-1">
-                <div className="text-sm font-semibold">Loaded Program</div>
+                <div className="text-sm font-semibold tracking-tight">
+                  Loaded Program
+                </div>
                 <div className="text-xs text-base-content/70 truncate">
-                  {hasPaths
-                    ? programPaths.join(", ")
-                    : "No program loaded yet"}
+                  {hasPaths ? programPaths.join(", ") : "No program loaded yet"}
                 </div>
               </div>
               {isLoading && (
                 <span className="loading loading-spinner loading-sm" />
               )}
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 px-6 lg:px-8 space-y-3 bg-card">
               {error && (
                 <div className="alert alert-error text-sm">
                   <span>{error}</span>
@@ -453,14 +615,23 @@
               )}
 
               {hasProgram && (
-                <pre className="whitespace-pre-wrap text-sm bg-base-200 rounded-lg p-3 border border-base-300">
-                  <code className="font-mono">{programContent}</code>
-                </pre>
+                <code className="font-mono whitespace-pre-wrap">
+                  {programContent}
+                </code>
               )}
             </div>
           </div>
         );
       }
+
+      const getInitialTheme = () => {
+        if (typeof window === "undefined") return "light";
+        const saved = localStorage.getItem("playbooks-theme");
+        if (saved === "light" || saved === "dark") return saved;
+        return window.matchMedia("(prefers-color-scheme: dark)").matches
+          ? "dark"
+          : "light";
+      };
 
       // Main App component
       function App() {
@@ -483,6 +654,7 @@
         const [programPaths, setProgramPaths] = useState([]);
         const [programError, setProgramError] = useState(null);
         const [isProgramLoading, setIsProgramLoading] = useState(false);
+        const [theme, setTheme] = useState(getInitialTheme);
         const messagesEndRef = useRef(null);
 
         const scrollToBottom = () => {
@@ -492,6 +664,32 @@
         useEffect(() => {
           scrollToBottom();
         }, [messages, streamingMessages]);
+
+        useEffect(() => {
+          const root = document.documentElement;
+          const themeName =
+            theme === "dark" ? "playbooks-dark" : "playbooks-light";
+          root.setAttribute("data-theme", themeName);
+          root.classList.toggle("dark", theme === "dark");
+          localStorage.setItem("playbooks-theme", theme);
+        }, [theme]);
+
+        useEffect(() => {
+          const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+          const handler = (event) => {
+            if (!localStorage.getItem("playbooks-theme")) {
+              setTheme(event.matches ? "dark" : "light");
+            }
+          };
+          const addListener = mediaQuery.addEventListener
+            ? () => mediaQuery.addEventListener("change", handler)
+            : () => mediaQuery.addListener(handler);
+          const removeListener = mediaQuery.removeEventListener
+            ? () => mediaQuery.removeEventListener("change", handler)
+            : () => mediaQuery.removeListener(handler);
+          addListener();
+          return () => removeListener();
+        }, []);
 
         // Update body classes for event filtering
         useEffect(() => {
@@ -891,73 +1089,98 @@
           }
         };
 
-        return (
-          <div className="flex flex-col h-screen">
-            {/* Header */}
-            <div className="bg-primary text-primary-content p-4 text-center">
-              <h1 className="text-2xl font-bold mb-2">
-                ▶ Playbooks playground
-              </h1>
-              <StatusIndicator
-                status={status}
-                text={statusText}
-                eventCount={eventCounter}
-              />
-            </div>
+        const toggleTheme = () => {
+          setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+        };
 
-            {/* Controls */}
-            <div className="bg-base-100 p-4 border-b border-base-300">
-              <div className="flex gap-4 items-center flex-wrap">
-                <input
-                  type="text"
-                  placeholder="Playbook path"
-                  className="input input-bordered flex-1 min-w-[200px]"
-                  value={playbookPath}
-                  onChange={(e) => setPlaybookPath(e.target.value)}
-                />
-                <button
-                  className="btn btn-primary"
-                  onClick={startChat}
-                  disabled={isConnected}
-                >
-                  {isConnected ? "Running..." : "Run Program"}
-                </button>
-                <button
-                  className="btn btn-secondary"
-                  onClick={stopChat}
-                  disabled={!isConnected}
-                >
-                  Stop Program
-                </button>
+        return (
+          <div className="h-screen flex flex-col overflow-hidden">
+            <div className="flex-0 px-6 lg:px-8 py-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="space-y-2">
+                  <div className="hero-eyebrow">Playbooks</div>
+                  <h1 className="text-3xl leading-tight">
+                    Playbooks playground
+                  </h1>
+                  <p className="text-sm text-base-content/70 max-w-2xl">
+                    Launch runs, watch live agent messages, and skim execution
+                    logs inside a focused console-inspired workspace.
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap justify-end">
+                  <button
+                    className="btn btn-sm glass-input gap-2"
+                    onClick={toggleTheme}
+                    type="button"
+                  >
+                    <span className="text-lg">
+                      {theme === "dark" ? "🌙" : "☀️"}
+                    </span>
+                    {theme === "dark" ? "Dark" : "Light"} mode
+                  </button>
+                  <StatusIndicator
+                    status={status}
+                    text={statusText}
+                    eventCount={eventCounter}
+                  />
+                </div>
               </div>
 
-              {/* Event Type Filters - Always visible */}
-              <div className="mt-4 flex gap-4 items-center flex-wrap">
-                <span className="text-sm font-semibold">Show Events:</span>
-                <label className="label cursor-pointer gap-2">
+              {/* Controls */}
+              <div className="mt-6 space-y-3">
+                <div className="flex gap-3 items-center flex-wrap">
                   <input
-                    type="checkbox"
-                    className="checkbox checkbox-sm"
-                    checked={showMessages}
-                    onChange={() => toggleEventDisplay("messages")}
+                    type="text"
+                    placeholder="Playbook path"
+                    className="input glass-input flex-1 min-w-[220px]"
+                    value={playbookPath}
+                    onChange={(e) => setPlaybookPath(e.target.value)}
                   />
-                  <span className="label-text">Messages</span>
-                </label>
-                <label className="label cursor-pointer gap-2">
-                  <input
-                    type="checkbox"
-                    className="checkbox checkbox-sm"
-                    checked={showExecutionLogs}
-                    onChange={() => toggleEventDisplay("session_log_entry")}
-                  />
-                  <span className="label-text">Execution Logs</span>
-                </label>
+                  <button
+                    className="btn btn-primary"
+                    onClick={startChat}
+                    disabled={isConnected}
+                  >
+                    {isConnected ? "Running..." : "Run Program"}
+                  </button>
+                  <button
+                    className="btn btn-outline"
+                    onClick={stopChat}
+                    disabled={!isConnected}
+                  >
+                    Stop
+                  </button>
+                </div>
+
+                <div className="flex gap-4 items-center flex-wrap">
+                  <span className="text-sm font-semibold text-base-content/80">
+                    Show Events
+                  </span>
+                  <label className="label cursor-pointer gap-2 px-2 py-1 rounded-lg hover:bg-base-200 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-sm"
+                      checked={showMessages}
+                      onChange={() => toggleEventDisplay("messages")}
+                    />
+                    <span className="label-text text-sm">Messages</span>
+                  </label>
+                  <label className="label cursor-pointer gap-2 px-2 py-1 rounded-lg hover:bg-base-200 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-sm"
+                      checked={showExecutionLogs}
+                      onChange={() => toggleEventDisplay("session_log_entry")}
+                    />
+                    <span className="label-text text-sm">Execution Logs</span>
+                  </label>
+                </div>
               </div>
             </div>
 
             {/* Main Content */}
-            <div className="flex-1 overflow-hidden p-4">
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full">
+            <div className="flex-1 app-shell mx-auto w-full px-0 lg:px-0 pb-0 min-h-0 border-t border-base-300">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-0 h-full min-h-0">
                 <ProgramViewer
                   programContent={programContent}
                   programPaths={programPaths}
@@ -965,9 +1188,9 @@
                   error={programError}
                 />
 
-                <div className="bg-base-100 rounded-lg shadow-lg flex flex-col h-full overflow-hidden">
+                <div className="surface-card flex flex-col h-full min-h-0">
                   {/* Messages */}
-                  <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  <div className="flex-1 overflow-y-auto p-4 lg:p-4 space-y-4">
                     {showWelcome && <WelcomeScreen />}
                     {messages.map((message) => (
                       <Message key={message.id} message={message} />
@@ -979,12 +1202,12 @@
                   </div>
 
                   {/* Input Area */}
-                  <div className="p-4 border-t border-base-300">
+                  <div className="p-4 lg:p-4 border-t border-base-300 bg-base-100 backdrop-blur">
                     <div className="flex gap-2">
                       <input
                         type="text"
                         placeholder="Type your message..."
-                        className="input input-bordered flex-1"
+                        className="input glass-input flex-1"
                         value={messageInput}
                         onChange={(e) => setMessageInput(e.target.value)}
                         onKeyPress={handleKeyPress}
