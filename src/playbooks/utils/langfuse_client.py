@@ -4,15 +4,10 @@ from __future__ import annotations
 
 from functools import wraps
 
-from langfuse import (
-    get_client as langfuse_get_client,
-    observe as langfuse_observe,
-)
+from langfuse import get_client as langfuse_get_client
+from langfuse import observe as langfuse_observe
 
-from playbooks.utils.langfuse_helper import (
-    LangfuseHelper,
-    PlaybooksLangfuseInstance,
-)
+from playbooks.utils.langfuse_helper import LangfuseHelper, PlaybooksLangfuseInstance
 
 
 def get_client():
