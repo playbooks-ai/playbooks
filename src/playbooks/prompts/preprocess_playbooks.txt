@@ -198,11 +198,64 @@ Compiled:
 ### Triggers
 Apply these for triggers on both Python and Markdown playbooks
 - Add prefix: `T1:BGN` (only for automatic execution when program starts), `T1:CND` (when condition is met), `T1:EVT` (when something happens)
-- "When program starts", "At the start", "In the beginning", etc → `- T1:BGN When program starts`
-- "When user provides X" → `- T1:EVT When user provides X`
-- "When $amount > 1000" → `- T1:CND When $amount > 1000`
-- "Upon receiving message from Accountant agent" → `- T1:EVT Upon receiving message from Accountant agent`
-- "When you are invited to a meeting" → `- T1:EVT When you are invited to a meeting"
+
+**BGN** Begin trigger
+
+```
+Original:
+### Triggers
+- When program starts
+- At the start
+- In the beginning
+
+Compiled:
+### Triggers
+  - T1:BGN When program starts
+```
+
+**EVT** Event trigger
+
+```
+Original:
+
+### Triggers
+- When user provides email
+- Upon receiving message from Accountant agent
+
+Compiled:
+
+### Triggers
+- T1:EVT When user provides email
+- T2:EVT Upon receiving message from Accountant agent
+```
+
+**CND** Conditional trigger
+
+```
+Original:
+
+### Triggers
+- When $amount > 1000
+
+Compiled:
+
+### Triggers
+- T1:CND When $amount > 1000
+```
+
+**EVT** Meeting invitation event trigger
+
+```
+Original:
+
+### Triggers
+- When invited to a meeting
+
+Compiled:
+
+### Triggers
+- T1:EVT When invited to a meeting
+```
 
 ### Loops
 
@@ -383,6 +436,8 @@ A markdown playbook without Steps -
 - if execution_mode:raw is NOT specified, it is a "react" playbook. React playbooks do NOT have steps, runtime assigns predefined steps to them so do not add steps.
 
 ## Example Transformation
+
+Keep python playbooks as python playbooks and markdown playbooks as markdown playbooks. Do not convert.
 
 **Input:**
 ---
@@ -693,6 +748,7 @@ Conduct a planning meeting
 
 ====
 
-Remember: Mark BGN playbooks as public. Follow the output contract exactly; deviations break execution.
+Remember: Mark playbooks as BGN only when a "when program starts" type trigger is specified. BGN playbooks are public by default. 
+**Follow the output contract exactly; deviations break execution.**
 
 **Output:**
