@@ -303,7 +303,7 @@ async def test_example_14_python_only(test_data_dir, monkeypatch):
     assert "Alice" in log
     assert "Secret code: OhSoSecret!" in log
     assert "GetSecret()" in log
-    assert "Exit()" in log  # Verify Exit was called
+    assert "EndProgram()" in log  # Verify Exit was called
 
     # Verify no LLM calls were made
     assert llm_call_count == 0, f"Expected 0 LLM calls, but got {llm_call_count}"

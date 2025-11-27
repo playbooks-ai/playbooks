@@ -83,8 +83,8 @@ async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
 #     return value
 
 @playbook
-async def Exit():
-    await agent.program.shutdown()
+async def EndProgram():
+    await agent.program.end_program()
 
 @playbook(hidden=True)
 async def MessageProcessingEventLoop():

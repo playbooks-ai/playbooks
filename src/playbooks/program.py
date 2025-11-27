@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
-from playbooks.core.constants import HUMAN_AGENT_KLASS
+from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
 from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
 from playbooks.core.identifiers import AgentID, MeetingID
@@ -951,6 +951,10 @@ class Program(ProgramAgentsCommunicationMixin):
                 session_id="program", reason=reason, exit_code=exit_code
             )
             self.event_bus.publish(termination_event)
+
+    async def end_program(self) -> None:
+        """End the program."""
+        raise ExecutionFinished(EXECUTION_FINISHED)
 
     async def shutdown(self) -> None:
         """Shutdown all agents and clean up resources."""

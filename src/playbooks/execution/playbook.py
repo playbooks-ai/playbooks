@@ -278,7 +278,7 @@ class PlaybookLLMExecution(LLMExecution):
 
             # Check if exiting program
             if llm_response.execution_result.exit_program:
-                raise ExecutionFinished(EXECUTION_FINISHED)
+                await self.agent.program.end_program()
 
             # Check if playbook finished
             if llm_response.execution_result.playbook_finished:
