@@ -4,6 +4,73 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [v0.7.1] - 2025-11-27
+
+### Added
+
+#### CLI Utilities & Scripting
+- **Playbook-based CLI Utilities** - Applications need to create command-line tools without boilerplate. Added support for making CLI utilities directly from playbooks, enabling rapid development of command-line applications (Fixes #69)
+- **Shebang Support** - Users want to run playbooks as scripts directly. Implemented shebang support allowing playbooks to be executed as standalone scripts (e.g., `./release_notes.pb --start v0.6.0 --end v0.7.0`)
+
+#### Communication & Transport
+- **MCP Memory Transport** - Agents need efficient in-process communication without network overhead. Added in-memory transport for MCP (Model Context Protocol) enabling fast inter-agent communicationd
+- **Enhanced Streaming Say()** - Streaming output couldn't handle triple-quoted strings properly. Extended Say() to support triple-quoted strings in streaming mode for better content formatting
+
+#### Message Handling
+- **Top-Level LLM Messages** - Messages outside playbook execution weren't properly tracked. Added AssistantResponseLLMMessage support with improved message ordering to ensure LLM responses appear before execution results
+
+#### Python Code Output
+- Custom output format was hard to parse and execute. Changed output format to Python code for direct execution
+- **Streaming async Python execution** - Generated Python code statements execute as soon as they have been produced in the token stream
+
+
+### Improved
+
+#### Playground Improvements
+- **Dark Mode Support** - Users working in low-light environments needed better UI options. Added dark mode with improved styling for better visual experience
+- **Playground Code Display** - Developers couldn't see generated code in the playground. Enhanced playground to display generated Python code for transparency and debugging
+- **Better Color Schemes** - CLI output was hard to read with poor color contrast. Improved color schemes for better readability and visual hierarchy
+
+#### Agent Communication
+- **Cross-Agent Communication** - Multi-agent coordination had inefficient message passing. Improved communication protocols between agents for more reliable and efficient coordination
+- **Message Handling Infrastructure** - Message handling was scattered across the codebase. Refactored core message handling with top-level LLM message support and improved logging for all communication scenarios
+
+#### Agent Behavior
+- **Concise Thinking** - Agent reasoning was verbose and inefficient. Enforced concise thinking patterns to improve reasoning clarity and reduce token usage
+- **Think outside the box** - Agent now considers whether anything unusual is happening and acts to mitigate that
+
+### Changed
+
+#### Dependencies & Versions
+- **Langfuse 2.x to 3.x Upgrade** - Langfuse library had breaking changes in new version. Upgraded langfuse from version 2.x to 3.x with updated integration code
+- **Updated Project Dependencies** - Dependencies were outdated and potentially vulnerable. Updated all project dependencies to latest compatible versions
+- **Moved pytest-asyncio to dev dependency** - Fixes #70
+
+#### Configuration
+- **Environment Loading from CWD** - Environment variables were loaded from package root instead of current directory. Changed .env loading to use current working directory for better project isolation
+
+#### Output & Formatting
+- **Public.json Parsing** - public.json was incorrectly parsed as Python code. Fixed parsing to treat public.json as JSON format
+
+### Fixed
+
+#### Core Functionality
+- **EndProgram() Execution** - EndProgram() wasn't properly terminating execution. Fixed EndProgram() function to correctly signal program termination
+- **BGN Processing Exceptions** - Exceptions during background processing weren't handled. Implemented proper exception handling during BGN (beginning) processing
+- **MCP Server Agent Busy State** - MCP server agent wasn't tracking busy state properly. Fixed busy state tracking to enable clean program exit when processing completes
+
+#### Execution & Exit Behavior
+- **Graceful Agent Shutdown** - Program exited before agents finished processing. Implemented wait for all agents to become idle before gracefully exiting
+- **Non-Interactive Mode Exit Codes** - Exit codes weren't consistent in non-interactive mode. Fixed exit code handling with proper InteractiveInputRequired exception support (exit code 3)
+- **Agent Instance Creation** - Agent instance creation wasn't reliable. Fixed agent instance request mechanism and ensured BGN playbooks are properly marked as public
+
+#### Message & Context Management
+- **LLM Context Duplication** - WaitForMessage calls were repeated in LLM context. Fixed to prevent duplicate WaitForMessage calls in LLM context
+- **Message Ordering** - Execution results appeared before LLM responses. Fixed message ordering to ensure LLM response appears before execution results
+- **Streaming Consistency** - Streaming behavior was inconsistent between modes. Fixed streaming observer to properly track streams in both interactive and non-interactive modes
+
+---
+
 ## [v0.7.0] - 2025-11-10
 
 ### Added
