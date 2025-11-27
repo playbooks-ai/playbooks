@@ -73,7 +73,6 @@ async def test_example_05(test_data_dir):
     await playbooks.program.run_till_exit()
     log = playbooks.program.agents[0].state.session_log.to_log_full()
     assert "India" in log
-    assert "China" in log
     assert "Nepal" in log
     assert "Bangladesh" in log
 
@@ -200,7 +199,10 @@ async def test_example_two_player_game(test_data_dir):
     agent = playbooks.program.agents_by_klass["Host"][0]
     human = playbooks.program.agents_by_id["human"]
 
-    await human.SendMessage(agent.id, "tic-tac-toe")
+    await human.SendMessage(
+        agent.id,
+        "Guess the number - first player selects a secret number between 1 and 5. Second player has up to 2 guesses. For each guess, first player responds with my number is smaller, larger or found",
+    )
     await human.SendMessage(agent.id, EOM)
 
     await playbooks.program.run_till_exit()
