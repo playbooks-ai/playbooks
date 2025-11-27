@@ -55,7 +55,10 @@ class StreamingPythonExecutor:
     """
 
     def __init__(
-        self, agent: "LocalAIAgent", playbook_args: Optional[Dict[str, Any]] = None
+        self,
+        agent: "LocalAIAgent",
+        playbook_args: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[int] = None,
     ):
         """Initialize streaming Python executor.
 
@@ -65,6 +68,7 @@ class StreamingPythonExecutor:
         """
         self.agent = agent
         self.playbook_args = playbook_args
+        self.execution_id = execution_id
 
         # Create a PythonExecutor to reuse its namespace building and capture functions
         self.base_executor = PythonExecutor(agent)
@@ -81,6 +85,7 @@ class StreamingPythonExecutor:
 
         # Track executed code for error truncation
         self.executed_lines: List[str] = []  # Lines successfully executed
+        self.statement_index: int = 0  # Track statement ordering for tracing
 
         # Variable tracking for runtime detection
         self.last_namespace_vars: Dict[str, Any] = {}
@@ -183,7 +188,7 @@ class StreamingPythonExecutor:
                 f"Execution failed: {type(e).__name__}: {e}", e, executed_code
             )
 
-    @observe(capture_input=False, capture_output=False)
+    @observe(capture_input=False, capture_output=False, as_type="span")
     async def _execute_statement(self, stmt: ast.stmt) -> None:
         """Execute a single AST statement with tracing.
 
@@ -198,16 +203,14 @@ class StreamingPythonExecutor:
 
         # Update current span with statement-specific information
         langfuse = get_client()
-        display_code = (
-            statement_code
-            if len(statement_code) <= 100
-            else statement_code[:97] + "..."
+
+        exec_id = (
+            self.execution_id
+            if self.execution_id is not None
+            else getattr(self.agent, "execution_counter", None)
         )
-        langfuse.update_current_span(
-            name=f"exec: {display_code}",
-            input={"code": statement_code},
-            metadata={"statement_type": stmt.__class__.__name__},
-        )
+
+        self._update_statement_span(langfuse, stmt, statement_code, exec_id)
 
         # Check if this is a function/class definition
         # These don't need wrapping and should execute directly
@@ -254,6 +257,28 @@ class StreamingPythonExecutor:
             # Mark statement as failed - @observe will capture the exception
             langfuse.update_current_span(output={"success": False, "error": str(e)})
             raise
+
+    def _update_statement_span(
+        self,
+        langfuse_client: Any,
+        stmt: ast.stmt,
+        statement_code: str,
+        exec_id: Optional[int],
+    ) -> None:
+        """Update the current span with statement metadata for tracing."""
+        display_code = (
+            statement_code
+            if len(statement_code) <= 100
+            else statement_code[:97] + "..."
+        )
+        langfuse_client.update_current_span(
+            name=display_code,
+            input={"code": statement_code},
+            metadata={
+                "statement_type": stmt.__class__.__name__,
+                "execution_id": exec_id,
+            },
+        )
 
     def _find_assignments(self, stmt: ast.stmt) -> List[str]:
         """Find all variable names that are assigned in a statement.

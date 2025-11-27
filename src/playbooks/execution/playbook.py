@@ -351,10 +351,15 @@ class PlaybookLLMExecution(LLMExecution):
         )
 
         # Use streaming to handle Say() calls progressively
-        return await self._stream_llm_response(prompt, playbook_args=playbook_args)
+        return await self._stream_llm_response(
+            prompt, playbook_args=playbook_args, execution_id=execution_id
+        )
 
     async def _stream_llm_response(
-        self, prompt: InterpreterPrompt, playbook_args: Optional[Dict[str, Any]] = None
+        self,
+        prompt: InterpreterPrompt,
+        playbook_args: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[int] = None,
     ) -> str:
         """Stream LLM response and handle code execution and Say() calls progressively.
 
@@ -383,7 +388,9 @@ class PlaybookLLMExecution(LLMExecution):
         self.agent._currently_streaming = False
 
         # Initialize streaming Python executor for incremental code execution
-        streaming_executor = StreamingPythonExecutor(self.agent, playbook_args)
+        streaming_executor = StreamingPythonExecutor(
+            self.agent, playbook_args, execution_id=execution_id
+        )
         self.streaming_execution_result = None  # Will be set after execution
 
         buffer = ""
@@ -411,8 +418,16 @@ class PlaybookLLMExecution(LLMExecution):
         langfuse = get_client()
         llm_config = LLMConfig()
 
+        # Prefer explicit execution_id argument but fall back to prompt metadata
+        execution_id = execution_id or getattr(prompt, "execution_id", None)
+        span_name = (
+            f"LLM Call {execution_id}: {llm_config.model}"
+            if execution_id is not None
+            else f"LLM Call: {llm_config.model}"
+        )
+
         generation_ctx = langfuse.start_as_current_observation(
-            name=f"LLM Call: {llm_config.model}",
+            name=span_name,
             as_type="generation",
             model=llm_config.model,
             model_parameters={
@@ -430,6 +445,7 @@ class PlaybookLLMExecution(LLMExecution):
                 llm_config=llm_config,
                 stream=True,
                 json_mode=False,
+                execution_id=execution_id,
             ):
                 buffer += chunk
 

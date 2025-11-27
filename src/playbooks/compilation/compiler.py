@@ -370,7 +370,7 @@ class Compiler:
         # Get LLM response
         messages = get_messages_for_prompt(prompt)
         langfuse_span = LangfuseHelper.instance().start_observation(
-            name="compile_agent", input=agent_content
+            name="compile_agent", as_type="generation", input=agent_content
         )
 
         response: Iterator[str] = get_completion(

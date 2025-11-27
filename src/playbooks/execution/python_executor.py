@@ -19,6 +19,7 @@ from playbooks.execution.call import PlaybookCall
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.call_stack import InstructionPointer
 from playbooks.state.variables import Artifact
+from playbooks.utils.langfuse_client import get_client
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
@@ -393,6 +394,33 @@ class PythonExecutor:
         self.result.steps.append(instruction_pointer)
         self.agent.state.call_stack.advance_instruction_pointer(instruction_pointer)
         self.current_instruction_pointer = instruction_pointer
+
+        # Try to resolve the actual playbook code for this step so we can label spans
+        step_code: Optional[str] = None
+        step_obj = getattr(instruction_pointer, "step", None)
+        if not step_obj:
+            playbook = (
+                self.agent.playbooks.get(instruction_pointer.playbook)
+                if hasattr(self.agent, "playbooks")
+                else None
+            )
+            if playbook and hasattr(playbook, "get_step"):
+                step_obj = playbook.get_step(instruction_pointer.line_number)
+
+        if step_obj:
+            step_code = (
+                instruction_pointer.playbook + ":" + getattr(step_obj, "raw_text", None)
+            )
+
+        if not step_code:
+            step_code = location
+
+        try:
+            langfuse = get_client()
+            if langfuse and hasattr(langfuse, "update_current_span"):
+                langfuse.update_current_span(name=step_code)
+        except Exception as exc:
+            logger.debug("Failed to update Langfuse span with step code: %s", exc)
 
         # Check if this is a thinking step
         is_thinking = (

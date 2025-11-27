@@ -166,8 +166,8 @@ class Playbooks:
         # Create root observation with OTEL context (so @observe decorators nest correctly)
         # Using start_as_current_observation sets this as the active span in OTEL context
         self._root_observation_ctx = langfuse.start_as_current_observation(
-            name=program_name + "Observation",
-            as_type="span",
+            name=program_name,
+            as_type="chain",
             metadata={
                 "program_paths": self.program_paths,
                 "cli_args": self.cli_args,

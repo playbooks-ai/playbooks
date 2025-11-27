@@ -295,6 +295,7 @@ def get_completion(
     use_cache: bool = True,
     json_mode: bool = False,
     session_id: Optional[str] = None,
+    execution_id: Optional[int] = None,
     **kwargs,
 ) -> Iterator[str]:
     """Get completion from LLM with optional streaming and caching support.
@@ -306,6 +307,7 @@ def get_completion(
         use_cache: If True and caching is enabled, will try to use cached responses
         json_mode: If True, instructs the model to return a JSON response
         session_id: Optional session ID to associate with the generation
+        execution_id: Optional counter identifying this LLM call for tracing
         langfuse_span: Optional parent span for Langfuse tracing
         **kwargs: Additional arguments passed to litellm.completion
 
@@ -351,8 +353,13 @@ def get_completion(
     langfuse_generation = None
 
     if langfuse_helper is not None and not stream:
+        span_name = (
+            f"LLM Call {execution_id}: {llm_config.model}"
+            if execution_id is not None
+            else f"LLM Call: {llm_config.model}"
+        )
         langfuse_generation = langfuse_helper.start_observation(
-            name=f"LLM Call: {llm_config.model}",
+            name=span_name,
             as_type="generation",
             model=llm_config.model,
             model_parameters={

@@ -368,7 +368,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         if program_trace:
             self._agent_span_ctx = program_trace.start_as_current_observation(
                 name=f"Agent: {str(self)}",
-                as_type="span",
+                as_type="agent",
                 metadata={
                     "agent_klass": self.klass,
                     "agent_id": self.id,
@@ -916,7 +916,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         return (target_agent, actual_playbook_name)
 
-    @observe(capture_input=True, capture_output=True)
+    @observe(capture_input=True, capture_output=True, as_type="tool")
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> tuple[bool, Any]:
