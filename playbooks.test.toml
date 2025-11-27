@@ -5,6 +5,9 @@ artifact_result_threshold = 80  # Lower threshold for testing
 [model]
 name = "claude-haiku-4-5-20251001"
 
+[model.compilation]
+name = "claude-sonnet-4-5-20250929"
+
 [llm_cache]
 type = "disk"
 enabled = true

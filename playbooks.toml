@@ -18,6 +18,9 @@ max_completion_tokens=15000
 # [model.execution]
 # [model.compilation]
 
+[model.compilation]
+name = "claude-sonnet-4-5-20250929"
+
 [llm_cache]
 enabled = true
 type = "disk"
