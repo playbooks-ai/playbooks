@@ -122,7 +122,6 @@ class CallStackFrame:
         self,
         instruction_pointer: InstructionPointer,
         llm_messages: Optional[List[LLMMessage]] = None,
-        langfuse_span: Optional[Any] = None,
         is_meeting: bool = False,
         meeting_id: Optional[str] = None,
     ) -> None:
@@ -131,16 +130,15 @@ class CallStackFrame:
         Args:
             instruction_pointer: Current execution position
             llm_messages: LLM messages associated with this frame
-            langfuse_span: Langfuse tracing span (optional)
             is_meeting: Whether this frame is part of a meeting
             meeting_id: Meeting ID if is_meeting is True
         """
         self.instruction_pointer = instruction_pointer
         self.llm_messages = llm_messages or []
-        self.langfuse_span = langfuse_span
         self.is_meeting = is_meeting
         self.meeting_id = meeting_id
         self.depth = -1
+        self.langfuse_span: Optional[Any] = None
 
     @property
     def source_line_number(self) -> int:
@@ -214,6 +212,9 @@ class CallStack:
         self.frames: List[CallStackFrame] = []
         self.event_bus = event_bus
         self.agent_id = agent_id
+        # Messages that occur outside of playbook execution (top-level)
+        # These are included in LLM context when call stack is empty
+        self.top_level_llm_messages: List[LLMMessage] = []
 
     def is_empty(self) -> bool:
         """Check if the call stack is empty.
@@ -294,10 +295,13 @@ class CallStack:
         messages = []
         for frame in self.frames:
             messages.extend(frame.get_llm_messages())
+        # Add top-level messages (when call stack is empty or before first playbook)
+        for msg in self.top_level_llm_messages:
+            messages.append(msg.to_full_message())
         return messages
 
     def add_llm_message(self, message: LLMMessage) -> None:
-        """Safely add an LLM message to the top frame if the stack is not empty.
+        """Add an LLM message to the top frame, or to top_level_llm_messages if stack is empty.
 
         Args:
             message: LLM message to add
@@ -305,20 +309,56 @@ class CallStack:
         current_frame = self.peek()
         if current_frame is not None:
             current_frame.add_llm_message(message)
+        else:
+            # Stack is empty - add to top-level messages
+            self.top_level_llm_messages.append(message)
 
-    def add_llm_message_on_caller(self, message: LLMMessage) -> None:
-        """Add an LLM message to the caller frame (second from top).
+    def add_llm_message_with_fallback(self, message: LLMMessage) -> bool:
+        """Deprecated: Use add_llm_message instead (now handles fallback automatically).
 
-        Used when a called playbook wants to add a message to its caller's context.
+        Add an LLM message to the top frame, returning success status.
+
+        Args:
+            message: LLM message to add
+
+        Returns:
+            True if message was added to a frame, False if stack is empty (fallback handled)
+        """
+        current_frame = self.peek()
+        if current_frame is not None:
+            current_frame.add_llm_message(message)
+            return True
+        else:
+            # Fallback to top-level messages (same as add_llm_message now does)
+            self.top_level_llm_messages.append(message)
+            return False
+
+    def add_llm_message_on_parent(self, message: LLMMessage) -> None:
+        """Add an LLM message to the parent context.
+
+        If there's a caller frame (second from top), adds to that frame.
+        If there's no caller frame, falls back to top_level_llm_messages.
+
+        Used when a called playbook wants to add a message to its parent's context.
 
         Args:
             message: LLM message to add
         """
-        if len(self.frames) < 2:
-            return
-        current_frame = self.frames[-2]
-        if current_frame is not None:
-            current_frame.add_llm_message(message)
+        if len(self.frames) >= 2:
+            # Add to caller frame (second from top)
+            caller_frame = self.frames[-2]
+            if caller_frame is not None:
+                caller_frame.add_llm_message(message)
+        else:
+            # No caller frame - fall back to top_level_llm_messages
+            self.top_level_llm_messages.append(message)
+
+    def add_llm_message_on_caller(self, message: LLMMessage) -> None:
+        """Deprecated: Use add_llm_message_on_parent instead.
+
+        Add an LLM message to the caller frame (second from top).
+        """
+        self.add_llm_message_on_parent(message)
 
     def is_artifact_loaded(self, artifact_name: str) -> bool:
         """Check if an artifact is loaded in any frame.

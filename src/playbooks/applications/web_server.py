@@ -9,6 +9,7 @@ from datetime import datetime
 from enum import Enum
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional, Set
+from urllib.parse import urlparse
 
 import websockets
 
@@ -17,6 +18,7 @@ from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.applications.streaming_observer import (
     ChannelStreamObserver as BaseChannelStreamObserver,
 )
+from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.channels.stream_events import (
     StreamChunkEvent,
     StreamCompleteEvent,
@@ -292,11 +294,8 @@ class PlaybookRun:
                 meeting_id,
             )
 
-        async def patched_wait_for_message(agent_self, source_agent_id: str):
+        async def on_wait(agent_self, source_agent_id: str):
             await playbook_run._intercept_wait_for_message(source_agent_id)
-            return await playbook_run._original_methods["wait_for_message"](
-                agent_self, source_agent_id
-            )
 
         async def patched_broadcast_to_meeting(
             manager_self, meeting_id, message, from_agent_id=None, from_agent_klass=None
@@ -321,7 +320,10 @@ class PlaybookRun:
 
         # Patch methods
         Program.route_message = patched_route_message
-        MessagingMixin.WaitForMessage = patched_wait_for_message
+        MessagingMixin.WaitForMessage = build_human_wait_patch(
+            self._original_methods["wait_for_message"],
+            on_wait=on_wait,
+        )
         MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting
         Program.create_agent = patched_create_agent
 
@@ -934,6 +936,16 @@ class HTTPHandler(BaseHTTPRequestHandler):
         """Handle CORS preflight requests."""
         self._send_response(200)
 
+    def do_GET(self):
+        parsed_path = urlparse(self.path)
+
+        if parsed_path.path.startswith("/runs/") and parsed_path.path.endswith(
+            "/program"
+        ):
+            self._handle_get_program(parsed_path)
+        else:
+            self._send_response(404, json.dumps({"error": "Not Found"}))
+
     def do_POST(self):
         if self.path == "/runs/new":
             self._handle_new_run()
@@ -976,6 +988,26 @@ class HTTPHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         """Suppress default HTTP logging."""
         return
+
+    def _handle_get_program(self, parsed_path):
+        """Return the program content and paths for a given run."""
+        parts = parsed_path.path.strip("/").split("/")
+        if len(parts) != 3 or parts[0] != "runs" or parts[2] != "program":
+            self._send_response(400, json.dumps({"error": "Invalid path"}))
+            return
+
+        run_id = parts[1]
+        run = self.server.run_manager.get_run(run_id)
+        if not run:
+            self._send_response(404, json.dumps({"error": "Run not found"}))
+            return
+
+        playbooks = run.playbooks
+        response = {
+            "program_content": getattr(playbooks, "program_content", None),
+            "program_paths": getattr(playbooks, "program_paths", []),
+        }
+        self._send_response(200, json.dumps(response))
 
 
 class HTTPServer(ThreadingHTTPServer):

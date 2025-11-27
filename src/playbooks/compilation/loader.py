@@ -21,6 +21,26 @@ class Loader:
     """
 
     @staticmethod
+    def _strip_shebang(content: str) -> str:
+        """Remove shebang line from content if present.
+
+        Args:
+            content: File content that may contain a shebang line
+
+        Returns:
+            Content with shebang line removed if it was present
+        """
+        if content.startswith("#!"):
+            # Find the first newline and remove everything before it
+            newline_pos = content.find("\n")
+            if newline_pos != -1:
+                return content[newline_pos + 1 :]
+            else:
+                # File only contains shebang line
+                return ""
+        return content
+
+    @staticmethod
     def read_program(program_paths: List[str]) -> Tuple[str, bool]:
         """Load program content from file paths.
 
@@ -79,7 +99,10 @@ class Loader:
             if file_path.is_file() and file_path.exists():
                 if is_compiled_playbook_file(file_path):
                     do_not_compile = True
-                contents.append(file_path.read_text())
+                content = file_path.read_text()
+                # Strip shebang line if present
+                content = Loader._strip_shebang(content)
+                contents.append(content)
             else:
                 not_found.append(str(file_path))
 
@@ -154,6 +177,8 @@ class Loader:
             file_path = Path(file)
             if file_path.is_file() and file_path.exists():
                 content = file_path.read_text()
+                # Strip shebang line if present
+                content = Loader._strip_shebang(content)
                 is_compiled = is_compiled_playbook_file(file_path)
 
                 # Process imports for non-compiled files

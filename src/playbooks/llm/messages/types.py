@@ -65,6 +65,18 @@ class AssistantResponseLLMMessage(LLMMessage):
         lines = lines[:2]
         return {"role": self.role.value, "content": "\n".join(lines)}
 
+    def set_content(self, content: str) -> None:
+        """
+        Set the content of the message.
+
+        This violoates the immutability of the message. But, we need to do this
+        because the content is not available until the LLM call is complete.
+
+        Args:
+            content: The content to set
+        """
+        self._content = content
+
 
 class PlaybookImplementationLLMMessage(LLMMessage):
     """Playbook markdown implementation."""

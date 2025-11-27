@@ -10,7 +10,7 @@ import json
 import os
 import sys
 import warnings
-from typing import Any, List
+from typing import Any, Dict, List, Optional
 
 import frontmatter
 import openai
@@ -19,8 +19,8 @@ from rich.panel import Panel
 from rich.table import Table
 
 from playbooks.compilation.compiler import Compiler, FileCompilationSpec
-from playbooks.core.exceptions import ProgramLoadError
 from playbooks.compilation.loader import Loader
+from playbooks.core.exceptions import ProgramLoadError
 from playbooks.infrastructure.logging.setup import configure_logging
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.version import get_playbooks_version
@@ -34,7 +34,131 @@ warnings.filterwarnings(
     "ignore", message="Use 'content=<...>' to upload raw bytes/text content"
 )
 
-console = Console()
+console = Console(stderr=True)  # All CLI diagnostics to stderr
+
+
+def load_public_json_from_program(
+    program_paths: List[str],
+) -> Optional[List[Dict[str, Any]]]:
+    """Load public.json from compiled playbook files.
+
+    Args:
+        program_paths: List of paths to playbook files
+
+    Returns:
+        List of public.json dictionaries (one per agent), or None if not available
+    """
+    import re
+
+    try:
+        # Load and compile program files
+        program_file_tuples = Loader.read_program_files(program_paths)
+        program_files = [
+            FileCompilationSpec(file_path=fp, content=content, is_compiled=is_comp)
+            for fp, content, is_comp in program_file_tuples
+        ]
+
+        # Check if all files are already compiled
+        all_files_compiled = all(file_spec.is_compiled for file_spec in program_files)
+
+        if all_files_compiled:
+            # Use existing compiled files
+            compiled_contents = [f.content for f in program_files]
+        else:
+            # Need to compile
+            compiler = Compiler(LLMConfig())
+            compiled_results = compiler.process_files(program_files)
+            compiled_contents = [r.content for r in compiled_results]
+
+        # Extract public.json from each compiled agent
+        public_jsons = []
+        for content in compiled_contents:
+            matches = re.findall(r"```public\.json(.*?)```", content, re.DOTALL)
+            if matches:
+                for match in matches:
+                    try:
+                        public_json = json.loads(match)
+                        if public_json:  # Skip empty lists
+                            public_jsons.append(public_json)
+                    except json.JSONDecodeError:
+                        pass
+
+        return public_jsons if public_jsons else None
+    except Exception:
+        # If we can't load public.json, return None (not a CLI utility)
+        return None
+
+
+def get_cli_entry_point(public_jsons: List[List[Dict]]) -> Optional[Dict]:
+    """Find the CLI entry point from public.json data.
+
+    Args:
+        public_jsons: List of public.json dictionaries (one per agent)
+
+    Returns:
+        The CLI entry point playbook dict, or None if not found
+    """
+    if not public_jsons:
+        return None
+
+    # Look for playbook marked with cli_entry: true
+    cli_entry_playbooks = []
+    for agent_public_json in public_jsons:
+        for playbook in agent_public_json:
+            if playbook.get("cli_entry"):
+                cli_entry_playbooks.append(playbook)
+
+    # Error if multiple CLI entry points
+    if len(cli_entry_playbooks) > 1:
+        raise ValueError(
+            f"Multiple playbooks marked with cli_entry:true. "
+            f"Only one playbook can be the CLI entry point. "
+            f"Found: {[p['name'] for p in cli_entry_playbooks]}"
+        )
+
+    if cli_entry_playbooks:
+        return cli_entry_playbooks[0]
+
+    # Look for first BGN playbook
+    for agent_public_json in public_jsons:
+        for playbook in agent_public_json:
+            if playbook.get("is_bgn"):
+                return playbook
+
+    return None
+
+
+def add_cli_arguments(parser: argparse.ArgumentParser, entry_point: Dict):
+    """Add CLI arguments based on entry point playbook signature.
+
+    Args:
+        parser: Argparse parser to add arguments to
+        entry_point: Entry point playbook dictionary with parameters
+    """
+    params = entry_point.get("parameters", {})
+    properties = params.get("properties", {})
+    required = params.get("required", [])
+
+    for param_name, param_info in properties.items():
+        param_type = param_info.get("type", "string")
+        param_desc = param_info.get("description", "")
+
+        # Map JSON types to Python types
+        type_mapping = {
+            "string": str,
+            "integer": int,
+            "number": float,
+            "boolean": lambda x: x.lower() in ["true", "1", "yes"],
+        }
+
+        python_type = type_mapping.get(param_type, str)
+
+        parser.add_argument(
+            f"--{param_name}",
+            type=python_type,
+            required=(param_name in required),
+            help=param_desc,
+        )
 
 
 def compile(program_paths: List[str], output_file: str = None) -> None:
@@ -99,6 +223,7 @@ async def run_application(
     wait_for_client: bool = False,
     stop_on_entry: bool = False,
     snoop: bool = False,
+    initial_state: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Run a playbook using the specified application.
@@ -113,6 +238,7 @@ async def run_application(
         wait_for_client: Whether to wait for a client to connect before starting
         stop_on_entry: Whether to stop at the beginning of playbook execution
         snoop: Whether to display agent-to-agent messages
+        initial_state: Optional initial state variables to set on agents
     """
     # Import the application module
     try:
@@ -139,6 +265,7 @@ async def run_application(
             wait_for_client=wait_for_client,
             stop_on_entry=stop_on_entry,
             snoop=snoop,
+            initial_state=initial_state,
         )
 
     except ImportError as e:
@@ -252,13 +379,27 @@ def _cmd_config_show(args) -> None:
 
 def main():
     """Main CLI entry point."""
-    # Print heading message
-    print("-" * 80)
-    print(f"Playbooks {get_playbooks_version()}")
-    print("-" * 80)
+    import sys
+
+    # Always print banner to stderr (diagnostics)
+    print("-" * 80, file=sys.stderr)
+    print(f"Playbooks {get_playbooks_version()}", file=sys.stderr)
+    print("-" * 80, file=sys.stderr)
 
     # Configure logging early
     configure_logging()
+
+    # Check for --quiet flag to suppress stderr diagnostics
+    quiet_mode = "--quiet" in sys.argv
+    if quiet_mode:
+        import logging
+
+        logging.getLogger().setLevel(logging.WARNING)
+        # Suppress specific noisy loggers
+        logging.getLogger("mcp.client.streamable_http").setLevel(logging.WARNING)
+        logging.getLogger("playbooks.agents.mcp_agent").setLevel(logging.WARNING)
+        logging.getLogger("playbooks.agents.remote_ai_agent").setLevel(logging.WARNING)
+        logging.getLogger("playbooks.compilation.compiler").setLevel(logging.WARNING)
 
     parser = argparse.ArgumentParser(
         description="Playbooks CLI - Compile and run Playbooks programs",
@@ -326,6 +467,22 @@ def main():
         help="Display messages exchanged between agents (default: False). Use --snoop=true to see all agent-to-agent communication",
     )
 
+    # CLI utility mode flags (always available)
+    run_parser.add_argument(
+        "--message",
+        help="Natural language message to pass to the agent",
+    )
+    run_parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Suppress all output except agent messages (no version banner, logs, or agent name prefixes)",
+    )
+    run_parser.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Fail if interactive input is required (for CI/CD pipelines)",
+    )
+
     # Compile command
     compile_parser = subparsers.add_parser("compile", help="Compile a playbook")
     compile_parser.add_argument(
@@ -345,10 +502,10 @@ def main():
         "--host", default="localhost", help="Host address (default: localhost)"
     )
     webserver_parser.add_argument(
-        "--http-port", type=int, default=8000, help="HTTP port (default: 8000)"
+        "--http-port", type=int, default=8080, help="HTTP port (default: 8080)"
     )
     webserver_parser.add_argument(
-        "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
+        "--ws-port", type=int, default=8081, help="WebSocket port (default: 8081)"
     )
 
     # Playground command
@@ -359,10 +516,10 @@ def main():
         "--host", default="localhost", help="Host address (default: localhost)"
     )
     playground_parser.add_argument(
-        "--http-port", type=int, default=8000, help="HTTP port (default: 8000)"
+        "--http-port", type=int, default=8080, help="HTTP port (default: 8080)"
     )
     playground_parser.add_argument(
-        "--ws-port", type=int, default=8001, help="WebSocket port (default: 8001)"
+        "--ws-port", type=int, default=8081, help="WebSocket port (default: 8081)"
     )
 
     # -------------------------
@@ -397,14 +554,87 @@ def main():
         help="Output JSON instead of a table (includes files_used).",
     )
 
-    args = parser.parse_args()
+    # First parse to get command and program_paths, allowing unknown args
+    args, unknown_args = parser.parse_known_args()
 
     if not args.command:
         parser.print_help()
         sys.exit(1)
 
     if args.command == "run":
-        # Run the application
+        # Try to load public.json to see if this has CLI parameters
+        try:
+            public_jsons = load_public_json_from_program(args.program_paths)
+            entry_point = get_cli_entry_point(public_jsons) if public_jsons else None
+        except Exception:
+            # If loading public.json fails, no entry point
+            entry_point = None
+
+        # If entry point found with parameters, add them to argparse
+        if entry_point and entry_point.get("parameters", {}).get("properties"):
+            # Add dynamic CLI arguments based on entry point signature
+            add_cli_arguments(run_parser, entry_point)
+
+            # Re-parse with dynamic arguments (now they're recognized)
+            args = parser.parse_args()
+
+            # Extract CLI args (parameters from entry point)
+            cli_args = {}
+            params = entry_point.get("parameters", {})
+            properties = params.get("properties", {})
+            for param_name in properties.keys():
+                if hasattr(args, param_name):
+                    value = getattr(args, param_name)
+                    if value is not None:
+                        cli_args[param_name] = value
+
+            # Check stdin for piped input
+            stdin_content = None
+            if not sys.stdin.isatty():
+                stdin_content = sys.stdin.read()
+
+            # Route to CLI utility application
+            try:
+                from playbooks.applications import cli_utility
+
+                exit_code = asyncio.run(
+                    cli_utility.main(
+                        program_paths=args.program_paths,
+                        cli_args=cli_args,
+                        message=args.message,
+                        stdin_content=stdin_content,
+                        non_interactive=args.non_interactive,
+                        quiet=args.quiet,
+                        stream=args.stream,
+                        verbose=args.verbose,
+                        snoop=args.snoop,
+                    )
+                )
+                sys.exit(exit_code)
+            except KeyboardInterrupt:
+                console.print("\n[yellow]Interrupted by user[/yellow]")
+                sys.exit(130)
+            except ProgramLoadError as e:
+                console.print(f"[red]Error loading program:[/red] {e}")
+                sys.exit(1)
+
+        # No entry point found or not a CLI utility - run in interactive mode
+        # But still pass stdin and message if provided
+        initial_state = {}
+        if hasattr(args, "message") and args.message:
+            initial_state["startup_message"] = args.message
+
+        stdin_content = None
+        if not sys.stdin.isatty():
+            stdin_content = sys.stdin.read()
+            if stdin_content:
+                if initial_state.get("startup_message"):
+                    initial_state["startup_message"] = (
+                        f"{stdin_content}\n\nMessage: {initial_state['startup_message']}"
+                    )
+                else:
+                    initial_state["startup_message"] = stdin_content
+
         try:
             asyncio.run(
                 run_application(
@@ -418,6 +648,7 @@ def main():
                     wait_for_client=args.wait_for_client,
                     stop_on_entry=args.stop_on_entry,
                     snoop=args.snoop,
+                    initial_state=initial_state if initial_state else None,
                 )
             )
         except KeyboardInterrupt:

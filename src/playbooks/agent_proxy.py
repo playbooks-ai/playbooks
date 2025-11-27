@@ -11,6 +11,8 @@ It also supports targeting specific agent instances using indexing syntax:
 
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
+from playbooks.core.identifiers import AgentID
+
 if TYPE_CHECKING:
     from playbooks.agents import AIAgent
     from playbooks.execution.python_executor import LLMNamespace
@@ -35,8 +37,10 @@ def create_playbook_wrapper(
     """
 
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        nonlocal target_agent_id
         # If targeting a specific agent instance, use AgentName:AgentId.PlaybookName format
         if target_agent_id:
+            target_agent_id = AgentID.parse(target_agent_id).id
             playbook_name_with_id = playbook_name.replace(
                 ".", f":{target_agent_id}.", 1
             )

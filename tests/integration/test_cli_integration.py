@@ -120,7 +120,7 @@ class TestCLIIntegration:
             )
 
             assert result.returncode == 0
-            assert "Compiled Playbooks program saved to:" in result.stdout
+            assert "Compiled Playbooks program saved to:" in result.stderr
 
             # Verify the file was created and contains expected content
             assert Path(output_path).exists()
@@ -148,7 +148,7 @@ class TestCLIIntegration:
         )
 
         assert result.returncode == 1
-        assert "not found" in result.stdout
+        assert "not found" in result.stderr
 
     def test_cli_run_nonexistent_file(self):
         """Test CLI run with non-existent file."""
@@ -162,7 +162,7 @@ class TestCLIIntegration:
         )
 
         assert result.returncode == 1
-        assert "not found" in result.stdout
+        assert "not found" in result.stderr
 
     def test_cli_no_command(self):
         """Test CLI with no command shows help."""

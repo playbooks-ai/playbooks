@@ -129,7 +129,6 @@ class RawLLMExecution(LLMExecution):
             llm_config=LLMConfig(),
             stream=False,
             json_mode=False,
-            langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
         )
 
         response = next(response_generator)

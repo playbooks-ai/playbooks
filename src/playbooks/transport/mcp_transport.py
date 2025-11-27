@@ -10,6 +10,11 @@ from fastmcp.client.transports import (
     StreamableHttpTransport,
 )
 
+from .mcp_module_loader import (
+    get_server_instance,
+    load_mcp_server,
+    parse_memory_url,
+)
 from .protocol import TransportProtocol
 
 logger = logging.getLogger(__name__)
@@ -22,27 +27,51 @@ class MCPTransport(TransportProtocol):
     like SSE (Server-Sent Events), stdio, or WebSocket.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], source_file_path: Optional[str] = None):
         """Initialize MCP transport.
 
         Args:
             config: Configuration dictionary containing:
-                - url: The MCP server URL or command
-                - transport: Transport type ('sse', 'stdio', 'websocket', etc.)
+                - url: The MCP server URL, command, or memory:// path
+                - transport: Transport type ('sse', 'stdio', 'memory', 'websocket', etc.)
                 - auth: Optional authentication configuration
                 - timeout: Optional timeout in seconds
+            source_file_path: Path to the playbook file (for resolving relative paths)
         """
         super().__init__(config)
         self.url = config.get("url")
         self.transport_type = config.get("transport", "sse")  # Default to SSE
         self.auth = config.get("auth", {})
         self.timeout = config.get("timeout", 30.0)
+        self.source_file_path = source_file_path
 
         self.client: Optional[Client] = None
         self._tools_cache: Optional[List[Dict[str, Any]]] = None
 
+        # Memory transport attributes
+        self._memory_server_path: Optional[str] = None
+        self._memory_var_name: Optional[str] = None
+        self._memory_server_instance: Optional[Any] = None
+
         if not self.url:
             raise ValueError("MCP transport requires 'url' in configuration")
+
+        # For memory transport, parse and validate the URL
+        if self.transport_type.lower() == "memory":
+            try:
+                self._memory_server_path, self._memory_var_name = parse_memory_url(
+                    self.url
+                )
+                # Note: Actual file existence and variable validation is deferred to connect()
+                # This allows for test scenarios where the transport may be replaced
+                # before connection is established. However, we validate the URL format here.
+                if not self._memory_server_path:
+                    raise ValueError("memory:// URL must contain a file path")
+            except ValueError:
+                # Re-raise ValueError from parse_memory_url
+                raise
+            except Exception as e:
+                raise ValueError(f"Invalid memory transport configuration: {e}") from e
 
     async def connect(self) -> None:
         """Establish connection to the MCP server."""
@@ -55,7 +84,24 @@ class MCPTransport(TransportProtocol):
             )
 
             # Create the appropriate transport based on configuration
-            if self.transport_type.lower() == "streamable-http":
+            if self.transport_type.lower() == "memory":
+                # Load the MCP server from Python file and connect in-process
+                logger.info(
+                    f"Loading in-process MCP server from {self._memory_server_path}"
+                )
+                # Determine base directory for path resolution
+                base_dir = None
+                if self.source_file_path:
+                    from pathlib import Path
+
+                    base_dir = str(Path(self.source_file_path).parent)
+
+                server = load_mcp_server(
+                    self._memory_server_path, self._memory_var_name, base_dir=base_dir
+                )
+                self._memory_server_instance = get_server_instance(server)
+                self.client = Client(self._memory_server_instance)
+            elif self.transport_type.lower() == "streamable-http":
                 # Use StreamableHttpTransport for streamable-http servers
                 transport = StreamableHttpTransport(self.url)
                 self.client = Client(transport)
@@ -77,6 +123,12 @@ class MCPTransport(TransportProtocol):
 
             logger.info(f"Successfully connected to MCP server at {self.url}")
 
+        except (FileNotFoundError, ValueError, ImportError) as e:
+            logger.error(f"Failed to connect to MCP server at {self.url}: {str(e)}")
+            # For these validation errors, raise as ValueError for consistency with __init__
+            if isinstance(e, ValueError):
+                raise
+            raise ValueError(f"Invalid memory transport configuration: {str(e)}") from e
         except Exception as e:
             logger.error(f"Failed to connect to MCP server at {self.url}: {str(e)}")
             raise ConnectionError(f"MCP connection failed: {str(e)}") from e
@@ -129,6 +181,13 @@ class MCPTransport(TransportProtocol):
 
             if method == "list_tools":
                 result = await self.client.list_tools()
+                # Convert Tool objects to dictionaries for consistency
+                if result and hasattr(result[0] if result else None, "model_dump"):
+                    # Pydantic v2 model - convert to dict
+                    result = [tool.model_dump() for tool in result]
+                elif result and hasattr(result[0] if result else None, "dict"):
+                    # Pydantic v1 model - convert to dict
+                    result = [tool.dict() for tool in result]
                 # Cache tools for later use
                 self._tools_cache = result
                 return result

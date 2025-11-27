@@ -51,3 +51,13 @@ class KlassNotFoundError(PlaybooksError):
     """Raised when a klass is not found."""
 
     pass
+
+
+class InteractiveInputRequired(PlaybooksError):
+    """Raised when interactive input is required but non-interactive mode is set.
+
+    This exception is used in CLI utility mode to signal that a playbook
+    requires user interaction but the --non-interactive flag was specified.
+    """
+
+    pass

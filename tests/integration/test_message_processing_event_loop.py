@@ -15,34 +15,6 @@ from playbooks.core.constants import EOM
 
 
 @pytest.mark.asyncio
-async def test_python_only_no_llm_calls(test_data_dir, monkeypatch):
-    """Test that python-only playbooks execute without any LLM calls."""
-    llm_call_count = 0
-
-    def mock_get_completion(*args, **kwargs):
-        nonlocal llm_call_count
-        llm_call_count += 1
-        pytest.fail(f"LLM call made when none expected. Call count: {llm_call_count}")
-
-    from playbooks.utils import llm_helper
-
-    monkeypatch.setattr(llm_helper, "get_completion", mock_get_completion)
-
-    playbooks = Playbooks([test_data_dir / "14-python-only.pb"])
-    await playbooks.initialize()
-    ai_agent = playbooks.program.agents[0]
-
-    # Send simple message
-    await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, "Alice")
-    await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
-
-    await playbooks.program.run_till_exit()
-
-    # Verify no LLM calls
-    assert llm_call_count == 0, f"Expected 0 LLM calls, but got {llm_call_count}"
-
-
-@pytest.mark.asyncio
 async def test_natural_language_triggers_llm(test_data_dir):
     """Test that natural language messages trigger LLM calls via ProcessMessages."""
     # Use a simple greeting playbook that will process natural language

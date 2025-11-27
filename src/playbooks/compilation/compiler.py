@@ -29,7 +29,7 @@ from playbooks.utils.llm_helper import (
 )
 from playbooks.utils.version import get_playbooks_version
 
-console = Console()
+console = Console(stderr=True)  # All compiler output to stderr
 
 
 class FileCompilationSpec(NamedTuple):
@@ -327,7 +327,10 @@ class Compiler:
             # Use cached version
             compiled_agent = cache_path.read_text()
         else:
-            console.print(f"[dim pink]  Compiling agent: {agent_name}[/dim pink]")
+            # Print to stderr so it doesn't pollute stdout when piping
+            import sys
+
+            print(f"  Compiling agent: {agent_name}", file=sys.stderr)
 
             compiled_agent = self._compile_agent(agent_content)
 
@@ -366,19 +369,19 @@ class Compiler:
 
         # Get LLM response
         messages = get_messages_for_prompt(prompt)
-        langfuse_span = LangfuseHelper.instance().trace(
-            name="compile_agent", input=agent_content
+        langfuse_span = LangfuseHelper.instance().start_observation(
+            name="compile_agent", as_type="generation", input=agent_content
         )
 
         response: Iterator[str] = get_completion(
             llm_config=self.llm_config,
             messages=messages,
             stream=False,
-            langfuse_span=langfuse_span,
         )
 
         compiled = next(response)
         langfuse_span.update(output=compiled)
+        langfuse_span.end()
 
         version = get_playbooks_version()
         compiled = (

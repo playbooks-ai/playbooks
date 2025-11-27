@@ -24,7 +24,8 @@ class ConsoleHandler:
     """Rich console output for CLI applications."""
 
     def __init__(self) -> None:
-        self.console: Console = Console()
+        # Use stderr for all console output (diagnostics)
+        self.console: Console = Console(stderr=True)
 
     def display(self, message: str, level: str = "info", **context: Any) -> None:
         if level == "error":

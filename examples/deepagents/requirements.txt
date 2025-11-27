@@ -1,0 +1,14 @@
+# Playbooks framework
+playbooks>=0.1.0
+
+# MCP server framework
+fastmcp>=0.1.0
+
+# Web tools dependencies
+requests>=2.31.0
+markdownify>=0.12.0
+tavily-python>=0.3.0
+
+# Optional: For better terminal display
+rich>=13.0.0
+

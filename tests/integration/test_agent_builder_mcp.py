@@ -2,11 +2,11 @@
 
 import pytest
 
-from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.agents import LocalAIAgent, MCPAgent
 from playbooks.agents.agent_builder import AgentBuilder
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.core.exceptions import AgentConfigurationError
+from playbooks.infrastructure.event_bus import EventBus
 
 
 class TestAgentBuilderMCP:
@@ -350,7 +350,7 @@ MCP agent with stdio transport and HTTP URL.
 
         with pytest.raises(
             AgentConfigurationError,
-            match="MCP agent 'BadMCPAgent' with stdio transport should not use HTTP/WebSocket URL",
+            match="MCP agent 'BadMCPAgent' with stdio transport should not use HTTP/WebSocket/Memory URL",
         ):
             AgentBuilder.create_agent_classes_from_ast(ast)
 

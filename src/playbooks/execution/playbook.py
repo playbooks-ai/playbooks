@@ -23,6 +23,7 @@ from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     PlaybookImplementationLLMMessage,
 )
+from playbooks.utils.langfuse_client import get_client
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import get_completion
 
@@ -144,6 +145,7 @@ class PlaybookLLMExecution(LLMExecution):
             # Extract playbook arguments to make available in generated code
             playbook_args = self._extract_playbook_arguments(call)
 
+            # Make the LLM call and execute the generated code streaming
             llm_response = await LLMResponse.create(
                 await self.make_llm_call(
                     instruction=instruction,
@@ -155,10 +157,8 @@ class PlaybookLLMExecution(LLMExecution):
                 agent=self.agent,
             )
 
-            # Create an AssistantResponseLLMMessage for semantic clarity
-            # and add it directly to the call stack
-            llm_response_msg = AssistantResponseLLMMessage(llm_response.response)
-            self.agent.state.call_stack.add_llm_message(llm_response_msg)
+            # Update the AssistantResponseLLMMessage with the actual response
+            self.llm_response_msg.set_content(llm_response.response)
 
             # Use the pre-computed execution result from streaming execution
             # The code was already executed incrementally during LLM streaming
@@ -278,7 +278,7 @@ class PlaybookLLMExecution(LLMExecution):
 
             # Check if exiting program
             if llm_response.execution_result.exit_program:
-                raise ExecutionFinished(EXECUTION_FINISHED)
+                await self.agent.program.end_program()
 
             # Check if playbook finished
             if llm_response.execution_result.playbook_finished:
@@ -351,12 +351,17 @@ class PlaybookLLMExecution(LLMExecution):
         )
 
         # Use streaming to handle Say() calls progressively
-        return await self._stream_llm_response(prompt, playbook_args=playbook_args)
+        return await self._stream_llm_response(
+            prompt, playbook_args=playbook_args, execution_id=execution_id
+        )
 
     async def _stream_llm_response(
-        self, prompt: InterpreterPrompt, playbook_args: Optional[Dict[str, Any]] = None
+        self,
+        prompt: InterpreterPrompt,
+        playbook_args: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[int] = None,
     ) -> str:
-        """Stream LLM response and handle Say() calls progressively.
+        """Stream LLM response and handle code execution and Say() calls progressively.
 
         Two-phase streaming approach:
         1. Pattern-based streaming (as tokens arrive) - detects Say("...") calls
@@ -383,7 +388,9 @@ class PlaybookLLMExecution(LLMExecution):
         self.agent._currently_streaming = False
 
         # Initialize streaming Python executor for incremental code execution
-        streaming_executor = StreamingPythonExecutor(self.agent, playbook_args)
+        streaming_executor = StreamingPythonExecutor(
+            self.agent, playbook_args, execution_id=execution_id
+        )
         self.streaming_execution_result = None  # Will be set after execution
 
         buffer = ""
@@ -394,26 +401,80 @@ class PlaybookLLMExecution(LLMExecution):
         say_stream_id = None  # Track stream ID for channel-based streaming
         processed_up_to = 0  # Track how much of buffer we've already processed
         say_has_placeholders = False  # Track if current Say has {$var} placeholders
+        say_end_pattern = '")'  # Tracks closing pattern for Say content
+        say_quote_type: Optional[str] = None  # "single" or "triple"
+
+        # Get LLM messages before adding the placeholder AssistantResponseLLMMessage
+        messages = prompt.messages
+
+        # Create an placeholder AssistantResponseLLMMessage so that it
+        # appears before any messages from the execution results
+        self.llm_response_msg = AssistantResponseLLMMessage("Thinking...")
+        self.agent.state.call_stack.add_llm_message(self.llm_response_msg)
+
+        # Create generation span with OTEL context - this stays active during code execution
+        # so that exec spans (@observe) nest under this generation
+
+        langfuse = get_client()
+        llm_config = LLMConfig()
+
+        # Prefer explicit execution_id argument but fall back to prompt metadata
+        execution_id = execution_id or getattr(prompt, "execution_id", None)
+        span_name = (
+            f"LLM Call {execution_id}: {llm_config.model}"
+            if execution_id is not None
+            else f"LLM Call: {llm_config.model}"
+        )
+
+        generation_ctx = langfuse.start_as_current_observation(
+            name=span_name,
+            as_type="generation",
+            model=llm_config.model,
+            model_parameters={
+                "maxTokens": llm_config.max_completion_tokens,
+                "temperature": llm_config.temperature,
+            },
+            input=messages,
+            metadata={"stream": True},
+        )
+        generation = generation_ctx.__enter__()
 
         try:
             for chunk in get_completion(
-                messages=prompt.messages,
-                llm_config=LLMConfig(),
+                messages=messages,
+                llm_config=llm_config,
                 stream=True,
                 json_mode=False,
-                langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
+                execution_id=execution_id,
             ):
                 buffer += chunk
+
+                # Update the AssistantResponseLLMMessage with the actual response
+                self.llm_response_msg.set_content(buffer)
 
                 # Feed chunk to streaming executor for incremental execution
                 try:
                     await streaming_executor.add_chunk(chunk)
                 except StreamingExecutionError as e:
+                    # Check if the underlying error is InteractiveInputRequired
+                    # These should not be retried, they should fail immediately
+                    if hasattr(e, "original_error"):
+                        from playbooks.core.exceptions import InteractiveInputRequired
+
+                        if isinstance(e.original_error, InteractiveInputRequired):
+                            # Re-raise InteractiveInputRequired exceptions
+                            raise e.original_error
+
                     # Execution error during streaming - stop processing
                     # The error details are already captured in streaming_executor.result
                     logger.error(f"Streaming execution error: {e}")
                     self.streaming_execution_result = streaming_executor.result
-                    # Return buffer so LLM can see what was generated
+                    # Close generation context and return buffer
+                    try:
+                        generation.update(output=buffer, status_message=str(e))
+                        generation_ctx.__exit__(None, None, None)
+                    except Exception:
+                        pass
                     return buffer
 
                 # Only look for new Say() calls in the unprocessed part of the buffer
@@ -454,6 +515,8 @@ class PlaybookLLMExecution(LLMExecution):
                                 say_start_pos = recipient_end_pos + len(
                                     recipient_end_pattern
                                 )  # Position after recipient and ", "
+                                say_end_pattern = '")'  # Default; may switch to triple
+                                say_quote_type = None  # Determine once content arrives
                                 current_say_content = ""
                                 say_has_placeholders = False  # Reset for new Say call
                                 processed_up_to = say_start_pos
@@ -482,10 +545,26 @@ class PlaybookLLMExecution(LLMExecution):
 
                 # Stream Say content if we're in a call
                 if in_say_call:
+                    # Determine quote style lazily to support triple-quoted strings
+                    if say_quote_type is None:
+                        # Need at least three characters to confirm triple quotes
+                        if len(buffer) >= say_start_pos + 3 and buffer.startswith(
+                            '""', say_start_pos
+                        ):
+                            say_quote_type = "triple"
+                            say_end_pattern = '""")'
+                            say_start_pos += 2  # Skip the extra two quotes
+                            processed_up_to = say_start_pos
+                        elif len(buffer) >= say_start_pos + 3:
+                            say_quote_type = "single"
+                            say_end_pattern = '")'
+                        else:
+                            # Not enough content yet to decide quote style
+                            continue
+
                     # Look for the end of the Say call
                     # Updated pattern: no backticks (Python code format)
-                    end_pattern = '")'
-                    end_pos = buffer.find(end_pattern, say_start_pos)
+                    end_pos = buffer.find(say_end_pattern, say_start_pos)
                     if end_pos != -1:
                         # Found end - extract final content and complete
                         final_content = buffer[say_start_pos:end_pos]
@@ -524,7 +603,9 @@ class PlaybookLLMExecution(LLMExecution):
                         say_recipient = ""
                         say_stream_id = None
                         say_has_placeholders = False
-                        processed_up_to = end_pos + len(end_pattern)
+                        processed_up_to = end_pos + len(say_end_pattern)
+                        say_quote_type = None
+                        say_end_pattern = '")'
                     else:
                         # Still streaming - extract new content since last update
                         # Only look at content between say_start_pos and end of buffer
@@ -546,6 +627,21 @@ class PlaybookLLMExecution(LLMExecution):
                         if not say_has_placeholders and say_stream_id:
                             # Don't stream if it ends with escape character (incomplete)
                             if not available_content.endswith("\\"):
+                                # Trim trailing quotes that are part of triple-quoted closing
+                                if available_content.endswith(say_end_pattern):
+                                    available_content = available_content[
+                                        : -len(say_end_pattern)
+                                    ]
+                                elif say_quote_type == "triple":
+                                    if available_content.endswith('"""'):
+                                        available_content = available_content[:-3]
+                                    elif available_content.endswith('""'):
+                                        available_content = available_content[:-2]
+                                    elif available_content.endswith('"'):
+                                        available_content = available_content[:-1]
+                                else:
+                                    if available_content.endswith('"'):
+                                        available_content = available_content[:-1]
                                 if len(available_content) > len(current_say_content):
                                     new_content = available_content[
                                         len(current_say_content) :
@@ -566,6 +662,10 @@ class PlaybookLLMExecution(LLMExecution):
             # Finalize streaming execution - execute any remaining buffered code
             self.streaming_execution_result = await streaming_executor.finalize()
 
+            # Update generation with output and close context
+            generation.update(output=buffer)
+            generation_ctx.__exit__(None, None, None)
+
         except Exception as e:
             # Unexpected error during streaming (not a StreamingExecutionError)
             logger.error(
@@ -576,6 +676,12 @@ class PlaybookLLMExecution(LLMExecution):
                 self.streaming_execution_result = await streaming_executor.finalize()
             except Exception:
                 # If finalization also fails, at least we have the original error
+                pass
+            # Update generation with error and close context
+            try:
+                generation.update(output=buffer, status_message=str(e))
+                generation_ctx.__exit__(None, None, None)
+            except Exception:
                 pass
             raise
 

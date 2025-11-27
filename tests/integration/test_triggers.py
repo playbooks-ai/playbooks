@@ -25,12 +25,8 @@ async def test_triggers(test_data_dir):
     await human.SendMessage(ai.id, "test@")
     await human.SendMessage(ai.id, EOM)
 
-    # Then user will provide a valid email
+    # Then user will provide a valid email (instead of exit, send valid email directly)
     await human.SendMessage(ai.id, "test@playbooks.com")
-    await human.SendMessage(ai.id, EOM)
-
-    # Then user will provide a valid email
-    await human.SendMessage(ai.id, "exit")
     await human.SendMessage(ai.id, EOM)
 
     await playbooks.program.run_till_exit()

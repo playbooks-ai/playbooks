@@ -17,6 +17,8 @@ from playbooks.execution.python_executor import (
     LLMNamespace,
     PythonExecutor,
 )
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.utils.langfuse_client import get_client, observe
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
@@ -54,7 +56,10 @@ class StreamingPythonExecutor:
     """
 
     def __init__(
-        self, agent: "LocalAIAgent", playbook_args: Optional[Dict[str, Any]] = None
+        self,
+        agent: "LocalAIAgent",
+        playbook_args: Optional[Dict[str, Any]] = None,
+        execution_id: Optional[int] = None,
     ):
         """Initialize streaming Python executor.
 
@@ -64,6 +69,7 @@ class StreamingPythonExecutor:
         """
         self.agent = agent
         self.playbook_args = playbook_args
+        self.execution_id = execution_id
 
         # Create a PythonExecutor to reuse its namespace building and capture functions
         self.base_executor = PythonExecutor(agent)
@@ -80,6 +86,7 @@ class StreamingPythonExecutor:
 
         # Track executed code for error truncation
         self.executed_lines: List[str] = []  # Lines successfully executed
+        self.statement_index: int = 0  # Track statement ordering for tracing
 
         # Variable tracking for runtime detection
         self.last_namespace_vars: Dict[str, Any] = {}
@@ -182,8 +189,9 @@ class StreamingPythonExecutor:
                 f"Execution failed: {type(e).__name__}: {e}", e, executed_code
             )
 
+    @observe(capture_input=False, capture_output=False, as_type="span")
     async def _execute_statement(self, stmt: ast.stmt) -> None:
-        """Execute a single AST statement.
+        """Execute a single AST statement with tracing.
 
         Uses exec() with proper namespace handling. For async statements containing
         await, wraps them in a temporary async function.
@@ -194,6 +202,18 @@ class StreamingPythonExecutor:
         # Convert the statement back to source code
         statement_code = ast.unparse(stmt)
 
+        # Update current span with statement-specific information
+        langfuse = get_client()
+
+        exec_id = (
+            self.execution_id
+            if self.execution_id is not None
+            else getattr(self.agent, "execution_counter", None)
+        )
+
+        self._update_statement_span(langfuse, stmt, statement_code, exec_id)
+        debug(f"Executing: {statement_code}")
+
         # Check if this is a function/class definition
         # These don't need wrapping and should execute directly
         is_definition = isinstance(
@@ -203,34 +223,64 @@ class StreamingPythonExecutor:
         # Check if statement contains await
         has_await = any(isinstance(node, ast.Await) for node in ast.walk(stmt))
 
-        if is_definition or not has_await:
-            # Function/class definitions or synchronous statements - execute directly
-            exec(compile(statement_code, "<llm>", "exec"), self.namespace)
-        else:
-            # Async statement with await - wrap in temporary function
-            fn_name = f"__stmt_{uuid.uuid4().hex[:8]}__"
+        try:
+            if is_definition or not has_await:
+                # Function/class definitions or synchronous statements - execute directly
+                exec(compile(statement_code, "<llm>", "exec"), self.namespace)
+            else:
+                # Async statement with await - wrap in temporary function
+                fn_name = f"__stmt_{uuid.uuid4().hex[:8]}__"
 
-            wrapped_code = f"async def {fn_name}():\n"
+                wrapped_code = f"async def {fn_name}():\n"
 
-            # Add global declarations for any assignments in the statement
-            assignments = self._find_assignments(stmt)
-            if assignments:
-                wrapped_code += f"    global {', '.join(assignments)}\n"
+                # Add global declarations for any assignments in the statement
+                assignments = self._find_assignments(stmt)
+                if assignments:
+                    wrapped_code += f"    global {', '.join(assignments)}\n"
 
-            for line in statement_code.split("\n"):
-                wrapped_code += f"    {line}\n"
+                for line in statement_code.split("\n"):
+                    wrapped_code += f"    {line}\n"
 
-            # Execute wrapper definition directly in namespace
-            exec(compile(wrapped_code, "<llm>", "exec"), self.namespace)
+                # Execute wrapper definition directly in namespace
+                exec(compile(wrapped_code, "<llm>", "exec"), self.namespace)
 
-            # Execute the async function from namespace
-            fn = dict.__getitem__(self.namespace, fn_name)
+                # Execute the async function from namespace
+                fn = dict.__getitem__(self.namespace, fn_name)
 
-            try:
-                await fn()
-            finally:
-                # Clean up the temporary function
-                dict.__delitem__(self.namespace, fn_name)
+                try:
+                    await fn()
+                finally:
+                    # Clean up the temporary function
+                    dict.__delitem__(self.namespace, fn_name)
+
+                # Mark statement as successful
+                langfuse.update_current_span(output={"success": True})
+        except Exception as e:
+            # Mark statement as failed - @observe will capture the exception
+            langfuse.update_current_span(output={"success": False, "error": str(e)})
+            raise
+
+    def _update_statement_span(
+        self,
+        langfuse_client: Any,
+        stmt: ast.stmt,
+        statement_code: str,
+        exec_id: Optional[int],
+    ) -> None:
+        """Update the current span with statement metadata for tracing."""
+        display_code = (
+            statement_code
+            if len(statement_code) <= 100
+            else statement_code[:97] + "..."
+        )
+        langfuse_client.update_current_span(
+            name=display_code,
+            input={"code": statement_code},
+            metadata={
+                "statement_type": stmt.__class__.__name__,
+                "execution_id": exec_id,
+            },
+        )
 
     def _find_assignments(self, stmt: ast.stmt) -> List[str]:
         """Find all variable names that are assigned in a statement.

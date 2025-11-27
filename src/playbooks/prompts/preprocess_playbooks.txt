@@ -131,7 +131,7 @@ The LLM runtime understands context and intent rather than requiring strict synt
 
 ### Pattern A: Simple playbook call (use Python-like syntax)
 
-Raw: Load account for the user
+Original: Load account for the user
 
 Compiled (assuming LoadAccount is a listed playbook and $email and $pin are available at this point):
 ```
@@ -140,7 +140,7 @@ Compiled (assuming LoadAccount is a listed playbook and $email and $pin are avai
 
 ### Pattern B: Nested markdown playbook calls (use Python-like syntax)
 
-Raw: FuncA(FuncB(x)+FuncC(x))
+Original: FuncA(FuncB(x)+FuncC(x))
 
 Compiled (If FuncA and FuncB are listed playbooks and $x is available at this point):
 ```
@@ -155,7 +155,7 @@ Compiled (If FuncA and FuncB are listed playbooks and $x is available at this po
 ### Pattern C: Communicating with another agent
 Do not change anything. Keep the instruction as is for run time resolution.
 
-Raw: Get current weather for 98053 from the weather agent
+Original: Get current weather for 98053 from the weather agent
 
 Compiled: Get current weather for 98053 from the weather agent
 
@@ -164,7 +164,7 @@ Compiled: Get current weather for 98053 from the weather agent
 ### Pattern D: Saying something to user
 Queue Say() to show text to the user. Keep instructions instead of making a specific string, e.g. Say(user, Say hello to the user) instead of Say(user, "Hello!")
 
-Raw: Inform user about the weather
+Original: Inform user about the weather
 
 Compiled:
 ```
@@ -174,7 +174,7 @@ Compiled:
 ### Pattern E: Having a multi-turn conversation with the user
 Queue Say() with an instruction to continue conversation unless condition to move on is satisfied
 
-Raw: Welcome the user, ask how you can help and do some ice breaking chitchat for up to 4 turns
+Original: Welcome the user, ask how you can help and do some ice breaking chitchat for up to 4 turns
 
 Compiled:
 ```
@@ -186,7 +186,7 @@ Compiled:
 ### Pattern F: Asking user for information
 Use Say() to show text to the user with a YLD for user to wait for user input.
 
-Raw: Ask user for their name
+Original: Ask user for their name
 
 Compiled:
 ```
@@ -197,14 +197,69 @@ Compiled:
 
 ### Triggers
 Apply these for triggers on both Python and Markdown playbooks
-- Add prefix: `T1:BGN` (execute when program begins), `T1:CND` (when condition is met), `T1:EVT` (when event received)
-- "When program starts" → `- T1:BGN When program starts`
-- "When user provides X" → `- T1:CND When user provides X`
-- "Upon receiving message from Accountant agent" → `- T1:EVT Upon receiving message from Accountant agent`
+- Add prefix: `T1:BGN` (only for automatic execution when program starts), `T1:CND` (when condition is met), `T1:EVT` (when something happens)
+
+**BGN** Begin trigger
+
+```
+Original:
+### Triggers
+- When program starts
+- At the start
+- In the beginning
+
+Compiled:
+### Triggers
+  - T1:BGN When program starts
+```
+
+**EVT** Event trigger
+
+```
+Original:
+
+### Triggers
+- When user provides email
+- Upon receiving message from Accountant agent
+
+Compiled:
+
+### Triggers
+- T1:EVT When user provides email
+- T2:EVT Upon receiving message from Accountant agent
+```
+
+**CND** Conditional trigger
+
+```
+Original:
+
+### Triggers
+- When $amount > 1000
+
+Compiled:
+
+### Triggers
+- T1:CND When $amount > 1000
+```
+
+**EVT** Meeting invitation event trigger
+
+```
+Original:
+
+### Triggers
+- When invited to a meeting
+
+Compiled:
+
+### Triggers
+- T1:EVT When invited to a meeting
+```
 
 ### Loops
 
-Raw:
+Original:
 
 ```
 - Until number is perfect square
@@ -237,7 +292,7 @@ Split when instruction contains multiple actions that cannot or should not be ex
 - Cannot: when output of one is needed for the next action
 - Should not: when user needs to make a decision between actions, when presenting multiple pieces of information that need processing time, or when overwhelming the user with too many questions
 
-Raw: Tell user the price and if they want it, add to cart
+Original: Tell user the price and if they want it, add to cart
 
 Compiled:
 ```
@@ -248,15 +303,16 @@ Compiled:
 ```
 
 ### Public Playbooks
+- Python syntax: `@playbook(public=True)`
+- Markdown syntax: `public: true`
+- Automatically mark BGN playbooks as public
 - Generate public.json with tool info for each public python and markdown playbooks
 - If no public playbooks, generate empty [] public.json
-- Python syntax: `@playbook(public=True)`
-- Markdown syntax: `public: true` in metadata
 
 ### Agent and Playbook metadata
 Collect any metadata in the description area into a metadata yaml block. When metadata is present, add a --- document separator and write description after that. This applies to # agent and ## playbook blocks.
 
-Raw:
+Original:
 ```
 # Agent1
 model: claude-sonnet-4.0
@@ -277,7 +333,7 @@ metadata:
 This is an example agent
 ```
 
-Raw:
+Original:
 ```
 # WeatherMCPServer
 MCP server for weather tools
@@ -335,9 +391,12 @@ MCP server for weather tools
       "type": "object",
       "properties": {
         "param1": {"type": "string", "description": "param description"}
-      }
+      },
+      "required": ["param1"]
     },
-    "triggers": ["T1:TYPE trigger text"]
+    "triggers": ["T1:TYPE trigger text"],
+    "is_bgn": false,
+    "cli_entry": false
   }
 ]
 ```
@@ -362,15 +421,23 @@ MCP server for weather tools
 7. ✓ Add `YLD for user` only when waiting for user response, `YLD for meeting` to listen to meeting, `YLD for call` for playbook execution
 8. ✓ Add JMP for while/until loops
 9. ✓ End with a public.json listing all public playbooks in the agent
-10. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
-11. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
-12. ✓ Extract metadata into yaml blocks for agents and playbooks
-13. ✓ Each YLD is expensive to execute (needs a new LLM call), so batch as many calls as possible before YLD
-14. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
-15. ✓ If a markdown playbook does not have any steps, do NOT make up steps. Mark that playbooks as execution_mode:react unless it is marked as execution_mode:raw
-16. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
+10. ✓ Mark BGN playbooks as public and include in public.json with "is_bgn": true
+11. ✓ 1:1 mapping of Python and Markdown playbooks from input to output. **No made-up playbooks**.
+12. ✓ When in a meeting playbook, prefer saying openly to the meeting, e.g. `Say(meeting, ask Host for rules)` unless private side conversation is needed
+13. ✓ Extract metadata into yaml blocks for agents and playbooks
+14. ✓ Each YLD is expensive to execute (needs a new LLM call), so batch as many calls as possible before YLD
+15. ✓ Starting a meeting by calling a meeting playbook must include topic:str and attendees:List[str] arguments
+16. ✓ If a markdown playbook does not have any steps, do NOT make up steps.
+17. ✓ Agent and Playbook names must be CamelCase, variables must be $snake_case
+18. ✓ Don't change instructions for communication with other agents. Runtime will interpret them.
+
+A markdown playbook without Steps -
+- if execution_mode:raw is specified, it is a "raw" playbook. Raw playbooks do NOT have steps, so do not add steps. The description is sent to LLM as a prompt.
+- if execution_mode:raw is NOT specified, it is a "react" playbook. React playbooks do NOT have steps, runtime assigns predefined steps to them so do not add steps.
 
 ## Example Transformation
+
+Keep python playbooks as python playbooks and markdown playbooks as markdown playbooks. Do not convert.
 
 **Input:**
 ---
@@ -419,6 +486,8 @@ def LookupInfo(query:str):
 - List 5 cities near user's city
 - Think deeply about something common among these 5 cities
 - Tell user about that common thing
+- Call Accountant.GetTaxRate()
+- Ask Accountant for tax form ID
 - End program
 
 ### Notes
@@ -487,6 +556,9 @@ def LookupInfo(query:str) -> str:
 ```
 
 ## Main() -> None
+metadata:
+  public: true
+---
 Main interaction loop that guides user conversations through a friendly information-gathering and sharing process.
 ### Triggers
 - T1:BGN When program starts
@@ -502,6 +574,8 @@ Main interaction loop that guides user conversations through a friendly informat
 - 09:EXE List 5 $cities:list near $city
 - 10:TNK Think deeply about something common among these 5 cities
 - 11:QUE Say(user, Tell user about that common thing)
+- 12:QUE Call Accountant.GetTaxRate()
+- 13:QUE Ask Accountant for tax form ID
 - 12:YLD for exit
 
 ### Notes
@@ -538,22 +612,36 @@ You are a processor who will take each line of the report and count how many lin
 ```public.json
 [
   {
+    "name": "Main",
+    "description": "Main interaction loop that guides user conversations through a friendly information-gathering and sharing process.",
+    "parameters": {},
+    "triggers": ["T1:BGN When program starts"],
+    "is_bgn": true,
+    "cli_entry": true
+  },
+  {
     "name": "LookupInfo",
     "description": "Look up info for given query",
     "parameters": {
       "type": "object",
-      "properties": {"query": {"type": "string", "description": "Query to look up"}}
+      "properties": {"query": {"type": "string", "description": "Query to look up"}},
+      "required": ["query"]
     },
-    "triggers": ["T1:CND Whenever you need to look up additional information"]
+    "triggers": ["T1:CND Whenever you need to look up additional information"],
+    "is_bgn": false,
+    "cli_entry": false
   },
   {
     "name": "ValidateCity",
     "description": "Validation routine that ensures location input meets formatting requirements through iterative verification",
     "parameters": {
       "type": "object",
-      "properties": {"city": {"type": "string", "description": "US city and state, e.g. 'Austin, TX'"}}
+      "properties": {"city": {"type": "string", "description": "US city and state, e.g. 'Austin, TX'"}},
+      "required": ["city"]
     },
-    "triggers": ["T1:CND When user provides their city"]
+    "triggers": ["T1:CND When user provides their city"],
+    "is_bgn": false,
+    "cli_entry": false
   }
 ]
 ```
@@ -575,7 +663,7 @@ public: true
 ## summarize the given document
 execution_mode: raw
 Produce a 1 paragraph summary of the following document:
-{{document}}
+{{LoadFile("mydocument.md")}}
 
 ## P3
 meeting: true
@@ -612,12 +700,12 @@ Says goodbye to the user
 - 02:QUE Say(user, $greeting_txt)
 - 03:RET # RET implicitly does `YLD for call`
 
-## SummarizeDocument($document)
+## SummarizeDocument
 metadata:
   execution_mode: raw
 ---
 Produce a 1 paragraph summary of the following document:
-{{$document}}
+{{LoadFile("mydocument.md")}}
 
 ## P3() -> None
 metadata:
@@ -642,8 +730,12 @@ Conduct a planning meeting
     "description": "Says goodbye to the user",
     "parameters": {
       "type": "object",
-      "properties": {}
-    }
+      "properties": {},
+      "required": []
+    },
+    "triggers": [],
+    "is_bgn": false,
+    "cli_entry": false
   }
 ]
 ```
@@ -656,6 +748,7 @@ Conduct a planning meeting
 
 ====
 
-Remember: Follow the output contract exactly; deviations break execution.
+Remember: Mark playbooks as BGN only when a "when program starts" type trigger is specified. BGN playbooks are public by default. 
+**Follow the output contract exactly; deviations break execution.**
 
 **Output:**

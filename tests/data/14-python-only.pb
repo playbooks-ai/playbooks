@@ -4,11 +4,11 @@
 
 @playbook(triggers=["At the beginning"])
 async def Main():
-  Say("user", "What's your name?")
-  messages = WaitForMessage("user")
-  Say("user", f"Received messages: {messages}")
-  Say("user", f"Secret code: {await GetSecret()}")
-  Exit()
+  await Say("user", "What's your name?")
+  messages = await WaitForMessage("user")
+  await Say("user", f"Received messages: {messages}")
+  await Say("user", f"Secret code: {await GetSecret()}")
+  await EndProgram()
 
 @playbook
 async def GetSecret():

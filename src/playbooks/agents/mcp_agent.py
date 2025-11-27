@@ -7,8 +7,8 @@ for tool execution and remote playbook processing.
 import logging
 from typing import TYPE_CHECKING, Any, Dict, Type
 
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.core.exceptions import AgentConfigurationError
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.playbook import RemotePlaybook
 from playbooks.transport import MCPTransport
 
@@ -86,6 +86,9 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
 
         remote_config = metadata["remote"]
 
+        # Extract source file path from h1 node
+        source_file_path = h1.get("source_file_path")
+
         # Define __init__ for the new MCP agent class
         def __init__(
             self,
@@ -98,6 +101,7 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                 event_bus=event_bus,
                 remote_config=remote_config,
                 source_line_number=source_line_number,
+                source_file_path=source_file_path,
                 agent_id=agent_id,
                 **kwargs,
             )
@@ -211,9 +215,9 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
         # Validate URL scheme matches transport
         if transport == "stdio":
             # For stdio, URL should be a file path or command
-            if url.startswith(("http://", "https://", "ws://", "wss://")):
+            if url.startswith(("http://", "https://", "ws://", "wss://", "memory://")):
                 raise AgentConfigurationError(
-                    f"MCP agent '{agent_name}' with stdio transport should not use HTTP/WebSocket URL"
+                    f"MCP agent '{agent_name}' with stdio transport should not use HTTP/WebSocket/Memory URL"
                 )
         elif transport in ["sse", "streamable-http"]:
             # For HTTP-based transports, URL should be HTTP(S)
@@ -227,12 +231,20 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                 raise AgentConfigurationError(
                     f"MCP agent '{agent_name}' with websocket transport requires WebSocket or HTTP URL"
                 )
+        elif transport == "memory":
+            # For memory transport, URL should use memory:// scheme
+            if not url.startswith("memory://"):
+                raise AgentConfigurationError(
+                    f"MCP agent '{agent_name}' with memory transport requires memory:// URL. "
+                    f"Example: memory://path/to/server.py or memory://path/to/server.py?var=mcp"
+                )
 
     def __init__(
         self,
         event_bus: EventBus,
         remote_config: Dict[str, Any],
         source_line_number: int = None,
+        source_file_path: str = None,
         agent_id: str = None,
         program: "Program" = None,
         **kwargs,
@@ -248,17 +260,22 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                 - timeout: Optional timeout in seconds
             source_line_number: The line number in the source markdown where this
                 agent is defined.
+            source_file_path: The path to the source file where this agent is defined.
             agent_id: Optional agent ID. If not provided, will generate UUID.
         """
         super().__init__(
             event_bus=event_bus,
             remote_config=remote_config,
             source_line_number=source_line_number,
+            source_file_path=source_file_path,
             agent_id=agent_id,
             program=program,
             **kwargs,
         )
-        self.transport = MCPTransport(remote_config)
+        self.transport = MCPTransport(remote_config, source_file_path=source_file_path)
+
+        # Initialize $_busy variable to False
+        self.state.variables["$_busy"] = False
 
     async def discover_playbooks(self) -> None:
         """Discover MCP tools and create RemotePlaybook instances for each."""
@@ -303,29 +320,35 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                     continue
 
                 # Create execution function for this tool - fix closure issue
-                def create_execute_fn(tool_name, schema):
+                def create_execute_fn(tool_name, schema, agent):
                     async def execute_fn(*args, **kwargs):
-                        # Convert positional args to kwargs if needed
-                        if args:
-                            properties = schema.get("properties", {})
-                            param_names = list(properties.keys())
-                            # Map positional args to parameter names from schema in order
-                            for i, arg in enumerate(args):
-                                if i < len(param_names):
-                                    param_name = param_names[i]
-                                    # Only set if not already in kwargs (kwargs take precedence)
-                                    if param_name not in kwargs:
-                                        kwargs[param_name] = arg
+                        # Set $_busy to True when starting execution
+                        agent.state.variables["$_busy"] = True
+                        try:
+                            # Convert positional args to kwargs if needed
+                            if args:
+                                properties = schema.get("properties", {})
+                                param_names = list(properties.keys())
+                                # Map positional args to parameter names from schema in order
+                                for i, arg in enumerate(args):
+                                    if i < len(param_names):
+                                        param_name = param_names[i]
+                                        # Only set if not already in kwargs (kwargs take precedence)
+                                        if param_name not in kwargs:
+                                            kwargs[param_name] = arg
 
-                        result = await self.transport.call_tool(tool_name, kwargs)
-                        result_str = str(result.content[0].text)
-                        if result.is_error:
-                            result_str = f"Error: {result_str}"
-                        return result_str
+                            result = await self.transport.call_tool(tool_name, kwargs)
+                            result_str = str(result.content[0].text)
+                            if result.is_error:
+                                result_str = f"Error: {result_str}"
+                            return result_str
+                        finally:
+                            # Set $_busy to False when execution completes (or on error)
+                            agent.state.variables["$_busy"] = False
 
                     return execute_fn
 
-                execute_fn = create_execute_fn(tool_name, input_schema)
+                execute_fn = create_execute_fn(tool_name, input_schema, self)
 
                 # Extract parameter schema
                 parameters = (

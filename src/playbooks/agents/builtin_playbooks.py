@@ -5,8 +5,8 @@ to all agents, including messaging, artifact handling, and system operations.
 """
 
 from playbooks.compilation.compiler import Compiler
-from playbooks.utils.llm_config import LLMConfig
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.utils.llm_config import LLMConfig
 
 
 class BuiltinPlaybooks:
@@ -83,8 +83,8 @@ async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
 #     return value
 
 @playbook
-async def Exit():
-    await agent.program.shutdown()
+async def EndProgram():
+    await agent.program.end_program()
 
 @playbook(hidden=True)
 async def MessageProcessingEventLoop():
@@ -121,6 +121,7 @@ hidden: true
         - Extract the inviter agent id from the message sender_id
         - Look at the topic (message content) and determine if there is a suitable meeting playbook to handle it
         - If a suitable meeting playbook is found
+            - Say to the inviter that the invitation has been accepted
             - Call the meeting playbook directly: <MeetingPlaybookName>(meeting_id=<extracted_meeting_id>, inviter_id=<extracted_inviter_id>, topic=<message_content>)
             - Continue to next message
         - Otherwise

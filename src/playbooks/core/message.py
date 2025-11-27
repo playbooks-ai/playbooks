@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from playbooks.utils.text_utils import simple_shorten
+
 
 class MessageType(enum.Enum):
     """Types of messages in the system.
@@ -72,47 +74,77 @@ class Message:
     id: str = uuid.uuid4()
     created_at: datetime = datetime.now()
 
-    def __str__(self) -> str:
+    def __str__(self, compact: bool = False) -> str:
         """Return human-readable string representation of the message."""
-        meeting_message = f", in meeting {self.meeting_id}" if self.meeting_id else ""
         message_type = (
-            "[MEETING INVITATION] "
+            "MEETING INVITATION"
             if self.message_type == MessageType.MEETING_INVITATION
-            else ""
+            else "Message"
         )
-        return f"{message_type}Message from {self.sender_klass}(agent {self.sender_id}) to {self.recipient_klass}(agent {self.recipient_id}){meeting_message}: {self.content}"
+
+        if self.sender_klass == "HumanAgent":
+            sender = f"from human {self.sender_id}"
+        elif self.sender_klass is None:
+            sender = ""
+        else:
+            sender = f"from {self.sender_klass}(agent {self.sender_id})"
+
+        if self.recipient_klass == "HumanAgent":
+            target = f"to human {self.recipient_id}"
+        elif self.recipient_klass is None or self.recipient_id is None:
+            target = "to everyone"
+        else:
+            target = f"to {self.recipient_klass}({self.recipient_id})"
+
+        meeting_message = f"in meeting {self.meeting_id}" if self.meeting_id else ""
+
+        content = self.content
+        if compact:
+            content = simple_shorten(content, 100)
+
+        return " ".join([message_type, sender, target, meeting_message, ":", content])
 
     def to_compact_str(self) -> str:
         """Return compact string representation for LLM context.
 
         Format: "SenderKlass(sender_id) → RecipientKlass(recipient_id): content"
         Example: "StoryTeller(1000) → CharacterCreator(1001): Hi! Could you..."
+        For meeting invitations: includes "[MEETING_INVITATION for meeting {meeting_id}]"
         Human agents show as just "User" without ID.
 
         Returns:
             Compact string representation similar to CLI output format
         """
-        # Format sender - just name for human, name(id) for agents
-        if self.sender_id == "human":
-            sender = self.sender_klass
+        # Format sender
+        if self.sender_klass == "HumanAgent":
+            sender = "User"
+        elif self.sender_id == "human":
+            sender = "User"
         else:
             sender = f"{self.sender_klass}({self.sender_id})"
 
         # Format recipient
-        if self.recipient_id and self.recipient_klass:
-            if self.recipient_id == "human":
-                recipient = self.recipient_klass
-            else:
-                recipient = f"{self.recipient_klass}({self.recipient_id})"
+        if self.recipient_klass == "HumanAgent":
+            recipient = "User"
+        elif self.recipient_id == "human":
+            recipient = "User"
+        elif self.recipient_klass is None or self.recipient_id is None:
+            recipient = "Everyone"
         else:
-            recipient = "all"
+            recipient = f"{self.recipient_klass}({self.recipient_id})"
 
-        # Format message content (truncate if very long)
-        content = self.content
-        if len(content) > 100:
-            content = content[:97] + "..."
+        # Add meeting invitation indicator
+        if self.message_type == MessageType.MEETING_INVITATION:
+            meeting_info = f" [MEETING_INVITATION for meeting {self.meeting_id}]"
+        elif self.message_type == MessageType.MEETING_BROADCAST:
+            meeting_info = f" [in meeting {self.meeting_id}]"
+        else:
+            meeting_info = ""
 
-        return f"{sender} → {recipient}: {content}"
+        # Shorten content
+        content = simple_shorten(self.content, 100)
+
+        return f"{sender} → {recipient}{meeting_info}: {content}"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert message to dictionary representation.

@@ -6,13 +6,12 @@ Provides a simple terminal interface for communicating with AI agents.
 
 import argparse
 import asyncio
-import functools
 import os
 import select
 import sys
 import uuid
 from pathlib import Path
-from typing import Any, Callable, List
+from typing import Any, Callable, Dict, List, Optional
 
 # Platform-specific imports for stdin clearing
 try:
@@ -33,6 +32,7 @@ from rich.console import Console
 
 from playbooks import Playbooks
 from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.applications.streaming_observer import (
     ChannelStreamObserver as BaseChannelStreamObserver,
 )
@@ -53,8 +53,10 @@ from playbooks.utils.error_utils import check_playbooks_health
 # Add the src directory to the Python path to import playbooks
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Initialize Rich console
-console = Console()
+# Initialize Rich console - use stderr for all diagnostics
+console = console_stderr = Console(stderr=True)
+# Separate console for stdout (for colored message headers)
+console_stdout = Console(stderr=False)
 
 
 def clear_stdin():
@@ -139,8 +141,12 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             return klass
         return f"{klass}({agent_id})"
 
-    async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
-        """Display stream start in terminal."""
+    async def on_stream_start(self, event: StreamStartEvent) -> None:
+        """Handle stream start - always track stream, display only if streaming."""
+        sender = self.program.agents_by_id.get(event.sender_id)
+        agent_name = sender.klass if sender else "Agent"
+
+        # Always track the stream (needed for non-streaming mode to work correctly)
         self.active_streams[event.stream_id] = {
             "agent_klass": agent_name,
             "sender_id": event.sender_id,
@@ -148,37 +154,41 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             "recipient_klass": event.recipient_klass,
             "content": "",
         }
-        # Format: 💬 HelloWorld(1000) → User:
+
+        # Call parent to handle display logic (will call _display_start if streaming)
+        await super().on_stream_start(event)
+
+    async def _display_start(self, event: StreamStartEvent, agent_name: str) -> None:
+        """Display stream start - prefix to stderr, content to stdout."""
         sender_display = self._format_agent_display(agent_name, event.sender_id)
 
         if event.recipient_id and event.recipient_klass:
             recipient_display = self._format_agent_display(
                 event.recipient_klass, event.recipient_id
             )
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: ",
-                end="",
+            # Prefix to stdout in bracket format with color
+            console_stderr.print(
+                f"\n[cyan][{sender_display} → {recipient_display}][/cyan]"
             )
         else:
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple]: ",
-                end="",
-            )
+            console_stderr.print(f"\n[cyan]{sender_display}][/cyan]")
 
     async def _display_chunk(self, event: StreamChunkEvent) -> None:
-        """Display stream chunk in terminal."""
+        """Display stream chunk - content to stdout."""
         if event.stream_id in self.active_streams:
             self.active_streams[event.stream_id]["content"] += event.chunk
-        print(event.chunk, end="", flush=True)
+        # Content to stdout
+        sys.stdout.write(event.chunk)
+        sys.stdout.flush()
 
     async def _display_complete(self, event: StreamCompleteEvent) -> None:
-        """Display stream completion in terminal."""
-        console.print()  # Newline to finish streaming
+        """Display stream completion."""
+        print(file=sys.stdout)  # Newline to finish content
         if event.stream_id in self.active_streams:
             del self.active_streams[event.stream_id]
 
     async def _display_buffered(self, event: StreamCompleteEvent) -> None:
-        """Display buffered complete message in terminal (non-streaming mode)."""
+        """Display buffered complete message (non-streaming mode)."""
         # Get sender/recipient info from active streams or event
         if event.stream_id in self.active_streams:
             stream_data = self.active_streams[event.stream_id]
@@ -204,20 +214,22 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
             recipient_klass = event.final_message.recipient_klass
             content = event.final_message.content
 
-        # Format: 💬 HelloWorld(1000) → User: message
+        # Prefix to stdout, content to stdout
         sender_display = self._format_agent_display(sender_klass, sender_id)
 
         if recipient_id and recipient_klass:
             recipient_display = self._format_agent_display(
                 recipient_klass, recipient_id
             )
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple] → [purple]{recipient_display}[/purple]: {content}"
+            console_stderr.print(
+                f"\n[cyan][{sender_display} → {recipient_display}][/cyan]"
             )
         else:
-            console.print(
-                f"\n[bold magenta]💬[/bold magenta] [purple]{sender_display}[/purple]: {content}"
-            )
+            console_stderr.print(f"\n[cyan][{sender_display}][/cyan]")
+
+        # Content to stdout
+        print(content, file=sys.stdout)
+        sys.stdout.flush()  # Ensure content is displayed immediately
 
 
 class SessionLogWrapper:
@@ -247,84 +259,52 @@ original_wait_for_message = MessagingMixin.WaitForMessage
 original_broadcast_to_meeting = None  # Will be set after MeetingManager is imported
 
 
-@functools.wraps(original_wait_for_message)
-async def patched_wait_for_message(self, source_agent_id: str):
-    """Patched version of WaitForMessage that shows a prompt when waiting for human input."""
-    # For human input, show a prompt before calling the normal WaitForMessage
-    # Accept both "human" and "user" as identifiers for human input
-    if source_agent_id in ("human", "user"):
-        # Check if there are already messages waiting using queue peek
-        human_message = await self._message_queue.peek(
-            lambda msg: msg.sender_id.id == "human"
+async def prompt_for_human_input(agent_self):
+    """Prompt in CLI and enqueue a human message for the waiting agent."""
+    console.print()  # Add a newline for spacing
+    await asyncio.to_thread(clear_stdin)
+
+    program: Program = agent_self.program
+    humans = [a for a in program.agents if a.klass.endswith("Human") or a.id == "human"]
+
+    sender_id = "human"
+    sender_klass = "human"
+    message_content = ""
+
+    if len(humans) > 1:
+        console.print(
+            f"[dim]Available humans: {', '.join(h.klass for h in humans)}[/dim]"
+        )
+        console.print(
+            "[dim]Format: HumanName: your message  (e.g., 'Alice: Hello')[/dim]"
+        )
+        user_input = await asyncio.to_thread(
+            console.input, "[bold yellow]Input:[/bold yellow] "
         )
 
-        if not human_message:
-            # No human messages waiting, show prompt
-            console.print()  # Add a newline for spacing
-            # Clear stdin buffer to prevent pre-filled input
-            await asyncio.to_thread(clear_stdin)
+        message_content = user_input
+        if ": " in user_input:
+            potential_human_name, rest = user_input.split(": ", 1)
+            matching_human = next(
+                (h for h in humans if h.klass.lower() == potential_human_name.lower()),
+                None,
+            )
+            if matching_human:
+                sender_id = matching_human.id
+                sender_klass = matching_human.klass
+                message_content = rest
+    else:
+        message_content = await asyncio.to_thread(
+            console.input, "[bold yellow]User:[/bold yellow] "
+        )
 
-            # Determine which humans exist in the program
-            program: Program = self.program
-            humans = [
-                a
-                for a in program.agents
-                if a.klass.endswith("Human") or a.id == "human"
-            ]
-
-            # If multiple humans, let user specify which one is speaking
-            if len(humans) > 1:
-                console.print(
-                    f"[dim]Available humans: {', '.join(h.klass for h in humans)}[/dim]"
-                )
-                console.print(
-                    "[dim]Format: HumanName: your message  (e.g., 'Alice: Hello')[/dim]"
-                )
-                user_input = await asyncio.to_thread(
-                    console.input, "[bold yellow]Input:[/bold yellow] "
-                )
-
-                # Parse "HumanName: message" format
-                sender_id = "human"
-                sender_klass = "human"
-                message_content = user_input
-
-                if ": " in user_input:
-                    potential_human_name, rest = user_input.split(": ", 1)
-                    # Check if potential_human_name matches any human
-                    matching_human = next(
-                        (
-                            h
-                            for h in humans
-                            if h.klass.lower() == potential_human_name.lower()
-                        ),
-                        None,
-                    )
-                    if matching_human:
-                        sender_id = matching_human.id
-                        sender_klass = matching_human.klass
-                        message_content = rest
-                    # If no match, treat entire input as message from default "human"
-            else:
-                # Single human, use simple prompt
-                user_input = await asyncio.to_thread(
-                    console.input, "[bold yellow]User:[/bold yellow] "
-                )
-                sender_id = "human"
-                sender_klass = "human"
-                message_content = user_input
-
-            # Send the user input and EOM
-            for message in [message_content, EOM]:
-                await program.route_message(
-                    sender_id=sender_id,
-                    sender_klass=sender_klass,
-                    receiver_spec=f"agent {self.id}",
-                    message=message,
-                )
-
-    # Call the normal WaitForMessage which handles message delivery
-    return await original_wait_for_message(self, source_agent_id)
+    for message in [message_content, EOM]:
+        await program.route_message(
+            sender_id=sender_id,
+            sender_klass=sender_klass,
+            receiver_spec=f"agent {agent_self.id}",
+            message=message,
+        )
 
 
 async def patched_broadcast_to_meeting_as_owner(
@@ -362,6 +342,7 @@ async def main(
     stop_on_entry: bool = False,
     stream: bool = True,
     snoop: bool = False,
+    initial_state: Optional[Dict[str, Any]] = None,
 ) -> None:
     """
     Playbooks application host for agent chat. You can execute a playbooks program within this application container.
@@ -381,13 +362,17 @@ async def main(
         stop_on_entry: Whether to stop at the beginning of playbook execution
         stream: Whether to stream the output
         snoop: Whether to display agent-to-agent messages
+        initial_state: Optional initial state variables to set on agents
 
     """
     #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
     # )
 
     # Patch the WaitForMessage method before loading agents
-    MessagingMixin.WaitForMessage = patched_wait_for_message
+    MessagingMixin.WaitForMessage = build_human_wait_patch(
+        original_wait_for_message,
+        on_prompt=prompt_for_human_input,
+    )
 
     user_output.info(f"Loading playbooks from: {program_paths}")
 
@@ -395,7 +380,11 @@ async def main(
     if isinstance(program_paths, str):
         program_paths = [program_paths]
     try:
-        playbooks = Playbooks(program_paths, session_id=session_id)
+        playbooks = Playbooks(
+            program_paths,
+            session_id=session_id,
+            initial_state=initial_state or {},
+        )
         await playbooks.initialize()
     except litellm.exceptions.AuthenticationError as e:
         user_output.error("Authentication error", details=str(e))

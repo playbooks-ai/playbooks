@@ -14,25 +14,26 @@ from pathlib import Path
 # Removed threading import - using asyncio only
 from typing import Any, Dict, List, Optional, Type, Union
 
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
+from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
+from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
+from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.core.message import Message, MessageType
+from playbooks.core.stream_result import StreamResult
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.state.variables import Artifact
+
 from .agents import AIAgent, HumanAgent
 from .agents.agent_builder import AgentBuilder
 from .agents.base_agent import BaseAgent
 from .channels import AgentParticipant, Channel, HumanParticipant
-from playbooks.core.constants import HUMAN_AGENT_KLASS
 from .debug.server import (
     DebugServer,  # Note: Actually a debug client that connects to VSCode
 )
-from playbooks.infrastructure.logging.debug_logger import debug
-from playbooks.infrastructure.event_bus import EventBus
-from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
-from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
-from playbooks.core.identifiers import AgentID, MeetingID
 from .meetings import MeetingRegistry
-from playbooks.core.message import Message, MessageType
-from playbooks.core.stream_result import StreamResult
 from .utils import file_utils
-from playbooks.compilation.markdown_to_ast import markdown_to_ast
-from playbooks.state.variables import Artifact
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class AsyncAgentRuntime:
 
         except ExecutionFinished as e:
             # Signal that execution is finished
-            self.program.set_execution_finished(reason="normal", exit_code=0)
+            await self.program.set_execution_finished(reason="normal", exit_code=0)
             debug(
                 "Agent execution finished",
                 agent_id=agent.id,
@@ -218,11 +219,37 @@ class AsyncAgentRuntime:
             ]
             log_agent_errors(error_info, "agent_runtime")
 
+            # Signal execution finished so run_till_exit doesn't hang
+            # This ensures the program terminates even if an agent fails
+            await self.program.set_execution_finished(reason="error", exit_code=1)
+
             raise
         finally:
             # Cleanup agent resources
             if hasattr(agent, "cleanup"):
                 await agent.cleanup()
+
+    async def wait_for_all_agents_idle(self) -> None:
+        """Wait for all agents to become idle.
+
+        Args:
+            self: The Program instance
+        """
+        done = False
+        while not done:
+            debug("Waiting for all agents to become idle")
+            done = True
+            for agent in self.program.agents:
+                if isinstance(agent, AIAgent):
+                    if len(agent.state.call_stack.frames) > 0:
+                        if "$_busy" not in agent.state.variables:
+                            done = False
+                            break
+                        if agent.state.variables["$_busy"].value is True:
+                            done = False
+                            break
+            await asyncio.sleep(1)
+        debug("All agents are idle")
 
 
 class ProgramAgentsCommunicationMixin:
@@ -493,12 +520,20 @@ class Program(ProgramAgentsCommunicationMixin):
         compiled_program_paths: List[str] = None,
         program_content: str = None,
         metadata: dict = {},
+        cli_args: Optional[Dict[str, Any]] = None,
+        initial_state: Optional[Dict[str, Any]] = None,
+        source_file_paths: List[str] = None,
     ):
         self.metadata = metadata
         self.event_bus = event_bus
+        self.cli_args = cli_args or {}
+        self.initial_state = initial_state or {}
 
         self.program_paths = program_paths or []
         self.compiled_program_paths = compiled_program_paths or []
+        self.source_file_paths = (
+            source_file_paths or []
+        )  # Original source paths for each compiled file
         self.program_content = program_content
         if self.compiled_program_paths and self.program_content:
             raise ValueError(
@@ -531,10 +566,17 @@ class Program(ProgramAgentsCommunicationMixin):
         else:
             # Using compiled program paths (cache files)
             for i, markdown_content in enumerate(self.markdown_contents):
-                cache_file_path = self.compiled_program_paths[i]
-                # Convert to absolute path for consistent tracking
-                abs_cache_path = str(Path(cache_file_path).resolve())
-                ast = markdown_to_ast(markdown_content, source_file_path=abs_cache_path)
+                # Use original source file path for relative path resolution
+                # (e.g., for memory:// MCP server paths)
+                # source_file_paths has one entry per compiled file and points to the original .pb source
+                if self.source_file_paths and i < len(self.source_file_paths):
+                    source_path = str(Path(self.source_file_paths[i]).resolve())
+                elif self.program_paths and i < len(self.program_paths):
+                    source_path = str(Path(self.program_paths[i]).resolve())
+                else:
+                    source_path = None
+
+                ast = markdown_to_ast(markdown_content, source_file_path=source_path)
                 self.agent_klasses.update(
                     AgentBuilder.create_agent_classes_from_ast(ast)
                 )
@@ -558,29 +600,73 @@ class Program(ProgramAgentsCommunicationMixin):
             for klass in self.agent_klasses.values()
             if klass.should_create_instance_at_start()
         ]
-        # Validate public.json count (only for AI agents, humans don't need public.json)
+
+        # Set initial state variables on all agents
+        if self.initial_state:
+            from playbooks.config import config as playbooks_config
+            from playbooks.state.variables import Artifact
+
+            for agent in self.agents:
+                if hasattr(agent, "state") and hasattr(agent.state, "variables"):
+                    for var_name, var_value in self.initial_state.items():
+                        # Check if should be promoted to Artifact based on threshold
+                        if (
+                            len(str(var_value))
+                            > playbooks_config.artifact_result_threshold
+                        ):
+                            artifact = Artifact(
+                                name=f"${var_name}",
+                                summary=f"Initial state variable: {var_name}",
+                                value=var_value,
+                            )
+                            agent.state.variables[f"${var_name}"] = artifact
+
+                            # Store artifact for pre-loading into first call stack frame
+                            if not hasattr(agent, "_initial_artifacts_to_load"):
+                                agent._initial_artifacts_to_load = []
+                            agent._initial_artifacts_to_load.append(f"${var_name}")
+                        else:
+                            agent.state.variables[f"${var_name}"] = var_value
+        # Validate public.json count (only for local AI agents, not remote/MCP agents)
+        # Remote agents (MCPAgent, RemoteAIAgent) don't have playbooks in the current playbook
         # Allow empty or missing public.json for testing scenarios
+        from playbooks.agents import RemoteAIAgent
+
+        # Get non-empty public json lists
+        non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
+
+        # Count only local AI agents that actually have playbooks (non-meeting-only agents)
+        # Note: All agents in agent_klasses have playbooks defined in the playbook file
+        # Meeting-only agents are those with only meeting playbooks
         ai_agent_count = sum(
             1
             for klass in self.agent_klasses.values()
             if not issubclass(klass, HumanAgent)
+            and not issubclass(klass, RemoteAIAgent)  # Exclude remote agents
         )
 
-        non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
+        # Count agents that have non-meeting playbooks (i.e., have public.json)
+        agents_with_public_json = len([pj for pj in self.public_jsons if pj])
 
-        # Only validate if there are non-empty public.jsons
-        # (Allow tests without public.json blocks)
-        if len(non_empty_public_jsons) > 0 and ai_agent_count != len(self.public_jsons):
+        # Only validate if there are explicitly defined public.jsons in the playbook
+        # If there are non-empty public jsons, they should match the agents that have them
+        # But allow agents without public.json (e.g., meeting-only agents)
+        if (
+            len(non_empty_public_jsons) > 0
+            and agents_with_public_json > 0
+            and ai_agent_count < agents_with_public_json
+        ):
             raise ValueError(
-                "Number of AI agents and public jsons must be the same. "
-                f"Got {ai_agent_count} AI agents and {len(self.public_jsons)} public jsons"
+                "Number of public json definitions exceeds number of agents. "
+                f"Got {ai_agent_count} local AI agents but {agents_with_public_json} have public.json"
             )
 
-        # Assign public.json to AI agents only (humans don't have playbooks)
+        # Assign public.json to local AI agents only (humans and remote agents don't have playbooks)
         ai_agent_klasses = [
             klass
             for klass in self.agent_klasses.values()
             if not issubclass(klass, HumanAgent)
+            and not issubclass(klass, RemoteAIAgent)  # Exclude remote agents
         ]
         for i, agent_klass in enumerate(ai_agent_klasses):
             if i < len(non_empty_public_jsons):
@@ -620,7 +706,8 @@ class Program(ProgramAgentsCommunicationMixin):
         for agent in self.agents:
             if agent.klass not in self.agents_by_klass:
                 self.agents_by_klass[agent.klass] = []
-            self.agents_by_klass[agent.klass].append(agent)
+            if agent not in self.agents_by_klass[agent.klass]:
+                self.agents_by_klass[agent.klass].append(agent)
             self.agents_by_id[agent.id] = agent
             agent.program = self
 
@@ -632,6 +719,25 @@ class Program(ProgramAgentsCommunicationMixin):
         if self.program_content:
             return [self.program_content]
         return [file_utils.read_file(path) for path in self.compiled_program_paths]
+
+    @property
+    def name(self) -> str:
+        """Get the program name for display and tracing.
+
+        Uses metadata name if available, otherwise derives from first program file.
+        Always prefixed with "Playbooks: ".
+
+        Returns:
+            Program name with "Playbooks: " prefix
+        """
+        program_name = self.metadata.get("name")
+        if not program_name and self.program_paths:
+            # Use the first program file name as the trace name
+            program_name = Path(self.program_paths[0]).stem
+        if not program_name:
+            program_name = "Program"
+
+        return f"Playbooks: {program_name}"
 
     def event_agents_changed(self) -> None:
         for agent in self.agents:
@@ -659,7 +765,8 @@ class Program(ProgramAgentsCommunicationMixin):
         self.agents.append(agent)
         if agent.klass not in self.agents_by_klass:
             self.agents_by_klass[agent.klass] = []
-        self.agents_by_klass[agent.klass].append(agent)
+        if agent not in self.agents_by_klass[agent.klass]:
+            self.agents_by_klass[agent.klass].append(agent)
         self.agents_by_id[agent.id] = agent
         agent.program = self
 
@@ -766,7 +873,7 @@ class Program(ProgramAgentsCommunicationMixin):
             # Agent threads are designed to run indefinitely until this exception
             await self.execution_finished_event.wait()
         except ExecutionFinished:
-            self.set_execution_finished(reason="normal", exit_code=0)
+            await self.set_execution_finished(reason="normal", exit_code=0)
         except Exception as e:
             logger.error(
                 f"Unexpected error in run_till_exit: {e}",
@@ -778,7 +885,7 @@ class Program(ProgramAgentsCommunicationMixin):
                 error=str(e),
                 error_type=type(e).__name__,
             )
-            self.set_execution_finished(reason="error", exit_code=1)
+            await self.set_execution_finished(reason="error", exit_code=1)
             raise
         finally:
             await self.shutdown()
@@ -821,7 +928,7 @@ class Program(ProgramAgentsCommunicationMixin):
         """
         return self._has_agent_errors or len(self.get_agent_errors()) > 0
 
-    def set_execution_finished(
+    async def set_execution_finished(
         self, reason: str = "normal", exit_code: int = 0
     ) -> None:
         """Signal that program execution has finished.
@@ -833,6 +940,9 @@ class Program(ProgramAgentsCommunicationMixin):
             reason: Reason for finishing (e.g., "normal", "error")
             exit_code: Exit code (0 for success, non-zero for errors)
         """
+        # Wait for all agents to become idle
+        await self.runtime.wait_for_all_agents_idle()
+
         self.execution_finished = True
         if hasattr(self, "execution_finished_event"):
             self.execution_finished_event.set()
@@ -842,9 +952,13 @@ class Program(ProgramAgentsCommunicationMixin):
             )
             self.event_bus.publish(termination_event)
 
+    async def end_program(self) -> None:
+        """End the program."""
+        raise ExecutionFinished(EXECUTION_FINISHED)
+
     async def shutdown(self) -> None:
         """Shutdown all agents and clean up resources."""
-        self.set_execution_finished(reason="normal", exit_code=0)
+        await self.set_execution_finished(reason="normal", exit_code=0)
 
         # Stop all agent tasks via runtime
         await self.runtime.stop_all_agents()
