@@ -216,10 +216,12 @@ class MeetingManager:
             )
 
         # Create meeting channel with all potential participants
-        all_participants = (
-            [self.playbook_executor]
-            + meeting.required_attendees
-            + meeting.optional_attendees
+        all_participants = list(
+            set(
+                [self.playbook_executor]
+                + meeting.required_attendees
+                + meeting.optional_attendees
+            )
         )
         await self.program.create_meeting_channel(meeting_id, all_participants)
         debug(
