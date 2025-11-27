@@ -17,6 +17,7 @@ from playbooks.execution.python_executor import (
     LLMNamespace,
     PythonExecutor,
 )
+from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.utils.langfuse_client import get_client, observe
 
 if TYPE_CHECKING:
@@ -211,6 +212,7 @@ class StreamingPythonExecutor:
         )
 
         self._update_statement_span(langfuse, stmt, statement_code, exec_id)
+        debug(f"Executing: {statement_code}")
 
         # Check if this is a function/class definition
         # These don't need wrapping and should execute directly
