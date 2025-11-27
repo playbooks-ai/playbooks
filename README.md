@@ -23,8 +23,6 @@
 
 ### Playbooks is a framework and runtime for building verifiable multi-agent AI systems with Natural Language Programs.
 
-![Playbooks](https://docs.runplaybooks.ai/assets/images/playbooks-illustrated.jpeg)
-
 Describe what your agents should do, not how to do it. Focus on agent behavior at a high level while the LLM handles implementation details and edge cases. Mix natural language and Python seamlessly on the same call stack. Get verifiable execution, full observability, and programs that business users can actually read and approve.
 
 Here's a complete **29-line Playbooks program** that orchestrates natural language and Python code together. Notice how the `Main` playbook (line 4) calls Python function `process_countries` (line 20), which then calls natural language playbook `GetCountryFact` (line 27).
@@ -61,6 +59,8 @@ async def process_countries(countries: List[str]):
 ````
 
 This accomplishes the same task as implementations that are [significantly longer and more complex using traditional agent frameworks](https://playbooks-ai.github.io/playbooks-docs/reference/playbooks-traditional-comparison/#traditional-framework-implementation-272-lines).
+
+![Playbooks](https://docs.runplaybooks.ai/assets/images/playbooks-illustrated.jpeg)
 
 ## What is Software 3.0?
 
