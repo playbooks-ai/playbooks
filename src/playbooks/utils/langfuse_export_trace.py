@@ -11,7 +11,8 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import dotenv
-from langfuse import get_client
+
+from playbooks.utils.langfuse_client import get_client
 
 dotenv.load_dotenv()
 

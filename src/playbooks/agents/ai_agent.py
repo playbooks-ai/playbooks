@@ -12,8 +12,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from langfuse import get_client, observe
-
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
@@ -38,6 +36,7 @@ from playbooks.playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlay
 from playbooks.state.call_stack import CallStackFrame, InstructionPointer
 from playbooks.state.execution_state import ExecutionState
 from playbooks.state.variables import Artifact
+from playbooks.utils.langfuse_client import get_client, observe
 from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.misc import copy_func
 from playbooks.utils.text_utils import indent, simple_shorten

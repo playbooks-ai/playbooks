@@ -10,8 +10,6 @@ import traceback
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from langfuse import get_client, observe
-
 from playbooks.compilation.expression_engine import preprocess_program
 from playbooks.execution.incremental_code_buffer import CodeBuffer
 from playbooks.execution.python_executor import (
@@ -19,6 +17,7 @@ from playbooks.execution.python_executor import (
     LLMNamespace,
     PythonExecutor,
 )
+from playbooks.utils.langfuse_client import get_client, observe
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent

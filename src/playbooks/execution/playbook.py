@@ -3,8 +3,6 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from langfuse import get_client
-
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
@@ -25,6 +23,7 @@ from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     PlaybookImplementationLLMMessage,
 )
+from playbooks.utils.langfuse_client import get_client
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import get_completion
 

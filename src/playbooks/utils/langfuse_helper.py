@@ -190,6 +190,14 @@ class PlaybooksLangfuseInstance:
         """
         return PlaybooksLangfuseSpan()
 
+    def update_current_span(self, **kwargs: Any) -> PlaybooksLangfuseSpan:
+        """Update the current span (no-op)."""
+        return PlaybooksLangfuseSpan()
+
+    def get_current_span(self) -> PlaybooksLangfuseSpan:
+        """Return the current span (no-op placeholder)."""
+        return PlaybooksLangfuseSpan()
+
     def flush(self) -> None:
         """Flush pending events (no-op)."""
         pass
