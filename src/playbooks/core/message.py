@@ -109,6 +109,7 @@ class Message:
 
         Format: "SenderKlass(sender_id) → RecipientKlass(recipient_id): content"
         Example: "StoryTeller(1000) → CharacterCreator(1001): Hi! Could you..."
+        For meeting invitations: includes "[MEETING_INVITATION for meeting {meeting_id}]"
         Human agents show as just "User" without ID.
 
         Returns:
@@ -132,10 +133,18 @@ class Message:
         else:
             recipient = f"{self.recipient_klass}({self.recipient_id})"
 
+        # Add meeting invitation indicator
+        if self.message_type == MessageType.MEETING_INVITATION:
+            meeting_info = f" [MEETING_INVITATION for meeting {self.meeting_id}]"
+        elif self.message_type == MessageType.MEETING_BROADCAST:
+            meeting_info = f" [in meeting {self.meeting_id}]"
+        else:
+            meeting_info = ""
+
         # Shorten content
         content = simple_shorten(self.content, 100)
 
-        return f"{sender} → {recipient}: {content}"
+        return f"{sender} → {recipient}{meeting_info}: {content}"
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert message to dictionary representation.
