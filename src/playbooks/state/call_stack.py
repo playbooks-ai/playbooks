@@ -138,6 +138,7 @@ class CallStackFrame:
         self.is_meeting = is_meeting
         self.meeting_id = meeting_id
         self.depth = -1
+        self.langfuse_span: Optional[Any] = None
 
     @property
     def source_line_number(self) -> int:

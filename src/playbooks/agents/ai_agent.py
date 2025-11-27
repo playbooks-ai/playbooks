@@ -698,7 +698,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
     async def _pre_execute(
         self, playbook_name: str, args: List[Any], kwargs: Dict[str, Any]
-    ) -> tuple:
+    ) -> tuple[Optional[Playbook], PlaybookCall, Optional[Any]]:
         """Prepare for playbook execution by setting up call stack frame and tracing metadata."""
         call = PlaybookCall(playbook_name, args, kwargs)
         playbook = self.playbooks.get(playbook_name)
@@ -719,6 +719,14 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         # Update the current span name (created by @observe) with our detailed trace string
 
         langfuse = get_client()
+        langfuse_span = None
+        if langfuse:
+            get_span_fn = getattr(langfuse, "get_current_span", None)
+            if callable(get_span_fn):
+                try:
+                    langfuse_span = get_span_fn()
+                except Exception:
+                    langfuse_span = None
         langfuse.update_current_span(name=trace_str)
 
         # Build and set input on the current span
@@ -766,6 +774,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             is_meeting=is_meeting,
             meeting_id=meeting_id,
         )
+        call_stack_frame.langfuse_span = langfuse_span
         self.state.call_stack.push(call_stack_frame)
         self.state.session_log.append(call)
 
@@ -781,7 +790,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             # Clear so we don't re-add on subsequent playbooks
             self._artifacts_to_preload = []
 
-        return playbook, call
+        return playbook, call, langfuse_span
 
     def _is_external_playbook(self, playbook_name: str, playbook: Any) -> bool:
         """Determine if playbook is external (cross-agent communication).
@@ -923,7 +932,12 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         if self.program and self.program.execution_finished:
             return (True, EXECUTION_FINISHED)
 
-        playbook, call = await self._pre_execute(playbook_name, args, kwargs)
+        pre_execute_result = await self._pre_execute(playbook_name, args, kwargs)
+        if isinstance(pre_execute_result, tuple) and len(pre_execute_result) == 3:
+            playbook, call, langfuse_span = pre_execute_result
+        else:
+            playbook, call = pre_execute_result
+            langfuse_span = None
 
         # Type-based argument resolution
         # Use call.args and call.kwargs which contain typed arguments from _pre_execute
@@ -1011,7 +1025,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     self.state.call_stack.add_llm_message(meeting_msg)
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
-            await self._post_execute(call, False, error_msg)
+            await self._post_execute(call, False, error_msg, langfuse_span)
             return (False, error_msg)
 
         # Execute local playbook in this agent
@@ -1021,18 +1035,20 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     return (False, EXECUTION_FINISHED)
 
                 result = await playbook.execute(*args, **kwargs)
-                success, result = await self._post_execute(call, True, result)
+                success, result = await self._post_execute(
+                    call, True, result, langfuse_span
+                )
                 return (success, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
                 self.state.variables["$_busy"] = False
                 await self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
-                await self._post_execute(call, False, message)
+                await self._post_execute(call, False, message, langfuse_span)
                 return (False, message)
             except Exception as e:
                 message = f"Error: {str(e)}"
-                await self._post_execute(call, False, message)
+                await self._post_execute(call, False, message, langfuse_span)
                 raise
         else:
             # Handle cross-agent playbook calls (AgentName.PlaybookName or AgentName:AgentId.PlaybookName format)
@@ -1049,7 +1065,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 success, result = await target_agent.execute_playbook(
                     actual_playbook_name, args, kwargs
                 )
-                await self._post_execute(call, success, result)
+                await self._post_execute(call, success, result, langfuse_span)
                 return (success, result)
 
             # Try to execute playbook in other agents (fallback)
@@ -1061,16 +1077,20 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     success, result = await agent.execute_playbook(
                         playbook_name, args, kwargs
                     )
-                    await self._post_execute(call, success, result)
+                    await self._post_execute(call, success, result, langfuse_span)
                     return (success, result)
 
             # Playbook not found
             error_msg = f"Playbook '{playbook_name}' not found in agent '{self.klass}' or any registered agents"
-            await self._post_execute(call, False, error_msg)
+            await self._post_execute(call, False, error_msg, langfuse_span)
             return (False, error_msg)
 
     async def _post_execute(
-        self, call: PlaybookCall, success: bool, result: Any
+        self,
+        call: PlaybookCall,
+        success: bool,
+        result: Any,
+        langfuse_span: Optional[Any] = None,
     ) -> tuple[bool, Any]:
         """Handle post-execution tasks: artifact creation, call stack management, and session logging."""
 
@@ -1175,12 +1195,18 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         # Update the current span (created by @observe) with output
         # The @observe decorator will automatically end the span and capture this return value
 
-        langfuse = get_client()
+        span_target = artifact_obj.value if artifact_result else result
 
-        if artifact_result:
-            langfuse.update_current_span(output=artifact_obj.value)
+        if langfuse_span and hasattr(langfuse_span, "update"):
+            try:
+                langfuse_span.update(output=span_target)
+            except Exception:
+                # Fall back to client if span update fails
+                langfuse = get_client()
+                langfuse.update_current_span(output=span_target)
         else:
-            langfuse.update_current_span(output=result)
+            langfuse = get_client()
+            langfuse.update_current_span(output=span_target)
 
         return success, (artifact_obj if artifact_result else result)
 
