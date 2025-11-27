@@ -10,6 +10,8 @@ import traceback
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from langfuse import get_client, observe
+
 from playbooks.compilation.expression_engine import preprocess_program
 from playbooks.execution.incremental_code_buffer import CodeBuffer
 from playbooks.execution.python_executor import (
@@ -182,8 +184,9 @@ class StreamingPythonExecutor:
                 f"Execution failed: {type(e).__name__}: {e}", e, executed_code
             )
 
+    @observe(capture_input=False, capture_output=False)
     async def _execute_statement(self, stmt: ast.stmt) -> None:
-        """Execute a single AST statement.
+        """Execute a single AST statement with tracing.
 
         Uses exec() with proper namespace handling. For async statements containing
         await, wraps them in a temporary async function.
@@ -194,6 +197,19 @@ class StreamingPythonExecutor:
         # Convert the statement back to source code
         statement_code = ast.unparse(stmt)
 
+        # Update current span with statement-specific information
+        langfuse = get_client()
+        display_code = (
+            statement_code
+            if len(statement_code) <= 100
+            else statement_code[:97] + "..."
+        )
+        langfuse.update_current_span(
+            name=f"exec: {display_code}",
+            input={"code": statement_code},
+            metadata={"statement_type": stmt.__class__.__name__},
+        )
+
         # Check if this is a function/class definition
         # These don't need wrapping and should execute directly
         is_definition = isinstance(
@@ -203,34 +219,42 @@ class StreamingPythonExecutor:
         # Check if statement contains await
         has_await = any(isinstance(node, ast.Await) for node in ast.walk(stmt))
 
-        if is_definition or not has_await:
-            # Function/class definitions or synchronous statements - execute directly
-            exec(compile(statement_code, "<llm>", "exec"), self.namespace)
-        else:
-            # Async statement with await - wrap in temporary function
-            fn_name = f"__stmt_{uuid.uuid4().hex[:8]}__"
+        try:
+            if is_definition or not has_await:
+                # Function/class definitions or synchronous statements - execute directly
+                exec(compile(statement_code, "<llm>", "exec"), self.namespace)
+            else:
+                # Async statement with await - wrap in temporary function
+                fn_name = f"__stmt_{uuid.uuid4().hex[:8]}__"
 
-            wrapped_code = f"async def {fn_name}():\n"
+                wrapped_code = f"async def {fn_name}():\n"
 
-            # Add global declarations for any assignments in the statement
-            assignments = self._find_assignments(stmt)
-            if assignments:
-                wrapped_code += f"    global {', '.join(assignments)}\n"
+                # Add global declarations for any assignments in the statement
+                assignments = self._find_assignments(stmt)
+                if assignments:
+                    wrapped_code += f"    global {', '.join(assignments)}\n"
 
-            for line in statement_code.split("\n"):
-                wrapped_code += f"    {line}\n"
+                for line in statement_code.split("\n"):
+                    wrapped_code += f"    {line}\n"
 
-            # Execute wrapper definition directly in namespace
-            exec(compile(wrapped_code, "<llm>", "exec"), self.namespace)
+                # Execute wrapper definition directly in namespace
+                exec(compile(wrapped_code, "<llm>", "exec"), self.namespace)
 
-            # Execute the async function from namespace
-            fn = dict.__getitem__(self.namespace, fn_name)
+                # Execute the async function from namespace
+                fn = dict.__getitem__(self.namespace, fn_name)
 
-            try:
-                await fn()
-            finally:
-                # Clean up the temporary function
-                dict.__delitem__(self.namespace, fn_name)
+                try:
+                    await fn()
+                finally:
+                    # Clean up the temporary function
+                    dict.__delitem__(self.namespace, fn_name)
+
+                # Mark statement as successful
+                langfuse.update_current_span(output={"success": True})
+        except Exception as e:
+            # Mark statement as failed - @observe will capture the exception
+            langfuse.update_current_span(output={"success": False, "error": str(e)})
+            raise
 
     def _find_assignments(self, stmt: ast.stmt) -> List[str]:
         """Find all variable names that are assigned in a statement.

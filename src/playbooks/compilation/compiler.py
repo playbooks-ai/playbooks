@@ -369,7 +369,7 @@ class Compiler:
 
         # Get LLM response
         messages = get_messages_for_prompt(prompt)
-        langfuse_span = LangfuseHelper.instance().trace(
+        langfuse_span = LangfuseHelper.instance().start_observation(
             name="compile_agent", input=agent_content
         )
 
@@ -377,11 +377,11 @@ class Compiler:
             llm_config=self.llm_config,
             messages=messages,
             stream=False,
-            langfuse_span=langfuse_span,
         )
 
         compiled = next(response)
         langfuse_span.update(output=compiled)
+        langfuse_span.end()
 
         version = get_playbooks_version()
         compiled = (

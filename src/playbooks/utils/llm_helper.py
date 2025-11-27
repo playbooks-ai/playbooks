@@ -295,7 +295,6 @@ def get_completion(
     use_cache: bool = True,
     json_mode: bool = False,
     session_id: Optional[str] = None,
-    langfuse_span: Optional[Any] = None,
     **kwargs,
 ) -> Iterator[str]:
     """Get completion from LLM with optional streaming and caching support.
@@ -345,28 +344,22 @@ def get_completion(
         if "reasoning_effort" in params:
             completion_kwargs["reasoning_effort"] = "low"
 
-    # Initialize Langfuse tracing if available
-    langfuse_span_obj = None
-    if langfuse_span is None:
-        langfuse_helper = LangfuseHelper.instance()
-        if langfuse_helper is not None:
-            langfuse_span_obj = langfuse_helper.trace(
-                name="llm_call",
-                metadata={"model": llm_config.model, "session_id": session_id},
-            )
-    else:
-        langfuse_span_obj = langfuse_span
-
+    # Note: For streaming mode, generation tracing is handled by the caller
+    # (playbook.py) so that exec spans can nest under the generation.
+    # For non-streaming mode, we still create the generation here.
+    langfuse_helper = LangfuseHelper.instance()
     langfuse_generation = None
-    if langfuse_span_obj is not None:
-        langfuse_generation = langfuse_span_obj.generation(
+
+    if langfuse_helper is not None and not stream:
+        langfuse_generation = langfuse_helper.start_observation(
+            name=f"LLM Call: {llm_config.model}",
+            as_type="generation",
             model=llm_config.model,
             model_parameters={
                 "maxTokens": completion_kwargs["max_completion_tokens"],
                 "temperature": completion_kwargs["temperature"],
             },
             input=messages,
-            session_id=session_id,
             metadata={"stream": stream},
         )
 
@@ -377,9 +370,10 @@ def get_completion(
 
         if cache_value is not None:
             if langfuse_generation:
-                langfuse_generation.update(metadata={"cache_hit": True})
-                langfuse_generation.end(output=str(cache_value))
-                langfuse_generation.update(cost_details={"input": 0, "output": 0})
+                langfuse_generation.update(
+                    metadata={"cache_hit": True}, output=str(cache_value)
+                )
+                langfuse_generation.end()
                 LangfuseHelper.flush()
 
             if stream:
@@ -408,7 +402,8 @@ def get_completion(
     except Exception as e:
         error_occurred = True
         if langfuse_generation:
-            langfuse_generation.end(error=str(e))
+            langfuse_generation.update(status_message=str(e))
+            langfuse_generation.end()
             LangfuseHelper.flush()
         raise e  # Re-raise the exception to be caught by the decorator if applicable
     finally:
@@ -428,7 +423,8 @@ def get_completion(
 
         if langfuse_generation and not error_occurred:
             # Only update if no exception occurred
-            langfuse_generation.end(output=full_response)
+            langfuse_generation.update(output=full_response)
+            langfuse_generation.end()
             LangfuseHelper.flush()
 
 

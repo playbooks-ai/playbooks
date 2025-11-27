@@ -19,6 +19,7 @@ from playbooks.compilation.compiler import (
 from playbooks.compilation.loader import Loader
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.infrastructure.logging.setup import configure_logging
+from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.llm_config import LLMConfig
 
 from .program import Program
@@ -154,11 +155,82 @@ class Playbooks:
 
     async def initialize(self):
         """Initialize the playbook execution environment and agents."""
+        # Initialize program first so we can access its name property
         await self.program.initialize()
+
+        # Create program-level Langfuse trace
+
+        langfuse = LangfuseHelper.instance()
+        program_name = self.program.name
+
+        # Create root observation with OTEL context (so @observe decorators nest correctly)
+        # Using start_as_current_observation sets this as the active span in OTEL context
+        self._root_observation_ctx = langfuse.start_as_current_observation(
+            name=program_name + "Observation",
+            as_type="span",
+            metadata={
+                "program_paths": self.program_paths,
+                "cli_args": self.cli_args,
+                "agent_count": (
+                    len(self.program.agents) if hasattr(self.program, "agents") else 0
+                ),
+            },
+            input={
+                "program_paths": self.program_paths,
+                "cli_args": self.cli_args,
+            },
+        )
+        root_observation = self._root_observation_ctx.__enter__()
+
+        # Update the trace with name and session_id
+        langfuse.update_current_trace(
+            name=program_name,
+            session_id=self.session_id,
+        )
+
+        # Flush immediately so the trace name and session appear in Langfuse right away
+        LangfuseHelper.flush()
+
+        LangfuseHelper.set_program_trace(root_observation)
 
     async def begin(self):
         """Start execution of the playbook."""
         await self.program.begin()
+
+    async def shutdown(self):
+        """Shutdown the program and finalize Langfuse trace."""
+
+        # Finalize program trace with output
+        trace = LangfuseHelper.get_program_trace()
+        if trace:
+            trace.update(
+                output={
+                    "execution_finished": (
+                        self.program.execution_finished
+                        if hasattr(self.program, "execution_finished")
+                        else False
+                    ),
+                    "has_errors": self.has_agent_errors(),
+                    "agent_count": (
+                        len(self.program.agents)
+                        if hasattr(self.program, "agents")
+                        else 0
+                    ),
+                }
+            )
+
+        # Exit the root observation context manager
+        if hasattr(self, "_root_observation_ctx") and self._root_observation_ctx:
+            try:
+                self._root_observation_ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+
+        # Shutdown the program
+        await self.program.shutdown()
+
+        # Flush Langfuse to ensure all data is sent
+        LangfuseHelper.flush()
 
     def _apply_program_metadata(self):
         """Apply program-level metadata from frontmatter."""

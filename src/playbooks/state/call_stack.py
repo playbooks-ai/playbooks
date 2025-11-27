@@ -122,7 +122,6 @@ class CallStackFrame:
         self,
         instruction_pointer: InstructionPointer,
         llm_messages: Optional[List[LLMMessage]] = None,
-        langfuse_span: Optional[Any] = None,
         is_meeting: bool = False,
         meeting_id: Optional[str] = None,
     ) -> None:
@@ -131,13 +130,11 @@ class CallStackFrame:
         Args:
             instruction_pointer: Current execution position
             llm_messages: LLM messages associated with this frame
-            langfuse_span: Langfuse tracing span (optional)
             is_meeting: Whether this frame is part of a meeting
             meeting_id: Meeting ID if is_meeting is True
         """
         self.instruction_pointer = instruction_pointer
         self.llm_messages = llm_messages or []
-        self.langfuse_span = langfuse_span
         self.is_meeting = is_meeting
         self.meeting_id = meeting_id
         self.depth = -1

@@ -11,8 +11,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import dotenv
-from langfuse import Langfuse
-from langfuse.client import os
+from langfuse import get_client
 
 dotenv.load_dotenv()
 
@@ -33,15 +32,11 @@ class DateTimeEncoder(json.JSONEncoder):
         return str(obj)
 
 
-# Initialize Langfuse client
-langfuse = Langfuse(
-    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-    host=os.getenv("LANGFUSE_HOST"),  # Adjust for your region
-)
+# Initialize Langfuse client using v3 API
+langfuse = get_client()
 if not langfuse:
     raise ValueError(
-        "Failed to initialize Langfuse client. Check your environment variables in .env file."
+        "Failed to initialize Langfuse client. Check your environment variables in .env file. "
         "LANGFUSE_SECRET_KEY, LANGFUSE_PUBLIC_KEY, and LANGFUSE_HOST must be set."
     )
 

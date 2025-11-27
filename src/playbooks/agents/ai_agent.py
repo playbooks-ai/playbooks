@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from langfuse import get_client, observe
+
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
@@ -361,6 +363,30 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         self.playbooks.update(new_playbook)
 
     async def begin(self):
+        # Create agent-level span under program trace with OTEL context
+        # Using start_as_current_span ensures @observe decorators nest under this span
+        program_trace = LangfuseHelper.get_program_trace()
+        if program_trace:
+            self._agent_span_ctx = program_trace.start_as_current_observation(
+                name=f"Agent: {str(self)}",
+                as_type="span",
+                metadata={
+                    "agent_klass": self.klass,
+                    "agent_id": self.id,
+                    "description": self.description[:200] if self.description else None,
+                },
+                input={
+                    "agent_klass": self.klass,
+                    "agent_id": self.id,
+                },
+            )
+            agent_span = self._agent_span_ctx.__enter__()
+
+            LangfuseHelper.set_agent_span(self.id, agent_span)
+
+            # Flush immediately so agent span appears in Langfuse right away
+            LangfuseHelper.flush()
+
         # Pre-load initial artifacts if any
         if hasattr(self, "_initial_artifacts_to_load"):
             from playbooks.state.variables import Artifact
@@ -386,6 +412,15 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         # Only cleanup if execution is truly finished
         if not (self.program and self.program.execution_finished):
             return
+
+        # Exit agent span context (ends the span and removes from OTEL context)
+        if hasattr(self, "_agent_span_ctx") and self._agent_span_ctx:
+            try:
+                self._agent_span_ctx.__exit__(None, None, None)
+            except Exception:
+                pass
+
+        LangfuseHelper.clear_agent_span(self.id)
 
     def parse_instruction_pointer(self, step_id: str) -> InstructionPointer:
         """Parse a step string into an InstructionPointer.
@@ -664,13 +699,14 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
     async def _pre_execute(
         self, playbook_name: str, args: List[Any], kwargs: Dict[str, Any]
     ) -> tuple:
+        """Prepare for playbook execution by setting up call stack frame and tracing metadata."""
         call = PlaybookCall(playbook_name, args, kwargs)
         playbook = self.playbooks.get(playbook_name)
 
+        # Build trace name for the span (will be set via langfuse.update_current_span)
         trace_str = str(self) + "." + call.to_log_full()
 
         if playbook:
-            # Set up tracing
             if isinstance(playbook, LLMPlaybook):
                 trace_str = f"Markdown: {trace_str}"
             elif isinstance(playbook, PythonPlaybook):
@@ -680,18 +716,17 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         else:
             trace_str = f"External: {trace_str}"
 
-        if self.state.call_stack.peek() is not None:
-            langfuse_span = self.state.call_stack.peek().langfuse_span.span(
-                name=trace_str
-            )
-        else:
-            langfuse_span = LangfuseHelper.instance().trace(name=trace_str)
+        # Update the current span name (created by @observe) with our detailed trace string
 
+        langfuse = get_client()
+        langfuse.update_current_span(name=trace_str)
+
+        # Build and set input on the current span
         if playbook:
             input_log = self._build_input_log(playbook, call)
-            langfuse_span.update(input=input_log)
+            langfuse.update_current_span(input=input_log)
         else:
-            langfuse_span.update(input=trace_str)
+            langfuse.update_current_span(input=trace_str)
 
         # Add the call to the call stack
         if playbook:
@@ -728,7 +763,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 source_line_number=first_step_line_number,
                 source_file_path=source_file_path,
             ),
-            langfuse_span=langfuse_span,
             is_meeting=is_meeting,
             meeting_id=meeting_id,
         )
@@ -747,7 +781,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             # Clear so we don't re-add on subsequent playbooks
             self._artifacts_to_preload = []
 
-        return playbook, call, langfuse_span
+        return playbook, call
 
     def _is_external_playbook(self, playbook_name: str, playbook: Any) -> bool:
         """Determine if playbook is external (cross-agent communication).
@@ -874,15 +908,22 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         return (target_agent, actual_playbook_name)
 
+    @observe(capture_input=True, capture_output=True)
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> tuple[bool, Any]:
+        """Execute a playbook in this agent.
+
+        Creates a traced span for observability, capturing inputs, outputs, and errors.
+        Supports local playbooks, remote playbooks, and cross-agent calls.
+
+        Returns:
+            Tuple of (success: bool, result: Any)
+        """
         if self.program and self.program.execution_finished:
             return (True, EXECUTION_FINISHED)
 
-        playbook, call, langfuse_span = await self._pre_execute(
-            playbook_name, args, kwargs
-        )
+        playbook, call = await self._pre_execute(playbook_name, args, kwargs)
 
         # Type-based argument resolution
         # Use call.args and call.kwargs which contain typed arguments from _pre_execute
@@ -970,7 +1011,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     self.state.call_stack.add_llm_message(meeting_msg)
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
-            await self._post_execute(call, False, error_msg, langfuse_span)
+            await self._post_execute(call, False, error_msg)
             return (False, error_msg)
 
         # Execute local playbook in this agent
@@ -980,20 +1021,18 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     return (False, EXECUTION_FINISHED)
 
                 result = await playbook.execute(*args, **kwargs)
-                success, result = await self._post_execute(
-                    call, True, result, langfuse_span
-                )
+                success, result = await self._post_execute(call, True, result)
                 return (success, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
                 self.state.variables["$_busy"] = False
                 await self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
-                await self._post_execute(call, False, message, langfuse_span)
+                await self._post_execute(call, False, message)
                 return (False, message)
             except Exception as e:
                 message = f"Error: {str(e)}"
-                await self._post_execute(call, False, message, langfuse_span)
+                await self._post_execute(call, False, message)
                 raise
         else:
             # Handle cross-agent playbook calls (AgentName.PlaybookName or AgentName:AgentId.PlaybookName format)
@@ -1010,7 +1049,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 success, result = await target_agent.execute_playbook(
                     actual_playbook_name, args, kwargs
                 )
-                await self._post_execute(call, success, result, langfuse_span)
+                await self._post_execute(call, success, result)
                 return (success, result)
 
             # Try to execute playbook in other agents (fallback)
@@ -1022,17 +1061,18 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     success, result = await agent.execute_playbook(
                         playbook_name, args, kwargs
                     )
-                    await self._post_execute(call, success, result, langfuse_span)
+                    await self._post_execute(call, success, result)
                     return (success, result)
 
             # Playbook not found
             error_msg = f"Playbook '{playbook_name}' not found in agent '{self.klass}' or any registered agents"
-            await self._post_execute(call, False, error_msg, langfuse_span)
+            await self._post_execute(call, False, error_msg)
             return (False, error_msg)
 
     async def _post_execute(
-        self, call: PlaybookCall, success: bool, result: Any, langfuse_span: Any
-    ) -> None:
+        self, call: PlaybookCall, success: bool, result: Any
+    ) -> tuple[bool, Any]:
+        """Handle post-execution tasks: artifact creation, call stack management, and session logging."""
 
         if "$__" in self.state.variables:
             execution_summary = self.state.variables.variables["$__"].value
@@ -1132,12 +1172,17 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             )
             self.state.call_stack.add_llm_message(result_msg)
 
+        # Update the current span (created by @observe) with output
+        # The @observe decorator will automatically end the span and capture this return value
+
+        langfuse = get_client()
+
         if artifact_result:
-            langfuse_span.update(output=artifact_obj.value)
-            return success, artifact_obj
+            langfuse.update_current_span(output=artifact_obj.value)
         else:
-            langfuse_span.update(output=result)
-            return success, result
+            langfuse.update_current_span(output=result)
+
+        return success, (artifact_obj if artifact_result else result)
 
     def __str__(self):
         if self.kwargs:

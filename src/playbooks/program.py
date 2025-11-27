@@ -720,6 +720,25 @@ class Program(ProgramAgentsCommunicationMixin):
             return [self.program_content]
         return [file_utils.read_file(path) for path in self.compiled_program_paths]
 
+    @property
+    def name(self) -> str:
+        """Get the program name for display and tracing.
+
+        Uses metadata name if available, otherwise derives from first program file.
+        Always prefixed with "Playbooks: ".
+
+        Returns:
+            Program name with "Playbooks: " prefix
+        """
+        program_name = self.metadata.get("name")
+        if not program_name and self.program_paths:
+            # Use the first program file name as the trace name
+            program_name = Path(self.program_paths[0]).stem
+        if not program_name:
+            program_name = "Program"
+
+        return f"Playbooks: {program_name}"
+
     def event_agents_changed(self) -> None:
         for agent in self.agents:
             if isinstance(agent, AIAgent):

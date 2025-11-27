@@ -1,11 +1,16 @@
 """Langfuse integration helper for LLM observability and tracing."""
 
+import logging
 import os
-from typing import Any
+from typing import Any, Optional
 
 from langfuse import Langfuse
 
 from playbooks.config import config
+
+# Suppress Langfuse context warnings since we use explicit parent-passing
+# rather than automatic context tracking
+logging.getLogger("langfuse").setLevel(logging.ERROR)
 
 
 class PlaybooksLangfuseSpan:
@@ -15,32 +20,121 @@ class PlaybooksLangfuseSpan:
     Used when Langfuse telemetry is disabled via configuration.
     """
 
-    def update(self, **kwargs: Any) -> None:
+    def update(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
         """Update span metadata (no-op).
 
         Args:
             **kwargs: Metadata to update (ignored)
-        """
-        pass
 
-    def generation(self, **kwargs: Any) -> None:
-        """Log generation event (no-op).
+        Returns:
+            Self for chaining
+        """
+        return self
+
+    def end(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """End the span (no-op).
+
+        Args:
+            **kwargs: End parameters (ignored)
+
+        Returns:
+            Self for chaining
+        """
+        return self
+
+    def start_generation(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """Start a generation (no-op).
 
         Args:
             **kwargs: Generation event data (ignored)
-        """
-        pass
 
-    def span(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
-        """Create a child span (no-op, returns self).
+        Returns:
+            No-op span
+        """
+        return PlaybooksLangfuseSpan()
+
+    def start_span(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """Start a child span (no-op).
 
         Args:
             **kwargs: Span configuration (ignored)
 
         Returns:
-            Self (no-op span)
+            No-op span
         """
         return PlaybooksLangfuseSpan()
+
+    def start_observation(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """Start a child observation (no-op).
+
+        Args:
+            **kwargs: Observation configuration (ignored)
+
+        Returns:
+            No-op span
+        """
+        return PlaybooksLangfuseSpan()
+
+    def start_as_current_span(
+        self, **kwargs: Any
+    ) -> "PlaybooksLangfuseNoOpContextManager":
+        """Start as current span (no-op).
+
+        Args:
+            **kwargs: Span configuration (ignored)
+
+        Returns:
+            No-op context manager
+        """
+        return PlaybooksLangfuseNoOpContextManager(PlaybooksLangfuseSpan())
+
+    def start_as_current_observation(
+        self, **kwargs: Any
+    ) -> "PlaybooksLangfuseNoOpContextManager":
+        """Start as current observation (no-op).
+
+        Args:
+            **kwargs: Observation configuration (ignored)
+
+        Returns:
+            No-op context manager
+        """
+        return PlaybooksLangfuseNoOpContextManager(PlaybooksLangfuseSpan())
+
+    def score_trace(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """Score the trace (no-op).
+
+        Args:
+            **kwargs: Score parameters (ignored)
+
+        Returns:
+            Self for chaining
+        """
+        return self
+
+    def update_trace(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """Update the trace (no-op).
+
+        Args:
+            **kwargs: Trace update parameters (ignored)
+
+        Returns:
+            Self for chaining
+        """
+        return self
+
+
+class PlaybooksLangfuseNoOpContextManager:
+    """No-op context manager for langfuse observations."""
+
+    def __init__(self, span: "PlaybooksLangfuseSpan"):
+        self.span = span
+
+    def __enter__(self) -> "PlaybooksLangfuseSpan":
+        return self.span
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> bool:
+        return False
 
 
 class PlaybooksLangfuseInstance:
@@ -50,11 +144,46 @@ class PlaybooksLangfuseInstance:
     Used when Langfuse telemetry is disabled via configuration.
     """
 
+    def start_observation(self, **kwargs: Any) -> PlaybooksLangfuseSpan:
+        """Create an observation (no-op).
+
+        Args:
+            **kwargs: Observation configuration (ignored)
+
+        Returns:
+            No-op span instance
+        """
+        return PlaybooksLangfuseSpan()
+
+    def start_as_current_observation(
+        self, **kwargs: Any
+    ) -> PlaybooksLangfuseNoOpContextManager:
+        """Create an observation as current (no-op).
+
+        Args:
+            **kwargs: Observation configuration (ignored)
+
+        Returns:
+            No-op context manager
+        """
+        return PlaybooksLangfuseNoOpContextManager(PlaybooksLangfuseSpan())
+
     def trace(self, **kwargs: Any) -> PlaybooksLangfuseSpan:
-        """Create a trace span (no-op).
+        """Create a trace (no-op).
 
         Args:
             **kwargs: Trace configuration (ignored)
+
+        Returns:
+            No-op span instance
+        """
+        return PlaybooksLangfuseSpan()
+
+    def span(self, **kwargs: Any) -> PlaybooksLangfuseSpan:
+        """Create a span (no-op).
+
+        Args:
+            **kwargs: Span configuration (ignored)
 
         Returns:
             No-op span instance
@@ -65,6 +194,22 @@ class PlaybooksLangfuseInstance:
         """Flush pending events (no-op)."""
         pass
 
+    def auth_check(self) -> bool:
+        """Check authentication (no-op).
+
+        Returns:
+            True (always succeeds for no-op)
+        """
+        return True
+
+    def update_current_trace(self, **kwargs: Any) -> None:
+        """Update the current trace (no-op).
+
+        Args:
+            **kwargs: Trace update parameters (ignored)
+        """
+        pass
+
 
 class LangfuseHelper:
     """A singleton helper class for Langfuse telemetry and tracing.
@@ -73,17 +218,19 @@ class LangfuseHelper:
     tracing of LLM operations throughout the application.
     """
 
-    langfuse: Langfuse | None = None
+    langfuse: Langfuse | PlaybooksLangfuseInstance | None = None
+    _program_trace: Optional[Any] = None  # StatefulTraceClient
+    _agent_spans: dict[str, Any] = {}  # agent_id -> span
 
     @classmethod
-    def instance(cls) -> Langfuse | PlaybooksLangfuseInstance | None:
+    def instance(cls) -> Langfuse | PlaybooksLangfuseInstance:
         """Get or initialize the Langfuse singleton instance.
 
         Creates the Langfuse client on first call using environment variables.
         Returns a no-op instance if Langfuse is disabled via configuration.
 
         Returns:
-            Langfuse client instance, no-op instance if disabled, or None
+            Langfuse client instance or no-op instance if disabled
         """
         if cls.langfuse is None:
             # Check if Langfuse is enabled via config system first, then env fallback
@@ -99,11 +246,10 @@ class LangfuseHelper:
             if not langfuse_enabled:
                 cls.langfuse = PlaybooksLangfuseInstance()
             else:
-                cls.langfuse = Langfuse(
-                    secret_key=os.getenv("LANGFUSE_SECRET_KEY"),
-                    public_key=os.getenv("LANGFUSE_PUBLIC_KEY"),
-                    host=os.getenv("LANGFUSE_HOST"),
-                )
+                # Use v3 API - get_client() reads env vars automatically
+                from langfuse import get_client
+
+                cls.langfuse = get_client()
         return cls.langfuse
 
     @classmethod
@@ -115,3 +261,52 @@ class LangfuseHelper:
         """
         if cls.langfuse:
             cls.langfuse.flush()
+
+    @classmethod
+    def set_program_trace(cls, trace: Optional[Any]) -> None:
+        """Set the program-level trace.
+
+        Args:
+            trace: The trace client for the current program execution
+        """
+        cls._program_trace = trace
+
+    @classmethod
+    def get_program_trace(cls) -> Optional[Any]:
+        """Get the program-level trace.
+
+        Returns:
+            The current program trace or None
+        """
+        return cls._program_trace
+
+    @classmethod
+    def set_agent_span(cls, agent_id: str, span: Any) -> None:
+        """Set the span for a specific agent.
+
+        Args:
+            agent_id: The agent ID
+            span: The span for this agent
+        """
+        cls._agent_spans[agent_id] = span
+
+    @classmethod
+    def get_agent_span(cls, agent_id: str) -> Optional[Any]:
+        """Get the span for a specific agent.
+
+        Args:
+            agent_id: The agent ID
+
+        Returns:
+            The agent's span or None
+        """
+        return cls._agent_spans.get(agent_id)
+
+    @classmethod
+    def clear_agent_span(cls, agent_id: str) -> None:
+        """Clear the span for a specific agent.
+
+        Args:
+            agent_id: The agent ID
+        """
+        cls._agent_spans.pop(agent_id, None)

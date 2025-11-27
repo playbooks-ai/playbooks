@@ -3,6 +3,8 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from langfuse import get_client
+
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
@@ -404,13 +406,31 @@ class PlaybookLLMExecution(LLMExecution):
         self.llm_response_msg = AssistantResponseLLMMessage("Thinking...")
         self.agent.state.call_stack.add_llm_message(self.llm_response_msg)
 
+        # Create generation span with OTEL context - this stays active during code execution
+        # so that exec spans (@observe) nest under this generation
+
+        langfuse = get_client()
+        llm_config = LLMConfig()
+
+        generation_ctx = langfuse.start_as_current_observation(
+            name=f"LLM Call: {llm_config.model}",
+            as_type="generation",
+            model=llm_config.model,
+            model_parameters={
+                "maxTokens": llm_config.max_completion_tokens,
+                "temperature": llm_config.temperature,
+            },
+            input=messages,
+            metadata={"stream": True},
+        )
+        generation = generation_ctx.__enter__()
+
         try:
             for chunk in get_completion(
                 messages=messages,
-                llm_config=LLMConfig(),
+                llm_config=llm_config,
                 stream=True,
                 json_mode=False,
-                langfuse_span=self.agent.state.call_stack.peek().langfuse_span,
             ):
                 buffer += chunk
 
@@ -434,7 +454,12 @@ class PlaybookLLMExecution(LLMExecution):
                     # The error details are already captured in streaming_executor.result
                     logger.error(f"Streaming execution error: {e}")
                     self.streaming_execution_result = streaming_executor.result
-                    # Return buffer so LLM can see what was generated
+                    # Close generation context and return buffer
+                    try:
+                        generation.update(output=buffer, status_message=str(e))
+                        generation_ctx.__exit__(None, None, None)
+                    except Exception:
+                        pass
                     return buffer
 
                 # Only look for new Say() calls in the unprocessed part of the buffer
@@ -622,6 +647,10 @@ class PlaybookLLMExecution(LLMExecution):
             # Finalize streaming execution - execute any remaining buffered code
             self.streaming_execution_result = await streaming_executor.finalize()
 
+            # Update generation with output and close context
+            generation.update(output=buffer)
+            generation_ctx.__exit__(None, None, None)
+
         except Exception as e:
             # Unexpected error during streaming (not a StreamingExecutionError)
             logger.error(
@@ -632,6 +661,12 @@ class PlaybookLLMExecution(LLMExecution):
                 self.streaming_execution_result = await streaming_executor.finalize()
             except Exception:
                 # If finalization also fails, at least we have the original error
+                pass
+            # Update generation with error and close context
+            try:
+                generation.update(output=buffer, status_message=str(e))
+                generation_ctx.__exit__(None, None, None)
+            except Exception:
                 pass
             raise
 
