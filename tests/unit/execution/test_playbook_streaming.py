@@ -86,9 +86,10 @@ class DummyPrompt:
 class DummyStreamingExecutor:
     """Streaming executor stub that just collects chunks."""
 
-    def __init__(self, agent, playbook_args):
+    def __init__(self, agent, playbook_args, execution_id=None):
         self.agent = agent
         self.playbook_args = playbook_args
+        self.execution_id = execution_id
         self.chunks = []
         self.result = "executed"
 

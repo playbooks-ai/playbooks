@@ -16,6 +16,7 @@ from playbooks.compilation.inject_setvar import inject_setvar
 from playbooks.core.identifiers import MeetingID
 from playbooks.debug.debug_handler import NoOpDebugHandler
 from playbooks.execution.call import PlaybookCall
+from playbooks.execution.step import PlaybookStep
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.call_stack import InstructionPointer
 from playbooks.state.variables import Artifact
@@ -398,6 +399,7 @@ class PythonExecutor:
         # Try to resolve the actual playbook code for this step so we can label spans
         step_code: Optional[str] = None
         step_obj = getattr(instruction_pointer, "step", None)
+
         if not step_obj:
             playbook = (
                 self.agent.playbooks.get(instruction_pointer.playbook)
@@ -407,10 +409,26 @@ class PythonExecutor:
             if playbook and hasattr(playbook, "get_step"):
                 step_obj = playbook.get_step(instruction_pointer.line_number)
 
-        if step_obj:
-            step_code = (
-                instruction_pointer.playbook + ":" + getattr(step_obj, "raw_text", None)
-            )
+        step_type: Optional[str] = None
+
+        if isinstance(step_obj, PlaybookStep):
+            raw_text = getattr(step_obj, "raw_text", None)
+            if raw_text:
+                step_code = f"{instruction_pointer.playbook}:{raw_text}"
+            step_type = step_obj.step_type
+        elif isinstance(step_obj, str):
+            step_code = f"{instruction_pointer.playbook}:{step_obj}"
+            step_type = step_obj
+        elif step_obj is not None:
+            raw_text = getattr(step_obj, "raw_text", None)
+            if raw_text:
+                step_code = f"{instruction_pointer.playbook}:{raw_text}"
+
+        if not step_type:
+            # Attempt to derive from the location string (Playbook:Line:TYPE)
+            location_parts = location.split(":")
+            if len(location_parts) >= 3:
+                step_type = location_parts[2]
 
         if not step_code:
             step_code = location
@@ -423,9 +441,7 @@ class PythonExecutor:
             logger.debug("Failed to update Langfuse span with step code: %s", exc)
 
         # Check if this is a thinking step
-        is_thinking = (
-            hasattr(instruction_pointer, "step") and instruction_pointer.step == "TNK"
-        )
+        is_thinking = step_type == "TNK"
         if is_thinking:
             self.result.is_thinking = True
 
