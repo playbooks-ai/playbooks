@@ -62,6 +62,8 @@ async def process_countries(countries: List[str]):
 
 This accomplishes the same task as implementations that are [significantly longer and more complex using traditional agent frameworks](https://playbooks-ai.github.io/playbooks-docs/reference/playbooks-traditional-comparison/#traditional-framework-implementation-272-lines).
 
+![Playbooks](https://docs.runplaybooks.ai/assets/images/playbooks-illustrated.jpeg)
+
 ## What is Software 3.0?
 
 Software 3.0 is the evolution from hand-coded algorithms (Software 1.0) and learned neural network weights (Software 2.0) to **natural language as the primary programming interface**. 
