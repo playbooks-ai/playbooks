@@ -1,0 +1,41 @@
+<!-- 
+============================================
+Playbooks Assembly Language v0.7.1
+============================================ 
+-->
+
+# HelloWorld
+This is a hello world demo for the playbooks system
+
+## HelloWorldDemo() -> None
+metadata:
+  public: true
+---
+This playbooks demo prints a hello playbooks message
+
+### Triggers
+- T1:BGN At the beginning
+
+### Steps
+- 01:QUE Say(user, Greet the user with a hello playbooks message)
+- 02:QUE Say(user, Tell the user that this is a demo for the playbooks system)
+- 03:QUE Say(user, Say goodbye to the user)
+- 04:YLD for exit
+
+```public.json
+[
+  {
+    "name": "HelloWorldDemo",
+    "description": "This playbooks demo prints a hello playbooks message",
+    "parameters": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    },
+    "triggers": ["T1:BGN At the beginning"],
+    "is_bgn": true,
+    "cli_entry": true
+  }
+]
+
+```
