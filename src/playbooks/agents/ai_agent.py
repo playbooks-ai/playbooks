@@ -177,7 +177,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         """Deep copy the playbooks."""
         playbooks_copy = copy.deepcopy(playbooks)
         for playbook in playbooks_copy.values():
-            if playbook.func:
+            if hasattr(playbook, "func") and playbook.func:
                 playbook.func = copy_func(playbook.func)
 
         return playbooks_copy
