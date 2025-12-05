@@ -47,6 +47,7 @@ from playbooks.core.events import Event
 from playbooks.core.exceptions import ExecutionFinished
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.infrastructure.user_output import user_output
+from playbooks.llm.messages import AgentCommunicationLLMMessage
 from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.program import Program
 from playbooks.utils.error_utils import check_playbooks_health
@@ -420,22 +421,20 @@ async def main(
             wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose)
             agent.state.session_log = wrapper
 
-    # Send message from human to first AI agent if provided
+    # Add message directly to LLM context so it's visible during BGN playbook execution
     if message:
         human = playbooks.program.agents_by_id.get("human")
-        print("human", human)
-        # Find first AI agent (not human)
-        ai_agent = None
+        human_klass = human.klass if human else "User"
+
         for agent in playbooks.program.agents:
             if isinstance(agent, AIAgent):
-                ai_agent = agent
-                break
-
-        print("ai_agent", ai_agent)
-        if human and ai_agent:
-            await human.SendMessage(ai_agent.id, message)
-            await human.SendMessage(ai_agent.id, EOM)
-            print("ai_agent._message_queue", ai_agent._message_queue)
+                # Add message to top-level LLM messages so it's visible in BGN playbooks
+                agent_comm_msg = AgentCommunicationLLMMessage(
+                    f"Received message from {human_klass}(human): {message}",
+                    sender_agent=human_klass,
+                    target_agent=agent.klass,
+                )
+                agent.state.call_stack.top_level_llm_messages.append(agent_comm_msg)
 
     def log_event(event: Event) -> None:
         print(event)

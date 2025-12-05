@@ -1,11 +1,12 @@
 """Unit tests for CLI utilities functionality."""
 
-import pytest
 import argparse
 
+import pytest
+
 from playbooks.cli import (
-    get_cli_entry_point,
     add_cli_arguments,
+    get_cli_entry_point,
 )
 
 
@@ -199,68 +200,53 @@ class TestDynamicArgparseGeneration:
 
 
 class TestStartupMessageCombination:
-    """Test $startup_message combination logic."""
+    """Test $startup_message logic.
+
+    $startup_message is set from stdin content only.
+    --message is sent as a Human→AI message (not stored in $startup_message).
+    """
 
     def test_stdin_only(self):
-        """Test that stdin alone becomes $startup_message."""
+        """Test that stdin becomes $startup_message."""
         stdin = "test content"
-        message = None
 
-        if stdin and message:
-            result = f"{stdin}\n\nMessage: {message}"
-        elif stdin:
-            result = stdin
-        elif message:
-            result = message
-        else:
-            result = None
+        # $startup_message is set from stdin only
+        startup_message = stdin if stdin else None
 
-        assert result == "test content"
+        assert startup_message == "test content"
 
     def test_message_only(self):
-        """Test that message alone becomes $startup_message."""
+        """Test that message alone does NOT become $startup_message.
+
+        --message is sent as a Human→AI message, not stored in $startup_message.
+        """
         stdin = None
-        message = "test message"
+        message = "test message"  # noqa: F841 - message is sent separately
 
-        if stdin and message:
-            result = f"{stdin}\n\nMessage: {message}"
-        elif stdin:
-            result = stdin
-        elif message:
-            result = message
-        else:
-            result = None
+        # $startup_message is set from stdin only
+        startup_message = stdin if stdin else None
 
-        assert result == "test message"
+        assert startup_message is None
 
     def test_stdin_and_message_combined(self):
-        """Test that stdin + message are properly combined."""
+        """Test that stdin becomes $startup_message while message is sent separately.
+
+        stdin → $startup_message (variable)
+        --message → Human→AI message (not a variable)
+        """
         stdin = "stdin content"
-        message = "message content"
+        message = "message content"  # noqa: F841 - message is sent separately
 
-        if stdin and message:
-            result = f"{stdin}\n\nMessage: {message}"
-        elif stdin:
-            result = stdin
-        elif message:
-            result = message
-        else:
-            result = None
+        # $startup_message is set from stdin only
+        startup_message = stdin if stdin else None
 
-        assert result == "stdin content\n\nMessage: message content"
+        assert startup_message == "stdin content"
 
     def test_neither_stdin_nor_message(self):
-        """Test that no input results in None."""
+        """Test that no stdin results in no $startup_message."""
         stdin = None
-        message = None
 
-        if stdin and message:
-            result = f"{stdin}\n\nMessage: {message}"
-        elif stdin:
-            result = stdin
-        elif message:
-            result = message
-        else:
-            result = None
+        # $startup_message is set from stdin only
+        startup_message = stdin if stdin else None
 
-        assert result is None
+        assert startup_message is None

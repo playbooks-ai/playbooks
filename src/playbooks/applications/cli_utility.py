@@ -11,10 +11,12 @@ from typing import Any, Dict, List
 from rich.console import Console
 
 from playbooks import Playbooks
+from playbooks.agents.ai_agent import AIAgent
 from playbooks.applications.streaming_observer import ChannelStreamObserver
 from playbooks.core.constants import EXECUTION_FINISHED
 from playbooks.core.exceptions import ExecutionFinished, InteractiveInputRequired
 from playbooks.infrastructure.user_output import user_output
+from playbooks.llm.messages import AgentCommunicationLLMMessage
 from playbooks.utils.error_utils import check_playbooks_health
 
 console = Console(stderr=True)  # All CLI utility diagnostics to stderr
@@ -154,39 +156,45 @@ async def main(
     # Enable agent streaming if snoop mode is on
     playbooks.program.enable_agent_streaming = snoop
 
-    # Combine stdin and message into $startup_message variable
+    # Set $startup_message from stdin content only
     # Will auto-promote to Artifact if > threshold (500 chars)
-    if stdin_content or message:
-        startup_message = None
-        if stdin_content and message:
-            startup_message = f"{stdin_content}\n\nMessage: {message}"
-        elif stdin_content:
-            startup_message = stdin_content
-        elif message:
-            startup_message = message
-
-        # Set as variable on all AI agents, promoting to Artifact if needed
+    if stdin_content:
         from playbooks.config import config
         from playbooks.state.variables import Artifact
 
         for agent in playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
                 # Check if should be an Artifact based on length threshold
-                if len(str(startup_message)) > config.artifact_result_threshold:
+                if len(str(stdin_content)) > config.artifact_result_threshold:
                     # Create Artifact for large content
                     artifact = Artifact(
                         name="$startup_message",
-                        summary="Startup message from stdin and/or --message flag",
-                        value=startup_message,
+                        summary="Startup message from stdin",
+                        value=stdin_content,
                     )
                     agent.state.variables["$startup_message"] = artifact
                 else:
                     # Regular variable for small content
-                    agent.state.variables["$startup_message"] = startup_message
+                    agent.state.variables["$startup_message"] = stdin_content
 
                 # Reset last_sent_state to ensure this variable is included in first I-frame
                 agent.state.last_sent_state = None
                 agent.state.last_i_frame_execution_id = None
+
+    # Add --message directly to LLM context so it's visible during BGN playbook execution
+    if message:
+        human = playbooks.program.agents_by_id.get("human")
+        human_klass = human.klass if human else "User"
+
+        for agent in playbooks.program.agents:
+            if isinstance(agent, AIAgent):
+                # Add message to top-level LLM messages so it's visible in BGN playbooks
+                agent_comm_msg = AgentCommunicationLLMMessage(
+                    f"Received message from {human_klass}(human): {message}",
+                    sender_agent=human_klass,
+                    target_agent=agent.klass,
+                )
+                agent.state.call_stack.top_level_llm_messages.append(agent_comm_msg)
 
     # Set up CLI stream observer
     stream_observer = CLIStreamObserver(
