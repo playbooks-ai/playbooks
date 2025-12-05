@@ -12,7 +12,7 @@ dynamic = ["dependencies"]
 
 [project.scripts]
 playbooks = "playbooks.cli:main"
-playbooks-shebang = "playbooks.shebang_cli:main"
+pb = "playbooks.shebang_cli:main"
 
 [tool.poetry]
 packages = [{include = "playbooks", from = "src"}]

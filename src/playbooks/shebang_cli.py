@@ -4,7 +4,7 @@
 This module provides the entry point for executing playbook files directly
 with a shebang line, allowing usage like:
 
-    #!/usr/bin/env playbooks-shebang
+    #!/usr/bin/env pb
 
 Then the file can be executed directly:
     ./my_script.pb --arg1 value1 --arg2 value2

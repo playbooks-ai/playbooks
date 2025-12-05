@@ -1,0 +1,14 @@
+#!/usr/bin/env pb
+# Translator
+Simple CLI utility that generates greetings
+
+## Main($target)
+cli_entry: true
+### Triggers
+- At the beginning
+### Steps
+- If $target is a language you can translate to
+  - Say($startup_message translated to $target language)
+- Otherwise
+  - Say that you cannot translate to $target or that $target is not a known language
+- End program

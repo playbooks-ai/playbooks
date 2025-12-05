@@ -31,6 +31,7 @@ import litellm
 from rich.console import Console
 
 from playbooks import Playbooks
+from playbooks.agents.ai_agent import AIAgent
 from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.applications.streaming_observer import (
@@ -343,6 +344,7 @@ async def main(
     stream: bool = True,
     snoop: bool = False,
     initial_state: Optional[Dict[str, Any]] = None,
+    message: Optional[str] = None,
 ) -> None:
     """
     Playbooks application host for agent chat. You can execute a playbooks program within this application container.
@@ -363,6 +365,7 @@ async def main(
         stream: Whether to stream the output
         snoop: Whether to display agent-to-agent messages
         initial_state: Optional initial state variables to set on agents
+        message: Optional message to send from human to first AI agent after initialization
 
     """
     #     f"[DEBUG] agent_chat.main called with stop_on_entry={stop_on_entry}, debug={debug}"
@@ -416,6 +419,23 @@ async def main(
         if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
             wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose)
             agent.state.session_log = wrapper
+
+    # Send message from human to first AI agent if provided
+    if message:
+        human = playbooks.program.agents_by_id.get("human")
+        print("human", human)
+        # Find first AI agent (not human)
+        ai_agent = None
+        for agent in playbooks.program.agents:
+            if isinstance(agent, AIAgent):
+                ai_agent = agent
+                break
+
+        print("ai_agent", ai_agent)
+        if human and ai_agent:
+            await human.SendMessage(ai_agent.id, message)
+            await human.SendMessage(ai_agent.id, EOM)
+            print("ai_agent._message_queue", ai_agent._message_queue)
 
     def log_event(event: Event) -> None:
         print(event)

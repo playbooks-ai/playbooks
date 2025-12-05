@@ -224,6 +224,7 @@ async def run_application(
     stop_on_entry: bool = False,
     snoop: bool = False,
     initial_state: Optional[Dict[str, Any]] = None,
+    message: Optional[str] = None,
 ) -> None:
     """
     Run a playbook using the specified application.
@@ -239,6 +240,7 @@ async def run_application(
         stop_on_entry: Whether to stop at the beginning of playbook execution
         snoop: Whether to display agent-to-agent messages
         initial_state: Optional initial state variables to set on agents
+        message: Optional message to send from human to first AI agent after initialization
     """
     # Import the application module
     try:
@@ -266,6 +268,7 @@ async def run_application(
             stop_on_entry=stop_on_entry,
             snoop=snoop,
             initial_state=initial_state,
+            message=message,
         )
 
     except ImportError as e:
@@ -593,7 +596,6 @@ def main():
             if not sys.stdin.isatty():
                 stdin_content = sys.stdin.read()
 
-            # Route to CLI utility application
             try:
                 from playbooks.applications import cli_utility
 
@@ -619,21 +621,19 @@ def main():
                 sys.exit(1)
 
         # No entry point found or not a CLI utility - run in interactive mode
-        # But still pass stdin and message if provided
+        # Handle stdin and message separately
         initial_state = {}
-        if hasattr(args, "message") and args.message:
-            initial_state["startup_message"] = args.message
-
         stdin_content = None
         if not sys.stdin.isatty():
             stdin_content = sys.stdin.read()
             if stdin_content:
-                if initial_state.get("startup_message"):
-                    initial_state["startup_message"] = (
-                        f"{stdin_content}\n\nMessage: {initial_state['startup_message']}"
-                    )
-                else:
-                    initial_state["startup_message"] = stdin_content
+                # Set startup_message only if stdin is provided
+                initial_state["startup_message"] = stdin_content
+
+        # Get message if provided (will be sent as user message after initialization)
+        message = None
+        if hasattr(args, "message") and args.message:
+            message = args.message
 
         try:
             asyncio.run(
@@ -649,6 +649,7 @@ def main():
                     stop_on_entry=args.stop_on_entry,
                     snoop=args.snoop,
                     initial_state=initial_state if initial_state else None,
+                    message=message,
                 )
             )
         except KeyboardInterrupt:

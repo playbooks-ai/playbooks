@@ -1,4 +1,4 @@
-#!/usr/bin/env playbooks-shebang
+#!/usr/bin/env pb
 # GreetingGenerator
 Simple CLI utility that generates greetings
 

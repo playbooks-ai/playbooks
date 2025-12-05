@@ -4,39 +4,41 @@ This directory demonstrates how to use Playbooks as semantic command-line utilit
 
 ## Quick Examples
 
+NOTE: You will need to make the examples executable by running `chmod +x <example>`.
+
 ### Basic CLI Utility
 ```bash
 # Run with arguments
-playbooks run hello_cli.pb --name "Alice"
+./hello --name "Alice"
 
 # Clean output to file (only stdout captured)
-playbooks run hello_cli.pb --name "Bob" > greeting.txt
+./hello --name "Bob" > greeting.txt
 
 # Completely silent
-playbooks run hello_cli.pb --name "Charlie" --quiet 2>/dev/null > greeting.txt
+./hello --name "Charlie" --quiet 2>/dev/null > greeting.txt
 ```
 
 ### With Natural Language Control
 ```bash
 # Add --message for semantic instructions
-playbooks run hello_cli.pb --name "Dave" --message "Make it sound formal"
+./hello --name "Dave" --message "Make it sound formal"
 
 # Pirate style
-playbooks run hello_cli.pb --name "Eve" --message "Use pirate language"
+./hello --name "Eve" --message "Use pirate language"
 ```
 
 ### Unix-Style Piping
 ```bash
 # Pipe stdin to agent
-cat article.txt | playbooks run summarize_text.pb
+cat example_release_notes.md | ./summarize
 
 # Combine stdin + message
-cat data.txt | playbooks run summarize_text.pb --message "Focus on key metrics"
+cat example_release_notes.md | ./summarize --message "Produce 3-4 bullet points"
 
 # Chain utilities
-cat article.txt | \
-  playbooks run summarize_text.pb | \
-  playbooks run translate.pb --target=spanish
+cat example_release_notes.md | \
+  ./summarize | \
+  ./translate --target=spanish
 ```
 
 ## How It Works
@@ -86,23 +88,23 @@ All Playbooks CLI utilities use proper Unix stream separation:
 This means you can:
 ```bash
 # See everything on terminal
-$ playbooks run script.pb --args
+$ ./script.pb --args
 
 # Pipe clean output, still see diagnostics
-$ playbooks run script.pb --args > output.txt
+$ ./script.pb --args > output.txt
 
 # Suppress diagnostics
-$ playbooks run script.pb --args 2>/dev/null
+$ ./script.pb --args 2>/dev/null
 
 # Save both separately
-$ playbooks run script.pb --args > output.txt 2> debug.log
+$ ./script.pb --args > output.txt 2> debug.log
 ```
 
 ## Available Examples
 
 1. **hello_cli.pb** - Simple greeting generator
 2. **generate_release_notes.pb** - Git commit analyzer
-3. **summarize_text.pb** - Text summarization with stdin
+3. **summarize.pb** - Text summarization with stdin
 
 ## Flags
 
