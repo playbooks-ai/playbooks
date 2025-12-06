@@ -94,7 +94,7 @@ class Playbooks:
                 )
         else:
             # Some files need compilation
-            compiler = Compiler(self.llm_config)
+            compiler = Compiler()
             self.compiled_program_files = compiler.process_files(self.program_files)
 
         # Extract and apply frontmatter from all files (.pb and .pbasm)

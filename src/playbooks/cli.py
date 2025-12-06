@@ -66,7 +66,7 @@ def load_public_json_from_program(
             compiled_contents = [f.content for f in program_files]
         else:
             # Need to compile
-            compiler = Compiler(LLMConfig())
+            compiler = Compiler()
             compiled_results = compiler.process_files(program_files)
             compiled_contents = [r.content for r in compiled_results]
 
@@ -180,8 +180,7 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
     ]
 
     # Let compiler handle all compilation logic
-    llm_config = LLMConfig()
-    compiler = Compiler(llm_config)
+    compiler = Compiler()
     compiled_results = compiler.process_files(program_files)
 
     try:

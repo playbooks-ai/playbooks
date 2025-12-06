@@ -2,11 +2,55 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+from litellm import common_cloud_provider_auth_params, get_llm_provider
+
 from playbooks.config import config
+
 from .env_loader import load_environment
 
 # Load environment variables from .env files
 load_environment()
+
+
+def _uses_credential_auth(model: str, provider: str) -> bool:
+    """Check if the model/provider uses credential-based authentication.
+
+    Some providers (Vertex AI, AWS Bedrock, etc.) use environment-based
+    credentials (gcloud ADC, AWS IAM roles) instead of API keys. For these,
+    we should not require an api_key and let LiteLLM handle authentication.
+
+    Uses LiteLLM's common_cloud_provider_auth_params to determine which
+    providers use cloud-based authentication, plus additional providers
+    that use IAM-based auth (like sagemaker).
+
+    Args:
+        model: The model name/identifier (e.g., "vertex_ai/gemini-1.5-flash")
+        provider: The provider name (e.g., "vertex_ai")
+
+    Returns:
+        True if the provider uses credential-based auth, False otherwise
+    """
+    # Get the list of cloud providers from LiteLLM, plus sagemaker which also
+    # uses AWS IAM credentials but isn't in the common_cloud_provider_auth_params list
+    cloud_providers = set(common_cloud_provider_auth_params.get("providers", []))
+    cloud_providers.add("sagemaker")
+
+    # Check explicit provider first - if user specified a provider, trust it
+    if provider:
+        return provider.lower() in cloud_providers
+
+    # Only use model-based detection if no explicit provider was given
+    # Use lowercase model to handle case-insensitivity
+    if model:
+        try:
+            _, custom_provider, *_ = get_llm_provider(model.lower())
+            if custom_provider and custom_provider.lower() in cloud_providers:
+                return True
+        except Exception:
+            # If LiteLLM can't determine the provider, fall through
+            pass
+
+    return False
 
 
 @dataclass
@@ -76,6 +120,12 @@ class LLMConfig:
 
         # Set appropriate API key based on model provider if none was provided
         if not self.api_key:
+            # Check if this provider uses credential-based auth (Vertex AI, Bedrock, etc.)
+            # These providers don't need an api_key - LiteLLM handles auth via environment
+            if _uses_credential_auth(self.model, self.provider):
+                # Let LiteLLM handle authentication via gcloud ADC, AWS credentials, etc.
+                return
+
             # Use provider field to determine API key, fallback to model name detection
             provider = self.provider.lower() if self.provider else ""
             model = self.model.lower() if self.model else ""
@@ -95,10 +145,10 @@ class LLMConfig:
 
             self.api_key = os.environ.get(api_key_env_var)
 
-        if not self.api_key:
-            raise ValueError(
-                f"Set {api_key_env_var} environment variable to use model {self.model}"
-            )
+            if not self.api_key:
+                raise ValueError(
+                    f"Set {api_key_env_var} environment variable to use model {self.model}"
+                )
 
     def to_dict(self) -> dict:
         """Convert configuration to a dictionary.

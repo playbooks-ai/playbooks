@@ -3,9 +3,9 @@
 from typing import TYPE_CHECKING, Any
 
 from playbooks.compilation.compiler import Compiler
-from playbooks.execution.step import PlaybookStep, PlaybookStepCollection
-from playbooks.utils.llm_config import LLMConfig
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.execution.step import PlaybookStep, PlaybookStepCollection
+
 from .playbook import PlaybookLLMExecution
 
 if TYPE_CHECKING:
@@ -86,9 +86,7 @@ class ReActLLMExecution(PlaybookLLMExecution):
             PlaybookStepCollection: The compiled step collection
         """
         try:
-            # Create compiler with LLM config
-            llm_config = LLMConfig()
-            compiler = Compiler(llm_config)
+            compiler = Compiler()
 
             # Compile the playbook content
             _, compiled_content, _ = compiler.compile(content=playbook_content)

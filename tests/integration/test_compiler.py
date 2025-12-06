@@ -18,40 +18,29 @@ from playbooks.compilation.compiler import (
     FileCompilationSpec,
 )
 from playbooks.core.exceptions import ProgramLoadError
-from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.version import get_playbooks_version
 
 
 @pytest.fixture
-def llm_config():
-    """Create a mock LLM config for testing."""
-    config = Mock(spec=LLMConfig)
-    config.model = "test-model"
-    config.provider = "test-provider"
-    config.api_key = "test-key"
-    config.temperature = 0.7
-    config.copy = Mock(return_value=config)
-    return config
-
-
-@pytest.fixture
-def compiler(llm_config):
-    """Create a compiler instance with mock LLM config."""
+def compiler():
+    """Create a compiler instance."""
     with patch("playbooks.compilation.compiler.config") as mock_config:
         mock_config.model.compilation.name = "test-model"
         mock_config.model.compilation.provider = "test-provider"
         mock_config.model.compilation.temperature = 0.7
-        return Compiler(llm_config, use_cache=True)
+        mock_config.model.compilation.max_completion_tokens = 7500
+        return Compiler(use_cache=True)
 
 
 @pytest.fixture
-def compiler_no_cache(llm_config):
+def compiler_no_cache():
     """Create a compiler instance with caching disabled."""
     with patch("playbooks.compilation.compiler.config") as mock_config:
         mock_config.model.compilation.name = "test-model"
         mock_config.model.compilation.provider = "test-provider"
         mock_config.model.compilation.temperature = 0.7
-        return Compiler(llm_config, use_cache=False)
+        mock_config.model.compilation.max_completion_tokens = 7500
+        return Compiler(use_cache=False)
 
 
 @pytest.fixture
@@ -794,20 +783,21 @@ No H1 headers here
 class TestLLMConfiguration:
     """Test LLM configuration handling."""
 
-    def test_llm_config_initialization(self, llm_config):
+    def test_llm_config_initialization(self):
         """Test that LLM config is properly initialized."""
         with patch("playbooks.compilation.compiler.config") as mock_config:
             mock_config.model.compilation.name = "claude-3"
             mock_config.model.compilation.provider = "anthropic"
             mock_config.model.compilation.temperature = 0.5
+            mock_config.model.compilation.max_completion_tokens = 7500
 
-            compiler = Compiler(llm_config)
+            compiler = Compiler()
 
             assert compiler.llm_config.model == "claude-3"
             assert compiler.llm_config.provider == "anthropic"
             assert compiler.llm_config.temperature == 0.5
 
-    def test_api_key_determination(self, llm_config):
+    def test_api_key_determination(self):
         """Test API key determination based on model."""
         test_cases = [
             ("claude-3", "ANTHROPIC_API_KEY", "anthropic-key"),
@@ -822,33 +812,95 @@ class TestLLMConfiguration:
                 mock_config.model.compilation.name = model
                 mock_config.model.compilation.provider = "test"
                 mock_config.model.compilation.temperature = 0.7
+                mock_config.model.compilation.max_completion_tokens = 7500
 
                 with patch.dict("os.environ", {env_var: expected_key}):
-                    compiler = Compiler(llm_config)
+                    compiler = Compiler()
                     assert compiler.llm_config.api_key == expected_key
+
+    def test_vertex_ai_no_api_key_required(self):
+        """Test that Vertex AI models don't require an API key.
+
+        Vertex AI uses gcloud Application Default Credentials (ADC) instead of API keys.
+        LiteLLM handles this authentication automatically when api_key is None.
+        See: https://github.com/playbooks-ai/playbooks/issues/73
+        """
+        with patch("playbooks.compilation.compiler.config") as mock_config:
+            mock_config.model.compilation.name = "vertex_ai/gemini-1.5-flash"
+            mock_config.model.compilation.provider = "vertex_ai"
+            mock_config.model.compilation.temperature = 0.7
+            mock_config.model.compilation.max_completion_tokens = 7500
+
+            # No API key environment variables set - should not raise
+            with patch.dict("os.environ", {}, clear=True):
+                compiler = Compiler()
+                # API key should be None - LiteLLM will use gcloud ADC
+                assert compiler.llm_config.api_key is None
+                assert compiler.llm_config.model == "vertex_ai/gemini-1.5-flash"
+                assert compiler.llm_config.provider == "vertex_ai"
+
+    def test_bedrock_no_api_key_required(self):
+        """Test that AWS Bedrock models don't require an API key.
+
+        Bedrock uses AWS credential chain instead of API keys.
+        LiteLLM handles this authentication automatically when api_key is None.
+        """
+        with patch("playbooks.compilation.compiler.config") as mock_config:
+            mock_config.model.compilation.name = "bedrock/anthropic.claude-v2"
+            mock_config.model.compilation.provider = "bedrock"
+            mock_config.model.compilation.temperature = 0.7
+            mock_config.model.compilation.max_completion_tokens = 7500
+
+            # No API key environment variables set - should not raise
+            with patch.dict("os.environ", {}, clear=True):
+                compiler = Compiler()
+                # API key should be None - LiteLLM will use AWS credentials
+                assert compiler.llm_config.api_key is None
+                assert compiler.llm_config.model == "bedrock/anthropic.claude-v2"
+
+    def test_vertex_ai_claude_no_api_key_required(self):
+        """Test that Claude models on Vertex AI don't require ANTHROPIC_API_KEY.
+
+        When using Claude via Vertex AI (vertex_ai/claude-*), authentication
+        should use gcloud ADC, not ANTHROPIC_API_KEY.
+        See: https://github.com/playbooks-ai/playbooks/issues/73
+        """
+        with patch("playbooks.compilation.compiler.config") as mock_config:
+            mock_config.model.compilation.name = "vertex_ai/claude-sonnet-4"
+            mock_config.model.compilation.provider = "vertex_ai"
+            mock_config.model.compilation.temperature = 0.7
+            mock_config.model.compilation.max_completion_tokens = 7500
+
+            # No API keys set - should work because Vertex AI uses ADC
+            with patch.dict("os.environ", {}, clear=True):
+                compiler = Compiler()
+                assert compiler.llm_config.api_key is None
+                assert compiler.llm_config.model == "vertex_ai/claude-sonnet-4"
 
 
 class TestPromptHandling:
     """Test compiler prompt handling."""
 
-    def test_prompt_loading(self, llm_config):
+    def test_prompt_loading(self):
         """Test that compiler prompt is loaded correctly."""
         with patch("playbooks.compilation.compiler.config") as mock_config:
             mock_config.model.compilation.name = "test-model"
             mock_config.model.compilation.provider = "test"
             mock_config.model.compilation.temperature = 0.7
+            mock_config.model.compilation.max_completion_tokens = 7500
 
-            compiler = Compiler(llm_config)
+            compiler = Compiler()
 
             assert compiler.compiler_prompt is not None
             assert "Playbooks Assembly Language Compiler" in compiler.compiler_prompt
 
-    def test_prompt_file_not_found(self, llm_config):
+    def test_prompt_file_not_found(self):
         """Test error handling when prompt file is not found."""
         with patch("playbooks.compilation.compiler.config") as mock_config:
             mock_config.model.compilation.name = "test-model"
             mock_config.model.compilation.provider = "test"
             mock_config.model.compilation.temperature = 0.7
+            mock_config.model.compilation.max_completion_tokens = 7500
 
             with patch(
                 "builtins.open", side_effect=FileNotFoundError("Prompt not found")
@@ -856,7 +908,7 @@ class TestPromptHandling:
                 with pytest.raises(
                     ProgramLoadError, match="Error reading prompt template"
                 ):
-                    Compiler(llm_config)
+                    Compiler()
 
 
 class TestParallelCompilation:

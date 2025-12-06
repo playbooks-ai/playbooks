@@ -56,33 +56,20 @@ class Compiler:
     Uses agent-level caching to avoid redundant LLM calls.
     """
 
-    def __init__(self, llm_config: LLMConfig, use_cache: bool = True) -> None:
+    def __init__(self, use_cache: bool = True) -> None:
         """
-        Initialize the compiler with LLM configuration.
+        Initialize the compiler.
 
         Args:
-            llm_config: Configuration for the language model
             use_cache: Whether to use compilation caching
         """
         compilation_model = config.model.compilation
-
-        self.llm_config = llm_config.copy()
-        self.llm_config.model = compilation_model.name
-        self.llm_config.provider = compilation_model.provider
-        self.llm_config.temperature = compilation_model.temperature
-
-        # Re-determine API key after model change
-        if "claude" in self.llm_config.model:
-            self.llm_config.api_key = os.environ.get("ANTHROPIC_API_KEY")
-        elif "gemini" in self.llm_config.model:
-            self.llm_config.api_key = os.environ.get("GEMINI_API_KEY")
-        elif "groq" in self.llm_config.model:
-            self.llm_config.api_key = os.environ.get("GROQ_API_KEY")
-        elif "openrouter" in self.llm_config.model:
-            self.llm_config.api_key = os.environ.get("OPENROUTER_API_KEY")
-        else:
-            # Default to OpenAI for other models
-            self.llm_config.api_key = os.environ.get("OPENAI_API_KEY")
+        self.llm_config = LLMConfig(
+            model=compilation_model.name,
+            provider=compilation_model.provider,
+            temperature=compilation_model.temperature,
+            max_completion_tokens=compilation_model.max_completion_tokens,
+        )
 
         self.use_cache = use_cache
         self.prompt_path = os.path.join(

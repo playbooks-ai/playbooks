@@ -6,7 +6,6 @@ to all agents, including messaging, artifact handling, and system operations.
 
 from playbooks.compilation.compiler import Compiler
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
-from playbooks.utils.llm_config import LLMConfig
 
 
 class BuiltinPlaybooks:
@@ -148,8 +147,7 @@ hidden: true
     @staticmethod
     def get_llm_playbooks_ast_nodes():
         markdown = BuiltinPlaybooks.get_llm_playbooks_markdown()
-        llm_config = LLMConfig()
-        compiler = Compiler(llm_config)
+        compiler = Compiler()
 
         # Compile the playbooks content
         _, compiled_content, compiled_file_path = compiler.compile(content=markdown)
