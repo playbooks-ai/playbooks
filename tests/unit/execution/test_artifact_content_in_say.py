@@ -6,10 +6,10 @@ import pytest
 
 from playbooks.agents.ai_agent import AIAgent
 from playbooks.core.argument_types import LiteralValue, VariableReference
-from playbooks.state.call_stack import CallStackFrame, InstructionPointer
-from playbooks.infrastructure.event_bus import EventBus
-from playbooks.state.execution_state import ExecutionState
 from playbooks.execution.call import PlaybookCall
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.call_stack import CallStackFrame, InstructionPointer
+from playbooks.state.execution_state import ExecutionState
 from playbooks.state.variables import Artifact
 
 
@@ -41,10 +41,8 @@ def agent(event_bus):
     agent = MockAIAgent(event_bus)
     agent.state = ExecutionState(event_bus, "MockAIAgent", "test-agent-id")
 
-    # Mock the execution summary variable
-    mock_execution_summary = Mock()
-    mock_execution_summary.value = "Test execution summary"
-    agent.state.variables.variables["$__"] = mock_execution_summary
+    # Mock the execution summary variable (__ uses bracket notation)
+    agent.state.variables["__"] = "Test execution summary"
 
     # Push a frame onto the call stack
     instruction_pointer = InstructionPointer("TestPlaybook", "1", 1)
@@ -68,8 +66,8 @@ async def test_artifact_content_in_say_direct_argument(agent):
         value="Detailed report content\nWith multiple lines\nAnd important data",
     )
 
-    # Store it in variables - Artifact IS a Variable, so store it directly
-    agent.state.variables.variables["$report"] = artifact
+    # Store it in variables (no $ prefix)
+    agent.state.variables.report = artifact
 
     # Mock the Say playbook with execute method
     mock_playbook = Mock(name="Say", meeting=False)
@@ -119,8 +117,8 @@ async def test_artifact_interpolation_in_string(agent):
         value="The answer is 42",
     )
 
-    # Store it in variables - Artifact IS a Variable, so store it directly
-    agent.state.variables.variables["$answer"] = artifact
+    # Store it in variables (no $ prefix)
+    agent.state.variables.answer = artifact
 
     # Mock the Say playbook with execute method
     mock_playbook = Mock(name="Say", meeting=False)
@@ -161,9 +159,9 @@ async def test_multiple_artifact_interpolations(agent):
     artifact1 = Artifact(name="name", summary="Name", value="John Doe")
     artifact2 = Artifact(name="age", summary="Age", value="30")
 
-    # Store in variables - Artifacts ARE Variables, so store them directly
-    agent.state.variables.variables["$name"] = artifact1
-    agent.state.variables.variables["$age"] = artifact2
+    # Store in variables (no $ prefix)
+    agent.state.variables.name = artifact1
+    agent.state.variables.age = artifact2
 
     # Mock the Say playbook with execute method
     mock_playbook = Mock(name="Say", meeting=False)
@@ -201,8 +199,8 @@ async def test_artifact_in_kwargs(agent):
     # Create an artifact
     artifact = Artifact(name="data", summary="Data Summary", value="Important data")
 
-    # Store it in variables - Artifact IS a Variable, so store it directly
-    agent.state.variables.variables["$data"] = artifact
+    # Store it in variables (no $ prefix)
+    agent.state.variables.data = artifact
 
     # Mock a custom playbook with execute method
     mock_playbook = Mock(name="CustomPlaybook", meeting=False)
@@ -239,8 +237,8 @@ async def test_string_interpolation_in_kwargs(agent):
     # Create an artifact
     artifact = Artifact(name="title", summary="Title", value="Report Title")
 
-    # Store it in variables - Artifact IS a Variable, so store it directly
-    agent.state.variables.variables["$title"] = artifact
+    # Store it in variables (no $ prefix)
+    agent.state.variables.title = artifact
 
     # Mock a custom playbook with execute method
     mock_playbook = Mock(name="CustomPlaybook", meeting=False)
@@ -273,9 +271,9 @@ async def test_string_interpolation_in_kwargs(agent):
 @pytest.mark.asyncio
 async def test_non_artifact_values_unchanged(agent):
     """Test that non-artifact values are not affected by the changes."""
-    # Store regular values in variables
-    agent.state.variables["$name"] = "Alice"
-    agent.state.variables["$count"] = 42
+    # Store regular values in variables (no $ prefix)
+    agent.state.variables.name = "Alice"
+    agent.state.variables.count = 42
 
     # Mock the Say playbook with execute method
     mock_playbook = Mock(name="Say", meeting=False)
@@ -310,9 +308,9 @@ async def test_non_artifact_values_unchanged(agent):
 @pytest.mark.asyncio
 async def test_interpolation_with_expressions(agent):
     """Test that complex expressions work in interpolation."""
-    # Store values in variables
-    agent.state.variables["$price"] = 99.99
-    agent.state.variables["$quantity"] = 3
+    # Store values in variables (no $ prefix)
+    agent.state.variables.price = 99.99
+    agent.state.variables.quantity = 3
 
     # Mock the Say playbook with execute method
     mock_playbook = Mock(name="Say", meeting=False)

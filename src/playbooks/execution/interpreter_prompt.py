@@ -21,7 +21,6 @@ from playbooks.llm.messages import (
 )
 from playbooks.llm.messages.types import FrameType
 from playbooks.playbook import Playbook
-from playbooks.state.variables import Variable
 from playbooks.utils.llm_helper import get_messages_for_prompt
 from playbooks.utils.token_counter import get_messages_token_count
 
@@ -45,8 +44,6 @@ class SetEncoder(json.JSONEncoder):
             return list(obj)
         if obj is Ellipsis:
             return "..."
-        if isinstance(obj, Variable):
-            return json.JSONEncoder.default(self, obj.value)
         # Handle module objects and other non-serializable types
         if isinstance(obj, types.ModuleType):
             return f"<module: {obj.__name__}>"
@@ -136,6 +133,43 @@ class InterpreterPrompt:
         parts.append("```")
         return AgentInfoLLMMessage("\n".join(parts)).to_full_message()
 
+    def _add_artifact_hints(self, state_json: str, state_dict: Dict[str, Any]) -> str:
+        """Add artifact load status hints to state JSON.
+
+        Args:
+            state_json: JSON string representation of state
+            state_dict: State dictionary
+
+        Returns:
+            JSON string with artifact hints added
+        """
+        variables = state_dict.get("variables", {})
+        if not variables:
+            return state_json
+
+        lines = state_json.split("\n")
+        for i, line in enumerate(lines):
+            for var_name, var_value in variables.items():
+                if isinstance(var_value, str) and var_value.startswith("Artifact:"):
+                    if f'"{var_name}":' in line:
+                        is_loaded = self.execution_state.call_stack.is_artifact_loaded(
+                            var_name
+                        )
+                        if is_loaded:
+                            lines[i] = (
+                                line.rstrip(",")
+                                + "  // content loaded above"
+                                + ("," if line.rstrip().endswith(",") else "")
+                            )
+                        else:
+                            lines[i] = (
+                                line.rstrip(",")
+                                + f"  // not loaded: use LoadArtifact('{var_name}') to load"
+                                + ("," if line.rstrip().endswith(",") else "")
+                            )
+
+        return "\n".join(lines)
+
     @property
     def prompt(self) -> str:
         """Constructs the full prompt string for the LLM.
@@ -175,6 +209,10 @@ class InterpreterPrompt:
                 "Current state" if self.frame_type == FrameType.I else "State changes"
             )
             state_json = json.dumps(state_dict, indent=2, cls=SetEncoder)
+
+            # Add artifact load status hints
+            state_json = self._add_artifact_hints(state_json, state_dict)
+
             state_block = f"""*{title}*
 ```json
 {state_json}

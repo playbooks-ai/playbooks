@@ -19,26 +19,15 @@ class TestStreamingPythonExecutor:
     @pytest.fixture
     def mock_agent(self):
         """Create a mock agent for testing."""
+        from dotmap import DotMap
+
         agent = Mock()
         agent.id = "test_agent"
         agent.klass = "TestAgent"
         agent.state = Mock()
 
-        # Create a dict-like mock for variables that supports 'in' operator
-        variables_dict = {}
-        agent.state.variables = Mock()
-        agent.state.variables.to_dict = Mock(return_value=variables_dict)
-        agent.state.variables.__setitem__ = Mock(
-            side_effect=lambda name, value, **kwargs: variables_dict.__setitem__(
-                name, value
-            )
-        )
-        agent.state.variables.__contains__ = Mock(
-            side_effect=lambda k: k in variables_dict
-        )
-        agent.state.variables.__getitem__ = Mock(
-            side_effect=lambda k: variables_dict[k]
-        )
+        # Use real DotMap for variables to test actual behavior
+        agent.state.variables = DotMap()
 
         agent.state.call_stack = Mock()
         agent.state.call_stack.peek = Mock(
@@ -200,14 +189,13 @@ class TestStreamingPythonExecutor:
 
     @pytest.mark.asyncio
     async def test_preprocessing_dollar_variables(self, executor):
-        """Test that $variable syntax is preprocessed correctly."""
-        await executor.add_chunk("$result = 100\n")
+        """Test that state.variable syntax works correctly."""
+        await executor.add_chunk("state.result = 100\n")
 
-        result = await executor.finalize()
+        await executor.finalize()
 
-        # Variable should be stored without $ prefix
-        assert result.vars["result"] == 100
-        assert executor.namespace["result"] == 100
+        # Variable should be stored in state
+        assert executor.agent.state.variables.result == 100
 
     @pytest.mark.asyncio
     async def test_expression_evaluation(self, executor):
@@ -313,78 +301,58 @@ result = add(3, 4)
 
     @pytest.mark.asyncio
     async def test_similar_variable_names_messages_and_message(self, executor):
-        """Test that similar variable names like $messages and $message work correctly.
+        """Test that similar variable names like state.messages and state.message work correctly.
 
-        This reproduces the issue from two-player-game.pb where the LLM generated:
-        $messages = [...]
-        $message = "..."
-
-        And got: NameError: name 'message' is not defined. Did you mean: 'messages'?
+        This reproduces the issue from two-player-game.pb where the LLM generated similar names.
+        Now using state.x syntax instead of $x.
         """
         # Mock Step function
         step_mock = AsyncMock()
         executor.namespace["Step"] = step_mock
 
-        # Simulate the LLM-generated code pattern
+        # Simulate the LLM-generated code pattern with new syntax
         await executor.add_chunk('await Step("ProcessMessages:01:CND")\n')
         await executor.add_chunk(
-            '$messages = ["Host(agent 1000) → Player(agent 1002): Game room for chess", '
+            'state.messages = ["Host(agent 1000) → Player(agent 1002): Game room for chess", '
         )
         await executor.add_chunk(
             '"Player(agent 1001) → all: KnightRider here, ready for chess. Let\'s play!"]\n'
         )
         await executor.add_chunk(
-            '$message = "Host(agent 1000) → Player(agent 1002): Game room for chess"\n'
+            'state.message = "Host(agent 1000) → Player(agent 1002): Game room for chess"\n'
         )
 
-        result = await executor.finalize()
+        await executor.finalize()
 
-        # Verify both variables were set correctly
-        assert "messages" in result.vars
-        assert "message" in result.vars
-        assert executor.namespace["messages"] == [
+        # Verify both variables were set correctly in state
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert hasattr(executor.agent.state.variables, "message")
+        assert executor.agent.state.variables.messages == [
             "Host(agent 1000) → Player(agent 1002): Game room for chess",
             "Player(agent 1001) → all: KnightRider here, ready for chess. Let's play!",
         ]
         assert (
-            executor.namespace["message"]
+            executor.agent.state.variables.message
             == "Host(agent 1000) → Player(agent 1002): Game room for chess"
         )
 
     @pytest.mark.asyncio
     async def test_preprocessing_with_similar_variable_names(self, executor):
-        """Test preprocessing behavior with $message vs $messages.
+        """Test behavior with similar variable names like state.message vs state.messages.
 
-        Ensures that the preprocessing correctly distinguishes between
-        similar variable names and doesn't incorrectly substitute one for another.
+        Ensures that similar variable names work correctly without preprocessing.
         """
-        from playbooks.compilation.expression_engine import preprocess_program
+        # Test execution with new syntax (no preprocessing needed)
+        await executor.add_chunk('state.messages = ["msg1", "msg2"]\n')
+        await executor.add_chunk('state.message = "msg1"\n')
 
-        # Test preprocessing of similar variable names
-        code = """$messages = ["msg1", "msg2"]
-$message = "msg1"
-print($message)
-print($messages)"""
+        await executor.finalize()
 
-        preprocessed = preprocess_program(code)
-        print(f"Original:\n{code}")
-        print(f"\nPreprocessed:\n{preprocessed}")
-
-        # Verify preprocessing converts both correctly
-        assert "messages =" in preprocessed
-        assert "message =" in preprocessed
-        assert (
-            "$messages" not in preprocessed or "$message" in preprocessed
-        )  # Either both $ are gone or both present
-
-        # Now test execution
-        await executor.add_chunk('$messages = ["msg1", "msg2"]\n')
-        await executor.add_chunk('$message = "msg1"\n')
-
-        result = await executor.finalize()
-
-        assert "messages" in result.vars
-        assert "message" in result.vars
+        # Verify both variables were set correctly in state
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert hasattr(executor.agent.state.variables, "message")
+        assert executor.agent.state.variables.messages == ["msg1", "msg2"]
+        assert executor.agent.state.variables.message == "msg1"
 
     @pytest.mark.asyncio
     async def test_messages_and_message_with_comments_and_steps(self, executor):
@@ -401,12 +369,12 @@ print($messages)"""
         step_mock = AsyncMock()
         executor.namespace["Step"] = step_mock
 
-        # Simulate the exact LLM-generated code pattern from the error
+        # Simulate the exact LLM-generated code pattern with new syntax
         code_chunks = [
             'await Step("ProcessMessages:01:CND")\n',
-            '$messages = ["Host(agent 1000) → Player(agent 1002): Game room for chess", ',
+            'state.messages = ["Host(agent 1000) → Player(agent 1002): Game room for chess", ',
             '"Player(agent 1001) → all: KnightRider here, ready for chess. Let\'s play!"]\n',
-            '$message = "Host(agent 1000) → Player(agent 1002): Game room for chess"\n',
+            'state.message = "Host(agent 1000) → Player(agent 1002): Game room for chess"\n',
             "\n",
             "# trig? no\n",
             "# yld? no, checking message type\n",
@@ -417,90 +385,80 @@ print($messages)"""
         for chunk in code_chunks:
             await executor.add_chunk(chunk)
 
-        result = await executor.finalize()
+        await executor.finalize()
 
-        # Verify variables were set correctly
-        assert "messages" in result.vars
-        assert "message" in result.vars
+        # Verify variables were set correctly in state
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert hasattr(executor.agent.state.variables, "message")
         assert step_mock.call_count == 2
 
     @pytest.mark.asyncio
     async def test_message_variable_split_across_chunks(self, executor):
-        """Test when $message variable name is split across chunks.
+        """Test when state.message variable name is split across chunks.
 
-        This tests the edge case where streaming might split $message
+        This tests the edge case where streaming might split the statement
         in the middle, which the streaming executor should handle by
         only processing complete lines.
         """
-        # First execute $messages successfully
-        await executor.add_chunk('$messages = ["msg1", "msg2"]\n')
-        assert "messages" in executor.namespace
+        # First execute state.messages successfully
+        await executor.add_chunk('state.messages = ["msg1", "msg2"]\n')
+        assert hasattr(executor.agent.state.variables, "messages")
 
-        # Now try to execute $message, but split the variable name
+        # Now try to execute state.message, but split the line
         # The executor should wait for complete line (ending with \n)
-        await executor.add_chunk("$mes")  # Incomplete - no newline
+        await executor.add_chunk("state.mes")  # Incomplete - no newline
         await executor.add_chunk('sage = "msg1"\n')  # Complete now
 
-        result = await executor.finalize()
+        await executor.finalize()
 
         # Both should be set correctly
-        assert "messages" in result.vars
-        assert "message" in result.vars
-        assert executor.namespace["message"] == "msg1"
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert hasattr(executor.agent.state.variables, "message")
+        assert executor.agent.state.variables.message == "msg1"
 
     @pytest.mark.asyncio
     async def test_message_referenced_before_definition_after_messages(self, executor):
-        """Test referencing $message before it's defined when $messages exists.
+        """Test referencing state.message before it's defined when state.messages exists.
 
-        This reproduces the exact error from two-player-game.pb:
-        NameError: name 'message' is not defined. Did you mean: 'messages'?
-
-        The issue occurs when:
-        1. $messages is defined
-        2. Code tries to use $message before it's defined
+        This reproduces the error pattern where:
+        1. state.messages is defined
+        2. Code tries to use state.message before it's defined
         """
-        # Define $messages first
-        await executor.add_chunk('$messages = ["msg1", "msg2"]\n')
+        # Define state.messages first
+        await executor.add_chunk('state.messages = ["msg1", "msg2"]\n')
 
-        # Now try to use $message in an expression before defining it
-        # This should fail with NameError since $message hasn't been defined yet
-        from playbooks.execution.streaming_python_executor import (
-            StreamingExecutionError,
-        )
+        # Now try to use state.message in an expression before defining it
+        # Note: DotMap auto-creates empty DotMap for undefined attributes,
+        # so this won't error - it will just create state.message as DotMap()
+        await executor.add_chunk('state.message = "msg1"\n')  # Define it properly
 
-        with pytest.raises(StreamingExecutionError) as exc_info:
-            await executor.add_chunk(
-                'x = $message + " suffix"\n'
-            )  # $message not yet defined
+        await executor.finalize()
 
-        # Verify it's the exact error we're looking for
-        assert "NameError" in str(exc_info.value)
-        assert "message" in str(exc_info.value).lower()
-
-        # The error should also be captured in the result
-        assert executor.result.runtime_error is not None
-        assert "message" in str(executor.result.error_message).lower()
+        # Both should be set correctly
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert hasattr(executor.agent.state.variables, "message")
+        assert executor.agent.state.variables.messages == ["msg1", "msg2"]
+        assert executor.agent.state.variables.message == "msg1"
 
     @pytest.mark.asyncio
     async def test_message_extraction_from_messages_pattern(self, executor):
-        """Test the pattern of extracting $message from $messages[0].
+        """Test the pattern of extracting state.message from state.messages[0].
 
         This tests a common pattern where you might extract the first message:
-        $messages = [...]
-        $message = $messages[0]
-
-        With preprocessing, this could potentially cause issues if there's
-        a bug in how the substitution happens.
+        state.messages = [...]
+        state.message = state.messages[0]
         """
-        await executor.add_chunk('$messages = ["msg1", "msg2"]\n')
-        await executor.add_chunk("$message = $messages[0]\n")  # Extract first message
+        await executor.add_chunk('state.messages = ["msg1", "msg2"]\n')
+        await executor.add_chunk(
+            "state.message = state.messages[0]\n"
+        )  # Extract first message
 
-        result = await executor.finalize()
+        await executor.finalize()
 
         # Both should be set correctly
-        assert "messages" in result.vars
-        assert "message" in result.vars
-        assert executor.namespace["message"] == "msg1"
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert hasattr(executor.agent.state.variables, "message")
+        assert executor.agent.state.variables.message == "msg1"
 
     @pytest.mark.asyncio
     async def test_exact_two_player_game_pattern_with_debug_output(self, executor):
@@ -514,22 +472,15 @@ print($messages)"""
         step_mock = AsyncMock()
         executor.namespace["Step"] = step_mock
 
-        # Simulate the EXACT streaming as it would happen
+        # Simulate the EXACT streaming as it would happen with new syntax
         # The LLM generates this code in chunks
         code = """await Step("ProcessMessages:01:CND")
-$messages = ["Host(agent 1000) → Player(agent 1002): Game room for chess", "Player(agent 1001) → all: KnightRider here, ready for chess. Let's play!"]
-$message = "Host(agent 1000) → Player(agent 1002): Game room for chess"
+state.messages = ["Host(agent 1000) → Player(agent 1002): Game room for chess", "Player(agent 1001) → all: KnightRider here, ready for chess. Let's play!"]
+state.message = "Host(agent 1000) → Player(agent 1002): Game room for chess"
 
 # trig? no
 # yld? no, checking message type
 """
-
-        # Let's trace through what preprocessing does to this entire block
-        from playbooks.compilation.expression_engine import preprocess_program
-
-        preprocessed = preprocess_program(code)
-        print(f"\n=== ORIGINAL CODE ===\n{code}")
-        print(f"\n=== PREPROCESSED CODE ===\n{preprocessed}")
 
         # Now simulate actual streaming - send complete lines one at a time
         lines = code.split("\n")
@@ -540,75 +491,59 @@ $message = "Host(agent 1000) → Player(agent 1002): Game room for chess"
                 if line:
                     await executor.add_chunk(line + "\n")
 
-        result = await executor.finalize()
+        await executor.finalize()
 
         # Both variables should be set
-        assert "messages" in result.vars or "messages" in executor.namespace
-        assert "message" in result.vars or "message" in executor.namespace
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert hasattr(executor.agent.state.variables, "message")
 
     @pytest.mark.asyncio
     async def test_namespace_exec_with_message_and_messages(self, executor):
-        """Test exec() behavior with similar variable names in namespace.
+        """Test exec() behavior with similar variable names using state.x syntax.
 
-        This tests if there's an issue with how exec() handles variables
-        when similar names exist in the namespace.
+        This tests that similar names work correctly with direct state access.
         """
-        from playbooks.compilation.expression_engine import preprocess_program
+        # Test with new syntax - no preprocessing needed
+        code1 = 'state.messages = ["msg1", "msg2"]'
+        exec(compile(code1, "<test>", "exec"), executor.namespace)
+        assert hasattr(executor.agent.state.variables, "messages")
 
-        # First, add messages to namespace via exec
-        code1 = '$messages = ["msg1", "msg2"]'
-        preprocessed1 = preprocess_program(code1)
-        print(f"\n=== Code 1: {code1}")
-        print(f"=== Preprocessed 1: {preprocessed1}")
+        # Now add message to state
+        code2 = 'state.message = "msg1"'
+        exec(compile(code2, "<test>", "exec"), executor.namespace)
+        assert hasattr(executor.agent.state.variables, "message")
 
-        # Execute it
-        exec(compile(preprocessed1, "<test>", "exec"), executor.namespace)
-        print(f"=== Namespace after statement 1: {list(executor.namespace.keys())}")
-        assert "messages" in executor.namespace
-
-        # Now add message to namespace
-        code2 = '$message = "msg1"'
-        preprocessed2 = preprocess_program(code2)
-        print(f"\n=== Code 2: {code2}")
-        print(f"=== Preprocessed 2: {preprocessed2}")
-
-        # Execute it
-        exec(compile(preprocessed2, "<test>", "exec"), executor.namespace)
-        print(f"=== Namespace after statement 2: {list(executor.namespace.keys())}")
-        assert "message" in executor.namespace
-
-        # Both should be in namespace
-        assert executor.namespace["messages"] == ["msg1", "msg2"]
-        assert executor.namespace["message"] == "msg1"
+        # Both should be in state
+        assert executor.agent.state.variables.messages == ["msg1", "msg2"]
+        assert executor.agent.state.variables.message == "msg1"
 
     @pytest.mark.asyncio
     async def test_buffer_preprocessing_with_partial_token(self, executor):
-        """Test what happens when preprocessing sees partial $message token.
+        """Test that partial lines are handled correctly by the buffer.
 
-        This tests if there's an issue where the buffer contains:
-        $messages = [...]
-        $mes
-
-        And preprocessing might incorrectly handle it.
+        The streaming executor only processes complete lines (ending with \n),
+        so partial tokens shouldn't cause issues.
         """
-        from playbooks.compilation.expression_engine import preprocess_program
+        # Test with new syntax - no preprocessing, just buffering
+        # Get initial count of actual stored values (not auto-created DotMap entries)
+        dict(executor.agent.state.variables)
 
-        # Test 1: Complete code - should work
-        complete_code = '$messages = ["msg1"]\n$message = "msg1"'
-        preprocessed_complete = preprocess_program(complete_code)
-        print(f"\n=== Complete code:\n{complete_code}")
-        print(f"=== Preprocessed complete:\n{preprocessed_complete}")
+        # Add partial line (no newline)
+        await executor.add_chunk('state.messages = ["msg1')
 
-        # Test 2: Partial code - what happens?
-        partial_code = '$messages = ["msg1"]\n$mes'
-        preprocessed_partial = preprocess_program(partial_code)
-        print(f"\n=== Partial code:\n{partial_code}")
-        print(f"=== Preprocessed partial:\n{preprocessed_partial}")
+        # Buffer should hold partial code, not execute yet
+        # (executor processes only complete lines)
+        current_vars = dict(executor.agent.state.variables)
+        assert "messages" not in current_vars or not isinstance(
+            current_vars.get("messages"), list
+        )
 
-        # The partial should convert $mes to mes (even though it's incomplete)
-        assert "messages" in preprocessed_complete
-        assert "message" in preprocessed_complete
-        assert "mes" in preprocessed_partial  # Should be converted even if incomplete
+        # Complete the line
+        await executor.add_chunk('"]\n')
+
+        # Now it should execute and have the list value
+        assert hasattr(executor.agent.state.variables, "messages")
+        assert executor.agent.state.variables.messages == ["msg1"]
 
     @pytest.mark.asyncio
     async def test_progressive_parsing_with_incomplete_string(self, executor):

@@ -364,16 +364,12 @@ class CallStack:
         """Check if an artifact is loaded in any frame.
 
         Args:
-            artifact_name: The name of the artifact (with or without $ prefix).
+            artifact_name: The name of the artifact
 
         Returns:
             True if the artifact is loaded in any frame, False otherwise.
         """
         from playbooks.llm.messages.types import ArtifactLLMMessage
-
-        # Normalize artifact name to include $ prefix
-        if not artifact_name.startswith("$"):
-            artifact_name = f"${artifact_name}"
 
         for frame in self.frames:
             for msg in frame.llm_messages:

@@ -3,8 +3,9 @@
 Tests the full flow of streaming execution in playbook contexts.
 """
 
-import pytest
 from unittest.mock import AsyncMock, Mock
+
+import pytest
 
 from playbooks.execution.streaming_python_executor import StreamingPythonExecutor
 
@@ -15,26 +16,15 @@ class TestStreamingExecutionIntegration:
     @pytest.fixture
     def mock_agent(self):
         """Create a comprehensive mock agent."""
+        from dotmap import DotMap
+
         agent = Mock()
         agent.id = "test_agent"
         agent.klass = "TestAgent"
         agent.state = Mock()
 
-        # Create a dict-like mock for variables that supports 'in' operator
-        variables_dict = {}
-        agent.state.variables = Mock()
-        agent.state.variables.to_dict = Mock(return_value=variables_dict)
-        agent.state.variables.__setitem__ = Mock(
-            side_effect=lambda name, value, **kwargs: variables_dict.__setitem__(
-                name, value
-            )
-        )
-        agent.state.variables.__contains__ = Mock(
-            side_effect=lambda k: k in variables_dict
-        )
-        agent.state.variables.__getitem__ = Mock(
-            side_effect=lambda k: variables_dict[k]
-        )
+        # Use real DotMap for variables to test actual behavior
+        agent.state.variables = DotMap()
 
         agent.state.call_stack = Mock()
         agent.state.call_stack.peek = Mock(
@@ -125,20 +115,19 @@ y = 20
 
     @pytest.mark.asyncio
     async def test_variable_state_updates(self, mock_agent):
-        """Test that variables are properly stored in agent state."""
+        """Test that variables are properly stored in agent state using state.x syntax."""
         streaming_executor = StreamingPythonExecutor(mock_agent)
 
-        await streaming_executor.add_chunk("user_name = 'Alice'\n")
-        await streaming_executor.add_chunk("user_age = 30\n")
+        await streaming_executor.add_chunk("state.user_name = 'Alice'\n")
+        await streaming_executor.add_chunk("state.user_age = 30\n")
 
-        result = await streaming_executor.finalize()
+        await streaming_executor.finalize()
 
-        # Verify variables were captured
-        assert result.vars["user_name"] == "Alice"
-        assert result.vars["user_age"] == 30
-
-        # Verify state was updated (via mock)
-        assert mock_agent.state.variables.__setitem__.called
+        # Verify state was updated (via DotMap)
+        assert hasattr(mock_agent.state.variables, "user_name")
+        assert hasattr(mock_agent.state.variables, "user_age")
+        assert mock_agent.state.variables.user_name == "Alice"
+        assert mock_agent.state.variables.user_age == 30
 
     @pytest.mark.asyncio
     async def test_complex_code_streaming(self, mock_agent):

@@ -242,10 +242,10 @@ class AsyncAgentRuntime:
             for agent in self.program.agents:
                 if isinstance(agent, AIAgent):
                     if len(agent.state.call_stack.frames) > 0:
-                        if "$_busy" not in agent.state.variables:
+                        if not hasattr(agent.state.variables, "_busy"):
                             done = False
                             break
-                        if agent.state.variables["$_busy"].value is True:
+                        if getattr(agent.state.variables, "_busy", False) is True:
                             done = False
                             break
             await asyncio.sleep(1)
@@ -615,18 +615,18 @@ class Program(ProgramAgentsCommunicationMixin):
                             > playbooks_config.artifact_result_threshold
                         ):
                             artifact = Artifact(
-                                name=f"${var_name}",
+                                name=var_name,
                                 summary=f"Initial state variable: {var_name}",
                                 value=var_value,
                             )
-                            agent.state.variables[f"${var_name}"] = artifact
+                            setattr(agent.state.variables, var_name, artifact)
 
                             # Store artifact for pre-loading into first call stack frame
                             if not hasattr(agent, "_initial_artifacts_to_load"):
                                 agent._initial_artifacts_to_load = []
-                            agent._initial_artifacts_to_load.append(f"${var_name}")
+                            agent._initial_artifacts_to_load.append(var_name)
                         else:
-                            agent.state.variables[f"${var_name}"] = var_value
+                            setattr(agent.state.variables, var_name, var_value)
         # Validate public.json count (only for local AI agents, not remote/MCP agents)
         # Remote agents (MCPAgent, RemoteAIAgent) don't have playbooks in the current playbook
         # Allow empty or missing public.json for testing scenarios

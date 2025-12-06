@@ -10,11 +10,9 @@ import traceback
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from playbooks.compilation.expression_engine import preprocess_program
 from playbooks.execution.incremental_code_buffer import CodeBuffer
 from playbooks.execution.python_executor import (
     ExecutionResult,
-    LLMNamespace,
     PythonExecutor,
 )
 from playbooks.infrastructure.logging.debug_logger import debug
@@ -75,7 +73,9 @@ class StreamingPythonExecutor:
         self.base_executor = PythonExecutor(agent)
 
         # Build namespace once at initialization
-        self.namespace: LLMNamespace = self.base_executor.build_namespace(playbook_args)
+        self.namespace: Dict[str, Any] = self.base_executor.build_namespace(
+            playbook_args
+        )
 
         # Result tracking
         self.result = ExecutionResult()
@@ -148,11 +148,8 @@ class StreamingPythonExecutor:
             return
 
         try:
-            # Preprocess to convert $variable syntax
-            preprocessed = preprocess_program(executable)
-
-            # Parse the code
-            parsed = ast.parse(preprocessed)
+            # Parse the code (no preprocessing needed - uses state.x syntax)
+            parsed = ast.parse(executable)
 
             # Execute each statement
             for stmt in parsed.body:

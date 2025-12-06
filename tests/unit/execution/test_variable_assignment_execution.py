@@ -1,14 +1,12 @@
 """Tests for variable assignment during playbook execution."""
 
-from unittest.mock import Mock
-
 import pytest
 
 from playbooks.agents.ai_agent import AIAgent
 from playbooks.config import config
+from playbooks.execution.call import PlaybookCall
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.execution_state import ExecutionState
-from playbooks.execution.call import PlaybookCall
 from playbooks.state.variables import Artifact
 
 
@@ -41,10 +39,8 @@ def agent(event_bus):
     agent = MockAgent(event_bus)
     agent.state = ExecutionState(event_bus, "MockAgent", "test-agent-id")
 
-    # Mock the execution summary variable
-    mock_execution_summary = Mock()
-    mock_execution_summary.value = "Test execution summary"
-    agent.state.variables.variables["$__"] = mock_execution_summary
+    # Mock the execution summary variable (__ uses bracket notation)
+    agent.state.variables["__"] = "Test execution summary"
 
     return agent
 
@@ -54,7 +50,7 @@ class TestVariableAssignmentExecution:
 
     def test_short_result_stored_in_variable(self, agent):
         """Test that short results are stored directly in the specified variable."""
-        # Create a playbook call with variable assignment
+        # Create a playbook call with variable assignment ($ prefix in call)
         call = PlaybookCall(
             "GetValue", [], {}, variable_to_assign="$result", type_annotation=None
         )
@@ -62,18 +58,15 @@ class TestVariableAssignmentExecution:
         # Mock the playbook execution to return a short result
         short_result = "short_value"
 
-        # We need to mock the actual playbook execution
-        # For this test, we'll directly test the variable storage logic
-        # by simulating what happens after execute_playbook returns
-
-        # Simulate storing the result
+        # Simulate storing the result (remove $ prefix for storage)
         if call.variable_to_assign:
+            var_name = call.variable_to_assign.lstrip("$")
             if short_result != call.variable_to_assign:
-                agent.state.variables[call.variable_to_assign] = short_result
+                setattr(agent.state.variables, var_name, short_result)
 
-        # Verify the variable was set
-        assert "$result" in agent.state.variables
-        assert agent.state.variables["$result"].value == "short_value"
+        # Verify the variable was set (no $ prefix in storage, no .value wrapper)
+        assert hasattr(agent.state.variables, "result")
+        assert agent.state.variables.result == "short_value"
 
     def test_int_result_stored_in_variable(self, agent):
         """Test that integer results are stored correctly."""
@@ -83,14 +76,15 @@ class TestVariableAssignmentExecution:
 
         result = 42
 
-        # Simulate storing the result
+        # Simulate storing the result (remove $ prefix for storage)
         if call.variable_to_assign:
+            var_name = call.variable_to_assign.lstrip("$")
             if result != call.variable_to_assign:
-                agent.state.variables[call.variable_to_assign] = result
+                setattr(agent.state.variables, var_name, result)
 
-        # Verify the variable was set
-        assert "$count" in agent.state.variables
-        assert agent.state.variables["$count"].value == 42
+        # Verify the variable was set (no $ prefix, no .value wrapper)
+        assert hasattr(agent.state.variables, "count")
+        assert agent.state.variables.count == 42
 
     def test_bool_result_stored_in_variable(self, agent):
         """Test that boolean results are stored correctly."""
@@ -100,14 +94,15 @@ class TestVariableAssignmentExecution:
 
         result = True
 
-        # Simulate storing the result
+        # Simulate storing the result (remove $ prefix for storage)
         if call.variable_to_assign:
+            var_name = call.variable_to_assign.lstrip("$")
             if result != call.variable_to_assign:
-                agent.state.variables[call.variable_to_assign] = result
+                setattr(agent.state.variables, var_name, result)
 
-        # Verify the variable was set
-        assert "$flag" in agent.state.variables
-        assert agent.state.variables["$flag"].value is True
+        # Verify the variable was set (no $ prefix, no .value wrapper)
+        assert hasattr(agent.state.variables, "flag")
+        assert agent.state.variables.flag is True
 
     def test_no_assignment_no_extra_variables(self, agent):
         """Test that calls without assignment don't create extra variables."""
@@ -117,11 +112,14 @@ class TestVariableAssignmentExecution:
 
         # Simulate the logic - no assignment should happen
         if call.variable_to_assign:
+            var_name = call.variable_to_assign.lstrip("$")
             if result != call.variable_to_assign:
-                agent.state.variables[call.variable_to_assign] = result
+                setattr(agent.state.variables, var_name, result)
 
-        # Count non-system variables (those not starting with $__)
-        user_vars = [v for v in agent.state.variables if not v.name.startswith("$__")]
+        # Count non-system variables (those not starting with __)
+        from playbooks.state.variables import VariablesTracker
+
+        user_vars = VariablesTracker.public_variables(agent.state.variables)
         assert len(user_vars) == 0
 
     def test_skip_assignment_when_result_is_variable_name(self, agent):
@@ -134,17 +132,20 @@ class TestVariableAssignmentExecution:
             type_annotation=None,
         )
 
-        # Simulate artifact case where result IS the variable name
-        result = "$report"
+        # Simulate artifact case where result IS the variable name (no $ in new system)
+        result = "report"
 
         # Simulate the conditional logic
         if call.variable_to_assign:
-            if result != call.variable_to_assign:
-                agent.state.variables[call.variable_to_assign] = result
+            var_name = call.variable_to_assign.lstrip("$")
+            if result != var_name:
+                setattr(agent.state.variables, var_name, result)
 
         # Verify NO assignment happened (no circular assignment)
         # Note: In real scenario, the artifact would already be set by _post_execute
-        user_vars = [v for v in agent.state.variables if not v.name.startswith("$__")]
+        from playbooks.state.variables import VariablesTracker
+
+        user_vars = VariablesTracker.public_variables(agent.state.variables)
         assert len(user_vars) == 0
 
     def test_multiple_assignments_in_sequence(self, agent):
@@ -154,22 +155,26 @@ class TestVariableAssignmentExecution:
             "Get1", [], {}, variable_to_assign="$a", type_annotation=None
         )
         result1 = "value_a"
-        if call1.variable_to_assign and result1 != call1.variable_to_assign:
-            agent.state.variables[call1.variable_to_assign] = result1
+        if call1.variable_to_assign:
+            var_name1 = call1.variable_to_assign.lstrip("$")
+            if result1 != var_name1:
+                setattr(agent.state.variables, var_name1, result1)
 
         # Second call
         call2 = PlaybookCall(
             "Get2", [], {}, variable_to_assign="$b", type_annotation=None
         )
         result2 = "value_b"
-        if call2.variable_to_assign and result2 != call2.variable_to_assign:
-            agent.state.variables[call2.variable_to_assign] = result2
+        if call2.variable_to_assign:
+            var_name2 = call2.variable_to_assign.lstrip("$")
+            if result2 != var_name2:
+                setattr(agent.state.variables, var_name2, result2)
 
-        # Verify both variables are set
-        assert "$a" in agent.state.variables
-        assert agent.state.variables["$a"].value == "value_a"
-        assert "$b" in agent.state.variables
-        assert agent.state.variables["$b"].value == "value_b"
+        # Verify both variables are set (no $ prefix, no .value wrapper)
+        assert hasattr(agent.state.variables, "a")
+        assert agent.state.variables.a == "value_a"
+        assert hasattr(agent.state.variables, "b")
+        assert agent.state.variables.b == "value_b"
 
 
 class TestArtifactNamingWithAssignment:
@@ -208,11 +213,13 @@ class TestArtifactNamingWithAssignment:
             summary=f"Result of {call.playbook_klass} call",
             value=long_result,
         )
-        agent.state.variables[artifact_var_name] = artifact
+        # Store without $ prefix
+        var_name = artifact_var_name.lstrip("$")
+        setattr(agent.state.variables, var_name, artifact)
 
-        # Verify artifact was created with custom name
-        assert "$custom_name" in agent.state.variables
-        artifact = agent.state.variables["$custom_name"].value
+        # Verify artifact was created with custom name (no $ prefix, artifact is the value)
+        assert hasattr(agent.state.variables, "custom_name")
+        artifact = agent.state.variables.custom_name
         assert isinstance(artifact, Artifact)
         assert artifact.name == "custom_name"
         assert artifact.summary == "Result of LongPlaybook call"
@@ -244,11 +251,13 @@ class TestArtifactNamingWithAssignment:
             summary=f"Result of {call.playbook_klass} call",
             value=long_result,
         )
-        agent.state.variables[artifact_var_name] = artifact
+        # Store without $ prefix
+        var_name = artifact_var_name.lstrip("$")
+        setattr(agent.state.variables, var_name, artifact)
 
-        # Verify artifact was created with hash-based name
-        assert artifact_var_name in agent.state.variables
-        artifact = agent.state.variables[artifact_var_name].value
+        # Verify artifact was created with hash-based name (no $ prefix, artifact is the value)
+        assert hasattr(agent.state.variables, var_name)
+        artifact = getattr(agent.state.variables, var_name)
         assert isinstance(artifact, Artifact)
         assert artifact.name == artifact_name_base
         assert artifact.summary == f"Result of {call.playbook_klass} call"
@@ -326,9 +335,11 @@ class TestArtifactNamingWithAssignment:
             summary=f"Result of {call.playbook_klass} call",
             value=long_result,
         )
-        agent.state.variables[artifact_var_name] = artifact
+        # Store without $ prefix
+        var_name = artifact_var_name.lstrip("$")
+        setattr(agent.state.variables, var_name, artifact)
 
-        # Verify artifact was created with complex name
-        assert "$user_data_2024" in agent.state.variables
-        artifact = agent.state.variables["$user_data_2024"].value
+        # Verify artifact was created with complex name (no $ prefix, artifact is the value)
+        assert hasattr(agent.state.variables, "user_data_2024")
+        artifact = agent.state.variables.user_data_2024
         assert artifact.name == "user_data_2024"

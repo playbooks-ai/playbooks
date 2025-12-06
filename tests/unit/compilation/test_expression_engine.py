@@ -6,7 +6,6 @@ from unittest.mock import Mock
 
 import pytest
 
-from playbooks.core.argument_types import LiteralValue, VariableReference
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     ExpressionError,
@@ -22,6 +21,7 @@ from playbooks.compilation.expression_engine import (
     resolve_description_placeholders,
     validate_expression,
 )
+from playbooks.core.argument_types import LiteralValue, VariableReference
 
 
 class TestPreprocessExpression:
@@ -167,22 +167,16 @@ class TestExpressionContext:
 
     def setup_method(self):
         """Set up test fixtures."""
+        from dotmap import DotMap
+
         self.agent = Mock()
         self.state = Mock()
         self.call = Mock()
         self.call.playbook_klass = "TestPlaybook"
 
-        # Mock state variables
-        mock_var = Mock()
-        mock_var.value = "test_value"
-        # Create a simple object to hold variables
-        variables_dict = {"$test_var": mock_var}
-
-        class VariablesHolder:
-            def __init__(self, variables):
-                self.variables = variables
-
-        self.state.variables = VariablesHolder(variables_dict)
+        # Use real DotMap for variables (no $ prefix, no .value wrapper)
+        self.state.variables = DotMap()
+        self.state.variables.test_var = "test_value"
 
         # Mock namespace manager
         namespace_dict = {"namespace_var": "namespace_value"}
@@ -229,7 +223,7 @@ class TestExpressionContext:
         value1 = self.context.resolve_variable("test_var")
 
         # Modify the underlying state
-        self.state.variables.variables["$test_var"].value = "modified_value"
+        self.state.variables.test_var = "modified_value"
 
         # Second access should return cached value
         value2 = self.context.resolve_variable("test_var")
@@ -388,21 +382,15 @@ class TestResolveDescriptionPlaceholders:
 
     def setup_method(self):
         """Set up test fixtures."""
+        from dotmap import DotMap
+
         self.agent = Mock()
         self.state = Mock()
         self.call = Mock()
 
-        # Mock state variables
-        mock_var = Mock()
-        mock_var.value = "12345"
-        # Create a simple object to hold variables
-        variables_dict = {"$order_id": mock_var}
-
-        class VariablesHolder:
-            def __init__(self, variables):
-                self.variables = variables
-
-        self.state.variables = VariablesHolder(variables_dict)
+        # Use real DotMap for variables (no $ prefix, no .value wrapper)
+        self.state.variables = DotMap()
+        self.state.variables.order_id = "12345"
 
         # Mock namespace manager
         namespace_dict = {}
@@ -422,10 +410,8 @@ class TestResolveDescriptionPlaceholders:
     @pytest.mark.asyncio
     async def test_multiple_placeholders(self):
         """Test resolving multiple placeholders."""
-        # Add another variable
-        mock_var2 = Mock()
-        mock_var2.value = "pending"
-        self.state.variables.variables["$status"] = mock_var2
+        # Add another variable (no $ prefix, no wrapper)
+        self.state.variables.status = "pending"
 
         description = "Order {$order_id} has status {$status}"
         result = await resolve_description_placeholders(description, self.context)
@@ -535,30 +521,21 @@ class TestIntegration:
 
     def setup_method(self):
         """Set up integration test fixtures."""
+        from dotmap import DotMap
+
         self.agent = Mock()
         self.state = Mock()
         self.call = Mock()
         self.call.playbook_klass = "TestPlaybook"
 
-        # Create realistic state variables
-        order_var = Mock()
-        order_var.value = {
+        # Use real DotMap for variables with raw values (no $ prefix, no wrappers)
+        self.state.variables = DotMap()
+        self.state.variables.order = {
             "id": "12345",
             "status": "pending",
             "items": [{"name": "item1", "price": 99.99}],
         }
-
-        user_var = Mock()
-        user_var.value = {"name": "John Doe", "email": "john@example.com"}
-
-        # Create a simple object to hold variables
-        variables_dict = {"$order": order_var, "$user": user_var}
-
-        class VariablesHolder:
-            def __init__(self, variables):
-                self.variables = variables
-
-        self.state.variables = VariablesHolder(variables_dict)
+        self.state.variables.user = {"name": "John Doe", "email": "john@example.com"}
 
         # Mock namespace manager
         namespace_dict = {"current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
@@ -829,6 +806,8 @@ class TestParameterResolution:
 
     def setup_method(self):
         """Set up test fixtures."""
+        from dotmap import DotMap
+
         self.agent = Mock()
         self.state = Mock()
         self.call = Mock()
@@ -847,12 +826,8 @@ class TestParameterResolution:
         # Mock agent playbooks
         self.agent.playbooks = {"LoadRelevantContext": self.playbook}
 
-        # Mock state variables (empty for this test)
-        class VariablesHolder:
-            def __init__(self):
-                self.variables = {}
-
-        self.state.variables = VariablesHolder()
+        # Use real DotMap for variables
+        self.state.variables = DotMap()
 
         # Mock namespace manager
         self.agent.namespace_manager = Mock(namespace={})
@@ -893,10 +868,8 @@ class TestParameterResolution:
 
     def test_parameters_shadow_state_variables(self):
         """Test that parameters shadow state variables with the same name."""
-        # Add a state variable with the same name as a parameter
-        mock_var = Mock()
-        mock_var.value = "global_question"
-        self.state.variables.variables["$question"] = mock_var
+        # Add a state variable with the same name as a parameter (no $ prefix, no wrapper)
+        self.state.variables.question = "global_question"
 
         # Reset context to pick up the new state
         self.context = ExpressionContext(
@@ -909,10 +882,8 @@ class TestParameterResolution:
 
     def test_state_variables_accessible_when_no_parameter_match(self):
         """Test that state variables are accessible when there's no matching parameter."""
-        # Add a state variable that doesn't match any parameter
-        mock_var = Mock()
-        mock_var.value = "some_global_value"
-        self.state.variables.variables["$other_var"] = mock_var
+        # Add a state variable that doesn't match any parameter (no $ prefix, no wrapper)
+        self.state.variables.other_var = "some_global_value"
 
         # Reset context
         self.context = ExpressionContext(
@@ -939,10 +910,8 @@ class TestParameterResolution:
 
     def test_variable_reference_parameters_resolved(self):
         """Test that VariableReference parameters are resolved to actual values."""
-        # Add a state variable
-        mock_var = Mock()
-        mock_var.value = "resolved_value"
-        self.state.variables.variables["$source_var"] = mock_var
+        # Add a state variable (no $ prefix, no wrapper)
+        self.state.variables.source_var = "resolved_value"
 
         # Set up call with VariableReference
         self.call.args = [VariableReference("$source_var"), LiteralValue("Starting")]
@@ -988,10 +957,8 @@ class TestParameterResolution:
         self.call.args = [LiteralValue("World")]
         self.call.kwargs = {}
 
-        # Add a state variable
-        mock_var = Mock()
-        mock_var.value = "hello"
-        self.state.variables.variables["$var1"] = mock_var
+        # Add a state variable (no $ prefix, no wrapper)
+        self.state.variables.var1 = "hello"
 
         # Reset context
         self.context = ExpressionContext(
@@ -1025,10 +992,8 @@ class TestParameterResolution:
         self.call.args = [LiteralValue("World")]
         self.call.kwargs = {}
 
-        # Add a state variable
-        mock_var = Mock()
-        mock_var.value = "hello"
-        self.state.variables.variables["$var1"] = mock_var
+        # Add a state variable (no $ prefix, no wrapper)
+        self.state.variables.var1 = "hello"
 
         # Create fresh context with new configuration
         context = ExpressionContext(agent=self.agent, state=self.state, call=self.call)

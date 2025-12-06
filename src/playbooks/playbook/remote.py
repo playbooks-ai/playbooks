@@ -7,8 +7,6 @@ like MCP (Model Context Protocol), enabling distributed agent execution.
 import logging
 from typing import Any, Callable, Dict, Optional
 
-from playbooks.state.variables import Variable
-
 from .base import Playbook
 
 logger = logging.getLogger(__name__)
@@ -76,15 +74,6 @@ class RemotePlaybook(Playbook):
         logger.debug(
             f"Executing remote playbook {self.name} with args={args}, kwargs={kwargs}"
         )
-
-        # Dereference variables
-        for i, arg in enumerate(args):
-            if isinstance(arg, Variable):
-                args[i] = arg.value
-
-        for key, value in kwargs.items():
-            if isinstance(value, Variable):
-                kwargs[key] = value.value
 
         try:
             # Execute the remote function

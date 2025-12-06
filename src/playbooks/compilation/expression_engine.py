@@ -13,11 +13,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.variables import Artifact
+from dotmap import DotMap
 
 if TYPE_CHECKING:
     from playbooks.agents.base_agent import Agent
-    from playbooks.state.execution_state import ExecutionState
     from playbooks.execution.call import PlaybookCall
+    from playbooks.state.execution_state import ExecutionState
 
 # ============================================================================
 # Core Processing Functions (Pure, Stateless)
@@ -333,7 +334,7 @@ class ExpressionContext:
         Resolution order (local-before-global):
         1. Built-in context (agent, call, timestamp)
         2. Local parameters from current playbook call
-        3. State variables (state.variables["$" + name]) - global scope
+        3. State variables (state.variables.name) - global scope
         4. Namespace manager (agent.namespace_manager.namespace[name])
         5. KeyError with suggestions
 
@@ -364,28 +365,29 @@ class ExpressionContext:
                 self._cache[name] = value
                 return value
 
-            # Try state variables (with or without $)
-            var_key = f"${name}" if not name.startswith("$") else name
-            if hasattr(self.state, "variables") and hasattr(
-                self.state.variables, "variables"
-            ):
-                if var_key in self.state.variables.variables:
-                    variable = self.state.variables.variables[var_key]
-                    # If the variable itself is an Artifact, return it directly
-                    # Otherwise, return its value
-                    if isinstance(variable, Artifact):
-                        value = variable
-                        # Auto-load artifact if not already loaded in any frame
-                        if hasattr(
-                            self.state, "call_stack"
-                        ) and not self.state.call_stack.is_artifact_loaded(var_key):
-
-                            artifact_msg = ArtifactLLMMessage(variable)
-                            self.state.call_stack.add_llm_message(artifact_msg)
-                    else:
-                        value = variable.value
-                    self._cache[name] = value
-                    return value
+            # Try state variables
+            if hasattr(self.state, "variables"):
+                if isinstance(self.state.variables, DotMap):
+                    try:
+                        # Check if key exists by safely converting to dict
+                        # Note: Use try/except because dict() might fail on certain DotMap states
+                        vars_dict = dict(self.state.variables)
+                        if name in vars_dict:
+                            value = vars_dict[name]
+                            # Auto-load artifact if not already loaded
+                            if isinstance(value, Artifact):
+                                if hasattr(
+                                    self.state, "call_stack"
+                                ) and not self.state.call_stack.is_artifact_loaded(
+                                    name
+                                ):
+                                    artifact_msg = ArtifactLLMMessage(value)
+                                    self.state.call_stack.add_llm_message(artifact_msg)
+                            self._cache[name] = value
+                            return value
+                    except (AttributeError, KeyError):
+                        # Dict conversion or access failed, continue to other scopes
+                        pass
 
             # Try namespace manager
             if (
@@ -426,12 +428,11 @@ class ExpressionContext:
             pass
 
         # State variables (global)
-        if hasattr(self.state, "variables") and hasattr(
-            self.state.variables, "variables"
-        ):
-            for key in self.state.variables.variables.keys():
-                if key.startswith("$"):
-                    variables.append(key[1:])  # Remove $ prefix
+        if hasattr(self.state, "variables"):
+            from dotmap import DotMap
+
+            if isinstance(self.state.variables, DotMap):
+                variables.extend(dict(self.state.variables).keys())
 
         # Namespace variables
         if hasattr(self.agent, "namespace_manager") and hasattr(

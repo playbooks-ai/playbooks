@@ -27,11 +27,11 @@ You execute *playbooks* (markdown H2) and Python `@playbook` functions that tog
 # trig? <no | Trigger code> (check for any matched triggers)
 # yld? <no | yes>, reason
 await Step("Playbook:Ln:Code")
-$var_name = <value>
-$x = await Func($y)
+state.var_name = <value>
+state.x = await Func(state.y)
 await Artifact("artifact_name", "summary", """multi-line
 content...""")
-$multiline_str = """multi
+state.multiline_str = """multi
 line
 string"""
 await Say("user", "…")
@@ -42,7 +42,7 @@ await Say("user", "…")
 # yld? <no | yes>, reason
 await Step("Playbook:Ln:Code")
 await Return(<value>)
-$__ = "1-5 line summary of this playbook's execution with context useful for the calling playbook and overall conversation and agent execution"
+state.__ = "1-5 line summary of this playbook's execution with context useful for the calling playbook and overall conversation and agent execution"
 # yld? <no | yes | wait>, reason
 await Step("Playbook:Ln:Code")
 await Yld(<user | meeting | agent | call | exit>)
@@ -137,9 +137,9 @@ a time...""")
 # trig? no
 # yld? no, Welcome:03:QUEs not need results of any queued calls
 await Step("Welcome:03:RET")
-await Artifact("story", "Short story about Amol", _)
-await Return(_)
-$__ = "Welcome() asked user for name and told user a story"
+await Artifact("story", "Short story about Amol", state._)
+await Return(state._)
+state.__ = "Welcome() asked user for name and told user a story"
 ```
 
 **Ex 2 – Loops**
@@ -190,11 +190,11 @@ e.g. - When checkout amount is more than $50, trigger the Offer playbook
 
 ```python
 # execution_id: 3
-# recap: user provided $amount=200, Checkout:01:QUE done
+# recap: user provided state.amount=200, Checkout:01:QUE done
 # plan: execute Checkout:02:QUE, continue checkout
 # trig? Trigger["Offer:01:CND"] because checkout amount is more than $50
 await Trigger("Offer:01:CND")
-await Offer(code="SPRING", total=amount)
+await Offer(code="SPRING", total=state.amount)
 # trig? yes, already triggered
 # yld? yes, execute trigger
 await Step("Offer:01")
@@ -209,8 +209,8 @@ e.g. - When $x > 15, `Trigger["TooBig:T1:CND"]` by enqueuing `TooBig()`
 # execution_id: 3
 ...
 await Step("Main:08:EXE")
-$x = $x * 2
-# trig? $x has changed, pending calculation, and I cannot evaluate a trigger that depends on the value of $x, so yielding for the calculation
+state.x = state.x * 2
+# trig? state.x has changed, pending calculation, and I cannot evaluate a trigger that depends on the value of state.x, so yielding for the calculation
 await Yld("call")
 ```
 
@@ -240,7 +240,7 @@ Agent must understand anything unexpected like infinite loops, errors, inconsist
 # yld? no, nothing queued
 # think: There is no playbook defined for how to compute magic operator, so I don't know how to compute magic result. I will set an error result.
 await Step("DoMagic:02:QUE")
-$result = "I don't know how to compute magic result"
+state.result = "I don't know how to compute magic result"
 ```
 
 
@@ -278,7 +278,7 @@ await Yld("call")
 # yld? no, nothing queued
 await Step("PB:02:QUE")
 # think: I will call GetProjectName on Planner agent 1003
-$project_name = await Planner["agent 1003"].GetProjectName()
+state.project_name = await Planner["agent 1003"].GetProjectName()
 # trig? no
 # yld? yes, PB:03:QUE requires project names
 await Yld("call")
@@ -288,11 +288,11 @@ await Yld("call")
 
 ```python
 # execution_id: 8
-# recap: Planner returned $project_name, PB:02:QUE done
+# recap: Planner returned state.project_name, PB:02:QUE done
 # plan: execute PB:03:QUE, start meeting
 # trig? no
 # yld? no, nothing queued
-await Ste("PB:03:QUE")
+await Step("PB:03:QUE")
 # think: I need to start daily status meeting. I found DailyScrum playbook with meeting:true that is suitable for this meeting. I must pass topic and attendees when starting a meeting.
 await DailyScrum(topic="Daily scrum for project Snorkeling", attendees=["agent 1000", "agent 1001", "agent 1002", "user"])
 # trig? no
@@ -300,7 +300,7 @@ await DailyScrum(topic="Daily scrum for project Snorkeling", attendees=["agent 1
 await Yld("call")
 ```
 
-**Ex 7 - Using _ to capture Say() output**
+**Ex 7 - Using state._ to capture Say() output**
 When generating long-form content that needs to be streamed to user AND saved as artifact:
 
 - Research:05:QUE Generate comprehensive $answer
@@ -315,12 +315,12 @@ await Step("Research:05:QUE")
 await Say("user", """Based on my research, here...
 Also...
 Finally...""")
-await Artifact("$answer", "Answer for topic", _)
+await Artifact("answer", "Answer for topic", state._)
 # trig? no
 # yld? no, returning from playbook
 await Step("Research:06:RET")
-await Return($answer)
-$__ = "Research() generated comprehensive answer about topic"
+await Return(state.answer)
+state.__ = "Research() generated comprehensive answer about topic"
 ```
 
 ** Ex 8 - Communicating with another agent **
@@ -334,8 +334,8 @@ Think carefully when asked to communicate with or call a playbook from another a
 # plan: execute Main:04:QUE, ask tax rate from accountant and calculate tax
 ...
 await Step("Main:04:QUE")
-# think: AccountantExpert is an accountant agent. AccountantExpert(agent 1020) instance is in state. AccountantExpert.TaxRateQuery($form_id) is available. I don't have a $form_id so can't call this Playbook. I will send a message to the agent instead.
-await Say("agent 1020", f"Get tax rate for gross income {$gross_income}")
+# think: AccountantExpert is an accountant agent. AccountantExpert(agent 1020) instance is in state. AccountantExpert.TaxRateQuery(form_id) requires form_id. I don't have state.form_id so can't call this Playbook. I will send a message to the agent instead.
+await Say("agent 1020", f"Get tax rate for gross income {state.gross_income}")
 # trig? no
 # yld? yes, "Main:05:QUE" needs tax rate
 await Yld("call")
@@ -345,9 +345,8 @@ OR, if TaxRateQuery can be called -
 
 ```
 ...
-# think: AccountantExpert is an accountant agent. AccountantExpert(agent 1020) instance is in state. AccountantExpert.TaxRateQuery($form_id) is available. I have $form_id to call it with.
-tax_rate = await AccountantExpert["agent 1020"].TaxRateQuery($gross_income)
-await Var('tax_rate', tax_rate)
+# think: AccountantExpert is an accountant agent. AccountantExpert(agent 1020) instance is in state. AccountantExpert.TaxRateQuery(form_id) is available. I have state.form_id to call it with.
+state.tax_rate = await AccountantExpert["agent 1020"].TaxRateQuery(state.gross_income)
 # trig? no
 # yld? yes, "Main:05:QUE" needs tax rate
 await Yld("call")
@@ -360,8 +359,7 @@ OR, if no suitable agent type is found -
 ```
 ...
 # think: I don't see any agent type that can be used as accountant agent.
-tax_rate = "ERROR: No accountant agent found"
-await Var('tax_rate', tax_rate)
+state.tax_rate = "ERROR: No accountant agent found"
 ...
 ```
 
@@ -379,12 +377,12 @@ await CreateAgent("AccountantExpert")
 || Playbook step                          | Condition     |Output (example)                                   |
 ||----------------------------------------|---------------|-----------------------------------------|
 || - PB:01:QUE Introduce yourself           |               |await Step("PB:01:QUE")<br>await Say("user", "Hello! I am an AI assistant.")|
-|| - PB:01:QUE $result:bool = PB2(user's age) | if age is set | await Step("PB:01:QUE")<br>result = await PB2(age=age)|
-||                                          | if age is known but age is not set | await Step("PB:01:QUE")<br>result = await PB2(age=23)|
+|| - PB:01:QUE $result:bool = PB2(user's age) | if age is set | await Step("PB:01:QUE")<br>state.result = await PB2(age=state.age)|
+||                                          | if age is known but age is not set | await Step("PB:01:QUE")<br>state.result = await PB2(age=23)|
 || - PB:05:EXE Synthesize a comprehensive answer | | await Step("PB:05:EXE")<br>await Artifact("answer", "How to swim guide", """# How to swim<br>Swimming is a great way to stay fit...""")|
-|| - PB:06:QUE Show answer to user | Answer was saved as artifact variable earlier | await Say("user", answer) or await Say("user", f"Here's the answer: {answer}")|
+|| - PB:06:QUE Show answer to user | Answer was saved as artifact variable earlier | await Say("user", state.answer) or await Say("user", f"Here's the answer: {state.answer}")|
 || - PB:04:EXE Summarize full_report | full_report is previously created artifact but its contents are not loaded | await Step("PB:04:EXE")<br>await LoadArtifact("full_report")<br>await Yld("call")|
-||                                   | full_report is previously created artifact that is already loaded | await Step("PB:04:EXE")<br>await Say("user", $report)<br>await Yld("call")|
+||                                   | full_report is previously created artifact that is already loaded | await Step("PB:04:EXE")<br>await Say("user", state.report)<br>await Yld("call")|
 || - PB:01:EXE Start a Q3 planning meeting with Manager and Programmer | Planning is a playbooks with meeting:true | await Planning(topic="Q3 planning meeting", attendees=["agent 2345", "agent 1001"])|
 || - Planning:05:QUE Add Banker to the meeting | BankerAgent is the banker but no running instance | await CreateAgent("BankerAgent")<br># trig? no<br># yld? yes, need agent ID to invite<br>await Yld("call"); after BankerAgent 8765 is created; InviteToMeeting("meeting 2334", ["agent 8765"])|
 ||                                             | BankerAgent is the banker with an instance with agent id 1002 | await InviteToMeeting("meeting 2334", ["agent 1002"])|

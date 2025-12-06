@@ -5,8 +5,8 @@
 @playbook(triggers=["At the beginning"])
 async def Main():
   await Say("user", "What's your name?")
-  messages = await WaitForMessage("user")
-  await Say("user", f"Received messages: {messages}")
+  agent.state.variables.messages = await WaitForMessage("user")
+  await Say("user", f"Received messages: {agent.state.variables.messages}")
   await Say("user", f"Secret code: {await GetSecret()}")
   await EndProgram()
 

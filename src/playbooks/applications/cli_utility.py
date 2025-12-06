@@ -168,14 +168,14 @@ async def main(
                 if len(str(stdin_content)) > config.artifact_result_threshold:
                     # Create Artifact for large content
                     artifact = Artifact(
-                        name="$startup_message",
+                        name="startup_message",
                         summary="Startup message from stdin",
                         value=stdin_content,
                     )
-                    agent.state.variables["$startup_message"] = artifact
+                    agent.state.variables.startup_message = artifact
                 else:
                     # Regular variable for small content
-                    agent.state.variables["$startup_message"] = stdin_content
+                    agent.state.variables.startup_message = stdin_content
 
                 # Reset last_sent_state to ensure this variable is included in first I-frame
                 agent.state.last_sent_state = None

@@ -1,317 +1,238 @@
 """Variable management system for playbook execution.
 
-This module provides the variable system that tracks variable values,
-changes, and history during playbook execution, with support for artifacts
-and reactive updates.
+Uses DotMap for attribute-style access (state.x) with diff-based change tracking.
 """
 
 import types
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional
 
-from playbooks.state.call_stack import InstructionPointer
-from playbooks.infrastructure.event_bus import EventBus
+from dotmap import DotMap
+
 from playbooks.core.events import VariableUpdateEvent
+from playbooks.infrastructure.event_bus import EventBus
 
 
-class VariableChangeHistoryEntry:
-    """Represents a single change in a variable's value history."""
+class Artifact:
+    """Artifact with summary and value for large content.
 
-    def __init__(self, instruction_pointer: InstructionPointer, value: Any) -> None:
-        """Initialize a variable change history entry.
-
-        Args:
-            instruction_pointer: Location where the change occurred
-            value: The new value after this change
-        """
-        self.instruction_pointer = instruction_pointer
-        self.value = value
-
-
-class Variable:
-    """Represents a variable with change tracking.
-
-    Tracks the current value and history of all changes to the variable
-    throughout playbook execution.
+    Artifacts are used for values that exceed the artifact_result_threshold,
+    allowing the LLM to see a summary without the full content in every message.
     """
-
-    def __init__(self, name: str, value: Any) -> None:
-        """Initialize a variable.
-
-        Args:
-            name: Variable name (typically with $ prefix)
-            value: Initial value
-        """
-        self.name = name
-        self.value = value
-        self.change_history: List[VariableChangeHistoryEntry] = []
-
-    def update(
-        self, new_value: Any, instruction_pointer: Optional[InstructionPointer] = None
-    ) -> None:
-        """Update the variable value and record the change.
-
-        Args:
-            new_value: The new value to assign
-            instruction_pointer: Location where this update occurred
-        """
-        self.change_history.append(
-            VariableChangeHistoryEntry(instruction_pointer, new_value)
-        )
-        self.value = new_value
-
-    def __repr__(self) -> str:
-        """Return string representation of the variable."""
-        return f"{self.name}={self.value}"
-
-
-class Artifact(Variable):
-    """An artifact - a Variable with additional summary metadata."""
 
     def __init__(self, name: str, summary: str, value: Any):
         """Initialize an Artifact.
 
         Args:
-            name: Variable name (without $ prefix)
+            name: Artifact name
             summary: Short summary of the artifact
             value: The actual content/value
         """
-        super().__init__(name, value)
+        self.name = name
         self.summary = summary
-
-    def update(
-        self, new_value: Any, instruction_pointer: Optional[InstructionPointer] = None
-    ) -> None:
-        """Update the artifact value and summary.
-
-        Args:
-            new_value: Must be an Artifact object
-            instruction_pointer: Location where this update occurred
-
-        Raises:
-            ValueError: If new_value is not an Artifact object
-        """
-        self.change_history.append(
-            VariableChangeHistoryEntry(instruction_pointer, new_value)
-        )
-        if isinstance(new_value, Artifact):
-            self.summary = new_value.summary
-            self.value = new_value.value
-        else:
-            raise ValueError("Artifact must be updated using an Artifact object")
+        self.value = value
 
     def __repr__(self) -> str:
-        return f"Artifact(name={self.name}, summary={self.summary})"
+        return f"Artifact({self.name}: {self.summary})"
 
     def __str__(self) -> str:
         return str(self.value)
 
-    # String operation support - delegate to string representation of value
+    # String operations - delegate to value
     def __len__(self) -> int:
-        """Support len(artifact)."""
         return len(str(self.value))
 
     def __add__(self, other):
-        """Support artifact + "text"."""
         return str(self.value) + str(other)
 
     def __radd__(self, other):
-        """Support "text" + artifact."""
         return str(other) + str(self.value)
 
     def __mul__(self, n):
-        """Support artifact * 3."""
         return str(self.value) * n
 
     def __rmul__(self, n):
-        """Support 3 * artifact."""
         return n * str(self.value)
 
-    def __getitem__(self, key: Union[int, slice]) -> str:
-        """Support artifact[0] and artifact[0:5] (indexing/slicing)."""
+    def __getitem__(self, key) -> str:
         return str(self.value)[key]
 
     def __contains__(self, item: Any) -> bool:
-        """Support "substring" in artifact."""
         return str(item) in str(self.value)
 
     def __eq__(self, other: Any) -> bool:
-        """Support artifact == "string"."""
         if isinstance(other, Artifact):
             return self.value == other.value
         return str(self.value) == str(other)
 
     def __lt__(self, other: Any) -> bool:
-        """Support artifact < "string"."""
         if isinstance(other, Artifact):
             return str(self.value) < str(other.value)
         return str(self.value) < str(other)
 
     def __le__(self, other: Any) -> bool:
-        """Support artifact <= "string"."""
         if isinstance(other, Artifact):
             return str(self.value) <= str(other.value)
         return str(self.value) <= str(other)
 
     def __gt__(self, other: Any) -> bool:
-        """Support artifact > "string"."""
         if isinstance(other, Artifact):
             return str(self.value) > str(other.value)
         return str(self.value) > str(other)
 
     def __ge__(self, other: Any) -> bool:
-        """Support artifact >= "string"."""
         if isinstance(other, Artifact):
             return str(self.value) >= str(other.value)
         return str(self.value) >= str(other)
 
 
-class Variables:
-    """A collection of variables with change history."""
+class VariablesTracker:
+    """Static utility methods for computing variable diffs and publishing events."""
 
-    def __init__(self, event_bus: EventBus, agent_id: str = "unknown") -> None:
-        """Initialize a Variables collection.
-
-        Args:
-            event_bus: Event bus for publishing variable update events
-            agent_id: ID of the agent owning these variables
-        """
-        self.variables: Dict[str, Variable] = {}
-        self.event_bus = event_bus
-        self.agent_id = agent_id
-
-    def update(self, vars: Union["Variables", Dict[str, Any]]) -> None:
-        """Update multiple variables at once.
+    @staticmethod
+    def snapshot(variables: DotMap) -> Dict[str, Any]:
+        """Create a snapshot of variables for diff computation.
 
         Args:
-            vars: Either a Variables instance or a dict of name->value mappings
-        """
-        if isinstance(vars, Variables):
-            for name, value in vars.variables.items():
-                self[name] = value.value
-        else:
-            for name, value in vars.items():
-                self[name] = value
-
-    def __getitem__(self, name: str) -> Variable:
-        """Get a variable by name.
-
-        Args:
-            name: Variable name (with or without $ prefix)
+            variables: DotMap to snapshot
 
         Returns:
-            Variable object
-
-        Raises:
-            KeyError: If variable doesn't exist
+            Dictionary copy of variables
         """
-        return self.variables[name]
+        return dict(variables)
 
-    def __setitem__(
-        self,
-        name: str,
-        value: Any,
-        instruction_pointer: Optional[InstructionPointer] = None,
+    @staticmethod
+    def compute_diff(
+        current: DotMap, previous: Optional[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """Compute diff between current and previous state.
+
+        Args:
+            current: Current variables DotMap
+            previous: Previous snapshot (or None for full state)
+
+        Returns:
+            Dict with new_variables, changed_variables, deleted_variables
+        """
+        if previous is None:
+            # No previous state - return everything as new
+            return {"variables": VariablesTracker.to_dict(current)}
+
+        diff = {}
+        current_dict = dict(current)
+
+        # Find new and changed variables
+        new_vars = {}
+        changed_vars = {}
+        for key, value in current_dict.items():
+            if key.startswith("_"):
+                continue
+            if key not in previous:
+                new_vars[key] = VariablesTracker._format_value(value)
+            elif previous[key] != value:
+                changed_vars[key] = VariablesTracker._format_value(value)
+
+        # Find deleted variables
+        deleted_vars = [
+            key
+            for key in previous
+            if not key.startswith("_") and key not in current_dict
+        ]
+
+        if new_vars:
+            diff["new_variables"] = new_vars
+        if changed_vars:
+            diff["changed_variables"] = changed_vars
+        if deleted_vars:
+            diff["deleted_variables"] = deleted_vars
+
+        return diff
+
+    @staticmethod
+    def publish_changes(
+        event_bus: EventBus,
+        agent_id: str,
+        current: DotMap,
+        previous: Optional[Dict[str, Any]],
     ) -> None:
-        """Set or update a variable value.
-
-        Automatically creates Variable or Artifact objects as needed.
-        Publishes VariableUpdateEvent to the event bus.
+        """Publish VariableUpdateEvent for all changes.
 
         Args:
-            name: Variable name (with or without $ prefix)
-            value: Value to assign (can be Variable, Artifact, or any value)
-            instruction_pointer: Location where this assignment occurred
+            event_bus: Event bus to publish to
+            agent_id: Agent ID
+            current: Current variables
+            previous: Previous snapshot
         """
-        if ":" in name:
-            name = name.split(":")[0]
-        if isinstance(value, Artifact):
-            if name not in self.variables:
-                if name == value.name:
-                    self.variables[name] = value
-                else:
-                    self.variables[name] = Variable(name, value)
+        if not event_bus or previous is None:
+            return
 
-            self.variables[name].update(value, instruction_pointer)
-        elif isinstance(value, Variable):
-            value = value.value
-            if name not in self.variables:
-                self.variables[name] = Variable(name, value)
-            self.variables[name].update(value, instruction_pointer)
-        else:
-            if name not in self.variables:
-                self.variables[name] = Variable(name, value)
-            self.variables[name].update(value, instruction_pointer)
+        diff = VariablesTracker.compute_diff(current, previous)
 
-        event = VariableUpdateEvent(
-            agent_id=self.agent_id,
-            session_id="",
-            variable_name=name,
-            variable_value=value,
-        )
-        self.event_bus.publish(event)
+        # Publish event for each new/changed variable
+        for key in diff.get("new_variables", {}):
+            event = VariableUpdateEvent(
+                agent_id=agent_id,
+                session_id="",
+                variable_name=key,
+                variable_value=current[key],
+            )
+            event_bus.publish(event)
 
-    def __contains__(self, name: str) -> bool:
-        """Check if a variable exists.
+        for key in diff.get("changed_variables", {}):
+            event = VariableUpdateEvent(
+                agent_id=agent_id,
+                session_id="",
+                variable_name=key,
+                variable_value=current[key],
+            )
+            event_bus.publish(event)
+
+    @staticmethod
+    def to_dict(variables: DotMap, include_private: bool = False) -> Dict[str, Any]:
+        """Convert variables to dictionary for state output.
 
         Args:
-            name: Variable name to check
+            variables: DotMap to convert
+            include_private: Include private variables starting with _
 
         Returns:
-            True if variable exists, False otherwise
-        """
-        return name in self.variables
-
-    def __iter__(self) -> Any:
-        """Iterate over all variables."""
-        return iter(self.variables.values())
-
-    def __len__(self) -> int:
-        """Return the number of variables."""
-        return len(self.variables)
-
-    def public_variables(self) -> Dict[str, Variable]:
-        """Get all public variables (excluding private variables starting with $_).
-
-        Returns:
-            Dictionary of public variable names to Variable objects
-        """
-        return {
-            name: variable
-            for name, variable in self.variables.items()
-            if not name.startswith("$_")
-        }
-
-    def to_dict(self, include_private: bool = False) -> Dict[str, Any]:
-        """Convert variables to a dictionary representation.
-
-        Args:
-            include_private: If True, include variables starting with $_ or _
-
-        Returns:
-            Dictionary mapping variable names to their values (or artifact summaries)
+            Dictionary representation
         """
         result = {}
-        for name, variable in self.variables.items():
-            if variable.value is None:
+        for key, value in dict(variables).items():
+            if key.startswith("_") and not include_private:
                 continue
-            if not include_private and (
-                variable.name.startswith("$_") or variable.name.startswith("_")
-            ):
+            if value is None:
                 continue
-
-            # Skip non-serializable objects like modules and classes
-            if isinstance(variable.value, (types.ModuleType, type)):
+            if isinstance(value, (types.ModuleType, type)):
                 continue
 
-            # If value is an Artifact, use its string representation
-            if isinstance(variable, Artifact):
-                result[name] = "Artifact: " + variable.summary
-            elif isinstance(variable.value, Artifact):
-                result[name] = "Artifact: " + str(variable.value.summary)
-            else:
-                result[name] = variable.value
+            result[key] = VariablesTracker._format_value(value)
 
         return result
 
-    def __repr__(self) -> str:
-        return f"Variables({self.to_dict(include_private=True)})"
+    @staticmethod
+    def public_variables(variables: DotMap) -> Dict[str, Any]:
+        """Get public variables only.
+
+        Args:
+            variables: DotMap to filter
+
+        Returns:
+            Dictionary of public variables (excludes None values and private vars)
+        """
+        return {
+            key: value
+            for key, value in dict(variables).items()
+            if not key.startswith("_") and value is not None
+        }
+
+    @staticmethod
+    def _format_value(value: Any) -> Any:
+        """Format a value for state output."""
+        if isinstance(value, Artifact):
+            return f"Artifact: {value.summary}"
+        return value
+
+
+# Backwards compatibility alias
+Variables = DotMap

@@ -748,15 +748,9 @@ class PlaybookLLMExecution(LLMExecution):
                 try:
                     # Try to get from state variables
                     if self.agent.state and hasattr(self.agent.state, "variables"):
-                        state_key = f"${ref}"
-                        if state_key in self.agent.state.variables:
-                            var = self.agent.state.variables[state_key]
-                            from playbooks.state.variables import Variable
-
-                            if isinstance(var, Variable):
-                                result[param_name] = var.value
-                            else:
-                                result[param_name] = var
+                        if hasattr(self.agent.state.variables, ref):
+                            var = getattr(self.agent.state.variables, ref)
+                            result[param_name] = var
                         else:
                             # Variable not found, store the reference as-is
                             result[param_name] = value

@@ -274,8 +274,8 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
         )
         self.transport = MCPTransport(remote_config, source_file_path=source_file_path)
 
-        # Initialize $_busy variable to False
-        self.state.variables["$_busy"] = False
+        # Initialize _busy variable to False
+        self.state.variables._busy = False
 
     async def discover_playbooks(self) -> None:
         """Discover MCP tools and create RemotePlaybook instances for each."""
@@ -322,8 +322,8 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                 # Create execution function for this tool - fix closure issue
                 def create_execute_fn(tool_name, schema, agent):
                     async def execute_fn(*args, **kwargs):
-                        # Set $_busy to True when starting execution
-                        agent.state.variables["$_busy"] = True
+                        # Set _busy to True when starting execution
+                        agent.state.variables._busy = True
                         try:
                             # Convert positional args to kwargs if needed
                             if args:
@@ -343,8 +343,8 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                                 result_str = f"Error: {result_str}"
                             return result_str
                         finally:
-                            # Set $_busy to False when execution completes (or on error)
-                            agent.state.variables["$_busy"] = False
+                            # Set _busy to False when execution completes (or on error)
+                            agent.state.variables._busy = False
 
                     return execute_fn
 

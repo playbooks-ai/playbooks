@@ -7,13 +7,15 @@ and execution control flags.
 
 from typing import Any, Dict, List, Optional
 
+from dotmap import DotMap
+
 from playbooks.config import config as global_config
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.llm.messages.types import FrameType
 from playbooks.meetings import JoinedMeeting, Meeting
 from playbooks.state.call_stack import CallStack
 from playbooks.state.session_log import SessionLog
-from playbooks.state.variables import Variables
+from playbooks.state.variables import VariablesTracker
 
 
 class ExecutionState:
@@ -40,24 +42,19 @@ class ExecutionState:
         self.agent_id = agent_id
         self.session_log = SessionLog(klass, agent_id)
         self.call_stack = CallStack(event_bus, agent_id)
-        self.variables = Variables(event_bus, agent_id)
+        self.variables = DotMap()
+        self.previous_variables: Optional[Dict[str, Any]] = None
         self.agents: List[Dict[str, Any]] = []
         self.last_llm_response = ""
-        self.last_message_target = (
-            None  # Track last 1:1 message target for Say() fallback
-        )
+        self.last_message_target = None
 
-        # Meetings initiated by this agent (agent is the owner/host)
-        self.owned_meetings: Dict[str, "Meeting"] = {}  # meeting_id -> Meeting
-
-        # Meetings this agent has joined as a participant
+        # Meetings
+        self.owned_meetings: Dict[str, "Meeting"] = {}
         self.joined_meetings: Dict[str, JoinedMeeting] = {}
 
         # State compression tracking (I-frame/P-frame strategy)
         self.last_sent_state: Optional[Dict[str, Any]] = None
-        self.last_i_frame_execution_id: Optional[int] = (
-            None  # Track last I-frame for interval
-        )
+        self.last_i_frame_execution_id: Optional[int] = None
 
     def __repr__(self) -> str:
         """Return a string representation of the execution state."""
@@ -110,7 +107,7 @@ class ExecutionState:
                 frame.instruction_pointer.to_compact_str()
                 for frame in self.call_stack.frames
             ],
-            "variables": self.variables.to_dict(),
+            "variables": VariablesTracker.to_dict(self.variables),
             "agents": self.agents.copy() if self.agents else [],
             "owned_meetings": owned_meetings_list,
             "joined_meetings": joined_meetings_list,
@@ -288,3 +285,13 @@ class ExecutionState:
             if frame.is_meeting and frame.meeting_id:
                 return frame.meeting_id
         return None
+
+    def snapshot_variables(self) -> None:
+        """Snapshot current variables for diff computation."""
+        self.previous_variables = VariablesTracker.snapshot(self.variables)
+
+    def publish_variable_changes(self) -> None:
+        """Publish events for any variable changes since last snapshot."""
+        VariablesTracker.publish_changes(
+            self.event_bus, self.agent_id, self.variables, self.previous_variables
+        )

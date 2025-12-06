@@ -1,11 +1,11 @@
 """Tests for PythonExecutor class."""
 
 import pytest
+from dotmap import DotMap
 
-from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.execution.python_executor import PythonExecutor
-from playbooks.state.variables import Variables
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
 
 
 class MockProgram:
@@ -20,7 +20,7 @@ class MockState:
 
     def __init__(self):
         event_bus = EventBus("test-session")
-        self.variables = Variables(event_bus, "test_agent")
+        self.variables = DotMap()
         self.call_stack = CallStack(event_bus)
         # Push a dummy frame for testing so Step() calls work
         instruction_pointer = InstructionPointer(
@@ -110,17 +110,16 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_var(self, executor):
         """Test capturing Var() calls."""
-        code = "$count = 42"
-        result = await executor.execute(code)
-        assert len(result.vars) == 1
-        assert result.vars["count"] == 42
+        code = "state.count = 42"
+        await executor.execute(code)
+        assert executor.agent.state.variables.count == 42
 
     @pytest.mark.asyncio
     async def test_capture_var_string(self, executor):
         """Test capturing Var() with string values."""
-        code = '$message = "test message"'
-        result = await executor.execute(code)
-        assert result.vars["message"] == "test message"
+        code = 'state.message = "test message"'
+        await executor.execute(code)
+        assert executor.agent.state.variables.message == "test message"
 
     @pytest.mark.asyncio
     async def test_capture_artifact(self, executor):
@@ -176,12 +175,12 @@ class TestPythonExecutor:
         code = """
 await Step("Welcome:01:QUE")
 await Say("user", "Hello!")
-$name = "Alice"
+state.name = "Alice"
 """
         result = await executor.execute(code)
         assert len(result.steps) == 1
         assert len(result.messages) == 1
-        assert len(result.vars) == 1
+        assert executor.agent.state.variables.name == "Alice"
 
     @pytest.mark.asyncio
     async def test_syntax_error(self, executor):
@@ -213,19 +212,19 @@ message""")'''
     async def test_variable_access(self, executor):
         """Test accessing variables in code."""
         # First set a variable
-        executor.agent.state.variables["$count"] = 5
+        executor.agent.state.variables.count = 5
 
         # Then use it
-        code = 'await Step("Test:01:QUE")\n$result = count * 2'
-        result = await executor.execute(code)
-        assert result.vars["result"] == 10
+        code = 'await Step("Test:01:QUE")\nstate.result = state.count * 2'
+        await executor.execute(code)
+        assert executor.agent.state.variables.result == 10
 
     @pytest.mark.asyncio
     async def test_builtin_namespace(self, executor):
         """Test that builtins are available (like len, str, etc.)."""
-        code = '$length = len("hello")'
-        result = await executor.execute(code)
-        assert result.vars["length"] == 5
+        code = 'state.length = len("hello")'
+        await executor.execute(code)
+        assert executor.agent.state.variables.length == 5
 
     @pytest.mark.asyncio
     async def test_execution_result_structure(self, executor):
@@ -233,7 +232,7 @@ message""")'''
         code = """
 await Step("Step1:01:QUE")
 await Say("user", "hello")
-$x = 1
+state.x = 1
 await Trigger("T1")
 await Return(True)
 """
@@ -261,31 +260,31 @@ await Return(True)
 
         # Code that uses the playbook arguments
         code = """
-$order_info = f"Order {order_id} for {customer_name}"
-$total_plus_ten = total + 10
+state.order_info = f"Order {order_id} for {customer_name}"
+state.total_plus_ten = total + 10
 """
         result = await executor.execute(code, playbook_args=playbook_args)
 
         # Verify arguments were accessible
         assert result.error_message is None
-        assert result.vars["order_info"] == "Order 12345 for John Doe"
-        assert result.vars["total_plus_ten"] == 109.99
+        assert executor.agent.state.variables.order_info == "Order 12345 for John Doe"
+        assert executor.agent.state.variables.total_plus_ten == 109.99
 
     @pytest.mark.asyncio
     async def test_playbook_arguments_none(self, executor):
         """Test that code works when no playbook_args are provided."""
-        code = "$x = 5"
+        code = "state.x = 5"
         result = await executor.execute(code, playbook_args=None)
         assert result.error_message is None
-        assert result.vars["x"] == 5
+        assert executor.agent.state.variables.x == 5
 
     @pytest.mark.asyncio
     async def test_playbook_arguments_empty_dict(self, executor):
         """Test that code works with empty playbook_args dict."""
-        code = "$y = 10"
+        code = "state.y = 10"
         result = await executor.execute(code, playbook_args={})
         assert result.error_message is None
-        assert result.vars["y"] == 10
+        assert executor.agent.state.variables.y == 10
 
     @pytest.mark.asyncio
     async def test_playbook_arguments_with_say(self, executor):
@@ -300,27 +299,19 @@ $total_plus_ten = total + 10
 
     @pytest.mark.asyncio
     async def test_variable_read_before_write_no_unbound_error(self, executor):
-        """Test that reading a variable before writing it later doesn't cause UnboundLocalError.
+        """Test that reading a variable via state.x before writing works correctly.
 
-        This tests the fix for the issue where code like:
-            game_state[move - 1] = current_symbol
-            current_symbol = 'X' if current_symbol == 'O' else 'O'
-
-        Would cause UnboundLocalError because Python sees the assignment to current_symbol
-        and marks it as local for the entire function, but the first line tries to read it
-        before it's assigned.
-
-        The fix initializes all variables that are assigned anywhere in the function
-        at the top of the function from globals.
+        With state.x syntax, variables are accessed through the DotMap directly,
+        so there's no UnboundLocalError issue.
         """
-        # Set up initial state with current_symbol
-        executor.agent.state.variables["$current_symbol"] = "X"
-        executor.agent.state.variables["$game_state"] = ["1", "2", "3"]
-        executor.agent.state.variables["$move"] = 2
+        # Set up initial state
+        executor.agent.state.variables.current_symbol = "X"
+        executor.agent.state.variables.game_state = ["1", "2", "3"]
+        executor.agent.state.variables.move = 2
 
         code = """
-game_state[move - 1] = current_symbol
-current_symbol = 'X' if current_symbol == 'O' else 'O'
+state.game_state[state.move - 1] = state.current_symbol
+state.current_symbol = 'X' if state.current_symbol == 'O' else 'O'
 """
         result = await executor.execute(code)
 
@@ -329,5 +320,7 @@ current_symbol = 'X' if current_symbol == 'O' else 'O'
         assert result.runtime_error is None
         assert result.syntax_error is None
 
-        # Should have captured the new current_symbol value
-        assert result.vars["current_symbol"] == "O"  # Flipped from X to O
+        # Should have updated current_symbol value
+        assert (
+            executor.agent.state.variables.current_symbol == "O"
+        )  # Flipped from X to O

@@ -9,19 +9,18 @@ It also supports targeting specific agent instances using indexing syntax:
     AccountantExpert["agent 1020"].TaxRateQuery($gross_income)
 """
 
-from typing import TYPE_CHECKING, Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional
 
 from playbooks.core.identifiers import AgentID
 
 if TYPE_CHECKING:
     from playbooks.agents import AIAgent
-    from playbooks.execution.python_executor import LLMNamespace
 
 
 def create_playbook_wrapper(
     playbook_name: str,
     current_agent: "AIAgent",
-    namespace: "LLMNamespace",
+    namespace: Optional[Dict[str, Any]] = None,
     target_agent_id: Optional[str] = None,
 ) -> Callable[..., Any]:
     """Create a wrapper function for executing a playbook.
@@ -73,7 +72,7 @@ class AIAgentInstanceProxy:
         target_agent_id: str,
         proxied_agent_klass: Any,
         current_agent: "AIAgent",
-        namespace: "LLMNamespace",
+        namespace: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize the agent instance proxy.
 
@@ -163,7 +162,7 @@ class AIAgentProxy:
         self,
         proxied_agent_klass_name: str,
         current_agent: "AIAgent",
-        namespace: Optional["LLMNamespace"] = None,
+        namespace: Optional[Dict[str, Any]] = None,
     ) -> None:
         """Initialize the agent proxy.
 
@@ -252,7 +251,7 @@ class AIAgentProxy:
 
 
 def create_agent_proxies(
-    current_agent: "AIAgent", namespace: "LLMNamespace"
+    current_agent: "AIAgent", namespace: Optional[Dict[str, Any]] = None
 ) -> dict[str, AIAgentProxy]:
     """Create agent proxy objects for all agents in the program.
 
