@@ -19,7 +19,7 @@ from playbooks.compilation.markdown_to_ast import (
     refresh_markdown_attributes,
 )
 from playbooks.config import config
-from playbooks.core.exceptions import ProgramLoadError
+from playbooks.core.exceptions import CompilationError, ProgramLoadError
 from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import (
@@ -333,6 +333,30 @@ class Compiler:
             print(f"  Compiling agent: {agent_name}", file=sys.stderr)
 
             compiled_agent = self._compile_agent(agent_content)
+
+            # Validate compilation result before caching
+            if not compiled_agent or not compiled_agent.strip():
+                raise CompilationError(
+                    f"Compilation of agent '{agent_name}' produced empty output"
+                )
+
+            # Validate the compiled output has actual content beyond the header
+            # The header is prepended as: <!-- ... Playbooks Assembly Language ... -->
+            # Check if there's any content after the header comment block
+            header_end_marker = "-->"
+            header_end_pos = compiled_agent.find(header_end_marker)
+            if header_end_pos != -1:
+                content_after_header = compiled_agent[
+                    header_end_pos + len(header_end_marker) :
+                ].strip()
+                if not content_after_header:
+                    raise CompilationError(
+                        f"Compilation of agent '{agent_name}' produced only a header with no content.\n"
+                        "This may indicate the LLM response was truncated due to token limits.\n"
+                        "Increase max_completion_tokens in playbooks.toml:\n\n"
+                        "[model]\n"
+                        "max_completion_tokens = 15000  # Increase this value"
+                    )
 
             # Cache the result
             try:

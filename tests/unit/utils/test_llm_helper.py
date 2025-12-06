@@ -5,7 +5,11 @@ from unittest.mock import patch
 import pytest
 
 from playbooks.core.enums import LLMMessageRole
-from playbooks.core.exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
+from playbooks.core.exceptions import (
+    CompilationError,
+    VendorAPIOverloadedError,
+    VendorAPIRateLimitError,
+)
 from playbooks.llm.messages import LLMMessage
 from playbooks.utils.llm_helper import (
     _make_completion_request,
@@ -241,9 +245,9 @@ def test_custom_get_cache_key():
 
 @patch("playbooks.utils.llm_helper.completion")
 def test_make_completion_request(mock_completion):
-    """Test _make_completion_request function."""
+    """Test _make_completion_request function with valid response."""
     mock_completion.return_value = {
-        "choices": [{"message": {"content": "Test response"}}]
+        "choices": [{"message": {"content": "Test response"}, "finish_reason": "stop"}]
     }
 
     kwargs = {"model": "gpt-4", "messages": []}
@@ -285,3 +289,81 @@ def test_retry_on_overload_max_retries_exceeded():
         always_failing_function()
 
     assert call_count == 2  # Should have tried max_retries times
+
+
+@patch("playbooks.utils.llm_helper.completion")
+def test_make_completion_request_token_limit_exceeded(mock_completion):
+    """Test _make_completion_request raises CompilationError when token limit exceeded."""
+    mock_completion.return_value = {
+        "choices": [{"message": {"content": ""}, "finish_reason": "length"}]
+    }
+
+    kwargs = {"model": "gpt-4", "messages": []}
+
+    with pytest.raises(CompilationError) as exc_info:
+        _make_completion_request(kwargs)
+
+    assert "truncated due to token limit" in str(exc_info.value)
+    assert "max_completion_tokens" in str(exc_info.value)
+
+
+@patch("playbooks.utils.llm_helper.completion")
+def test_make_completion_request_token_limit_with_partial_content(mock_completion):
+    """Test _make_completion_request raises CompilationError even with partial content when truncated."""
+    mock_completion.return_value = {
+        "choices": [
+            {"message": {"content": "Partial response..."}, "finish_reason": "length"}
+        ]
+    }
+
+    kwargs = {"model": "gpt-4", "messages": []}
+
+    with pytest.raises(CompilationError) as exc_info:
+        _make_completion_request(kwargs)
+
+    assert "truncated due to token limit" in str(exc_info.value)
+
+
+@patch("playbooks.utils.llm_helper.completion")
+def test_make_completion_request_empty_content(mock_completion):
+    """Test _make_completion_request raises CompilationError when content is empty."""
+    mock_completion.return_value = {
+        "choices": [{"message": {"content": ""}, "finish_reason": "stop"}]
+    }
+
+    kwargs = {"model": "gpt-4", "messages": []}
+
+    with pytest.raises(CompilationError) as exc_info:
+        _make_completion_request(kwargs)
+
+    assert "empty content" in str(exc_info.value)
+
+
+@patch("playbooks.utils.llm_helper.completion")
+def test_make_completion_request_whitespace_only_content(mock_completion):
+    """Test _make_completion_request raises CompilationError when content is whitespace only."""
+    mock_completion.return_value = {
+        "choices": [{"message": {"content": "   \n\t  "}, "finish_reason": "stop"}]
+    }
+
+    kwargs = {"model": "gpt-4", "messages": []}
+
+    with pytest.raises(CompilationError) as exc_info:
+        _make_completion_request(kwargs)
+
+    assert "empty content" in str(exc_info.value)
+
+
+@patch("playbooks.utils.llm_helper.completion")
+def test_make_completion_request_none_content(mock_completion):
+    """Test _make_completion_request raises CompilationError when content is None."""
+    mock_completion.return_value = {
+        "choices": [{"message": {"content": None}, "finish_reason": "stop"}]
+    }
+
+    kwargs = {"model": "gpt-4", "messages": []}
+
+    with pytest.raises(CompilationError) as exc_info:
+        _make_completion_request(kwargs)
+
+    assert "empty content" in str(exc_info.value)

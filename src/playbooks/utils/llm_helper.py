@@ -22,7 +22,11 @@ from litellm import completion, get_supported_openai_params
 from playbooks.config import config
 from playbooks.core.constants import SYSTEM_PROMPT_DELIMITER
 from playbooks.core.enums import LLMMessageRole
-from playbooks.core.exceptions import VendorAPIOverloadedError, VendorAPIRateLimitError
+from playbooks.core.exceptions import (
+    CompilationError,
+    VendorAPIOverloadedError,
+    VendorAPIRateLimitError,
+)
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.messages import SystemPromptLLMMessage, UserInputLLMMessage
 
@@ -197,12 +201,33 @@ def _make_completion_request(completion_kwargs: dict) -> str:
         Full response text from the LLM
 
     Raises:
+        CompilationError: If response is truncated due to token limit or content is empty
         VendorAPIOverloadedError: If API is overloaded after retries
         VendorAPIRateLimitError: If rate limit exceeded after retries
         litellm exceptions: Various litellm exceptions if request fails
     """
     response = completion(**completion_kwargs)
-    return response["choices"][0]["message"]["content"]
+    choice = response["choices"][0]
+    finish_reason = choice.get("finish_reason")
+    content = choice["message"]["content"]
+
+    # Check for token limit truncation
+    if finish_reason == "length":
+        raise CompilationError(
+            "LLM response was truncated due to token limit.\n"
+            "Increase max_completion_tokens in playbooks.toml:\n\n"
+            "[model]\n"
+            "max_completion_tokens = 15000  # Increase this value"
+        )
+
+    # Validate content is not empty
+    if not content or not content.strip():
+        raise CompilationError(
+            f"LLM returned empty content (finish_reason: {finish_reason}).\n"
+            "This may indicate the model couldn't generate a valid response."
+        )
+
+    return content
 
 
 def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:

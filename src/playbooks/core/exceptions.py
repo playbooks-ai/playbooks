@@ -39,6 +39,16 @@ class VendorAPIRateLimitError(PlaybooksError):
     pass
 
 
+class CompilationError(PlaybooksError):
+    """Raised when compilation fails due to LLM response issues.
+
+    This can occur when the LLM response is truncated due to token limits
+    or when the response content is empty/invalid.
+    """
+
+    pass
+
+
 class ExecutionFinished(Exception):
     """Custom exception to indicate that the playbook execution is finished.
 
