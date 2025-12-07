@@ -74,8 +74,9 @@ Test agent for message injection
             # Inject message into agent state
             for agent in playbooks.program.agents:
                 if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                    agent.state.variables["$message"] = "test message"
-                    assert "$message" in agent.state.variables
+                    agent.state.variables.message = "test message"
+                    assert hasattr(agent.state.variables, "message")
+                    assert agent.state.variables.message == "test message"
                     break
 
         finally:
@@ -108,9 +109,9 @@ Test agent for stdin
             stdin_content = "test stdin content"
             for agent in playbooks.program.agents:
                 if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                    agent.state.variables["$stdin"] = stdin_content
-                    assert "$stdin" in agent.state.variables
-                    assert agent.state.variables["$stdin"].value == stdin_content
+                    agent.state.variables.stdin = stdin_content
+                    assert hasattr(agent.state.variables, "stdin")
+                    assert agent.state.variables.stdin == stdin_content
                     break
 
         finally:

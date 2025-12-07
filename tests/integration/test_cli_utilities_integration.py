@@ -53,8 +53,8 @@ class TestStartupMessageIntegration:
         # Verify variable is set
         for agent in playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                assert "$startup_message" in agent.state.variables
-                assert agent.state.variables["$startup_message"].value == "test message"
+                assert hasattr(agent.state.variables, "startup_message")
+                assert agent.state.variables.startup_message == "test message"
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -74,11 +74,11 @@ class TestStartupMessageIntegration:
 
         for agent in playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                var = agent.state.variables["$startup_message"]
+                var = agent.state.variables.startup_message
                 assert isinstance(var, Artifact), f"Expected Artifact, got {type(var)}"
                 assert var.value == large_content
                 assert hasattr(agent, "_initial_artifacts_to_load")
-                assert "$startup_message" in agent._initial_artifacts_to_load
+                assert "startup_message" in agent._initial_artifacts_to_load
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -116,14 +116,13 @@ class TestStartupMessageIntegration:
         )
         await playbooks.initialize()
 
-        from playbooks.state.variables import Artifact, Variable
+        from playbooks.state.variables import Artifact
 
         for agent in playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                var = agent.state.variables["$startup_message"]
-                assert isinstance(var, Variable)
+                var = agent.state.variables.startup_message
                 assert not isinstance(var, Artifact)
-                assert var.value == small_content
+                assert var == small_content
 
 
 class TestExitCodes:
@@ -217,8 +216,8 @@ class TestMessageAndStdinCombination:
 
         for agent in playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                assert "$startup_message" in agent.state.variables
-                assert agent.state.variables["$startup_message"].value == "from stdin"
+                assert hasattr(agent.state.variables, "startup_message")
+                assert agent.state.variables.startup_message == "from stdin"
 
     @pytest.mark.asyncio
     @pytest.mark.integration
@@ -232,12 +231,14 @@ class TestMessageAndStdinCombination:
 
         for agent in playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                assert "$startup_message" in agent.state.variables
+                assert hasattr(agent.state.variables, "startup_message")
 
     @pytest.mark.asyncio
     @pytest.mark.integration
     async def test_stdin_and_message_combined(self, test_data_dir):
         """Test that stdin and message are combined with Message: prefix."""
+        from playbooks.state.variables import Artifact
+
         stdin_content = "stdin data"
         message_content = "instruction"
         combined = f"{stdin_content}\n\nMessage: {message_content}"
@@ -250,9 +251,12 @@ class TestMessageAndStdinCombination:
 
         for agent in playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                value = agent.state.variables["$startup_message"].value
-                assert "stdin data" in value
-                assert "Message: instruction" in value
+                value = agent.state.variables.startup_message
+                # Handle Artifact objects
+                if isinstance(value, Artifact):
+                    value = value.value
+                assert "stdin data" in str(value)
+                assert "Message: instruction" in str(value)
 
 
 class TestQuietFlag:
