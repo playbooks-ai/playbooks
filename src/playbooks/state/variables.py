@@ -12,6 +12,82 @@ from playbooks.core.events import VariableUpdateEvent
 from playbooks.infrastructure.event_bus import EventBus
 
 
+class PlaybookDotMap(DotMap):
+    """Custom DotMap that supports format specifiers in f-strings.
+
+    This subclass fixes the issue where DotMap objects don't support format
+    specifiers like `:,` in f-strings. When accessing dictionary values via
+    __getitem__, primitive types (int, str, float, bool, None) are returned
+    as native Python types to support format specifiers.
+
+    When format specifiers are used on a DotMap itself, it converts to a
+    native dict for formatting.
+    """
+
+    def __format__(self, format_spec: str) -> str:
+        """Format DotMap with format specifiers by converting to dict first.
+
+        Args:
+            format_spec: Format specification (e.g., ':,' for number formatting)
+
+        Returns:
+            Formatted string representation
+        """
+        # Convert to native dict to support format specifiers
+        native_dict = self._to_native_dict(self)
+        # Format the dict using the format spec
+        if format_spec:
+            return format(native_dict, format_spec)
+        return str(native_dict)
+
+    def __getitem__(self, key: Any) -> Any:
+        """Get item, returning native types for primitives.
+
+        This ensures that when accessing nested dictionary values like
+        report_data['sales'], we get a native int that supports format
+        specifiers, rather than a DotMap-wrapped value.
+
+        Args:
+            key: Dictionary key
+
+        Returns:
+            Native Python type for primitives, PlaybookDotMap for dicts
+        """
+        value = super().__getitem__(key)
+        # If it's a dict-like DotMap, keep it as PlaybookDotMap for nested access
+        if isinstance(value, DotMap) and not isinstance(value, PlaybookDotMap):
+            # Convert to PlaybookDotMap for consistency
+            return PlaybookDotMap(value)
+        # For primitive values, ensure they're native types
+        # DotMap should already return primitives as-is, but be safe
+        if isinstance(value, (int, str, float, bool, type(None))):
+            return value
+        # For dicts stored in DotMap, they become DotMap - keep as PlaybookDotMap
+        if isinstance(value, dict):
+            return PlaybookDotMap(value)
+        return value
+
+    @staticmethod
+    def _to_native_dict(value: Any) -> Any:
+        """Recursively convert DotMap to native dict.
+
+        Args:
+            value: Value to convert
+
+        Returns:
+            Native Python dict/list/primitive
+        """
+        if isinstance(value, (DotMap, dict)):
+            result = {}
+            for k, v in dict(value).items():
+                result[k] = PlaybookDotMap._to_native_dict(v)
+            return result
+        elif isinstance(value, list):
+            return [PlaybookDotMap._to_native_dict(item) for item in value]
+        else:
+            return value
+
+
 class Artifact:
     """Artifact with summary and value for large content.
 
@@ -234,5 +310,5 @@ class VariablesTracker:
         return value
 
 
-# Backwards compatibility alias
-Variables = DotMap
+# Backwards compatibility alias - use PlaybookDotMap instead of DotMap
+Variables = PlaybookDotMap

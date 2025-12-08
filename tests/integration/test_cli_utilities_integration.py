@@ -44,22 +44,26 @@ class TestStartupMessageIntegration:
     @pytest.mark.integration
     async def test_message_sets_startup_message(self, test_data_dir):
         """Test that initial_state sets $startup_message."""
+        from playbooks.agents import AIAgent
+
         playbooks = Playbooks(
             [test_data_dir / "cli_test_startup_message.pb"],
             initial_state={"startup_message": "test message"},
         )
         await playbooks.initialize()
 
-        # Verify variable is set
+        # Verify variable is set (only check AI agents, not human agents)
         for agent in playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                assert hasattr(agent.state.variables, "startup_message")
-                assert agent.state.variables.startup_message == "test message"
+            if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                assert hasattr(agent.state, "startup_message")
+                assert agent.state.startup_message == "test message"
 
     @pytest.mark.asyncio
     @pytest.mark.integration
     async def test_large_startup_message_becomes_artifact(self, test_data_dir):
         """Test that large startup_message is promoted to Artifact."""
+        from playbooks.agents import AIAgent
+
         # Create content larger than threshold
         large_content = "x" * (config.artifact_result_threshold + 100)
 
@@ -73,8 +77,8 @@ class TestStartupMessageIntegration:
         from playbooks.state.variables import Artifact
 
         for agent in playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                var = agent.state.variables.startup_message
+            if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                var = agent.state.startup_message
                 assert isinstance(var, Artifact), f"Expected Artifact, got {type(var)}"
                 assert var.value == large_content
                 assert hasattr(agent, "_initial_artifacts_to_load")
@@ -107,6 +111,8 @@ class TestStartupMessageIntegration:
     @pytest.mark.integration
     async def test_small_startup_message_remains_variable(self, test_data_dir):
         """Test that small startup_message stays as regular Variable."""
+        from playbooks.agents import AIAgent
+
         small_content = "small text"
         assert len(small_content) < config.artifact_result_threshold
 
@@ -119,8 +125,8 @@ class TestStartupMessageIntegration:
         from playbooks.state.variables import Artifact
 
         for agent in playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                var = agent.state.variables.startup_message
+            if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                var = agent.state.startup_message
                 assert not isinstance(var, Artifact)
                 assert var == small_content
 
@@ -208,6 +214,8 @@ class TestMessageAndStdinCombination:
     @pytest.mark.integration
     async def test_stdin_becomes_startup_message(self, test_data_dir):
         """Test that stdin content is available as $startup_message."""
+        from playbooks.agents import AIAgent
+
         playbooks = Playbooks(
             [test_data_dir / "cli_test_startup_message.pb"],
             initial_state={"startup_message": "from stdin"},
@@ -215,14 +223,16 @@ class TestMessageAndStdinCombination:
         await playbooks.initialize()
 
         for agent in playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                assert hasattr(agent.state.variables, "startup_message")
-                assert agent.state.variables.startup_message == "from stdin"
+            if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                assert hasattr(agent.state, "startup_message")
+                assert agent.state.startup_message == "from stdin"
 
     @pytest.mark.asyncio
     @pytest.mark.integration
     async def test_message_becomes_startup_message(self, test_data_dir):
         """Test that --message becomes $startup_message."""
+        from playbooks.agents import AIAgent
+
         playbooks = Playbooks(
             [test_data_dir / "cli_test_startup_message.pb"],
             initial_state={"startup_message": "from message"},
@@ -230,13 +240,14 @@ class TestMessageAndStdinCombination:
         await playbooks.initialize()
 
         for agent in playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                assert hasattr(agent.state.variables, "startup_message")
+            if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                assert hasattr(agent.state, "startup_message")
 
     @pytest.mark.asyncio
     @pytest.mark.integration
     async def test_stdin_and_message_combined(self, test_data_dir):
         """Test that stdin and message are combined with Message: prefix."""
+        from playbooks.agents import AIAgent
         from playbooks.state.variables import Artifact
 
         stdin_content = "stdin data"
@@ -250,8 +261,8 @@ class TestMessageAndStdinCombination:
         await playbooks.initialize()
 
         for agent in playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                value = agent.state.variables.startup_message
+            if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                value = agent.state.startup_message
                 # Handle Artifact objects
                 if isinstance(value, Artifact):
                     value = value.value

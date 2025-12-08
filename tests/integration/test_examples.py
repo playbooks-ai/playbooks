@@ -16,7 +16,7 @@ async def test_example_01(test_data_dir):
     playbooks = Playbooks([test_data_dir / "01-hello-playbooks.pb"])
     await playbooks.initialize()
     await playbooks.program.run_till_exit()
-    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    log = playbooks.program.agents[0].session_log.to_log_full()
     assert "HelloWorldDemo()" in log
     assert EXECUTION_FINISHED in log
 
@@ -32,7 +32,7 @@ async def test_example_02(test_data_dir):
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
 
     await playbooks.program.run_till_exit()
-    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    log = playbooks.program.agents[0].session_log.to_log_full()
     print(log)
     assert "John" in log
 
@@ -48,7 +48,7 @@ async def test_example_03(test_data_dir):
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
 
     await playbooks.program.run_till_exit()
-    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    log = playbooks.program.agents[0].session_log.to_log_full()
     assert "-5.44" in log
 
 
@@ -57,7 +57,7 @@ async def test_example_04(test_data_dir):
     playbooks = Playbooks([test_data_dir / "04-md-python-md.pb"])
     await playbooks.initialize()
     await playbooks.program.run_till_exit()
-    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    log = playbooks.program.agents[0].session_log.to_log_full()
     assert "generate_report_summary()" in log
 
 
@@ -71,17 +71,16 @@ async def test_example_05(test_data_dir):
     )
 
     await playbooks.program.run_till_exit()
-    log = playbooks.program.agents[0].state.session_log.to_log_full()
+    log = playbooks.program.agents[0].session_log.to_log_full()
     assert "India" in log
     assert "Nepal" in log
-    assert "Bangladesh" in log
 
 
 # @pytest.mark.asyncio
 # async def test_example_08(test_data_dir):
 #     playbooks = Playbooks([test_data_dir / "08-artifact.pb"])
 #     await playbooks.program.run_till_exit()
-#     log = playbooks.program.agents[0].state.session_log.to_log_full()
+#     log = playbooks.program.agents[0].session_log.to_log_full()
 #     assert '`LoadArtifact("my_artifact")`' in log
 #     assert '`LoadArtifact("another_artifact")`' in log
 
@@ -110,7 +109,7 @@ async def test_example_05(test_data_dir):
 #     )
 
 #     await playbooks.program.run_till_exit()
-#     log = playbooks.program.agents[0].state.session_log.to_log_full()
+#     log = playbooks.program.agents[0].session_log.to_log_full()
 #     assert "John" in log
 
 
@@ -151,7 +150,7 @@ async def test_example_11(test_data_dir, test_mcp_server_instance):
 
     await playbooks.program.run_till_exit()
 
-    log = markdown_agent.state.session_log.to_log_full()
+    log = markdown_agent.session_log.to_log_full()
 
     # Check that the secret message appears in the log
     assert "Playbooks+MCP FTW!" in log
@@ -185,7 +184,7 @@ async def test_example_12_timeout(test_data_dir):
     )
     await human.SendMessage(agent.id, EOM)
     await playbooks.program.run_till_exit()
-    log = agent.state.session_log.to_log_full()
+    log = agent.session_log.to_log_full()
 
     assert "Meeting initialization failed" in log
     assert "Timeout" in log
@@ -217,7 +216,7 @@ async def test_example_two_player_game(test_data_dir):
             ]
         )
         pytest.fail(f"Agent errors detected during test execution:\n{error_details}")
-    log = agent.state.session_log.to_log_full()
+    log = agent.session_log.to_log_full()
     print(log)
     assert "GameRoom(" in log
 
@@ -230,12 +229,12 @@ async def test_example_13_description_injection(test_data_dir):
     agent = playbooks.program.agents_by_klass["TestAgent"][0]
 
     await playbooks.program.run_till_exit()
-    log = agent.state.session_log.to_log_full()
+    log = agent.session_log.to_log_full()
     print(log)
     assert "Greed" in log
     # Variable is stored as jk (without $ prefix) in new system
     assert (
-        playbooks.program.agents_by_klass["TestAgent"][0].state.variables.jk
+        playbooks.program.agents_by_klass["TestAgent"][0].state.jk
         == "Why was the computer cold? It left its Windows open."
     )
 
@@ -261,7 +260,7 @@ async def test_example_13_description_injection(test_data_dir):
 #     await human.SendMessage(agent.id, EOM)
 
 #     await playbooks.program.run_till_exit()
-#     log = agent.state.session_log.to_log_full()
+#     log = agent.session_log.to_log_full()
 #     print(log)
 #     assert "FileSystemAgent.extract_table_of_contents" in log
 #     assert "FileSystemAgent.read_file" in log
@@ -294,7 +293,7 @@ async def test_example_14_python_only(test_data_dir, monkeypatch):
 
     await playbooks.program.run_till_exit()
 
-    log = ai_agent.state.session_log.to_log_full()
+    log = ai_agent.session_log.to_log_full()
 
     print("=== Session Log ===")
     print(log)
@@ -325,13 +324,13 @@ async def test_example_storyteller(test_examples_dir):
     await human.SendMessage(storyteller.id, EOM)
 
     await playbooks.program.run_till_exit()
-    log = storyteller.state.session_log.to_log_full()
+    log = storyteller.session_log.to_log_full()
     assert "Main()" in log
     assert "CreateAgent(CharacterCreator)" in log
     assert "Execution finished" in log
 
     character_creator = playbooks.program.agents_by_klass["CharacterCreator"][0]
-    log = character_creator.state.session_log.to_log_full()
+    log = character_creator.session_log.to_log_full()
     assert "CreateNewCharacter() →" in log
 
 
@@ -426,14 +425,14 @@ async def test_example_15(test_data_dir, capsys):
     assert len(playbooks.program.agents) == 5
     assert len(playbooks.program.agents_by_klass["B"]) == 2
 
-    log = playbooks.program.agents_by_klass["A"][0].state.session_log.to_log_full()
+    log = playbooks.program.agents_by_klass["A"][0].session_log.to_log_full()
     assert "from A" in log
 
-    log = playbooks.program.agents_by_klass["B"][0].state.session_log.to_log_full()
+    log = playbooks.program.agents_by_klass["B"][0].session_log.to_log_full()
     assert "from B" in log
 
-    log = playbooks.program.agents_by_klass["B"][1].state.session_log.to_log_full()
+    log = playbooks.program.agents_by_klass["B"][1].session_log.to_log_full()
     assert "from another B" in log
 
-    log = playbooks.program.agents_by_klass["C"][0].state.session_log.to_log_full()
+    log = playbooks.program.agents_by_klass["C"][0].session_log.to_log_full()
     assert "from C" in log

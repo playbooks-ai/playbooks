@@ -88,9 +88,7 @@ class PlaybookLLMExecution(LLMExecution):
 
         # Resolve description placeholders if present
         if self.playbook.description and "{" in self.playbook.description:
-            context = ExpressionContext(
-                agent=self.agent, state=self.agent.state, call=call
-            )
+            context = ExpressionContext(agent=self.agent, call=call)
             resolved_description = await resolve_description_placeholders(
                 self.playbook.description, context
             )
@@ -112,7 +110,7 @@ class PlaybookLLMExecution(LLMExecution):
         )
 
         # Add the message object directly to the call stack
-        self.agent.state.call_stack.add_llm_message(playbook_impl_msg)
+        self.agent.call_stack.add_llm_message(playbook_impl_msg)
 
     async def execute(self, *args: Any, **kwargs: Any) -> Any:
         """Execute the playbook with traditional step-by-step logic.
@@ -153,7 +151,7 @@ class PlaybookLLMExecution(LLMExecution):
                     artifacts_to_load=artifacts_to_load,
                     playbook_args=playbook_args,
                 ),
-                event_bus=self.agent.state.event_bus,
+                event_bus=self.agent.event_bus,
                 agent=self.agent,
             )
 
@@ -190,91 +188,10 @@ class PlaybookLLMExecution(LLMExecution):
                     playbook_name=self.playbook.name,
                     success=False,
                 )
-                self.agent.state.call_stack.add_llm_message(error_msg)
+                self.agent.call_stack.add_llm_message(error_msg)
 
                 # Continue the loop to let LLM retry
                 continue
-
-            # artifacts_to_load = []
-
-            # all_steps = []
-            # for line in llm_response.lines:
-            #     for step in line.steps:
-            #         all_steps.append(step)
-            # next_steps = {}
-            # for i in range(len(all_steps)):
-            #     if i == len(all_steps) - 1:
-            #         next_steps[all_steps[i]] = all_steps[i]
-            #     else:
-            #         next_steps[all_steps[i]] = all_steps[i + 1]
-
-            # for line in llm_response.lines:
-            #     if self.agent.program.execution_finished:
-            #         break
-
-            #     if "`SaveArtifact(" not in line.text:
-            #         for step in line.steps:
-            #             if step.step:
-            #                 self.agent.state.session_log.append(
-            #                     SessionLogItemMessage(
-            #                         f"{self.playbook.name}:{step.step.raw_text}"
-            #                     ),
-            #                     level=SessionLogItemLevel.HIGH,
-            #                 )
-            #         self.agent.state.session_log.append(
-            #             SessionLogItemMessage(line.text),
-            #             level=SessionLogItemLevel.LOW,
-            #         )
-
-            #     # Process steps but only call handle_execution_start once per line
-            #     for i in range(len(line.steps)):
-            #         # debug("Execution step", step_index=i, step=str(line.steps[i]))
-            #         step = line.steps[i]
-            #         if i == len(line.steps) - 1:
-            #             next_step = step.copy()
-            #             # debug("Next step prepared", next_step=str(next_step))
-            #         else:
-            #             next_step = step
-
-            #         self.agent.state.call_stack.advance_instruction_pointer(next_step)
-
-            #     # Replace the current call stack frame with the last executed step
-            #     if line.steps:
-            #         # last_step = line.steps[-1].copy()
-
-            #         # debug(
-            #         #     "Call handle_step",
-            #         #     last_step=str(last_step),
-            #         #     next_step=str(next_step),
-            #         # )
-
-            #         for step in line.steps:
-            #             # debug(f"Agent {self.agent.id} pause if needed on step {step}")
-            #             await self.debug_handler.pause_if_needed(
-            #                 instruction_pointer=step,
-            #                 agent_id=self.agent.id,
-            #             )
-            #             # debug(
-            #             #     f"Agent {self.agent.id} pause if needed on step {step} done"
-            #             # )
-
-            #     # Update variables
-            #     if len(line.vars) > 0:
-            #         self.agent.state.variables.update(line.vars)
-
-            #     # Process playbook calls for logging and special cases only
-            #     # (playbooks are now executed immediately when called in Python code)
-            #     if line.playbook_calls:
-            #         for playbook_call in line.playbook_calls:
-            #             if self.agent.program.execution_finished:
-            #                 break
-
-            #             # debug("Playbook call", playbook_call=str(playbook_call))
-            #             if playbook_call.playbook_klass == "Return":
-            #                 if playbook_call.args:
-            #                     return_value = playbook_call.args[0]
-            #             elif playbook_call.playbook_klass == "LoadArtifact":
-            #                 artifacts_to_load.append(playbook_call.args[0])
 
             # Check if exiting program
             if llm_response.execution_result.exit_program:
@@ -289,7 +206,7 @@ class PlaybookLLMExecution(LLMExecution):
             instruction = []
             for loaded_artifact in artifacts_to_load:
                 instruction.append(f"Loaded Artifact[{loaded_artifact}]")
-            top_of_stack = self.agent.state.call_stack.peek()
+            top_of_stack = self.agent.call_stack.peek()
             instruction.append(
                 f"{str(top_of_stack)} was executed - "
                 f"continue execution. Refer to {top_of_stack.instruction_pointer.playbook} playbook implementation above."
@@ -338,7 +255,7 @@ class PlaybookLLMExecution(LLMExecution):
             )
 
         prompt = InterpreterPrompt(
-            self.agent.state,
+            self.agent,
             self.agent.playbooks,
             self.playbook,
             instruction=instruction,
@@ -410,7 +327,7 @@ class PlaybookLLMExecution(LLMExecution):
         # Create an placeholder AssistantResponseLLMMessage so that it
         # appears before any messages from the execution results
         self.llm_response_msg = AssistantResponseLLMMessage("Thinking...")
-        self.agent.state.call_stack.add_llm_message(self.llm_response_msg)
+        self.agent.call_stack.add_llm_message(self.llm_response_msg)
 
         # Create generation span with OTEL context - this stays active during code execution
         # so that exec spans (@observe) nest under this generation
@@ -700,7 +617,7 @@ class PlaybookLLMExecution(LLMExecution):
             return message
 
         # Create expression context for resolution
-        context = ExpressionContext(agent=self.agent, state=self.agent.state, call=None)
+        context = ExpressionContext(agent=self.agent, call=None)
 
         # Resolve placeholders
         resolved = await resolve_description_placeholders(message, context)
@@ -747,14 +664,11 @@ class PlaybookLLMExecution(LLMExecution):
                     ref = ref[1:]
                 try:
                     # Try to get from state variables
-                    if self.agent.state and hasattr(self.agent.state, "variables"):
-                        if hasattr(self.agent.state.variables, ref):
-                            var = getattr(self.agent.state.variables, ref)
-                            result[param_name] = var
-                        else:
-                            # Variable not found, store the reference as-is
-                            result[param_name] = value
+                    if self.agent.state and hasattr(self.agent.state, ref):
+                        var = getattr(self.agent.state, ref)
+                        result[param_name] = var
                     else:
+                        # Variable not found, store the reference as-is
                         result[param_name] = value
                 except Exception:
                     # If can't resolve, store the reference as-is

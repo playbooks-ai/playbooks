@@ -418,8 +418,8 @@ async def main(
     # Wrap session logs with SessionLogWrapper for verbose output
     for agent in playbooks.program.agents:
         if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-            wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose)
-            agent.state.session_log = wrapper
+            wrapper = SessionLogWrapper(agent.session_log, pubsub, verbose)
+            agent.session_log = wrapper
 
     # Add message directly to LLM context so it's visible during BGN playbook execution
     if message:
@@ -434,7 +434,7 @@ async def main(
                     sender_agent=human_klass,
                     target_agent=agent.klass,
                 )
-                agent.state.call_stack.top_level_llm_messages.append(agent_comm_msg)
+                agent.call_stack.top_level_llm_messages.append(agent_comm_msg)
 
     def log_event(event: Event) -> None:
         print(event)

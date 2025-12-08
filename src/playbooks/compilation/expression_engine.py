@@ -11,14 +11,14 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
+from dotmap import DotMap
+
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.variables import Artifact
-from dotmap import DotMap
 
 if TYPE_CHECKING:
     from playbooks.agents.base_agent import Agent
     from playbooks.execution.call import PlaybookCall
-    from playbooks.state.execution_state import ExecutionState
 
 # ============================================================================
 # Core Processing Functions (Pure, Stateless)
@@ -306,18 +306,14 @@ def bind_call_parameters(
 class ExpressionContext:
     """Minimal context for variable and function resolution."""
 
-    def __init__(
-        self, agent: "Agent", state: "ExecutionState", call: "PlaybookCall"
-    ) -> None:
+    def __init__(self, agent: "Agent", call: "PlaybookCall") -> None:
         """Initialize expression context.
 
         Args:
-            agent: Agent instance for namespace resolution
-            state: Execution state for variable lookup
+            agent: Agent instance for namespace resolution and variable lookup
             call: Current playbook call for context
         """
         self.agent = agent
-        self.state = state
         self.call = call
         self._cache: Dict[str, Any] = {}
         self._resolving: Set[str] = set()  # Circular reference detection
@@ -326,7 +322,9 @@ class ExpressionContext:
         )
 
         # Pre-populate built-in context
-        self._cache.update({"agent": agent, "call": call, "timestamp": datetime.now()})
+        self._cache.update(
+            {"agent": agent, "self": agent, "call": call, "timestamp": datetime.now()}
+        )
 
     def resolve_variable(self, name: str) -> Any:
         """Resolve single variable with caching.
@@ -334,7 +332,7 @@ class ExpressionContext:
         Resolution order (local-before-global):
         1. Built-in context (agent, call, timestamp)
         2. Local parameters from current playbook call
-        3. State variables (state.variables.name) - global scope
+        3. State variables (state.name) - global scope
         4. Namespace manager (agent.namespace_manager.namespace[name])
         5. KeyError with suggestions
 
@@ -366,23 +364,23 @@ class ExpressionContext:
                 return value
 
             # Try state variables
-            if hasattr(self.state, "variables"):
-                if isinstance(self.state.variables, DotMap):
+            if hasattr(self.agent, "state"):
+                if isinstance(self.agent.state, DotMap):
                     try:
                         # Check if key exists by safely converting to dict
                         # Note: Use try/except because dict() might fail on certain DotMap states
-                        vars_dict = dict(self.state.variables)
+                        vars_dict = dict(self.agent.state)
                         if name in vars_dict:
                             value = vars_dict[name]
                             # Auto-load artifact if not already loaded
                             if isinstance(value, Artifact):
                                 if hasattr(
-                                    self.state, "call_stack"
-                                ) and not self.state.call_stack.is_artifact_loaded(
+                                    self.agent, "call_stack"
+                                ) and not self.agent.call_stack.is_artifact_loaded(
                                     name
                                 ):
                                     artifact_msg = ArtifactLLMMessage(value)
-                                    self.state.call_stack.add_llm_message(artifact_msg)
+                                    self.agent.call_stack.add_llm_message(artifact_msg)
                             self._cache[name] = value
                             return value
                     except (AttributeError, KeyError):
@@ -417,7 +415,7 @@ class ExpressionContext:
         variables = []
 
         # Built-in variables
-        variables.extend(["agent", "call", "timestamp"])
+        variables.extend(["agent", "self", "call", "timestamp"])
 
         # Local parameters from current playbook call
         try:
@@ -428,11 +426,11 @@ class ExpressionContext:
             pass
 
         # State variables (global)
-        if hasattr(self.state, "variables"):
+        if hasattr(self.agent, "state"):
             from dotmap import DotMap
 
-            if isinstance(self.state.variables, DotMap):
-                variables.extend(dict(self.state.variables).keys())
+            if isinstance(self.agent.state, DotMap):
+                variables.extend(dict(self.agent.state).keys())
 
         # Namespace variables
         if hasattr(self.agent, "namespace_manager") and hasattr(

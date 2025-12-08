@@ -4,11 +4,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from playbooks.agents.base_agent import BaseAgent
+from playbooks.agents.ai_agent import AIAgent
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.llm.messages import AgentCommunicationLLMMessage
 from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.state.execution_state import ExecutionState
 
 
 class MockProgram:
@@ -23,21 +22,19 @@ class MockProgram:
         return f"Response from {receiver_spec}"
 
 
-class MockBaseAgent(BaseAgent):
-    """Mock BaseAgent for testing."""
+class MockAIAgent(AIAgent):
+    """Mock AIAgent for testing."""
 
-    klass = "MockBaseAgent"
-    description = "Mock BaseAgent for testing"
+    klass = "MockAIAgent"
+    description = "Mock AIAgent for testing"
     metadata = {}
     playbooks = {}
     namespace_manager = None
 
-    def __init__(self, agent_id: str):
-        # Skip the normal BaseAgent init to avoid klass issues
-        self.id = agent_id
-        self.klass = "MockBaseAgent"
+    def __init__(self, event_bus: EventBus, agent_id: str):
+        super().__init__(event_bus, agent_id=agent_id)
 
-    def discover_playbooks(self):
+    async def discover_playbooks(self):
         pass
 
 
@@ -50,22 +47,16 @@ class TestAgentCommunicationIntegration:
         return EventBus("test_session")
 
     @pytest.fixture
-    def execution_state(self, event_bus):
-        """Create execution state for testing."""
-        return ExecutionState(event_bus, "TestAgent", "agent_1000")
-
-    @pytest.fixture
-    def base_agent(self, execution_state):
+    def base_agent(self, event_bus):
         """Create base agent for testing."""
-        agent = MockBaseAgent("agent_1000")
-        agent.state = execution_state
+        agent = MockAIAgent(event_bus, "agent_1000")
         agent.program = MockProgram()
         return agent
 
     def test_send_message_with_empty_call_stack_adds_to_top_level(self, base_agent):
         """Test that agent communication with empty call stack adds to top_level_llm_messages."""
         # Ensure call stack is empty
-        assert base_agent.state.call_stack.is_empty()
+        assert base_agent.call_stack.is_empty()
 
         # Simulate the message creation part of SendMessage (without async routing)
         message = "Hello, agent_2000!"
@@ -84,28 +75,28 @@ class TestAgentCommunicationIntegration:
 
         # Test the call stack logic (same as in SendMessage)
         if hasattr(base_agent, "state") and hasattr(base_agent.state, "call_stack"):
-            current_frame = base_agent.state.call_stack.peek()
+            current_frame = base_agent.call_stack.peek()
             if current_frame is not None and current_frame.playbook == "Say":
                 # If we're in Say playbook, add to its parent context
-                base_agent.state.call_stack.add_llm_message_on_parent(agent_comm_msg)
+                base_agent.call_stack.add_llm_message_on_parent(agent_comm_msg)
             else:
                 # Add to current frame or top-level if stack is empty
-                base_agent.state.call_stack.add_llm_message(agent_comm_msg)
+                base_agent.call_stack.add_llm_message(agent_comm_msg)
 
         # Check that message was added to top-level
-        assert len(base_agent.state.call_stack.top_level_llm_messages) == 1
+        assert len(base_agent.call_stack.top_level_llm_messages) == 1
 
-        comm_msg = base_agent.state.call_stack.top_level_llm_messages[0]
+        comm_msg = base_agent.call_stack.top_level_llm_messages[0]
         assert isinstance(comm_msg, AgentCommunicationLLMMessage)
         assert message in comm_msg.content
-        assert "MockBaseAgent" in comm_msg.content
+        assert "MockAIAgent" in comm_msg.content
 
     def test_send_message_with_call_stack_frame_adds_to_frame(self, base_agent):
         """Test that agent communication with call stack frame adds to current frame."""
         # Add a frame to call stack
         ip = InstructionPointer("test_playbook", "01", 1)
         frame = CallStackFrame(ip)
-        base_agent.state.call_stack.push(frame)
+        base_agent.call_stack.push(frame)
 
         # Simulate agent communication logic
         message = "Hello from playbook!"
@@ -118,14 +109,14 @@ class TestAgentCommunicationIntegration:
         )
 
         # Test the call stack logic
-        current_frame = base_agent.state.call_stack.peek()
+        current_frame = base_agent.call_stack.peek()
         if current_frame is not None and current_frame.playbook == "Say":
-            base_agent.state.call_stack.add_llm_message_on_parent(agent_comm_msg)
+            base_agent.call_stack.add_llm_message_on_parent(agent_comm_msg)
         else:
-            base_agent.state.call_stack.add_llm_message(agent_comm_msg)
+            base_agent.call_stack.add_llm_message(agent_comm_msg)
 
         # Check that message was added to frame, not top-level
-        assert len(base_agent.state.call_stack.top_level_llm_messages) == 0
+        assert len(base_agent.call_stack.top_level_llm_messages) == 0
         assert len(frame.llm_messages) == 1
 
         comm_msg = frame.llm_messages[0]
@@ -137,12 +128,12 @@ class TestAgentCommunicationIntegration:
         # Add caller frame
         ip1 = InstructionPointer("caller_playbook", "01", 1)
         caller_frame = CallStackFrame(ip1)
-        base_agent.state.call_stack.push(caller_frame)
+        base_agent.call_stack.push(caller_frame)
 
         # Add Say frame
         ip2 = InstructionPointer("Say", "01", 1)
         say_frame = CallStackFrame(ip2)
-        base_agent.state.call_stack.push(say_frame)
+        base_agent.call_stack.push(say_frame)
 
         # Simulate agent communication from Say playbook
         message = "Message from Say"
@@ -153,14 +144,14 @@ class TestAgentCommunicationIntegration:
         )
 
         # Test the Say playbook logic
-        current_frame = base_agent.state.call_stack.peek()
+        current_frame = base_agent.call_stack.peek()
         if current_frame is not None and current_frame.playbook == "Say":
-            base_agent.state.call_stack.add_llm_message_on_parent(agent_comm_msg)
+            base_agent.call_stack.add_llm_message_on_parent(agent_comm_msg)
         else:
-            base_agent.state.call_stack.add_llm_message(agent_comm_msg)
+            base_agent.call_stack.add_llm_message(agent_comm_msg)
 
         # Check that message was added to caller frame, not Say frame or top-level
-        assert len(base_agent.state.call_stack.top_level_llm_messages) == 0
+        assert len(base_agent.call_stack.top_level_llm_messages) == 0
         assert len(say_frame.llm_messages) == 0
         assert len(caller_frame.llm_messages) == 1
 

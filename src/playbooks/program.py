@@ -38,6 +38,20 @@ from .utils import file_utils
 logger = logging.getLogger(__name__)
 
 
+def is_agent_busy(agent: BaseAgent) -> bool:
+    """Check if agent is busy, with defensive handling.
+
+    Args:
+        agent: Agent instance to check
+
+    Returns:
+        True if agent is busy, False otherwise (defaults to False if state is missing)
+    """
+    if not hasattr(agent, "state"):
+        return False
+    return getattr(agent.state, "_busy", False)
+
+
 class AsyncAgentRuntime:
     """Asyncio-based runtime that manages agent execution.
 
@@ -241,11 +255,8 @@ class AsyncAgentRuntime:
             done = True
             for agent in self.program.agents:
                 if isinstance(agent, AIAgent):
-                    if len(agent.state.call_stack.frames) > 0:
-                        if not hasattr(agent.state.variables, "_busy"):
-                            done = False
-                            break
-                        if getattr(agent.state.variables, "_busy", False) is True:
+                    if len(agent.call_stack.frames) > 0:
+                        if is_agent_busy(agent):
                             done = False
                             break
             await asyncio.sleep(1)
@@ -554,6 +565,9 @@ class Program(ProgramAgentsCommunicationMixin):
         # Agent runtime manages execution with asyncio
         self.runtime = AsyncAgentRuntime(program=self)
 
+        # Lock for agent creation to prevent race conditions
+        self._agent_creation_lock = asyncio.Lock()
+
         self.extract_public_json()
         self.parse_metadata()
 
@@ -607,7 +621,7 @@ class Program(ProgramAgentsCommunicationMixin):
             from playbooks.state.variables import Artifact
 
             for agent in self.agents:
-                if hasattr(agent, "state") and hasattr(agent.state, "variables"):
+                if hasattr(agent, "state"):
                     for var_name, var_value in self.initial_state.items():
                         # Check if should be promoted to Artifact based on threshold
                         if (
@@ -619,14 +633,16 @@ class Program(ProgramAgentsCommunicationMixin):
                                 summary=f"Initial state variable: {var_name}",
                                 value=var_value,
                             )
-                            setattr(agent.state.variables, var_name, artifact)
+                            # Store directly on state using dictionary-style access
+                            agent.state[var_name] = artifact
 
                             # Store artifact for pre-loading into first call stack frame
                             if not hasattr(agent, "_initial_artifacts_to_load"):
                                 agent._initial_artifacts_to_load = []
                             agent._initial_artifacts_to_load.append(var_name)
                         else:
-                            setattr(agent.state.variables, var_name, var_value)
+                            # Store directly on state using dictionary-style access
+                            agent.state[var_name] = var_value
         # Validate public.json count (only for local AI agents, not remote/MCP agents)
         # Remote agents (MCPAgent, RemoteAIAgent) don't have playbooks in the current playbook
         # Allow empty or missing public.json for testing scenarios
@@ -775,6 +791,78 @@ class Program(ProgramAgentsCommunicationMixin):
             await self._debug_server.send_thread_started_event(agent.id)
 
         return agent
+
+    async def get_or_create_agent(self, agent_klass: str, **create_kwargs) -> BaseAgent:
+        """Get an available agent or create a new one.
+
+        Finds idle agents of the requested type using load balancing.
+        Creates a new agent if all are busy or none exist.
+
+        Args:
+            agent_klass: Agent class name (e.g., "AccountantExpert")
+            **create_kwargs: Arguments to pass to create_agent()
+
+        Returns:
+            Agent instance (either existing idle one or newly created)
+
+        Raises:
+            ValueError: If agent_klass is not found in agent_klasses
+            RuntimeError: If agent creation fails after registration
+        """
+        import random
+
+        # Validate that the agent class exists
+        if agent_klass not in self.agent_klasses:
+            raise ValueError(
+                f"Agent class '{agent_klass}' not found. "
+                f"Available classes: {list(self.agent_klasses.keys())}"
+            )
+
+        # Use lock to prevent race conditions in async context
+        async with self._agent_creation_lock:
+            # Get all agents of this type
+            agents = self.agents_by_klass.get(agent_klass, [])
+
+            # Find idle agents (not busy) with defensive checks
+            idle_agents = []
+            for agent in agents:
+                # Defensive check: ensure agent has state and variables
+                if not hasattr(agent, "state"):
+                    logger.debug(
+                        f"Agent {agent.id if hasattr(agent, 'id') else 'unknown'} "
+                        "missing state attribute, skipping in get_or_create_agent"
+                    )
+                    continue
+                # Check if agent is idle (not busy)
+                if not is_agent_busy(agent):
+                    idle_agents.append(agent)
+
+            # Load balance: randomly select from idle agents
+            if idle_agents:
+                return random.choice(idle_agents)
+
+            # Create new agent if all busy or none exist
+            # Track registration state for rollback on failure
+            new_agent = None
+            agent_registered = False
+            try:
+                new_agent = await self.create_agent(agent_klass, **create_kwargs)
+                agent_registered = True
+                await self.runtime.start_agent(new_agent)
+                return new_agent
+            except Exception as e:
+                # Rollback: remove agent from registries if it was registered
+                if agent_registered and new_agent is not None:
+                    self.agents.remove(new_agent)
+                    if agent_klass in self.agents_by_klass:
+                        if new_agent in self.agents_by_klass[agent_klass]:
+                            self.agents_by_klass[agent_klass].remove(new_agent)
+                    if new_agent.id in self.agents_by_id:
+                        del self.agents_by_id[new_agent.id]
+                    self.event_agents_changed()
+                raise RuntimeError(
+                    f"Failed to create or start agent '{agent_klass}': {e}"
+                ) from e
 
     async def _start_new_agent(self, agent: BaseAgent) -> None:
         """Initialize and start a newly created agent."""

@@ -2,10 +2,20 @@
 
 import pytest
 
+from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.execution.step import PlaybookStep
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.call_stack import CallStackFrame, InstructionPointer
-from playbooks.state.execution_state import ExecutionState
+
+
+class TestAgent(LocalAIAgent):
+    """Test agent with concrete klass."""
+
+    klass = "TestAgent"
+    description = "Test Agent"
+    metadata = {}
+    playbooks = {}
+    namespace_manager = None
 
 
 @pytest.fixture
@@ -16,8 +26,8 @@ def event_bus():
 
 @pytest.fixture
 def execution_state(event_bus):
-    """Create an execution state for testing."""
-    return ExecutionState(event_bus, "TestAgent", "1000")
+    """Create an agent for testing (named execution_state for backward compatibility)."""
+    return TestAgent(event_bus, agent_id="1000")
 
 
 class TestExecutionStateDelta:
@@ -31,7 +41,7 @@ class TestExecutionStateDelta:
     def test_full_state_returns_complete_state(self, execution_state):
         """Test that to_dict(full=True) returns complete state."""
         # Add some state
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         execution_state.agents = [{"id": "1001", "name": "Agent1"}]
 
         full_state = execution_state.to_dict(full=True)
@@ -45,7 +55,7 @@ class TestExecutionStateDelta:
 
     def test_delta_without_last_sent_state_returns_full(self, execution_state):
         """Test that delta without last_sent_state returns full state."""
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
 
         # Request delta but no last_sent_state
         delta = execution_state.to_dict(full=False)
@@ -56,7 +66,7 @@ class TestExecutionStateDelta:
 
     def test_delta_with_no_changes(self, execution_state):
         """Test delta when nothing has changed."""
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Get delta with no changes
@@ -67,11 +77,11 @@ class TestExecutionStateDelta:
 
     def test_delta_with_added_variables(self, execution_state):
         """Test delta when variables are added."""
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Add new variable
-        execution_state.variables.var2 = "value2"
+        execution_state.state.var2 = "value2"
 
         delta = execution_state.to_dict(full=False)
 
@@ -84,11 +94,11 @@ class TestExecutionStateDelta:
 
     def test_delta_with_modified_variables(self, execution_state):
         """Test delta when variables are modified."""
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Modify existing variable
-        execution_state.variables.var1 = "new_value"
+        execution_state.state.var1 = "new_value"
 
         delta = execution_state.to_dict(full=False)
 
@@ -101,12 +111,12 @@ class TestExecutionStateDelta:
 
     def test_delta_with_deleted_variables(self, execution_state):
         """Test delta when variables are deleted."""
-        execution_state.variables.var1 = "value1"
-        execution_state.variables.var2 = "value2"
+        execution_state.state.var1 = "value1"
+        execution_state.state.var2 = "value2"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Delete a variable using del
-        del execution_state.variables.var2
+        del execution_state.state.var2
 
         delta = execution_state.to_dict(full=False)
 
@@ -118,14 +128,14 @@ class TestExecutionStateDelta:
 
     def test_delta_with_mixed_variable_changes(self, execution_state):
         """Test delta with added, modified, and deleted variables."""
-        execution_state.variables.var1 = "value1"
-        execution_state.variables.var2 = "value2"
+        execution_state.state.var1 = "value1"
+        execution_state.state.var2 = "value2"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Add, modify, delete
-        execution_state.variables.var3 = "value3"  # add
-        execution_state.variables.var1 = "modified1"  # modify
-        del execution_state.variables.var2  # delete
+        execution_state.state.var3 = "value3"  # add
+        execution_state.state.var1 = "modified1"  # modify
+        del execution_state.state.var2  # delete
 
         delta = execution_state.to_dict(full=False)
 
@@ -194,13 +204,13 @@ class TestExecutionStateDelta:
 
     def test_compute_variable_delta_handles_complex_values(self, execution_state):
         """Test delta computation with complex variable values."""
-        execution_state.variables.mylist = [1, 2, 3]
-        execution_state.variables.mydict = {"key": "value"}
+        execution_state.state.mylist = [1, 2, 3]
+        execution_state.state.mydict = {"key": "value"}
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Modify complex values
-        execution_state.variables.mylist = [1, 2, 3, 4]
-        execution_state.variables.mydict = {"key": "new_value"}
+        execution_state.state.mylist = [1, 2, 3, 4]
+        execution_state.state.mydict = {"key": "new_value"}
 
         delta = execution_state.to_dict(full=False)
 
@@ -211,7 +221,7 @@ class TestExecutionStateDelta:
 
     def test_empty_delta_returns_none(self, execution_state):
         """Test that empty delta returns None."""
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # No changes
@@ -221,11 +231,11 @@ class TestExecutionStateDelta:
 
     def test_full_state_update_resets_baseline(self, execution_state):
         """Test that requesting full state can reset the baseline."""
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Add variable
-        execution_state.variables.var2 = "value2"
+        execution_state.state.var2 = "value2"
 
         # Get full state
         full_state = execution_state.to_dict(full=True)
@@ -247,7 +257,7 @@ class TestGetStateForLLM:
         from playbooks.config import StateCompressionConfig
         from playbooks.llm.messages.types import FrameType
 
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         compression_config = StateCompressionConfig(
             enabled=True, full_state_interval=10
         )
@@ -272,14 +282,14 @@ class TestGetStateForLLM:
         )
 
         # First call
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         state_dict, frame_type = execution_state.get_state_for_llm(
             1, compression_config
         )
         assert frame_type == FrameType.I
 
         # Second call with changes
-        execution_state.variables.var2 = "value2"
+        execution_state.state.var2 = "value2"
         state_dict, frame_type = execution_state.get_state_for_llm(
             2, compression_config
         )
@@ -299,7 +309,7 @@ class TestGetStateForLLM:
         )
 
         # First call
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         state_dict, frame_type = execution_state.get_state_for_llm(
             1, compression_config
         )
@@ -320,27 +330,27 @@ class TestGetStateForLLM:
         compression_config = StateCompressionConfig(enabled=True, full_state_interval=3)
 
         # First call
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         state_dict, frame_type = execution_state.get_state_for_llm(
             1, compression_config
         )
         assert frame_type == FrameType.I
 
         # Calls 2-3 should be P-frames
-        execution_state.variables.var2 = "value2"
+        execution_state.state.var2 = "value2"
         state_dict, frame_type = execution_state.get_state_for_llm(
             2, compression_config
         )
         assert frame_type == FrameType.P
 
-        execution_state.variables.var3 = "value3"
+        execution_state.state.var3 = "value3"
         state_dict, frame_type = execution_state.get_state_for_llm(
             3, compression_config
         )
         assert frame_type == FrameType.P
 
         # Call 4 should be I-frame (interval reached)
-        execution_state.variables.var4 = "value4"
+        execution_state.state.var4 = "value4"
         state_dict, frame_type = execution_state.get_state_for_llm(
             4, compression_config
         )
@@ -359,7 +369,7 @@ class TestGetStateForLLM:
         )
 
         # First call
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         state_dict, frame_type = execution_state.get_state_for_llm(
             1, compression_config
         )
@@ -367,7 +377,7 @@ class TestGetStateForLLM:
         assert "variables" in state_dict
 
         # Second call should also be full
-        execution_state.variables.var2 = "value2"
+        execution_state.state.var2 = "value2"
         state_dict, frame_type = execution_state.get_state_for_llm(
             2, compression_config
         )
@@ -383,7 +393,7 @@ class TestGetStateForLLM:
             enabled=True, full_state_interval=10
         )
 
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
         state_dict, frame_type = execution_state.get_state_for_llm(
             None, compression_config
         )
@@ -396,7 +406,7 @@ class TestGetStateForLLM:
         """Test that default config is used when none provided."""
         from playbooks.llm.messages.types import FrameType
 
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
 
         # Should use global config
         state_dict, frame_type = execution_state.get_state_for_llm(1, None)
@@ -514,7 +524,7 @@ class TestStateCompressionMessageCompactionCoordination:
         )
 
         # First call - I-frame
-        execution_state.variables["$var1"] = "value1"
+        execution_state.state.var1 = "value1"
         state_dict, frame_type = execution_state.get_state_for_llm(
             1, compression_config
         )
@@ -583,7 +593,7 @@ class TestDeltaCompressionEdgeCases:
         execution_state.last_sent_state = execution_state.to_dict(full=True)
 
         # Change something else (add variable)
-        execution_state.variables.var1 = "value1"
+        execution_state.state.var1 = "value1"
 
         delta = execution_state.to_dict(full=False)
 
@@ -616,10 +626,10 @@ class TestInterpreterPromptIntegration:
         """Test that prompt includes state block for I-frames."""
         from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
-        execution_state.variables.var1 = "test_value"
+        execution_state.state.var1 = "test_value"
 
         prompt_obj = InterpreterPrompt(
-            execution_state=execution_state,
+            agent=execution_state,
             playbooks={},
             current_playbook=None,
             instruction="Test instruction",
@@ -645,13 +655,13 @@ class TestInterpreterPromptIntegration:
         from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         # Set up initial state
-        execution_state.variables.var1 = "test_value"
+        execution_state.state.var1 = "test_value"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
         execution_state.last_i_frame_execution_id = 1
 
         # Create prompt with no changes (P-frame with empty delta)
         prompt_obj = InterpreterPrompt(
-            execution_state=execution_state,
+            agent=execution_state,
             playbooks={},
             current_playbook=None,
             instruction="Test instruction",
@@ -674,15 +684,15 @@ class TestInterpreterPromptIntegration:
         from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         # Set up initial state
-        execution_state.variables.var1 = "initial"
+        execution_state.state.var1 = "initial"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
         execution_state.last_i_frame_execution_id = 1
 
         # Add a new variable
-        execution_state.variables.var2 = "new_value"
+        execution_state.state.var2 = "new_value"
 
         prompt_obj = InterpreterPrompt(
-            execution_state=execution_state,
+            agent=execution_state,
             playbooks={},
             current_playbook=None,
             instruction="Test instruction",
@@ -710,11 +720,11 @@ class TestInterpreterPromptIntegration:
         from playbooks.llm.messages.types import FrameType
 
         # Ensure clean state for I-frame (first call scenario)
-        execution_state.variables.var1 = "test"
+        execution_state.state.var1 = "test"
         # Don't set last_sent_state - this ensures it's treated as first call
 
         prompt_obj = InterpreterPrompt(
-            execution_state=execution_state,
+            agent=execution_state,
             playbooks={},
             current_playbook=None,
             instruction="Test instruction",
@@ -751,15 +761,15 @@ class TestInterpreterPromptIntegration:
         from playbooks.llm.messages.types import FrameType
 
         # Setup for P-frame (subsequent call with delta)
-        execution_state.variables.var1 = "initial"
+        execution_state.state.var1 = "initial"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
         execution_state.last_i_frame_execution_id = 1
 
         # Add new variable to create delta
-        execution_state.variables.var2 = "new"
+        execution_state.state.var2 = "new"
 
         prompt_obj = InterpreterPrompt(
-            execution_state=execution_state,
+            agent=execution_state,
             playbooks={},
             current_playbook=None,
             instruction="Test instruction",
@@ -781,10 +791,10 @@ class TestInterpreterPromptIntegration:
         """Test that agent instructions are included for I-frames."""
         from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
-        execution_state.variables.var1 = "test"
+        execution_state.state.var1 = "test"
 
         prompt_obj = InterpreterPrompt(
-            execution_state=execution_state,
+            agent=execution_state,
             playbooks={},
             current_playbook=None,
             instruction="Test instruction",
@@ -807,15 +817,15 @@ class TestInterpreterPromptIntegration:
         from playbooks.execution.interpreter_prompt import InterpreterPrompt
 
         # Setup for P-frame
-        execution_state.variables.var1 = "initial"
+        execution_state.state.var1 = "initial"
         execution_state.last_sent_state = execution_state.to_dict(full=True)
         execution_state.last_i_frame_execution_id = 1
 
         # Add change to create delta
-        execution_state.variables.var2 = "new"
+        execution_state.state.var2 = "new"
 
         prompt_obj = InterpreterPrompt(
-            execution_state=execution_state,
+            agent=execution_state,
             playbooks={},
             current_playbook=None,
             instruction="Test instruction",

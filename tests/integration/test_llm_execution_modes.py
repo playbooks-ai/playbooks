@@ -52,6 +52,6 @@ async def test_execution(playbooks):
     await human.SendMessage(agent.id, "sin(exp(3!))")
 
     await playbooks.program.run_till_exit()
-    log = agent.state.session_log.to_log_full()
+    log = agent.session_log.to_log_full()
     assert "0.9" in log
     assert "Joke() → " in log

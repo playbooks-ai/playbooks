@@ -52,6 +52,8 @@ Test agent for CLI args
     @pytest.mark.integration
     async def test_message_variable_injection(self):
         """Test that --message flag creates $message variable."""
+        from playbooks.agents import AIAgent
+
         playbook_content = """# TestAgent
 Test agent for message injection
 
@@ -71,12 +73,12 @@ Test agent for message injection
             playbooks = Playbooks([temp_path])
             await playbooks.initialize()
 
-            # Inject message into agent state
+            # Inject message into agent state (only AI agents, not human agents)
             for agent in playbooks.program.agents:
-                if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                    agent.state.variables.message = "test message"
-                    assert hasattr(agent.state.variables, "message")
-                    assert agent.state.variables.message == "test message"
+                if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                    agent.state["message"] = "test message"
+                    assert hasattr(agent.state, "message")
+                    assert agent.state.message == "test message"
                     break
 
         finally:
@@ -86,6 +88,8 @@ Test agent for message injection
     @pytest.mark.integration
     async def test_stdin_variable_injection(self):
         """Test that stdin content is available as $stdin."""
+        from playbooks.agents import AIAgent
+
         playbook_content = """# TestAgent
 Test agent for stdin
 
@@ -105,13 +109,13 @@ Test agent for stdin
             playbooks = Playbooks([temp_path])
             await playbooks.initialize()
 
-            # Inject stdin content into agent state
+            # Inject stdin content into agent state (only AI agents, not human agents)
             stdin_content = "test stdin content"
             for agent in playbooks.program.agents:
-                if hasattr(agent, "state") and hasattr(agent.state, "variables"):
-                    agent.state.variables.stdin = stdin_content
-                    assert hasattr(agent.state.variables, "stdin")
-                    assert agent.state.variables.stdin == stdin_content
+                if isinstance(agent, AIAgent) and hasattr(agent, "state"):
+                    agent.state["stdin"] = stdin_content
+                    assert hasattr(agent.state, "stdin")
+                    assert agent.state.stdin == stdin_content
                     break
 
         finally:

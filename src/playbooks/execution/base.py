@@ -4,11 +4,11 @@ import logging
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from playbooks.execution.call import PlaybookCall
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
 )
+from playbooks.execution.call import PlaybookCall
 
 if TYPE_CHECKING:
     from playbooks.agents.local_ai_agent import LocalAIAgent
@@ -47,7 +47,7 @@ class LLMExecution(ABC):
         try:
             # Create a PlaybookCall for context
             call = PlaybookCall(self.playbook.name, list(args), kwargs)
-            context = ExpressionContext(self.agent, self.agent.state, call)
+            context = ExpressionContext(self.agent, call=call)
             return await resolve_description_placeholders(description, context)
         except Exception as e:
             logger = logging.getLogger(__name__)

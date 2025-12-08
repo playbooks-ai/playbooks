@@ -37,58 +37,58 @@ from playbooks.state.variables import Artifact
 
 @playbook(hidden=True)
 async def SendMessage(target_agent_id: str, message: str):
-    await agent.SendMessage(target_agent_id, message)
+    await self.SendMessage(target_agent_id, message)
 
 @playbook(hidden=True)
 async def WaitForMessage(source_agent_id: str) -> list:
-    return await agent.WaitForMessage(source_agent_id)
+    return await self.WaitForMessage(source_agent_id)
 
 @playbook
 async def Say(target: str, message: str):
-    await agent.Say(target, message)
+    await self.say(target, message)
 
 @playbook
 async def CreateAgent(agent_klass: str, **kwargs):
-    new_agent = await agent.program.create_agent(agent_klass, **kwargs)
-    await agent.program.runtime.start_agent(new_agent)
+    new_agent = await self.program.create_agent(agent_klass, **kwargs)
+    await self.program.runtime.start_agent(new_agent)
     return new_agent
     
 @playbook(description="If an artifact was previously created, but is no longer available, use this Playbook to load its contents")
 async def LoadArtifact(artifact_name: str):
     # Load artifact from variables
-    agent.load_artifact(artifact_name)
+    self.load_artifact(artifact_name)
 
 @playbook
 async def SaveArtifact(name: str, summary: str, value: str):
     artifact = Artifact(name, summary, value)
-    agent.state.variables[name] = artifact
+    self.state[name] = artifact
     return artifact.name
 
 @playbook
 async def InviteToMeeting(meeting_id: str, attendees: list):
     """Invite additional agents to an existing meeting."""
-    return await agent.meeting_manager.InviteToMeeting(meeting_id, attendees)
+    return await self.meeting_manager.InviteToMeeting(meeting_id, attendees)
 
 @playbook
 async def Loadfile(file_path: str, inline: bool = False, silent: bool = False):
-    return await agent.load_file(file_path, inline, silent)
+    return await self.load_file(file_path, inline, silent)
 
 # @playbook(hidden=True)
 # async def SetVar(name: str, value):
 #     """Set a variable in the agent's state and return the value."""
 #     if not name.startswith("$"):
 #         name = f"${name}"
-#     agent.state.variables[name] = value
+#     self.state[name] = value
 #     return value
 
 @playbook
 async def EndProgram():
-    await agent.program.end_program()
+    await self.program.end_program()
 
 @playbook(hidden=True)
 async def MessageProcessingEventLoop():
     """Main message processing loop for agents. Delegates to agent's message_processing_event_loop method."""
-    await agent.message_processing_event_loop()
+    await self.message_processing_event_loop()
 
 ```        
 '''

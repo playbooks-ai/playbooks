@@ -15,23 +15,23 @@ import websockets
 
 from playbooks import Playbooks
 from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.applications.streaming_observer import (
     ChannelStreamObserver as BaseChannelStreamObserver,
 )
-from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.channels.stream_events import (
     StreamChunkEvent,
     StreamCompleteEvent,
     StreamStartEvent,
 )
 from playbooks.core.constants import EOM
-from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.core.exceptions import ExecutionFinished
-from playbooks.meetings.meeting_manager import MeetingManager
+from playbooks.core.identifiers import AgentID
 from playbooks.core.message import MessageType
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.program import Program
 from playbooks.state.streaming_log import StreamingSessionLog
-from playbooks.core.identifiers import AgentID
 
 
 class EventType(Enum):
@@ -374,13 +374,13 @@ class PlaybookRun:
                 callback = create_session_log_callback(agent.id, agent.klass)
 
                 # Replace with streaming version, preserving existing data
-                original_log = agent.state.session_log
+                original_log = agent.session_log
                 streaming_log = StreamingSessionLog(
                     original_log.klass, original_log.agent_id, callback
                 )
                 # Copy existing log entries
                 streaming_log.log = original_log.log.copy()
-                agent.state.session_log = streaming_log
+                agent.session_log = streaming_log
                 debug(
                     "Replaced session log for agent",
                     agent_id=agent.id,
@@ -443,13 +443,13 @@ class PlaybookRun:
             callback = create_session_log_callback(agent.id, agent.klass)
 
             # Replace with streaming version, preserving existing data
-            original_log = agent.state.session_log
+            original_log = agent.session_log
             streaming_log = StreamingSessionLog(
                 original_log.klass, original_log.agent_id, callback
             )
             # Copy existing log entries
             streaming_log.log = original_log.log.copy()
-            agent.state.session_log = streaming_log
+            agent.session_log = streaming_log
             debug(
                 "Replaced session log for new agent",
                 agent_id=agent.id,
@@ -590,7 +590,7 @@ class PlaybookRun:
 
         for agent in self.playbooks.program.agents:
             if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-                session_log = agent.state.session_log
+                session_log = agent.session_log
                 debug(
                     "Agent session log entries",
                     agent_id=agent.id,

@@ -25,7 +25,7 @@ from playbooks.utils.llm_helper import get_messages_for_prompt
 from playbooks.utils.token_counter import get_messages_token_count
 
 if TYPE_CHECKING:
-    from playbooks.state.execution_state import ExecutionState
+    from playbooks.agents import AIAgent
 
 
 class SetEncoder(json.JSONEncoder):
@@ -61,7 +61,7 @@ class InterpreterPrompt:
 
     def __init__(
         self,
-        execution_state: "ExecutionState",
+        agent: "AIAgent",
         playbooks: Dict[str, Playbook],
         current_playbook: Optional[Playbook],
         instruction: str,
@@ -75,7 +75,7 @@ class InterpreterPrompt:
         """Initialize the InterpreterPrompt.
 
         Args:
-            execution_state: The current execution state
+            agent: The AIAgent instance for accessing state and execution context
             playbooks: Dictionary of available playbooks
             current_playbook: The currently executing playbook, if any
             instruction: The user's latest instruction
@@ -86,7 +86,7 @@ class InterpreterPrompt:
             other_agent_klasses_information: List of information strings about other agents
             execution_id: Sequential execution counter for this LLM call
         """
-        self.execution_state = execution_state
+        self.agent = agent
         self.playbooks = playbooks
         self.current_playbook = current_playbook
         self.instruction = instruction
@@ -152,9 +152,7 @@ class InterpreterPrompt:
             for var_name, var_value in variables.items():
                 if isinstance(var_value, str) and var_value.startswith("Artifact:"):
                     if f'"{var_name}":' in line:
-                        is_loaded = self.execution_state.call_stack.is_artifact_loaded(
-                            var_name
-                        )
+                        is_loaded = self.agent.call_stack.is_artifact_loaded(var_name)
                         if is_loaded:
                             lines[i] = (
                                 line.rstrip(",")
@@ -199,7 +197,7 @@ class InterpreterPrompt:
             return "Error: Prompt template missing."
 
         # Get state with compression applied
-        state_dict, self.frame_type = self.execution_state.get_state_for_llm(
+        state_dict, self.frame_type = self.agent.get_state_for_llm(
             self.execution_id, config.state_compression
         )
 
@@ -225,7 +223,7 @@ class InterpreterPrompt:
 
         prompt = prompt.replace("{{INITIAL_STATE}}", state_block)
 
-        # session_log_str = str(self.execution_state.session_log)
+        # session_log_str = str(self.agent.session_log)
 
         # prompt = prompt_template.replace("{{TRIGGERS}}", trigger_instructions_str)
         # prompt = prompt.replace(
@@ -270,23 +268,23 @@ class InterpreterPrompt:
             user_instruction_msg = UserInputLLMMessage(
                 prompt_messages[1]["content"], frame_type=frame_type
             )
-            self.execution_state.call_stack.add_llm_message(user_instruction_msg)
+            self.agent.call_stack.add_llm_message(user_instruction_msg)
 
         # Collect all LLM messages: from call stack frames + top-level messages
         call_stack_llm_messages = []
 
         # Add messages from call stack frames
-        for frame in self.execution_state.call_stack.frames:
+        for frame in self.agent.call_stack.frames:
             call_stack_llm_messages.extend(frame.llm_messages)
             for index, message in enumerate(frame.llm_messages):
                 message.cached = index == len(frame.llm_messages) - 1
 
         # Add top-level messages (when call stack is empty or before first playbook)
-        top_level_messages = self.execution_state.call_stack.top_level_llm_messages
+        top_level_messages = self.agent.call_stack.top_level_llm_messages
         if top_level_messages:
             call_stack_llm_messages.extend(top_level_messages)
             # Mark the last message as cached if no call stack frames
-            if not self.execution_state.call_stack.frames and top_level_messages:
+            if not self.agent.call_stack.frames and top_level_messages:
                 top_level_messages[-1].cached = True
 
         # Apply compaction - the cached flags will be preserved through to_full_message()

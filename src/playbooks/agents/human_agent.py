@@ -6,10 +6,11 @@ in playbook execution, handling user input and state management.
 
 from typing import TYPE_CHECKING, Any, Optional
 
-from playbooks.core.constants import HUMAN_AGENT_KLASS
 from playbooks.agents.delivery_preferences import DeliveryPreferences
+from playbooks.core.constants import HUMAN_AGENT_KLASS
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.human_state import HumanState
+
 from .base_agent import BaseAgent
 
 if TYPE_CHECKING:
@@ -85,7 +86,7 @@ class HumanAgent(BaseAgent):
             or DeliveryPreferences.streaming_default()
         )
 
-        # Use minimal HumanState instead of full ExecutionState
+        # Use minimal HumanState instead of full AIAgent state
         # Humans don't execute playbooks, so don't need call stacks, variables, or session logs
         self.state = HumanState(event_bus, self.klass, self.id)
 

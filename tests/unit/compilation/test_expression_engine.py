@@ -175,16 +175,14 @@ class TestExpressionContext:
         self.call.playbook_klass = "TestPlaybook"
 
         # Use real DotMap for variables (no $ prefix, no .value wrapper)
-        self.state.variables = DotMap()
-        self.state.variables.test_var = "test_value"
+        self.agent.state = DotMap()
+        self.agent.state.test_var = "test_value"
 
         # Mock namespace manager
         namespace_dict = {"namespace_var": "namespace_value"}
         self.agent.namespace_manager = Mock(namespace=namespace_dict)
 
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
     def test_built_in_variables(self):
         """Test access to built-in variables."""
@@ -223,7 +221,7 @@ class TestExpressionContext:
         value1 = self.context.resolve_variable("test_var")
 
         # Modify the underlying state
-        self.state.variables.test_var = "modified_value"
+        self.agent.state.test_var = "modified_value"
 
         # Second access should return cached value
         value2 = self.context.resolve_variable("test_var")
@@ -389,16 +387,14 @@ class TestResolveDescriptionPlaceholders:
         self.call = Mock()
 
         # Use real DotMap for variables (no $ prefix, no .value wrapper)
-        self.state.variables = DotMap()
-        self.state.variables.order_id = "12345"
+        self.agent.state = DotMap()
+        self.agent.state.order_id = "12345"
 
         # Mock namespace manager
         namespace_dict = {}
         self.agent.namespace_manager = Mock(namespace=namespace_dict)
 
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
     @pytest.mark.asyncio
     async def test_simple_placeholder(self):
@@ -411,7 +407,7 @@ class TestResolveDescriptionPlaceholders:
     async def test_multiple_placeholders(self):
         """Test resolving multiple placeholders."""
         # Add another variable (no $ prefix, no wrapper)
-        self.state.variables.status = "pending"
+        self.agent.state.status = "pending"
 
         description = "Order {$order_id} has status {$status}"
         result = await resolve_description_placeholders(description, self.context)
@@ -529,21 +525,19 @@ class TestIntegration:
         self.call.playbook_klass = "TestPlaybook"
 
         # Use real DotMap for variables with raw values (no $ prefix, no wrappers)
-        self.state.variables = DotMap()
-        self.state.variables.order = {
+        self.agent.state = DotMap()
+        self.agent.state.order = {
             "id": "12345",
             "status": "pending",
             "items": [{"name": "item1", "price": 99.99}],
         }
-        self.state.variables.user = {"name": "John Doe", "email": "john@example.com"}
+        self.agent.state.user = {"name": "John Doe", "email": "john@example.com"}
 
         # Mock namespace manager
         namespace_dict = {"current_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
         self.agent.namespace_manager = Mock(namespace=namespace_dict)
 
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
     @pytest.mark.asyncio
     async def test_complex_description_resolution(self):
@@ -827,14 +821,12 @@ class TestParameterResolution:
         self.agent.playbooks = {"LoadRelevantContext": self.playbook}
 
         # Use real DotMap for variables
-        self.state.variables = DotMap()
+        self.agent.state = DotMap()
 
         # Mock namespace manager
         self.agent.namespace_manager = Mock(namespace={})
 
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
     def test_resolve_positional_parameters(self):
         """Test resolving positional parameters."""
@@ -856,9 +848,7 @@ class TestParameterResolution:
         }
 
         # Reset context
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
         result = self.context.resolve_variable("question")
         assert result == "What is AI?"
@@ -869,12 +859,10 @@ class TestParameterResolution:
     def test_parameters_shadow_state_variables(self):
         """Test that parameters shadow state variables with the same name."""
         # Add a state variable with the same name as a parameter (no $ prefix, no wrapper)
-        self.state.variables.question = "global_question"
+        self.agent.state.question = "global_question"
 
         # Reset context to pick up the new state
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
         # Parameter should take precedence over state variable
         result = self.context.resolve_variable("question")
@@ -883,12 +871,10 @@ class TestParameterResolution:
     def test_state_variables_accessible_when_no_parameter_match(self):
         """Test that state variables are accessible when there's no matching parameter."""
         # Add a state variable that doesn't match any parameter (no $ prefix, no wrapper)
-        self.state.variables.other_var = "some_global_value"
+        self.agent.state.other_var = "some_global_value"
 
         # Reset context
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
         # Should resolve from state since no parameter named "other_var"
         result = self.context.resolve_variable("other_var")
@@ -911,15 +897,13 @@ class TestParameterResolution:
     def test_variable_reference_parameters_resolved(self):
         """Test that VariableReference parameters are resolved to actual values."""
         # Add a state variable (no $ prefix, no wrapper)
-        self.state.variables.source_var = "resolved_value"
+        self.agent.state.source_var = "resolved_value"
 
         # Set up call with VariableReference
         self.call.args = [VariableReference("$source_var"), LiteralValue("Starting")]
 
         # Reset context
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
         # Parameter should be resolved to the value from state
         result = self.context.resolve_variable("question")
@@ -931,9 +915,7 @@ class TestParameterResolution:
         self.playbook.signature = None
 
         # Reset context
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
         # Should not crash, just not find the parameter
         with pytest.raises(KeyError):
@@ -958,12 +940,10 @@ class TestParameterResolution:
         self.call.kwargs = {}
 
         # Add a state variable (no $ prefix, no wrapper)
-        self.state.variables.var1 = "hello"
+        self.agent.state.var1 = "hello"
 
         # Reset context
-        self.context = ExpressionContext(
-            agent=self.agent, state=self.state, call=self.call
-        )
+        self.context = ExpressionContext(agent=self.agent, call=self.call)
 
         # Test parameter with default
         result_b = self.context.resolve_variable("b")
@@ -993,10 +973,10 @@ class TestParameterResolution:
         self.call.kwargs = {}
 
         # Add a state variable (no $ prefix, no wrapper)
-        self.state.variables.var1 = "hello"
+        self.agent.state.var1 = "hello"
 
         # Create fresh context with new configuration
-        context = ExpressionContext(agent=self.agent, state=self.state, call=self.call)
+        context = ExpressionContext(agent=self.agent, call=self.call)
 
         # Test description with mixed variables (state, parameter, default parameter)
         description = "This playbook says {$var1}, {$a} {$b} times"

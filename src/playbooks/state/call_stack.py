@@ -139,6 +139,7 @@ class CallStackFrame:
         self.meeting_id = meeting_id
         self.depth = -1
         self.langfuse_span: Optional[Any] = None
+        self.executor = None  # Executor context for this frame (handles nested calls)
 
     @property
     def source_line_number(self) -> int:

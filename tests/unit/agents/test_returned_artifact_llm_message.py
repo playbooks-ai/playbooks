@@ -5,12 +5,11 @@ from unittest.mock import Mock
 import pytest
 
 from playbooks.agents.ai_agent import AIAgent
-from playbooks.state.call_stack import CallStackFrame, InstructionPointer
+from playbooks.execution.call import PlaybookCall
 from playbooks.infrastructure.event_bus import EventBus
-from playbooks.state.execution_state import ExecutionState
 from playbooks.llm.messages import ExecutionResultLLMMessage
 from playbooks.llm.messages.types import ArtifactLLMMessage
-from playbooks.execution.call import PlaybookCall
+from playbooks.state.call_stack import CallStackFrame, InstructionPointer
 from playbooks.state.variables import Artifact
 
 
@@ -26,7 +25,7 @@ class MockAIAgent(AIAgent):
     def __init__(self, event_bus: EventBus):
         super().__init__(event_bus)
 
-    def discover_playbooks(self):
+    async def discover_playbooks(self):
         pass
 
 
@@ -40,17 +39,14 @@ def event_bus():
 def agent(event_bus):
     """Create a mock agent with execution state."""
     agent = MockAIAgent(event_bus)
-    agent.state = ExecutionState(event_bus, "MockAIAgent", "test-agent-id")
 
-    # Mock the execution summary variable
-    mock_execution_summary = Mock()
-    mock_execution_summary.value = "Test execution summary"
-    agent.state.variables.variables["$__"] = mock_execution_summary
+    # Mock the execution summary variable (__ uses bracket notation, not attribute access)
+    agent.state["__"] = "Test execution summary"
 
     # Push a frame onto the call stack so we can add messages to it
     instruction_pointer = InstructionPointer("TestPlaybook", "1", 1)
     frame = CallStackFrame(instruction_pointer)
-    agent.state.call_stack.push(frame)
+    agent.call_stack.push(frame)
 
     return agent
 
@@ -67,8 +63,8 @@ class TestReturnedArtifactLLMMessage:
     @pytest.mark.asyncio
     async def test_returned_artifact_creates_llm_message(self, agent, playbook_call):
         """Test that when a playbook returns an Artifact, an ArtifactLLMMessage is added."""
-        assert len(agent.state.call_stack.frames) == 1
-        frame1 = agent.state.call_stack.peek()
+        assert len(agent.call_stack.frames) == 1
+        frame1 = agent.call_stack.peek()
 
         # Create an artifact that will be returned
         artifact = Artifact(
@@ -78,14 +74,14 @@ class TestReturnedArtifactLLMMessage:
         )
 
         # Store it in variables
-        agent.state.variables["$test_artifact"] = artifact
+        agent.state.test_artifact = artifact
 
         # Push an extra frame since post_execute will pop one
         instruction_pointer = InstructionPointer("TestPlaybook2", "1", 1)
         frame2 = CallStackFrame(instruction_pointer)
-        agent.state.call_stack.push(frame2)
+        agent.call_stack.push(frame2)
 
-        assert len(agent.state.call_stack.frames) == 2
+        assert len(agent.call_stack.frames) == 2
         frame1_message_count = len(frame1.llm_messages)
         assert frame1_message_count == 0
         frame2_message_count = len(frame2.llm_messages)
@@ -95,8 +91,8 @@ class TestReturnedArtifactLLMMessage:
         await agent._post_execute(playbook_call, True, artifact, Mock())
 
         # Get the messages from the call stack (after pop)
-        assert len(agent.state.call_stack.frames) == 1
-        assert agent.state.call_stack.peek() == frame1
+        assert len(agent.call_stack.frames) == 1
+        assert agent.call_stack.peek() == frame1
         assert len(frame1.llm_messages) == 2
         assert isinstance(frame1.llm_messages[0], ArtifactLLMMessage)
         assert isinstance(frame1.llm_messages[1], ExecutionResultLLMMessage)
@@ -113,17 +109,17 @@ class TestReturnedArtifactLLMMessage:
             value="Very detailed content\nWith multiple lines\nAnd information.",
         )
 
-        agent.state.variables["$detailed_artifact"] = artifact
+        agent.state.detailed_artifact = artifact
 
         # Push an extra frame
         instruction_pointer = InstructionPointer("TestPlaybook2", "1", 1)
         frame = CallStackFrame(instruction_pointer)
-        agent.state.call_stack.push(frame)
+        agent.call_stack.push(frame)
 
         await agent._post_execute(playbook_call, True, artifact, Mock())
 
         # Get the artifact message
-        final_messages = agent.state.call_stack.peek().llm_messages
+        final_messages = agent.call_stack.peek().llm_messages
         artifact_messages = [
             msg for msg in final_messages if isinstance(msg, ArtifactLLMMessage)
         ]
@@ -144,14 +140,14 @@ class TestReturnedArtifactLLMMessage:
         # Push an extra frame
         instruction_pointer = InstructionPointer("TestPlaybook2", "1", 1)
         frame = CallStackFrame(instruction_pointer)
-        agent.state.call_stack.push(frame)
+        agent.call_stack.push(frame)
 
-        initial_message_count = len(agent.state.call_stack.peek().llm_messages)
+        initial_message_count = len(agent.call_stack.peek().llm_messages)
 
         await agent._post_execute(playbook_call, True, result, Mock())
 
         # Get the messages from the call stack
-        final_messages = agent.state.call_stack.peek().llm_messages
+        final_messages = agent.call_stack.peek().llm_messages
 
         # Should only have ExecutionResultLLMMessage, not ArtifactLLMMessage
         assert len(final_messages) == initial_message_count + 1
@@ -180,17 +176,17 @@ class TestReturnedArtifactLLMMessage:
             value="Content of my artifact",
         )
 
-        agent.state.variables["$my_artifact"] = artifact
+        agent.state.my_artifact = artifact
 
         # Push an extra frame
         instruction_pointer = InstructionPointer("TestPlaybook2", "1", 1)
         frame = CallStackFrame(instruction_pointer)
-        agent.state.call_stack.push(frame)
+        agent.call_stack.push(frame)
 
         await agent._post_execute(call, True, artifact, Mock())
 
         # Check that ArtifactLLMMessage was added
-        final_messages = agent.state.call_stack.peek().llm_messages
+        final_messages = agent.call_stack.peek().llm_messages
         artifact_messages = [
             msg for msg in final_messages if isinstance(msg, ArtifactLLMMessage)
         ]
@@ -207,12 +203,12 @@ class TestReturnedArtifactLLMMessage:
         # Push an extra frame
         instruction_pointer = InstructionPointer("TestPlaybook2", "1", 1)
         frame = CallStackFrame(instruction_pointer)
-        agent.state.call_stack.push(frame)
+        agent.call_stack.push(frame)
 
         await agent._post_execute(playbook_call, True, long_result, Mock())
 
         # Should have ArtifactLLMMessage
-        final_messages = agent.state.call_stack.peek().llm_messages
+        final_messages = agent.call_stack.peek().llm_messages
         artifact_messages = [
             msg for msg in final_messages if isinstance(msg, ArtifactLLMMessage)
         ]
@@ -233,15 +229,15 @@ class TestReturnedArtifactLLMMessage:
         # Push an extra frame
         instruction_pointer = InstructionPointer("TestPlaybook2", "1", 1)
         frame = CallStackFrame(instruction_pointer)
-        agent.state.call_stack.push(frame)
+        agent.call_stack.push(frame)
 
-        initial_message_count = len(agent.state.call_stack.peek().llm_messages)
+        initial_message_count = len(agent.call_stack.peek().llm_messages)
 
         # Failed execution
         await agent._post_execute(playbook_call, False, artifact, Mock())
 
         # Should only have ExecutionResultLLMMessage, not ArtifactLLMMessage
-        final_messages = agent.state.call_stack.peek().llm_messages
+        final_messages = agent.call_stack.peek().llm_messages
         assert len(final_messages) == initial_message_count + 1
 
         artifact_messages = [

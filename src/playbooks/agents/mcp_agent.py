@@ -275,7 +275,7 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
         self.transport = MCPTransport(remote_config, source_file_path=source_file_path)
 
         # Initialize _busy variable to False
-        self.state.variables._busy = False
+        self.state._busy = False
 
     async def discover_playbooks(self) -> None:
         """Discover MCP tools and create RemotePlaybook instances for each."""
@@ -323,7 +323,7 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                 def create_execute_fn(tool_name, schema, agent):
                     async def execute_fn(*args, **kwargs):
                         # Set _busy to True when starting execution
-                        agent.state.variables._busy = True
+                        agent.state._busy = True
                         try:
                             # Convert positional args to kwargs if needed
                             if args:
@@ -344,7 +344,7 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
                             return result_str
                         finally:
                             # Set _busy to False when execution completes (or on error)
-                            agent.state.variables._busy = False
+                            agent.state._busy = False
 
                     return execute_fn
 

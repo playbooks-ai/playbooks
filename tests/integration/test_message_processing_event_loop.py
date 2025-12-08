@@ -90,7 +90,7 @@ async def test_direct_message_to_agent(test_data_dir):
     # Let it process
     await playbooks.program.run_till_exit()
 
-    log = ai_agent.state.session_log.to_log_full()
+    log = ai_agent.session_log.to_log_full()
 
     # Verify message was received
     assert "Test message" in log or "WaitForMessage" in log
@@ -111,7 +111,7 @@ async def test_message_buffer_handling(test_data_dir):
 
     await playbooks.program.run_till_exit()
 
-    log = ai_agent.state.session_log.to_log_full()
+    log = ai_agent.session_log.to_log_full()
 
     # At least one message should be processed
     assert "WaitForMessage" in log
@@ -169,7 +169,7 @@ async def test_busy_flag_management(test_data_dir):
     await playbooks.program.run_till_exit()
 
     # After execution finishes, verify the agent processed messages
-    log = ai_agent.state.session_log.to_log_full()
+    log = ai_agent.session_log.to_log_full()
     assert "WaitForMessage" in log
 
 
@@ -187,7 +187,7 @@ async def test_agent_handles_multiple_message_cycles(test_data_dir):
 
     await playbooks.program.run_till_exit()
 
-    log = ai_agent.state.session_log.to_log_full()
+    log = ai_agent.session_log.to_log_full()
 
     # Verify agent processed the message
     assert "John" in log or "GreetTheUser" in log

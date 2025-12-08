@@ -18,7 +18,7 @@ class HumanState:
     - Meeting participation tracking (joined meetings)
     - Basic identification (klass, agent_id)
 
-    Unlike ExecutionState, this doesn't include:
+    Unlike AIAgent state, this doesn't include:
     - CallStack (humans don't execute playbooks)
     - Variables (humans don't have execution variables)
     - SessionLog (humans don't have LLM execution history)
@@ -28,7 +28,7 @@ class HumanState:
         """Initialize human state.
 
         Args:
-            event_bus: The event bus (for consistency with ExecutionState interface)
+            event_bus: The event bus (for consistency with AIAgent interface)
             klass: The human agent class name
             agent_id: The human agent ID
         """

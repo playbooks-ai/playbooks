@@ -22,6 +22,7 @@ from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 from playbooks.core.enums import StartupMode
 from playbooks.core.exceptions import ExecutionFinished
 from playbooks.core.identifiers import AgentID
+from playbooks.execution.agents_accessor import AgentsAccessor
 from playbooks.execution.call import PlaybookCall, PlaybookCallResult
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.infrastructure.logging.debug_logger import debug
@@ -32,10 +33,10 @@ from playbooks.llm.messages import (
 )
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.meetings import MeetingManager
+from playbooks.meetings.meeting import JoinedMeeting, Meeting
 from playbooks.playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from playbooks.state.call_stack import CallStackFrame, InstructionPointer
-from playbooks.state.execution_state import ExecutionState
-from playbooks.state.variables import Artifact
+from playbooks.state.variables import Artifact, PlaybookDotMap
 from playbooks.utils.langfuse_client import get_client, observe
 from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.misc import copy_func
@@ -151,13 +152,32 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         # Create instance-specific namespace with playbook wrappers
         self._setup_isolated_namespace()
 
-        self.state = ExecutionState(event_bus, self.klass, self.id)
+        # Execution state attributes (flattened from ExecutionState)
+        from playbooks.state.call_stack import CallStack
+        from playbooks.state.session_log import SessionLog
+
+        self.event_bus: EventBus = event_bus
+        self.session_log: SessionLog = SessionLog(self.klass, self.id)
+        self.call_stack: CallStack = CallStack(event_bus, self.id)
+        self.state: PlaybookDotMap = PlaybookDotMap()
+        self.previous_variables: Optional[Dict[str, Any]] = None
+        self.agents_list: List[str] = []
+        self.last_llm_response: str = ""
+        self.last_message_target: Optional[str] = None
+
+        # Meetings
+        self.owned_meetings: Dict[str, Meeting] = {}
+        self.joined_meetings: Dict[str, JoinedMeeting] = {}
+
+        # State compression tracking
+        self.last_sent_state: Optional[Dict[str, Any]] = None
+        self.last_i_frame_execution_id: Optional[int] = None
 
         # Initialize meeting manager with dependency injection (after state is created)
         self.meeting_manager = MeetingManager(
             agent_id=self.id,
             agent_klass=self.klass,
-            state=self.state,
+            agent=self,
             program=self.program,
             playbook_executor=self,
         )
@@ -196,7 +216,10 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             )
         else:
             self.namespace_manager = AgentNamespaceManager()
-        self.namespace_manager.namespace["agent"] = self
+        self.namespace_manager.namespace["self"] = self
+        self.namespace_manager.namespace["agent"] = (
+            self  # Allow 'agent' as alias for 'self'
+        )
 
         # Set up cross-playbook wrapper functions and bind agent-specific functions
         for playbook_name, playbook in self.playbooks.items():
@@ -204,10 +227,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
             call_through = playbook.create_namespace_function(self)
             self.namespace_manager.namespace[playbook_name] = call_through
             playbook.agent_name = str(self)
-
-        # Add agent proxies for cross-agent playbook calls in expressions
-        # These are needed for description placeholder resolution (e.g., {FileSystemAgent.read_file(...)})
-        self._add_agent_proxies_to_namespace()
 
         for playbook_name, playbook in self.playbooks.items():
             if (
@@ -224,27 +243,28 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
                     },
                 )
 
-    def _add_agent_proxies_to_namespace(self):
-        """Add agent proxies to namespace for cross-agent playbook calls in expressions.
+        # Add agent classes for factory pattern access
+        self._add_agent_classes_to_namespace()
 
-        Uses the same AIAgentProxy class as PythonExecutor for consistency.
-        These proxies enable expressions like {FileSystemAgent.read_file(...)} in playbook descriptions.
+    def _add_agent_classes_to_namespace(self):
+        """Add AIAgent classes to namespace for factory method access.
+
+        Adds all AIAgent classes (including self) to enable clean factory syntax:
+        - agent = await AccountantExpert.get_or_create(requester=self)
+        - all_agents = AccountantExpert.get_all(self.program)
+
+        Only AIAgent classes are added, not HumanAgent classes.
         """
         if not self.program or not hasattr(self.program, "agent_klasses"):
             return
 
-        from playbooks.agent_proxy import AIAgentProxy
+        from playbooks.agents import AIAgent
 
-        # Create agent proxies for all other agents
-        for agent_klass_name in self.program.agent_klasses:
-            # Skip creating a proxy for the current agent itself
-            if agent_klass_name != self.klass:
-                proxy = AIAgentProxy(
-                    proxied_agent_klass_name=agent_klass_name,
-                    current_agent=self,
-                    namespace=None,  # Not needed for expression evaluation
-                )
-                self.namespace_manager.namespace[agent_klass_name] = proxy
+        # Add all AIAgent subclasses to namespace (including own class)
+        for agent_klass_name, agent_class in self.program.agent_klasses.items():
+            # Only add AIAgent subclasses, not HumanAgent
+            if issubclass(agent_class, AIAgent):
+                self.namespace_manager.namespace[agent_klass_name] = agent_class
 
     def create_agent_wrapper(self, agent, func):
         """Create an agent-specific wrapper that bypasses globals lookup."""
@@ -287,7 +307,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         )
 
     def event_agents_changed(self):
-        self.state.agents = [str(agent) for agent in self.program.agents]
+        self.agents_list = [str(agent) for agent in self.program.agents]
 
     def get_available_playbooks(self) -> List[str]:
         """Get a list of available playbook names.
@@ -321,7 +341,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
     try:
 {playbook_calls_str}
     except Exception as e:
-        agent.state.variables._busy = False
+        agent.state._busy = False
         raise e
     """
 
@@ -332,10 +352,10 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
     # Auto-generated by Playbooks AI runtime
     # 
     # Calls any playbooks that should be executed when the program starts, followed by a loop that waits for messages and processes them.
-    agent.state.variables._busy = True
+    agent.state._busy = True
 {playbook_calls_str}
 
-    agent.state.variables._busy = False
+    agent.state._busy = False
     if agent.program and agent.program.execution_finished:
         return
     
@@ -394,8 +414,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             # Actually, we need to load them in the BGN frame, so store for _pre_execute
             self._artifacts_to_preload = []
             for artifact_name in self._initial_artifacts_to_load:
-                if hasattr(self.state.variables, artifact_name):
-                    artifact_var = getattr(self.state.variables, artifact_name)
+                if hasattr(self.state, artifact_name):
+                    artifact_var = getattr(self.state, artifact_name)
                     if isinstance(artifact_var, Artifact):
                         self._artifacts_to_preload.append(artifact_var)
 
@@ -588,7 +608,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         # Meeting targets
         if target == "meeting":
-            if meeting_id := self.state.get_current_meeting():
+            if meeting_id := self.get_current_meeting():
                 return f"meeting {meeting_id}"
             return None
 
@@ -604,11 +624,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         # Special context targets
         if target == "last_non_human_agent":
-            if (
-                self.state.last_message_target
-                and self.state.last_message_target != "human"
-            ):
-                return self.state.last_message_target
+            if self.last_message_target and self.last_message_target != "human":
+                return self.last_message_target
             return None
 
         # Agent by class name
@@ -646,12 +663,12 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             Fallback target identifier
         """
         # Current meeting context
-        if meeting_id := self.state.get_current_meeting():
+        if meeting_id := self.get_current_meeting():
             return f"meeting {meeting_id}"
 
         # Last 1:1 conversation target
-        if self.state.last_message_target:
-            return self.state.last_message_target
+        if self.last_message_target:
+            return self.last_message_target
 
         # Default to human
         return "human"
@@ -680,9 +697,9 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             A string containing the input log data
         """
         log_parts = []
-        log_parts.append(str(self.state.call_stack))
-        log_parts.append(str(self.state.variables))
-        log_parts.append("Session log: \n" + str(self.state.session_log))
+        log_parts.append(str(self.call_stack))
+        log_parts.append(str(self.state))
+        log_parts.append("Session log: \n" + str(self.session_log))
 
         if isinstance(playbook, LLMPlaybook):
             log_parts.append(playbook.markdown)
@@ -750,7 +767,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         if playbook and playbook.meeting:
             is_meeting = True
             # Try to get meeting ID from kwargs or current context
-            meeting_id = kwargs.get("meeting_id") or self.state.get_current_meeting()
+            meeting_id = kwargs.get("meeting_id") or self.get_current_meeting()
         elif "meeting_id" in kwargs:
             # Even if not a meeting playbook, if meeting_id is in kwargs (e.g., AcceptAndJoinMeeting),
             # mark as meeting context so get_current_meeting_from_call_stack() can find it
@@ -774,10 +791,10 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             meeting_id=meeting_id,
         )
         call_stack_frame.langfuse_span = langfuse_span
-        self.state.call_stack.push(call_stack_frame)
-        self.state.session_log.append(call)
+        self.call_stack.push(call_stack_frame)
+        self.session_log.append(call)
 
-        self.state.variables.update({"$__": None})
+        self.state.update({"$__": None})
 
         # Pre-load initial artifacts if this is the first playbook execution
         if hasattr(self, "_artifacts_to_preload") and self._artifacts_to_preload:
@@ -946,7 +963,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         # Ensure args is a list (not tuple) so we can modify it
         args = list(args) if not isinstance(args, list) else args
 
-        context = ExpressionContext(agent=self, state=self.state, call=call)
+        context = ExpressionContext(agent=self, call=call)
 
         # Determine playbook type
         is_external = self._is_external_playbook(playbook_name, playbook)
@@ -976,7 +993,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
                 if (
                     existing_meeting_id
-                    and existing_meeting_id not in self.state.joined_meetings
+                    and existing_meeting_id not in self.joined_meetings
                 ):
                     # We're joining an existing meeting - accept the invitation first
                     inviter_id = AgentID.parse(kwargs.get("inviter_id")).id
@@ -991,8 +1008,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     # No need to wait for attendees - we're joining, not creating
 
                 elif (
-                    existing_meeting_id
-                    and existing_meeting_id in self.state.joined_meetings
+                    existing_meeting_id and existing_meeting_id in self.joined_meetings
                 ):
                     # We've already joined this meeting, just proceed with execution
                     debug(
@@ -1018,10 +1034,10 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     await self.meeting_manager._wait_for_required_attendees(meeting)
 
                     message = f"Meeting {meeting.id} ready to proceed - all required attendees present"
-                    self.state.session_log.append(message)
+                    self.session_log.append(message)
 
                     meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
-                    self.state.call_stack.add_llm_message(meeting_msg)
+                    self.call_stack.add_llm_message(meeting_msg)
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
             await self._post_execute(call, False, error_msg, langfuse_span)
@@ -1040,7 +1056,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 return (success, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
-                self.state.variables._busy = False
+                self.state._busy = False
                 await self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
                 await self._post_execute(call, False, message, langfuse_span)
@@ -1095,8 +1111,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         # Note: __ (double underscore) cannot use attribute access in DotMap
         # due to Python's dunder name handling, so we use bracket notation
-        if "__" in self.state.variables:
-            execution_summary = self.state.variables["__"]
+        if "__" in self.state:
+            execution_summary = self.state["__"]
             # Convert to string if it's an Artifact to ensure it can be used in string operations
             if isinstance(execution_summary, Artifact):
                 execution_summary = str(execution_summary)
@@ -1143,7 +1159,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 value=artifact_contents,
             )
             # Store artifact in variables
-            setattr(self.state.variables, artifact_var_name, artifact)
+            setattr(self.state, artifact_var_name, artifact)
             artifact_result = True
             result = artifact_var_name
 
@@ -1152,31 +1168,31 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         # Otherwise it's the plain result value
         if artifact_result:
             # result is now the artifact name, retrieve it
-            artifact_obj = getattr(self.state.variables, result)
+            artifact_obj = getattr(self.state, result)
             if not isinstance(artifact_obj, Artifact):
                 raise ValueError(f"Invalid artifact object: {artifact_obj}")
             # Store in _ for chaining operations
-            self.state.variables._ = artifact_obj
+            self.state._ = artifact_obj
         elif returned_artifact:
             # Playbook returned an artifact object directly
-            self.state.variables._ = returned_artifact
+            self.state._ = returned_artifact
             artifact_var_name = returned_artifact.name
             result = f"Artifact: {artifact_var_name}"
         else:
             # Plain result value
-            self.state.variables._ = result
+            self.state._ = result
 
         call_result = PlaybookCallResult(call, result, execution_summary)
-        self.state.session_log.append(call_result)
+        self.session_log.append(call_result)
 
-        self.state.call_stack.pop()
+        self.call_stack.pop()
 
         if artifact_result:
             artifact_msg = ArtifactLLMMessage(artifact_obj)
-            self.state.call_stack.add_llm_message(artifact_msg)
+            self.call_stack.add_llm_message(artifact_msg)
         elif returned_artifact:
             artifact_msg = ArtifactLLMMessage(returned_artifact)
-            self.state.call_stack.add_llm_message(artifact_msg)
+            self.call_stack.add_llm_message(artifact_msg)
 
         if call.playbook_klass not in ["WaitForMessage"]:
             result_msg = ExecutionResultLLMMessage(
@@ -1184,7 +1200,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 playbook_name=call.playbook_klass,
                 success=success,
             )
-            self.state.call_stack.add_llm_message(result_msg)
+            self.call_stack.add_llm_message(result_msg)
 
         # Update the current span (created by @observe) with output
         # The @observe decorator will automatically end the span and capture this return value
@@ -1230,8 +1246,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             return content
         else:
             # Safely get the caller frame (second from top)
-            if len(self.state.call_stack.frames) >= 2:
-                caller_frame = self.state.call_stack.frames[-2]
+            if len(self.call_stack.frames) >= 2:
+                caller_frame = self.call_stack.frames[-2]
 
                 if silent:
                     file_msg = FileLoadLLMMessage(content, file_path=file_path)
@@ -1250,16 +1266,16 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 return f"Loaded file {file_path}"
 
     def load_artifact(self, artifact_name: str):
-        if not hasattr(self.state.variables, artifact_name):
+        if not hasattr(self.state, artifact_name):
             raise ValueError(f"Artifact {artifact_name} not found")
 
-        artifact = getattr(self.state.variables, artifact_name)
+        artifact = getattr(self.state, artifact_name)
         if not isinstance(artifact, Artifact):
             raise ValueError(f"{artifact_name} is not an artifact")
 
-        if not self.state.call_stack.is_artifact_loaded(artifact_name):
+        if not self.call_stack.is_artifact_loaded(artifact_name):
             artifact_msg = ArtifactLLMMessage(artifact)
-            self.state.call_stack.add_llm_message_on_parent(artifact_msg)
+            self.call_stack.add_llm_message_on_parent(artifact_msg)
             return f"Artifact {artifact_name} is now loaded"
         else:
             return f"Artifact {artifact_name} is already loaded"
@@ -1270,7 +1286,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             if self.program and self.program.execution_finished:
                 break
 
-            self.state.variables._busy = False
+            self.state._busy = False
 
             # Wait for messages
             _, messages = await self.execute_playbook("WaitForMessage", ["*"])
@@ -1278,8 +1294,369 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             if not messages:
                 continue
 
-            self.state.variables._busy = True
+            self.state._busy = True
 
             # Delegate all message processing to ProcessMessages LLM playbook
             # This includes trigger matching, meeting invitations, and natural language handling
             await self.execute_playbook("ProcessMessages", [messages])
+
+    # Execution logging methods (used by LLM-generated code)
+
+    @property
+    def _current_executor(self):
+        """Get the current executor from the top call stack frame.
+
+        The executor is stored in the call stack frame and automatically
+        handles nested execution contexts - when a frame is popped, the
+        previous frame's executor becomes current.
+
+        Returns:
+            The executor associated with the current call stack frame.
+
+        Raises:
+            RuntimeError: If called outside of code execution context
+                (no frame on stack or frame has no executor).
+        """
+        current_frame = self.call_stack.peek()
+        if (
+            not current_frame
+            or not hasattr(current_frame, "executor")
+            or current_frame.executor is None
+        ):
+            raise RuntimeError("Called outside of code execution context")
+        return current_frame.executor
+
+    async def LogStep(self, location: str) -> None:
+        """Log step execution for tracking and debugging.
+
+        Args:
+            location: Step location (e.g., "Welcome:01:QUE")
+        """
+        await self._current_executor.capture_step(location)
+
+    async def Yield(self, target: str = "user") -> None:
+        """Yield execution control back to framework.
+
+        Args:
+            target: Yield target ("user", "call", "agent <id>", "meeting <id>", "exit")
+        """
+        await self._current_executor.capture_yld(target)
+
+    async def Return(self, value: Any) -> None:
+        """Return value from playbook and set self.state._ for use in caller.
+
+        Args:
+            value: The value to return from the playbook
+        """
+        await self._current_executor.capture_return(value)
+
+    async def SaveArtifact(self, name: str, summary: str, content: str) -> None:
+        """Create and save artifact with summary and full content.
+
+        Args:
+            name: Artifact variable name
+            summary: Short summary of the artifact
+            content: Full artifact content
+        """
+        await self._current_executor.capture_artifact(name, summary, content)
+
+    async def LogTrigger(self, code: str) -> None:
+        """Log trigger execution.
+
+        Args:
+            code: Trigger code to execute
+        """
+        await self._current_executor.capture_trigger(code)
+
+    @classmethod
+    async def get_or_create(cls, *, requester, **create_kwargs):
+        """Get an available agent of this type or create a new one.
+
+        Automatically finds an idle agent or creates a new instance.
+        Supports load balancing and allows same-type creation.
+
+        Args:
+            requester: The agent requesting the instance (keyword-only)
+            **create_kwargs: Arguments to pass to agent creation
+
+        Returns:
+            Agent instance of this class type
+
+        Example:
+            accountant = await AccountantExpert.get_or_create(requester=self)
+        """
+        return await requester.program.get_or_create_agent(
+            agent_klass=cls.klass, **create_kwargs
+        )
+
+    @classmethod
+    def get_all(cls, program):
+        """Get all agents of this type.
+
+        Args:
+            program: The program instance
+
+        Returns:
+            List of all agent instances of this class type
+
+        Example:
+            all_accountants = AccountantExpert.get_all(self.program)
+        """
+        return program.agents_by_klass.get(cls.klass, [])
+
+    @property
+    def all_agents(self) -> AgentsAccessor:
+        """Access to all agents in the program."""
+        return AgentsAccessor(self.program)
+
+    @property
+    def agents(self):
+        """Alias for agents_list."""
+        return self.agents_list
+
+    @agents.setter
+    def agents(self, value):
+        """Setter for agents_list."""
+        self.agents_list = value
+
+    def get_current_meeting(self) -> Optional[str]:
+        """Get meeting ID from top meeting playbook in call stack.
+
+        Returns:
+            Meeting ID if currently in a meeting, None otherwise
+        """
+        for frame in reversed(self.call_stack.frames):
+            if frame.is_meeting and frame.meeting_id:
+                return frame.meeting_id
+        return None
+
+    def snapshot_variables(self) -> None:
+        """Snapshot current variables for diff computation."""
+        from playbooks.state.variables import VariablesTracker
+
+        self.previous_variables = VariablesTracker.snapshot(self.state)
+
+    def publish_variable_changes(self) -> None:
+        """Publish events for any variable changes since last snapshot."""
+        from playbooks.state.variables import VariablesTracker
+
+        VariablesTracker.publish_changes(
+            self.event_bus, self.id, self.state, self.previous_variables
+        )
+
+    def to_dict(self, full: bool = True) -> Dict[str, Any]:
+        """Return a dictionary representation of the execution state.
+
+        Args:
+            full: If True, return full state. If False, return delta from last_sent_state.
+
+        Returns:
+            Dictionary containing call stack, variables, agents, and meetings
+        """
+        from playbooks.state.variables import VariablesTracker
+
+        # Owned meetings
+        owned_meetings_list = []
+        joined_meetings_list = []
+
+        for meeting_id, meeting in self.owned_meetings.items():
+            participants_list = []
+            for participant in meeting.joined_attendees:
+                participants_list.append(f"{participant.klass}(agent {participant.id})")
+            owned_meetings_list.append(
+                {
+                    "meeting_id": meeting_id,
+                    "participants": participants_list,
+                    "topic": meeting.topic,
+                }
+            )
+            joined_meetings_list.append(
+                {
+                    "meeting_id": meeting_id,
+                    "owner": f"Owned by me - agent {meeting.owner_id}",
+                    "topic": meeting.topic,
+                }
+            )
+
+        # Joined meetings
+        for meeting_id, meeting in self.joined_meetings.items():
+            joined_meetings_list.append(
+                {
+                    "meeting_id": meeting_id,
+                    "owner": f"agent {meeting.owner_id}",
+                    "topic": meeting.topic,
+                }
+            )
+
+        full_state = {
+            "call_stack": [
+                frame.instruction_pointer.to_compact_str()
+                for frame in self.call_stack.frames
+            ],
+            "variables": VariablesTracker.to_dict(self.state),
+            "agents": self.agents_list.copy() if self.agents_list else [],
+            "owned_meetings": owned_meetings_list,
+            "joined_meetings": joined_meetings_list,
+        }
+
+        if not full and self.last_sent_state is not None:
+            return self._compute_delta(full_state)
+
+        return full_state
+
+    def _compute_delta(self, current_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Compute delta between current state and last sent state.
+
+        Args:
+            current_state: The current full state dictionary
+
+        Returns:
+            Delta state dictionary with only changes, or None if no changes
+        """
+        if self.last_sent_state is None:
+            return current_state
+
+        delta: Dict[str, Any] = {}
+
+        # Call stack: Always include full call stack if changed
+        current_call_stack = current_state.get("call_stack", [])
+        last_call_stack = self.last_sent_state.get("call_stack", [])
+        if current_call_stack != last_call_stack:
+            delta["call_stack"] = current_call_stack
+
+        # Variables: Use explicit delta keys
+        current_vars = current_state.get("variables", {})
+        last_vars = self.last_sent_state.get("variables", {})
+        self._add_variable_delta_to_dict(delta, current_vars, last_vars)
+
+        # Agents: Use explicit delta keys
+        current_agents = current_state.get("agents", [])
+        last_agents = self.last_sent_state.get("agents", [])
+        self._add_agent_delta_to_dict(delta, current_agents, last_agents)
+
+        # Owned meetings: Always include full list if changed
+        current_owned = current_state.get("owned_meetings", [])
+        last_owned = self.last_sent_state.get("owned_meetings", [])
+        if current_owned != last_owned:
+            delta["owned_meetings"] = current_owned
+
+        # Joined meetings: Always include full list if changed
+        current_joined = current_state.get("joined_meetings", [])
+        last_joined = self.last_sent_state.get("joined_meetings", [])
+        if current_joined != last_joined:
+            delta["joined_meetings"] = current_joined
+
+        # If delta is empty (no changes), return None
+        if not delta:
+            return None
+
+        return delta
+
+    def _add_variable_delta_to_dict(
+        self,
+        delta: Dict[str, Any],
+        current_vars: Dict[str, Any],
+        last_vars: Dict[str, Any],
+    ) -> None:
+        """Add variable delta to the delta dictionary using explicit keys.
+
+        Args:
+            delta: Delta dictionary to update
+            current_vars: Current variables dictionary
+            last_vars: Last sent variables dictionary
+        """
+        new_vars = {}
+        changed_vars = {}
+        deleted_vars = []
+
+        # Find added and modified variables
+        for key, value in current_vars.items():
+            if key not in last_vars:
+                new_vars[key] = value
+            elif value != last_vars[key]:
+                changed_vars[key] = value
+
+        # Find deleted variables
+        for key in last_vars:
+            if key not in current_vars:
+                deleted_vars.append(key)
+
+        # Add to delta with explicit key names
+        if new_vars:
+            delta["new_variables"] = new_vars
+        if changed_vars:
+            delta["changed_variables"] = changed_vars
+        if deleted_vars:
+            delta["deleted_variables"] = deleted_vars
+
+    def _add_agent_delta_to_dict(
+        self, delta: Dict[str, Any], current_agents: List[Any], last_agents: List[Any]
+    ) -> None:
+        """Add agent delta to the delta dictionary using explicit keys.
+
+        Args:
+            delta: Delta dictionary to update
+            current_agents: Current agents list
+            last_agents: Last sent agents list
+        """
+        new_agents = [a for a in current_agents if a not in last_agents]
+
+        # For now, we only track new agents (no changed or deleted)
+        if new_agents:
+            delta["new_agents"] = new_agents
+
+    def get_state_for_llm(
+        self, execution_id: Optional[int], compression_config: Optional[Any] = None
+    ) -> tuple[Optional[Dict[str, Any]], Any]:
+        """Get state for LLM with compression applied.
+
+        Determines whether to send full state or delta based on execution_id
+        and compression settings. Updates tracking state as needed.
+
+        Args:
+            execution_id: Current execution ID (LLM call counter)
+            compression_config: StateCompressionConfig object (if None, uses default)
+
+        Returns:
+            Tuple of (state_dict, frame_type):
+            - (full_state_dict, FrameType.I) for I-frame (full state)
+            - (delta_dict, FrameType.P) for P-frame with changes
+            - (None, FrameType.P) for P-frame with no changes (empty delta)
+        """
+        from playbooks.llm.messages.types import FrameType
+
+        # Import here to avoid circular dependency
+        if compression_config is None:
+            from playbooks.config import config
+
+            compression_config = config.state_compression
+
+        # Determine if we should send full state or delta
+        compression_enabled = compression_config.enabled
+        send_full_state = True
+
+        if compression_enabled and execution_id is not None:
+            # Send full state at intervals or if this is the first call
+            if (
+                self.last_i_frame_execution_id is None
+                or (execution_id - self.last_i_frame_execution_id)
+                >= compression_config.full_state_interval
+            ):
+                send_full_state = True
+                self.last_i_frame_execution_id = execution_id
+            else:
+                send_full_state = False
+
+        # Get state (full or delta)
+        state_dict = self.to_dict(full=send_full_state)
+
+        # Always update last_sent_state to current full state (cumulative)
+        # This ensures P-frames are deltas from the immediate previous state, not from last I-frame
+        # Cumulative chain: I + P + P + P = current full state
+        self.last_sent_state = self.to_dict(full=True)
+
+        if send_full_state:
+            return state_dict, FrameType.I
+        else:
+            # Delta state (could be None if no changes)
+            return state_dict, FrameType.P

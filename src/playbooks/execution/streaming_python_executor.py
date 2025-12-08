@@ -76,6 +76,9 @@ class StreamingPythonExecutor:
         self.namespace: Dict[str, Any] = self.base_executor.build_namespace(
             playbook_args
         )
+        # Add self and agent to namespace for LLM-generated code compatibility
+        self.namespace["agent"] = agent
+        self.namespace["self"] = agent
 
         # Result tracking
         self.result = ExecutionResult()
@@ -96,6 +99,9 @@ class StreamingPythonExecutor:
         self.has_error = False
         self.error: Optional[Exception] = None
         self.error_traceback: Optional[str] = None
+
+        # Track if we've set executor on the call stack frame
+        self._executor_set = False
 
     def _initialize_namespace_snapshot(self) -> None:
         """Initialize snapshot of namespace variables for change detection."""
@@ -146,6 +152,13 @@ class StreamingPythonExecutor:
 
         if not executable:
             return
+
+        # Set executor on current call stack frame for Log* methods (only once)
+        if not self._executor_set:
+            current_frame = self.agent.call_stack.peek()
+            if current_frame:
+                current_frame.executor = self.base_executor
+            self._executor_set = True
 
         try:
             # Parse the code (no preprocessing needed - uses state.x syntax)
@@ -341,7 +354,7 @@ class StreamingPythonExecutor:
 
             # Variable is new or changed - call Var() to record it
             try:
-                await self.base_executor._capture_var(name, value)
+                await self.base_executor.capture_var(name, value)
             except Exception as e:
                 logger.warning(f"Failed to capture variable {name}: {e}")
 
@@ -377,4 +390,6 @@ class StreamingPythonExecutor:
                 self.code_buffer.add_chunk("\n")
             await self._try_execute()
 
+        # No cleanup needed - executor is tied to call stack frame lifecycle
+        # When the frame is popped, the previous frame's executor becomes current
         return self.result

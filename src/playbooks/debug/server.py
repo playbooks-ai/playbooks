@@ -359,7 +359,7 @@ class DebugServer:
 
             try:
                 agent = self.program.agents_by_id[agent_id]
-                variables = agent.state.variables.to_dict()
+                variables = agent.state.to_dict()
                 # debug(f"Retrieved {len(variables)} variables from agent {agent_id}")
             except Exception as e:
                 debug(f"Error retrieving variables for agent {agent_id}: {e}")
@@ -381,7 +381,7 @@ class DebugServer:
             stack_trace = []
             try:
                 agent = self.program.agents_by_id[agent_id]
-                for frame in reversed(agent.state.call_stack.frames):
+                for frame in reversed(agent.call_stack.frames):
                     name = frame.instruction_pointer.to_compact_str()
                     if frame.is_meeting:
                         name = f"{name}[meeting {frame.meeting_id}]"
@@ -922,7 +922,9 @@ class DebugServer:
         # Get agent's variables for condition evaluation
         try:
             agent = self.program.agents_by_id[agent_id]
-            variables = agent.state.variables.to_dict()
+            from playbooks.state.variables import VariablesTracker
+
+            variables = VariablesTracker.to_dict(agent.state)
         except Exception as e:
             debug(f"Failed to get agent variables: {e}")
             variables = {}
@@ -997,7 +999,7 @@ class DebugServer:
         if not self.program.agents:
             return []
         agent = self.program.agents[0]
-        stack = agent.state.call_stack.to_dict()
+        stack = agent.call_stack.to_dict()
         if not stack:
             return []
         for frame in stack:

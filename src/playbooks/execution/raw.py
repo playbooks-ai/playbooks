@@ -46,7 +46,7 @@ class RawLLMExecution(LLMExecution):
         # No need to push/pop here as it would create double management
 
         # Publish playbook start event
-        self.agent.state.event_bus.publish(
+        self.agent.event_bus.publish(
             PlaybookStartEvent(
                 agent_id=self.agent.id, session_id="", playbook=self.playbook.name
             )
@@ -62,8 +62,8 @@ class RawLLMExecution(LLMExecution):
         result = self._parse_response(response)
 
         # Publish playbook end event
-        call_stack_depth = len(self.agent.state.call_stack.frames)
-        self.agent.state.event_bus.publish(
+        call_stack_depth = len(self.agent.call_stack.frames)
+        self.agent.event_bus.publish(
             PlaybookEndEvent(
                 agent_id=self.agent.id,
                 session_id="",
@@ -90,12 +90,12 @@ class RawLLMExecution(LLMExecution):
         """
         call = PlaybookCall(self.playbook.name, args, kwargs)
 
-        context = ExpressionContext(agent=self.agent, state=self.agent.state, call=call)
+        context = ExpressionContext(agent=self.agent, call=call)
         resolved_description = await resolve_description_placeholders(
             self.playbook.description, context
         )
 
-        stack_frame = self.agent.state.call_stack.peek()
+        stack_frame = self.agent.call_stack.peek()
         # Get file load messages from the call stack
         file_load_messages = [
             msg
@@ -135,7 +135,7 @@ class RawLLMExecution(LLMExecution):
 
         # Add the response to call stack (will be marked for caching as last message)
         response_msg = AssistantResponseLLMMessage(response)
-        self.agent.state.call_stack.add_llm_message(response_msg)
+        self.agent.call_stack.add_llm_message(response_msg)
 
         return response
 
