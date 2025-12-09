@@ -495,7 +495,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             if public_only and not playbook.public:
                 continue
 
-            namespace = self.klass if with_namespace else None
+            namespace = self.klass if with_namespace else "self"
             playbook_instructions = playbook.trigger_instructions(namespace, skip_bgn)
             instructions.extend(playbook_instructions)
         return instructions
@@ -1326,7 +1326,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             raise RuntimeError("Called outside of code execution context")
         return current_frame.executor
 
-    async def LogStep(self, location: str) -> None:
+    async def Step(self, location: str) -> None:
         """Log step execution for tracking and debugging.
 
         Args:
