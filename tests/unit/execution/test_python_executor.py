@@ -177,15 +177,15 @@ class TestPythonExecutor:
         assert result.messages[0] == ("user", "Hello, how are you?")
 
     @pytest.mark.asyncio
-    async def test_capture_var(self, executor):
-        """Test capturing Var() calls."""
+    async def test_state_assignment(self, executor):
+        """Test state variable assignment."""
         code = "self.state.count = 42"
         await executor.execute(code)
         assert executor.agent.state.count == 42
 
     @pytest.mark.asyncio
-    async def test_capture_var_string(self, executor):
-        """Test capturing Var() with string values."""
+    async def test_state_assignment_string(self, executor):
+        """Test state variable assignment with string values."""
         code = 'self.state.message = "test message"'
         await executor.execute(code)
         assert executor.agent.state.message == "test message"
@@ -312,7 +312,6 @@ await self.Return(True)
         # Verify all result attributes are properly initialized
         assert isinstance(result.steps, list)
         assert isinstance(result.messages, list)
-        assert isinstance(result.captured_vars, dict)
         assert isinstance(result.artifacts, dict)
         assert isinstance(result.triggers, list)
         assert isinstance(result.playbook_calls, list)

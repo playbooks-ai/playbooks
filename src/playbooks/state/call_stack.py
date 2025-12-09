@@ -140,6 +140,7 @@ class CallStackFrame:
         self.depth = -1
         self.langfuse_span: Optional[Any] = None
         self.executor = None  # Executor context for this frame (handles nested calls)
+        self.locals: Dict[str, Any] = {}  # Frame-specific local variables
 
     @property
     def source_line_number(self) -> int:

@@ -39,7 +39,6 @@ class ExecutionResult:
         """Initialize an empty execution result."""
         self.steps: List[InstructionPointer] = []
         self.messages: List[Tuple[str, str]] = []  # List of (recipient, message)
-        self.captured_vars: Dict[str, Any] = {}  # Variables set via LogSaveArtifact
         self.artifacts: Dict[str, Artifact] = {}  # Artifacts captured
         self.triggers: List[str] = []  # Trigger names
         self.playbook_calls: List[PlaybookCall] = []  # Playbook calls
@@ -92,16 +91,11 @@ class PythonExecutor:
         self.result.error_traceback = traceback.format_exc()
         return self.result
 
-    def build_namespace(
-        self, playbook_args: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
+    def build_namespace(self) -> Dict[str, Any]:
         """Build minimal namespace for generated code execution.
 
         Code executes as if inside an agent instance method, so 'self'
         is bound to the agent. Most functionality accessed via self.
-
-        Args:
-            playbook_args: Optional dict of playbook argument names to values
 
         Returns:
             Dict containing necessary functions and variables
@@ -134,10 +128,6 @@ class PythonExecutor:
 
         # Add asyncio for await syntax
         namespace["asyncio"] = asyncio
-
-        # Add playbook arguments directly to namespace
-        if playbook_args:
-            namespace.update(playbook_args)
 
         # Add agent's namespace items (imports, playbook wrappers, etc.)
         if hasattr(self.agent, "namespace_manager") and hasattr(
@@ -181,9 +171,13 @@ class PythonExecutor:
         if current_frame:
             current_frame.executor = self
 
+            # Store playbook arguments in frame locals
+            if playbook_args:
+                current_frame.locals.update(playbook_args)
+
         try:
-            # Build namespace
-            namespace = self.build_namespace(playbook_args=playbook_args)
+            # Build namespace (without playbook_args)
+            namespace = self.build_namespace()
 
             # Parse and transform code into async method
             try:
@@ -222,17 +216,17 @@ class PythonExecutor:
             exec(compiled_code, temp_namespace)
             method = temp_namespace["__exec_method__"]
 
-            # Add agent = self to namespace for LLM-generated code compatibility
-            # This allows code to reference 'agent' in addition to 'self'
-            namespace_with_agent = namespace.copy()
-            namespace_with_agent["agent"] = self.agent
-            namespace_with_agent["self"] = self.agent  # Add self to namespace
+            # Merge namespace with frame locals and self reference
+            execution_namespace = namespace.copy()
+            if current_frame:
+                execution_namespace.update(current_frame.locals)
+            execution_namespace["self"] = self.agent
 
-            # Create bound method with our namespace (which includes agent = self)
+            # Create bound method with merged namespace
             bound_method = types.MethodType(
                 types.FunctionType(
                     method.__code__,
-                    namespace_with_agent,
+                    execution_namespace,
                     method.__name__,
                     method.__defaults__,
                     method.__closure__,
@@ -320,28 +314,6 @@ class PythonExecutor:
             agent_id=self.agent.id,
         )
 
-    async def capture_var(self, name: str, value: Any) -> None:
-        """Capture variable assignment and update agent state.
-
-        Args:
-            name: Variable name
-            value: Variable value
-        """
-        from playbooks.config import config
-
-        # Auto-convert large values to artifacts
-        if len(str(value)) > config.artifact_result_threshold:
-            artifact = Artifact(
-                name=name,
-                summary=f"Variable: {name}",
-                value=str(value),
-            )
-            self.result.captured_vars[name] = artifact
-            setattr(self.agent.state, name, artifact)
-        else:
-            self.result.captured_vars[name] = value
-            setattr(self.agent.state, name, value)
-
     async def capture_artifact(self, name: str, summary: str, content: str) -> None:
         """Capture artifact creation and store in agent state.
 
@@ -352,7 +324,6 @@ class PythonExecutor:
         """
         artifact = Artifact(name=name, summary=summary, value=content)
         self.result.artifacts[name] = artifact
-        self.result.captured_vars[name] = artifact
         setattr(self.agent.state, name, artifact)
 
     async def capture_trigger(self, code: str) -> None:
