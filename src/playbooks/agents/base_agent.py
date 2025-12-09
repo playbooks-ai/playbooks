@@ -393,7 +393,11 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         if hasattr(self, "playbooks") and name in self.playbooks:
             # Return a wrapper that calls the playbook's execute() method
             async def playbook_wrapper(*args, **kwargs):
-                return await self.execute_playbook(name, args, kwargs)
+                success, result = await self.execute_playbook(name, args, kwargs)
+                if success:
+                    return result
+                else:
+                    return {"error": result}
 
             return playbook_wrapper
 
