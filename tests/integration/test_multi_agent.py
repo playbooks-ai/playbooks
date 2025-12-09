@@ -13,18 +13,22 @@ async def test_multi_agent(test_data_dir):
 
     await playbooks.program.run_till_exit()
 
-    first_agent = playbooks.program.agents[0]
+    first_agent = playbooks.program.agents_by_klass["FirstAgent"][0]
     log = first_agent.session_log.to_log_full()
-    assert "X() → " in log
+    assert "A(5) →" in log
     # assert "A(1024) → 32.0" in log
 
-    country_info_agent = playbooks.program.agents[1]
+    country_info_agent = playbooks.program.agents_by_klass["CountryInfo"][0]
     log = country_info_agent.session_log.to_log_full()
     # assert "GetCountrySecret(Canada) → " in log
     # assert "FirstAgent.A(num=5) → 2.23" in log
     # assert "GetCountryPopulation(India) → 2.23" in log
     assert "→ 32.0" in log
     assert EXECUTION_FINISHED in log
+
+    first_agent2 = playbooks.program.agents_by_klass["FirstAgent"][1]
+    log = first_agent2.session_log.to_log_full()
+    assert "A(5) →" in log
 
 
 @pytest.mark.integration

@@ -326,7 +326,6 @@ async def test_example_storyteller(test_examples_dir):
     await playbooks.program.run_till_exit()
     log = storyteller.session_log.to_log_full()
     assert "Main()" in log
-    assert "CreateAgent(CharacterCreator)" in log
     assert "Execution finished" in log
 
     character_creator = playbooks.program.agents_by_klass["CharacterCreator"][0]

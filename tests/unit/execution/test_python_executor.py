@@ -44,7 +44,7 @@ class MockAgent:
         event_bus = EventBus("test-session")
         self._variables_internal = PlaybookDotMap()
         self.call_stack = CallStack(event_bus)
-        # Push a dummy frame for testing so LogStep() calls work
+        # Push a dummy frame for testing so Step() calls work
         instruction_pointer = InstructionPointer(
             playbook="TestPlaybook",
             line_number="00",
@@ -109,8 +109,8 @@ class MockAgent:
             raise RuntimeError("Called outside of code execution context")
         return current_frame.executor
 
-    async def LogStep(self, location: str):
-        """Mock LogStep method that delegates to executor."""
+    async def Step(self, location: str):
+        """Mock Step method that delegates to executor."""
         await self._current_executor.capture_step(location)
 
     async def Yield(self, target: str = "user"):
@@ -154,8 +154,8 @@ class TestPythonExecutor:
 
     @pytest.mark.asyncio
     async def test_capture_step(self, executor):
-        """Test capturing LogStep() calls."""
-        code = 'await self.LogStep("Welcome:01:QUE")'
+        """Test capturing Step() calls."""
+        code = 'await self.Step("Welcome:01:QUE")'
         result = await executor.execute(code)
         assert len(result.steps) == 1
         assert result.steps[0].playbook == "Welcome"
@@ -164,7 +164,7 @@ class TestPythonExecutor:
     @pytest.mark.asyncio
     async def test_capture_step_thinking(self, executor):
         """Test capturing thinking step (TNK)."""
-        code = 'await self.LogStep("Analysis:02:TNK")'
+        code = 'await self.Step("Analysis:02:TNK")'
         result = await executor.execute(code)
         assert result.is_thinking is True
 
@@ -242,7 +242,7 @@ class TestPythonExecutor:
     async def test_multiple_statements(self, executor):
         """Test executing multiple statements."""
         code = """
-await self.LogStep("Welcome:01:QUE")
+await self.Step("Welcome:01:QUE")
 await self.Say("user", "Hello!")
 self.state.name = "Alice"
 """
@@ -284,7 +284,9 @@ message""")'''
         executor.agent.state.count = 5
 
         # Then use it
-        code = 'await self.LogStep("Test:01:QUE")\nself.state.result = self.state.count * 2'
+        code = (
+            'await self.Step("Test:01:QUE")\nself.state.result = self.state.count * 2'
+        )
         await executor.execute(code)
         assert executor.agent.state.result == 10
 
@@ -299,7 +301,7 @@ message""")'''
     async def test_execution_result_structure(self, executor):
         """Test ExecutionResult structure."""
         code = """
-await self.LogStep("Step1:01:QUE")
+await self.Step("Step1:01:QUE")
 await self.Say("user", "hello")
 self.state.x = 1
 await self.LogTrigger("T1")
@@ -410,7 +412,7 @@ self.state.current_symbol = 'X' if self.state.current_symbol == 'O' else 'O'
 
         # This is the exact code pattern that was failing
         code = """
-await self.LogStep("FormatSummary:01:EXE")
+await self.Step("FormatSummary:01:EXE")
 self.state.summary = f'📊 **North Region Report**: Sales reached **${self.state.report_data["sales"]:,}** with a **{self.state.report_data["trend"]}** trend—excellent momentum!'
 """
 
