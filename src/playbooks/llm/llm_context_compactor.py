@@ -4,13 +4,11 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     LLMMessage,
     UserInputLLMMessage,
 )
-from playbooks.llm.messages.types import FrameType
 
 
 @dataclass
@@ -96,34 +94,11 @@ class LLMContextCompactor:
                 safe_user_index = i
                 break
 
-        # Find last I-frame (full state) to preserve base state for delta compression
-        # This ensures deltas can always reference their base state
-        last_i_frame_index = -1
-        for i in range(len(messages) - 1, -1, -1):
-            if isinstance(messages[i], UserInputLLMMessage):
-                # Check if message has frame_type attribute and is an I-frame
-                if (
-                    hasattr(messages[i], "frame_type")
-                    and messages[i].frame_type == FrameType.I
-                ):
-                    last_i_frame_index = i
-                    break
-
         # Determine final safe index
         if safe_user_index == -1:
             safe_index = safe_assistant_index
         else:
             safe_index = safe_user_index
-
-        # Ensure we don't compact past the last I-frame
-        # Messages with index >= safe_index are kept full, so we need SMALLER index to preserve more
-        if last_i_frame_index != -1:
-            if safe_index > last_i_frame_index:
-                debug(
-                    f"Preserving I-frame at index {last_i_frame_index} for delta compression "
-                    f"(originally safe_index was {safe_index})"
-                )
-            safe_index = min(safe_index, last_i_frame_index)
 
         # All messages before safe_index are compacted
         # Messages at or after safe_index are kept full

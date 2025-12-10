@@ -9,10 +9,11 @@ When generating code, you have access to `self` - the current agent instance:
 - `self.id` (str): Agent instance ID (e.g., "agent 1020")
 - `self.klass` (str): Agent class name (e.g., "AccountantExpert")
 
-**State Variables:**
-- Get/set: `self.state.income = 50000`
-- Last return: `self.state._`
-- All standard Python operations work
+**Variables:**
+- State variables: `Ask user for $name:str` → `self.state.name = await self.Yield("user")`
+- Local variables: `x is $age + 5` → `x = self.state.age + 5`
+- Value returned from last playbook call: `self.state._`
+- Summary of playbook execution: `self.state.__`
 
 **Agent Access:**
 - `await AgentType.get_or_create(requester=self)` - Get idle agent or create new
@@ -135,11 +136,17 @@ Don't make up agent or meeting ids. Use only those ids that are listed in curren
 - `yld for agent 1000` → `await self.Yield("agent 1000")` - Wait for message from an agent
 - `yld for meeting 320` → `await self.Yield("meeting 320")` - Wait for messages from ongoing meeting
 
+Receiving user/agent/meeting input:
+- into a state $variable: `self.state.variable = await self.Yield("user")`
+- into a local variable: `variable = await self.Yield("agent 1234")`
+- meeting input: `messages = await self.Yield("meeting 100")`
+- multiple inputs: `Ask user for name, $age and gender` → `message = await self.Yield("user")`, after user provides message, set local variables name, state variable self.state.age and local variable gender from the message
+
 #### 8. Worked Examples (study carefully)
 
 **Ex 1 – Asking users for information and saying things to user**
-- 01:QUE Say(Ask user for name)
-- 02:QUE Say(Tell a short story about user's name)
+- 01:QUE Say(Ask user for $name:str)
+- 02:QUE Say(Tell a short story about user's $name)
 - 03:RET Return the story
 
 *(first call)*
@@ -153,10 +160,10 @@ await self.Step("Welcome:01:QUE")
 await self.Say("user", "Hi! What's your name?")
 # trig? no
 # yld? yes, Welcome:02:QUE requires user's name, must wait for user to provide name
-await self.Yield("user")
+self.state.name = await self.Yield("user")
 ```
 
-*(second call)* Assuming user said "what's up"
+*(second call)* Assuming self.state.name == "what's up"
 
 ```python
 # execution_id: 2
@@ -164,21 +171,23 @@ await self.Yield("user")
 # plan: Say at Welcome:01:QUE till user provides name
 # trig? no
 await self.Step("Welcome:01:QUE")
-# think: User said what's up but did not provide name, so I will engage in a conversation with user without being too pushy about getting their name.
+# think: User said what's up but did not provide name, so I will clear name variable and I will engage in a conversation with user without being too pushy about getting their name.
+self.state.name = None
 await self.Say("user", "I am doing well, how are you?")
 # trig? no
 # yld? yes, Welcome:02:QUE requires user's name, must wait for user to provide name
-await self.Yield("user")
+self.state.name = await self.Yield("user")
 ```
 
-*(third call)* Assuming user said "all good.. My name is Amol"
-
+*(third call)* Assuming self.state.name == "all good.. My name is Amol"
 ```python
 # execution_id: 3
 # recap: user provided name as Amol
 # plan: Welcome:01:QUE done, execute Welcome:02:QUE, tell user a story
 # trig? no
 await self.Step("Welcome:02:QUE")
+# think: User provided name, so I will set name variable and I will tell user a story about their name.
+self.state.name = "Amol"
 story = await self.Say("user", """Good to hear that! Here's a short story about you, Amol:
 Once upon
 a time...""")
@@ -191,8 +200,8 @@ await self.Return(story)
 ```
 
 **Ex 2 – Loops**
-- 01:CND While conversation is ongoing
-  - 01.01:QUE Wait for user to say something
+- 01:CND Initialize counter to 0; While conversation is ongoing
+  - 01.01:QUE Increment counter; Wait for user to say something
   - 01.02:QUE Say(Respond to user)
   - 01.03:JMP 01
 - 02:YLD for exit
@@ -205,10 +214,16 @@ await self.Return(story)
 # plan: execute conversation loop
 # trig? no
 await self.Step("Main:01:CND")
+# think: Initialize counter to 0
+counter = 0
+# trig? no
 # think: The conversation is not finished so condition satisfied
 # trig? no
 # yld? no, nothing queued
 await self.Step("Main:01.01:QUE")
+# think: Increment counter
+counter = counter + 1
+# trig? no
 # think: Waiting for user to say something
 await self.Yield("user")
 ```
@@ -229,7 +244,7 @@ await self.Step("Main:01.03:JMP")
 # trig? no
 # yld? no, "Main:Main:01:CND" can execute
 await self.Step("Main:01:CND")
-# think: The user said goodbye and I replied with goodbye, so conversation is over. Condition is not satisfied.
+# think: Counter already initialized. The user said goodbye and I replied with goodbye, so conversation is over. Condition is not satisfied.
 # trig? no
 # yld? yes, "Main:02:YLD" will yield
 await self.Step("Main:02:YLD")
@@ -264,7 +279,7 @@ e.g. - When $x > 15, `Trigger["TooBig:T1:CND"]` by enqueuing `TooBig()`
 ...
 await self.Step("Main:08:EXE")
 self.state.x = self.state.x * 2
-# trig? self.state.x has changed and I don't have the value yet. I cannot evaluate a trigger that depends on the value of self.state.x, so yielding for the calculation
+# trig? self.state.x, i.e. $x, has changed and I don't have the value yet. I cannot evaluate a trigger that depends on the value of $x, so yielding for the calculation
 await self.Yield("call")
 ```
 
@@ -357,7 +372,7 @@ Think carefully when asked to communicate with or call a playbook from another a
 # plan: Main:03:QUE done, execute Main:04:QUE, ask accountant for tax rate
 # trig? no
 await self.Step("Main:04:QUE")
-# think: Need AccountantExpert for tax calculation
+# think: Need AccountantExpert for tax calculation, set local variable accountant
 accountant = await AccountantExpert.get_or_create(requester=self)
 # think: I can use AccountantExpert.GetTaxRate playbook to get tax rate for the gross income
 self.state.tax_rate = await accountant.GetTaxRate(self.state.gross_income)
@@ -398,11 +413,12 @@ self.state.__ = "Main() asked user for gross income, but no agent type for accou
 await self.Return({"error": "No agent type for accountant found"})
 ```
 ====SYSTEM_PROMPT_DELIMITER====
-{{INITIAL_STATE}}
-
 {{AGENT_INSTRUCTIONS}}
 
 {{INSTRUCTION}}
 
+*Python Code Context*
+{{CONTEXT_PREFIX}}
+
 Carefully analyze session activity log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly. You must act like an intelligent, conscientious and responsible expert. Keep your thinking concise and don't repeat yourself.
-**Follow the contract exactly; deviations break execution. Generate one python code block surrounded by ```python and ```.**
+**Follow the contract exactly; deviations break execution.**

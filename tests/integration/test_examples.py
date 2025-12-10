@@ -1,3 +1,4 @@
+import re
 import subprocess
 from pathlib import Path
 
@@ -435,3 +436,27 @@ async def test_example_15(test_data_dir, capsys):
 
     log = playbooks.program.agents_by_klass["C"][0].session_log.to_log_full()
     assert "from C" in log
+
+
+@pytest.mark.asyncio
+async def test_example_16(test_data_dir):
+    playbooks = Playbooks([test_data_dir / "16-variables.pb"])
+    await playbooks.initialize()
+
+    ai_agent = playbooks.program.agents[0]
+    await playbooks.program.agents_by_id["human"].SendMessage(
+        ai_agent.id, "checkers and blue"
+    )
+    await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
+
+    await playbooks.program.run_till_exit()
+    log = ai_agent.session_log.to_log_full()
+    print(log)
+    assert re.search(r"Say.*John", log)
+    assert re.search(r"Say.*Pinkerton", log)
+    assert re.search(r"Say.*30", log)
+    assert re.search(r"Say.*70", log)
+    assert not re.search(r"Say.*male", log)
+    assert re.search(r"Say.*Pinkerton.*blue.*checkers", log)
+    assert re.search(r"Say.*India.*70", log)
+    assert EXECUTION_FINISHED in log

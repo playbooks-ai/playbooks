@@ -7,7 +7,7 @@ In this playbook, the customer support agent welcomes the user
 - At the beginning
 ### Steps
 - Tell user about yourself
-- Ask the user for their name
+- Ask the user for their name and engage in small talk till user provides a valid name
 - Say hello to the user by name
 - Welcome user to Playbooks AI and say goodbye
 - End program

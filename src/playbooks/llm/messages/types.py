@@ -1,23 +1,10 @@
 """Clean semantic LLM message types with minimal, maintainable design."""
 
-from enum import Enum
 from typing import Any, Dict, Optional
 
 from playbooks.core.enums import LLMMessageRole, LLMMessageType
 from playbooks.llm.messages.base import LLMMessage
 from playbooks.state.variables import Artifact
-
-
-class FrameType(Enum):
-    """Frame type for state compression (video codec metaphor).
-
-    I-frame (Intra-frame): Full state - independent, can be decoded alone
-    P-frame (Predicted-frame): Delta state - depends on previous I-frame
-    """
-
-    I = "I"  # Full state  # noqa: E741
-    P = "P"  # Delta state
-
 
 # Core semantic message types - minimal set covering all use cases
 
@@ -36,13 +23,12 @@ class SystemPromptLLMMessage(LLMMessage):
 class UserInputLLMMessage(LLMMessage):
     """User inputs and instructions."""
 
-    def __init__(self, content: str, frame_type: FrameType = FrameType.I) -> None:
+    def __init__(self, content: str) -> None:
         super().__init__(
             content=content,
             role=LLMMessageRole.USER,
             type=LLMMessageType.USER_INPUT,
         )
-        self.frame_type = frame_type
 
     def to_compact_message(self) -> Optional[Dict[str, Any]]:
         """Remove user inputs during compaction."""

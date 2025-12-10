@@ -417,7 +417,11 @@ async def main(
 
     # Wrap session logs with SessionLogWrapper for verbose output
     for agent in playbooks.program.agents:
-        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+        if (
+            isinstance(agent, AIAgent)
+            and hasattr(agent, "state")
+            and "session_log" in agent.state
+        ):
             wrapper = SessionLogWrapper(agent.session_log, pubsub, verbose)
             agent.session_log = wrapper
 

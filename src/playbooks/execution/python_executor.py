@@ -11,6 +11,7 @@ import traceback
 import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+from playbooks.core.constants import EOM
 from playbooks.core.identifiers import MeetingID
 from playbooks.debug.debug_handler import NoOpDebugHandler
 from playbooks.execution.call import PlaybookCall
@@ -344,7 +345,7 @@ class PythonExecutor:
         self.agent.state._ = value
         self.result.playbook_finished = True
 
-    async def capture_yld(self, target: str = "user") -> None:
+    async def capture_yld(self, target: str = "user") -> Optional[str]:
         """Capture yield point and handle waiting logic.
 
         Args:
@@ -364,8 +365,9 @@ class PythonExecutor:
             self.result.wait_for_agent_target = target
 
         # Perform the actual waiting operations
+        messages = []
         if target_lower in ["user", "human"]:
-            await self.agent.WaitForMessage("human")
+            messages = await self.agent.WaitForMessage("human")
         elif target_lower not in ["exit", "return"]:
             # Agent ID or meeting spec
             target_agent_id = self._resolve_yld_target(target)
@@ -376,9 +378,14 @@ class PythonExecutor:
                     meeting_id = meeting_id_obj.id
                     if meeting_id == "current":
                         meeting_id = self.agent.call_stack.peek().meeting_id
-                    await self.agent.WaitForMessage(f"meeting {meeting_id}")
+                    messages = await self.agent.WaitForMessage(f"meeting {meeting_id}")
                 else:
-                    await self.agent.WaitForMessage(target_agent_id)
+                    messages = await self.agent.WaitForMessage(target_agent_id)
+        if messages:
+            return "\n".join(
+                [message.content for message in messages if message.content != EOM]
+            )
+        return None
 
     def _resolve_yld_target(self, target: str) -> Optional[str]:
         """Resolve a YLD target to an agent ID.

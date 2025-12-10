@@ -169,10 +169,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.owned_meetings: Dict[str, Meeting] = {}
         self.joined_meetings: Dict[str, JoinedMeeting] = {}
 
-        # State compression tracking
-        self.last_sent_state: Optional[Dict[str, Any]] = None
-        self.last_i_frame_execution_id: Optional[int] = None
-
         # Initialize meeting manager with dependency injection (after state is created)
         self.meeting_manager = MeetingManager(
             agent_id=self.id,
@@ -794,7 +790,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         self.call_stack.push(call_stack_frame)
         self.session_log.append(call)
 
-        self.state.update({"$__": None})
+        self.state.__ = None
 
         # Pre-load initial artifacts if this is the first playbook execution
         if hasattr(self, "_artifacts_to_preload") and self._artifacts_to_preload:
@@ -1340,7 +1336,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         Args:
             target: Yield target ("user", "call", "agent <id>", "meeting <id>", "exit")
         """
-        await self._current_executor.capture_yld(target)
+        return await self._current_executor.capture_yld(target)
 
     async def Return(self, value: Any) -> None:
         """Return value from playbook and set self.state._ for use in caller.
@@ -1444,11 +1440,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             self.event_bus, self.id, self.state, self.previous_variables
         )
 
-    def to_dict(self, full: bool = True) -> Dict[str, Any]:
+    def to_dict(self) -> Dict[str, Any]:
         """Return a dictionary representation of the execution state.
-
-        Args:
-            full: If True, return full state. If False, return delta from last_sent_state.
 
         Returns:
             Dictionary containing call stack, variables, agents, and meetings
@@ -1488,7 +1481,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 }
             )
 
-        full_state = {
+        return {
             "call_stack": [
                 frame.instruction_pointer.to_compact_str()
                 for frame in self.call_stack.frames
@@ -1498,165 +1491,3 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             "owned_meetings": owned_meetings_list,
             "joined_meetings": joined_meetings_list,
         }
-
-        if not full and self.last_sent_state is not None:
-            return self._compute_delta(full_state)
-
-        return full_state
-
-    def _compute_delta(self, current_state: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        """Compute delta between current state and last sent state.
-
-        Args:
-            current_state: The current full state dictionary
-
-        Returns:
-            Delta state dictionary with only changes, or None if no changes
-        """
-        if self.last_sent_state is None:
-            return current_state
-
-        delta: Dict[str, Any] = {}
-
-        # Call stack: Always include full call stack if changed
-        current_call_stack = current_state.get("call_stack", [])
-        last_call_stack = self.last_sent_state.get("call_stack", [])
-        if current_call_stack != last_call_stack:
-            delta["call_stack"] = current_call_stack
-
-        # Variables: Use explicit delta keys
-        current_vars = current_state.get("variables", {})
-        last_vars = self.last_sent_state.get("variables", {})
-        self._add_variable_delta_to_dict(delta, current_vars, last_vars)
-
-        # Agents: Use explicit delta keys
-        current_agents = current_state.get("agents", [])
-        last_agents = self.last_sent_state.get("agents", [])
-        self._add_agent_delta_to_dict(delta, current_agents, last_agents)
-
-        # Owned meetings: Always include full list if changed
-        current_owned = current_state.get("owned_meetings", [])
-        last_owned = self.last_sent_state.get("owned_meetings", [])
-        if current_owned != last_owned:
-            delta["owned_meetings"] = current_owned
-
-        # Joined meetings: Always include full list if changed
-        current_joined = current_state.get("joined_meetings", [])
-        last_joined = self.last_sent_state.get("joined_meetings", [])
-        if current_joined != last_joined:
-            delta["joined_meetings"] = current_joined
-
-        # If delta is empty (no changes), return None
-        if not delta:
-            return None
-
-        return delta
-
-    def _add_variable_delta_to_dict(
-        self,
-        delta: Dict[str, Any],
-        current_vars: Dict[str, Any],
-        last_vars: Dict[str, Any],
-    ) -> None:
-        """Add variable delta to the delta dictionary using explicit keys.
-
-        Args:
-            delta: Delta dictionary to update
-            current_vars: Current variables dictionary
-            last_vars: Last sent variables dictionary
-        """
-        new_vars = {}
-        changed_vars = {}
-        deleted_vars = []
-
-        # Find added and modified variables
-        for key, value in current_vars.items():
-            if key not in last_vars:
-                new_vars[key] = value
-            elif value != last_vars[key]:
-                changed_vars[key] = value
-
-        # Find deleted variables
-        for key in last_vars:
-            if key not in current_vars:
-                deleted_vars.append(key)
-
-        # Add to delta with explicit key names
-        if new_vars:
-            delta["new_variables"] = new_vars
-        if changed_vars:
-            delta["changed_variables"] = changed_vars
-        if deleted_vars:
-            delta["deleted_variables"] = deleted_vars
-
-    def _add_agent_delta_to_dict(
-        self, delta: Dict[str, Any], current_agents: List[Any], last_agents: List[Any]
-    ) -> None:
-        """Add agent delta to the delta dictionary using explicit keys.
-
-        Args:
-            delta: Delta dictionary to update
-            current_agents: Current agents list
-            last_agents: Last sent agents list
-        """
-        new_agents = [a for a in current_agents if a not in last_agents]
-
-        # For now, we only track new agents (no changed or deleted)
-        if new_agents:
-            delta["new_agents"] = new_agents
-
-    def get_state_for_llm(
-        self, execution_id: Optional[int], compression_config: Optional[Any] = None
-    ) -> tuple[Optional[Dict[str, Any]], Any]:
-        """Get state for LLM with compression applied.
-
-        Determines whether to send full state or delta based on execution_id
-        and compression settings. Updates tracking state as needed.
-
-        Args:
-            execution_id: Current execution ID (LLM call counter)
-            compression_config: StateCompressionConfig object (if None, uses default)
-
-        Returns:
-            Tuple of (state_dict, frame_type):
-            - (full_state_dict, FrameType.I) for I-frame (full state)
-            - (delta_dict, FrameType.P) for P-frame with changes
-            - (None, FrameType.P) for P-frame with no changes (empty delta)
-        """
-        from playbooks.llm.messages.types import FrameType
-
-        # Import here to avoid circular dependency
-        if compression_config is None:
-            from playbooks.config import config
-
-            compression_config = config.state_compression
-
-        # Determine if we should send full state or delta
-        compression_enabled = compression_config.enabled
-        send_full_state = True
-
-        if compression_enabled and execution_id is not None:
-            # Send full state at intervals or if this is the first call
-            if (
-                self.last_i_frame_execution_id is None
-                or (execution_id - self.last_i_frame_execution_id)
-                >= compression_config.full_state_interval
-            ):
-                send_full_state = True
-                self.last_i_frame_execution_id = execution_id
-            else:
-                send_full_state = False
-
-        # Get state (full or delta)
-        state_dict = self.to_dict(full=send_full_state)
-
-        # Always update last_sent_state to current full state (cumulative)
-        # This ensures P-frames are deltas from the immediate previous state, not from last I-frame
-        # Cumulative chain: I + P + P + P = current full state
-        self.last_sent_state = self.to_dict(full=True)
-
-        if send_full_state:
-            return state_dict, FrameType.I
-        else:
-            # Delta state (could be None if no changes)
-            return state_dict, FrameType.P

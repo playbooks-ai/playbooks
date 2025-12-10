@@ -10,7 +10,6 @@ import os
 import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
-from playbooks.config import config
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.llm_context_compactor import LLMContextCompactor
 from playbooks.llm.messages import (
@@ -19,7 +18,6 @@ from playbooks.llm.messages import (
     TriggerInstructionsLLMMessage,
     UserInputLLMMessage,
 )
-from playbooks.llm.messages.types import FrameType
 from playbooks.playbook import Playbook
 from playbooks.utils.llm_helper import get_messages_for_prompt
 from playbooks.utils.token_counter import get_messages_token_count
@@ -97,7 +95,6 @@ class InterpreterPrompt:
         self.other_agent_klasses_information = other_agent_klasses_information
         self.execution_id = execution_id  # NEW: Store execution_id
         self.compactor = LLMContextCompactor()
-        self.frame_type = None  # Will be set when generating prompt
 
     def _get_trigger_instructions_message(self) -> str:
         if len(self.trigger_instructions) > 0:
@@ -168,6 +165,135 @@ class InterpreterPrompt:
 
         return "\n".join(lines)
 
+    def _build_context_prefix(self) -> str:
+        """Build Python code prefix showing all available context.
+
+        Returns a Python code block with:
+        - Imports from namespace
+        - Local variables (including playbook args)
+        - self reference
+        - self.state dict
+        """
+        lines = ["```python"]
+
+        # Imports
+        imports = self._extract_imports()
+        if imports:
+            lines.extend(imports)
+            lines.append("")  # blank line after imports
+
+        # Call stack, list of agents, meetings
+        agent_dict = self.agent.to_dict()
+        call_stack = agent_dict.get("call_stack", [])
+        agents = agent_dict.get("agents", [])
+        owned_meetings = agent_dict.get("owned_meetings", [])
+        joined_meetings = agent_dict.get("joined_meetings", [])
+        lines.append(f"call_stack = {call_stack}")
+        lines.append(f"owned_meetings = {owned_meetings if owned_meetings else []}")
+        lines.append(f"joined_meetings = {joined_meetings if joined_meetings else []}")
+
+        lines.append("agents.by_klass = ... # method to access agents by type")
+        lines.append("agents.by_id = ... # method to access agents by id")
+        lines.append(f"agents.all = {agents}")
+
+        # Local variables (including playbook args from frame.locals)
+        current_frame = self.agent.call_stack.peek()
+        if current_frame and current_frame.locals:
+            for name, value in sorted(current_frame.locals.items()):
+                lines.append(self._format_variable(name, value))
+            if current_frame.locals:
+                lines.append("")  # blank line after locals
+
+        # self reference (formatted like agents in state)
+        lines.append(f"self = ...  # {self.agent.klass} ({self.agent.id})")
+
+        # self.state
+        for name, value in sorted(self.agent.state.items()):
+            if name not in ["_busy"]:
+                lines.append("self.state." + self._format_variable(name, value))
+
+        lines.append("")
+        lines.append("```")
+        return "\n".join(lines) + "\n\n"
+
+    def _format_variable(self, name: str, value: Any) -> str:
+        """Format a single variable assignment."""
+        if self._is_literal(value):
+            # Use repr() for actual Python literal
+            return f"{name} = {repr(value)}"
+        else:
+            # Use ... with type comment
+            type_hint = self._get_type_hint(value)
+            return f"{name} = ...  # {type_hint}"
+
+    def _is_literal(self, value: Any) -> bool:
+        """Check if value should be shown as literal."""
+        if isinstance(value, (int, float, bool, type(None))):
+            return True
+        if isinstance(value, str):
+            return len(value) < 200  # Show strings up to 200 chars
+        if isinstance(value, (list, dict, tuple)):
+            repr_str = repr(value)
+            return len(repr_str) < 100  # Show collections if repr < 100 chars
+        return False
+
+    def _get_type_hint(self, value: Any) -> str:
+        """Get human-readable type hint for non-literal values."""
+        if hasattr(value, "id") and hasattr(value, "klass"):
+            # Looks like an agent instance
+            return f"{value.klass} instance"
+        if hasattr(value, "__class__"):
+            return type(value).__name__
+        return "Any"
+
+    def _format_state_dict(self, state_dict: Dict[str, Any]) -> str:
+        """Format state dict as Python dict literal.
+
+        Handles special cases:
+        - Artifacts: Keep "Artifact: summary" notation
+        - Literals: Use repr()
+        - Non-literals: Use <TypeName> placeholder
+        """
+        formatted = {}
+        for key, value in state_dict.items():
+            if key.startswith("_"):
+                # Skip internal keys like __
+                continue
+            if isinstance(value, str) and value.startswith("Artifact: "):
+                # Keep artifact notation
+                formatted[key] = value
+            elif self._is_literal(value):
+                formatted[key] = value
+            else:
+                # Non-literal, use type placeholder
+                formatted[key] = f"<{type(value).__name__}>"
+
+        # Use json.dumps for cleaner formatting with proper escaping
+        import json
+
+        try:
+            return json.dumps(formatted, indent=None, ensure_ascii=False)
+        except (TypeError, ValueError):
+            # Fallback to repr if json fails
+            return repr(formatted)
+
+    def _extract_imports(self) -> List[str]:
+        """Extract import statements from agent namespace."""
+        imports = []
+        if hasattr(self.agent, "namespace_manager") and hasattr(
+            self.agent.namespace_manager, "namespace"
+        ):
+            for name, value in self.agent.namespace_manager.namespace.items():
+                if isinstance(value, types.ModuleType) and not name.startswith("_"):
+                    # Get the actual module name
+                    module_name = getattr(value, "__name__", name)
+                    if module_name != name:
+                        # Was imported with alias
+                        imports.append(f"import {module_name} as {name}")
+                    else:
+                        imports.append(f"import {name}")
+        return sorted(imports)
+
     @property
     def prompt(self) -> str:
         """Constructs the full prompt string for the LLM.
@@ -196,32 +322,9 @@ class InterpreterPrompt:
             debug("Error: Prompt template file not found")
             return "Error: Prompt template missing."
 
-        # Get state with compression applied
-        state_dict, self.frame_type = self.agent.get_state_for_llm(
-            self.execution_id, config.state_compression
-        )
-
-        # Generate state block in code (not template)
-        if state_dict is not None:
-            title = (
-                "Current state" if self.frame_type == FrameType.I else "State changes"
-            )
-            state_json = json.dumps(state_dict, indent=2, cls=SetEncoder)
-
-            # Add artifact load status hints
-            state_json = self._add_artifact_hints(state_json, state_dict)
-
-            state_block = f"""*{title}*
-```json
-{state_json}
-```
-
-"""
-        else:
-            # Empty delta - no state block
-            state_block = ""
-
-        prompt = prompt.replace("{{INITIAL_STATE}}", state_block)
+        # Generate context prefix (imports, locals, self.state)
+        context_prefix = self._build_context_prefix()
+        prompt = prompt.replace("{{CONTEXT_PREFIX}}", context_prefix)
 
         # session_log_str = str(self.agent.session_log)
 
@@ -232,9 +335,8 @@ class InterpreterPrompt:
         # prompt = prompt.replace("{{SESSION_LOG}}", session_log_str)
         prompt = prompt.replace("{{INSTRUCTION}}", self.instruction)
 
-        # Only include agent instructions for I-frames (full state)
-        # P-frames skip this since it was already in the last I-frame
-        if self.agent_instructions and self.frame_type == FrameType.I:
+        # Include agent instructions
+        if self.agent_instructions:
             prompt = prompt.replace("{{AGENT_INSTRUCTIONS}}", self.agent_instructions)
         else:
             prompt = prompt.replace("{{AGENT_INSTRUCTIONS}}", "")
@@ -262,12 +364,7 @@ class InterpreterPrompt:
 
         # Convert the prompt message dict back to a proper message object
         if len(prompt_messages) > 1:
-            # Use frame_type from prompt generation (set in self.prompt property)
-
-            frame_type = self.frame_type if self.frame_type is not None else FrameType.I
-            user_instruction_msg = UserInputLLMMessage(
-                prompt_messages[1]["content"], frame_type=frame_type
-            )
+            user_instruction_msg = UserInputLLMMessage(prompt_messages[1]["content"])
             self.agent.call_stack.add_llm_message(user_instruction_msg)
 
         # Collect all LLM messages: from call stack frames + top-level messages

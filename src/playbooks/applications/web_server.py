@@ -14,6 +14,7 @@ from urllib.parse import urlparse
 import websockets
 
 from playbooks import Playbooks
+from playbooks.agents.ai_agent import AIAgent
 from playbooks.agents.messaging_mixin import MessagingMixin
 from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.applications.streaming_observer import (
@@ -364,7 +365,7 @@ class PlaybookRun:
             agent_count=len(self.playbooks.program.agents),
         )
         for agent in self.playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+            if hasattr(agent, "session_log"):
                 debug(
                     "Setting up streaming for agent",
                     agent_id=agent.id,
@@ -409,7 +410,7 @@ class PlaybookRun:
         )
 
         # Set up session log streaming if the agent has one
-        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+        if hasattr(agent, "session_log"):
             debug("Setting up session log streaming for new agent", agent_id=agent.id)
 
             def create_session_log_callback(agent_id, agent_klass):
@@ -589,7 +590,11 @@ class PlaybookRun:
         debug("Sending existing session logs to client", client_id=client.client_id)
 
         for agent in self.playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+            if (
+                isinstance(agent, AIAgent)
+                and hasattr(agent, "state")
+                and "session_log" in agent.state
+            ):
                 session_log = agent.session_log
                 debug(
                     "Agent session log entries",
