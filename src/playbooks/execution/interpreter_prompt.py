@@ -192,9 +192,11 @@ class InterpreterPrompt:
         lines.append(f"owned_meetings = {owned_meetings if owned_meetings else []}")
         lines.append(f"joined_meetings = {joined_meetings if joined_meetings else []}")
 
-        lines.append("agents.by_klass = ... # method to access agents by type")
-        lines.append("agents.by_id = ... # method to access agents by id")
-        lines.append(f"agents.all = {agents}")
+        lines.append(
+            "all_agents.by_klass(agent_klass) = ... # method to access agents by type"
+        )
+        lines.append("all_agents.by_id(agent_id) = ... # method to access agents by id")
+        lines.append(f"all_agents.all = {agents}")
 
         # Local variables (including playbook args from frame.locals)
         current_frame = self.agent.call_stack.peek()

@@ -12,7 +12,6 @@ When generating code, you have access to `self` - the current agent instance:
 **Variables:**
 - State variables: `Ask user for $name:str` → `self.state.name = await self.Yield("user")`
 - Local variables: `x is $age + 5` → `x = self.state.age + 5`
-- Value returned from last playbook call: `self.state._`
 - Summary of playbook execution: `self.state.__`
 
 **Agent Access:**
@@ -27,7 +26,7 @@ When generating code, you have access to `self` - the current agent instance:
 **Step Execution:**
 - `await self.Step("Playbook:01:QUE")` - Log execution of a playbook step
 - `await self.Yield(target)` - Yield control back to orchestrator ("user", "call", "agent X", "exit")
-- `await self.Return(value)` - Return value from playbook and set self.state._
+- `await self.Return(value)` - Return value from playbook
 - `await self.LogTrigger(code)` - Log trigger that matched and is ready to execute
 
 **Playbook Execution:**
@@ -99,11 +98,10 @@ await self.Yield(<user | meeting | agent | call | exit>)
 6.  Use `Yld("exit")` to terminate the program when requested.
 7.  When told "Main:03.02.03 was executed - continue execution", complete any remaining tasks on that step, then execute the next step (e.g. Main:03.03:QUE).
 8.  Always output playbook execution summary in a variable before returning (`self.state.__ = "summary"`)
-9.  Special variable `_` automatically captures the return value of the last playbook call. Use `varname = self.state._` to save the result for later use, e.g. `self.Say("user", """<long\nanswer>""")\nanswer = self.state._`
-10. If your code has a Python error (SyntaxError, NameError, etc.), you will be shown the error and asked to regenerate corrected code.
-11. Carefully analyze conversation log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly.
-12. **Always** yield for playbook call whose result you will need to use. 
-13. Never assume that a playbook call will succeed, it may return an error! Write defensive code to handle errors.
+9.  If your code has a Python error (SyntaxError, NameError, etc.), you will be shown the error and asked to regenerate corrected code.
+10. Carefully analyze conversation log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly.
+11. **Always** yield for playbook call whose result you will need to use. 
+12. Never assume that a playbook call will succeed, it may return an error! Write defensive code to handle errors.
 
 #### 4. Meetings
 Meetings are a mechanism for more than two agents to communicate together.
@@ -327,13 +325,13 @@ Assuming MyWorker agent type/klass is defined
 # plan: execute PB:01:QUE, create worker agents
 # trig? no
 await self.Step("PB:01:QUE")
-# think: I need to create 3 worker agents as "agents" with name like "MW001", "MW002", etc and age=random age
+# think: I need to create 3 new worker agents as "agents" with name like "MW001", "MW002", etc and age=random age
 tasks = [asyncio.create_task(self.CreateAgent("MyWorker", name="MW001", age=38)), asyncio.create_task(self.CreateAgent("MyWorker", name="MW002", age=22)), asyncio.create_task(self.CreateAgent("MyWorker", name="MW003", age=61))]
 self.state.workers = await asyncio.gather(*tasks)
 # trig? no
 # yld? no, PB:02:QUE does not use the workers being created
 await self.Step("PB:02:QUE")
-# think: I need to call GetProjectName on a Planner agent
+# think: I need to call GetProjectName on an available or newly created Planner agent
 planner = await Planner.get_or_create(requester=self)
 self.state.project_name = await planner.GetProjectName()
 # trig? no

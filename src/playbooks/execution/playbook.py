@@ -372,6 +372,8 @@ class PlaybookLLMExecution(LLMExecution):
                 # Feed chunk to streaming executor for incremental execution
                 try:
                     await streaming_executor.add_chunk(chunk)
+                    if self.agent.program.execution_finished:
+                        raise ExecutionFinished("Program execution finished")
                 except StreamingExecutionError as e:
                     # Check if the underlying error is InteractiveInputRequired
                     # These should not be retried, they should fail immediately

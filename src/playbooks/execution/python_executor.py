@@ -165,6 +165,11 @@ class PythonExecutor:
         """
         self.result = ExecutionResult()
 
+        if self.agent.program.execution_finished:
+            self.result.playbook_finished = True
+            self.result.return_value = "Program execution finished"
+            return self.result
+
         # Set executor on current call stack frame for Log* methods
         # This automatically handles nested execution contexts - when the frame
         # is popped, the previous frame's executor becomes current
