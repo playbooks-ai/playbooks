@@ -115,31 +115,20 @@ hidden: true
 
 ### Steps
 - For each $message in $messages
-    - If $message is a MEETING_INVITATION (check if message contains "[MEETING_INVITATION for meeting" text)
-        - Extract the meeting_id from the message (e.g., from "[MEETING_INVITATION for meeting 123456]")
-        - Extract the inviter agent id from the message sender_id
-        - Look at the topic (message content) and determine if there is a suitable meeting playbook to handle it
+    - If $message was sent to a meeting we have joined
+        - This means we haven't started the meeting playbook yet. Try to find the appropriate meeting playbook using meeting topic.
         - If a suitable meeting playbook is found
-            - Say to the inviter that the invitation has been accepted
-            - Call the meeting playbook directly: <MeetingPlaybookName>(meeting_id=<extracted_meeting_id>, inviter_id=<extracted_inviter_id>, topic=<message_content>)
-            - Continue to next message
+            - Set $_busy = True, output an appropriate trig? line and start the meeting playbook: <MeetingPlaybookName>(meeting_id=<extracted_meeting_id>, inviter_id=<extracted_inviter_id>, topic=<message_content>)
+            - Return the result of the meeting playbook execution
         - Otherwise
-            - Reject the invitation by saying to the inviter that no suitable meeting playbook was found
+            - Return an error message that no suitable meeting playbook was found
             - Continue to next message
-    - If $message sent to a meeting we have joined
-        - Find a suitable meeting playbook if not already in one
-        - If meeting playbook is found and not already running
-            - Call the meeting playbook directly with meeting context
-            - Continue
-        - Otherwise
-            - Return "No suitable meeting playbook found"
-    - Analyze message content and current state and check available triggers to determine if any playbook should be triggered based on
+    - Analyze message content and current state and check available triggers to determine if any playbook should be triggered
     - If any playbook should be triggered
         - Set $_busy = True, output an appropriate trig? line and execute the playbook
         - Look at $message and the result of the playbook execution. If the message sender is expecting a response, enqueue a Say(message sender, result of the playbook execution) call
-        - If the message sender is expecting a response
-        - Enqueue a Say(message sender, result of the playbook execution) call
-    - If no playbook is triggered but the message requires a response
+        - Return the result of the playbook execution
+    - If no playbook was triggered but the message requires a response
         - Formulate an appropriate response based on agent's role and description
         - Enqueue a Say(message sender, response) call
 """

@@ -31,10 +31,50 @@ class PlaybookCall(SessionLogItem):
             type_annotation: Expected return type annotation (e.g., "bool")
         """
         self.playbook_klass = playbook_klass
-        self.args = args
-        self.kwargs = kwargs
+        # Normalize arguments - convert Message objects to dicts for consistent logging
+        self.args = self._normalize_args(args)
+        self.kwargs = {k: self._normalize_arg(v) for k, v in kwargs.items()}
         self.variable_to_assign = variable_to_assign  # e.g., "$result"
         self.type_annotation = type_annotation  # e.g., "bool"
+
+    def _normalize_arg(self, arg: Any) -> Any:
+        """Normalize a single argument by converting Message objects to dicts.
+
+        This ensures consistent representation in logs and avoids serialization issues.
+
+        Args:
+            arg: Argument value to normalize
+
+        Returns:
+            Normalized argument (Messages converted to dicts)
+        """
+        from playbooks.core.message import Message
+
+        if isinstance(arg, Message):
+            return arg.to_dict()
+        elif isinstance(arg, list):
+            return [self._normalize_arg(item) for item in arg]
+        elif isinstance(arg, dict) and not any(
+            isinstance(v, Message) for v in arg.values()
+        ):
+            # Already a dict and doesn't contain Messages
+            return arg
+        elif isinstance(arg, dict):
+            # Dict that might contain Messages
+            return {k: self._normalize_arg(v) for k, v in arg.items()}
+        else:
+            return arg
+
+    def _normalize_args(self, args: List[Any]) -> List[Any]:
+        """Normalize all arguments in the list.
+
+        Args:
+            args: List of arguments
+
+        Returns:
+            List with normalized arguments
+        """
+        return [self._normalize_arg(arg) for arg in args]
 
     def __str__(self) -> str:
         """Return formatted string representation of the playbook call.
@@ -86,7 +126,7 @@ class PlaybookCall(SessionLogItem):
     def _format_arg(self, arg: Any) -> str:
         """Format a single argument for display in playbook call string.
 
-        Uses compact representation for Message objects and lists of messages.
+        Uses compact representation for Message dicts and lists of message dicts.
 
         Args:
             arg: Argument value to format
@@ -94,16 +134,64 @@ class PlaybookCall(SessionLogItem):
         Returns:
             Formatted string representation of the argument
         """
-        from playbooks.core.message import Message
 
-        # Handle list of messages compactly
-        if isinstance(arg, list) and len(arg) > 0 and isinstance(arg[0], Message):
-            formatted_messages = [f'"{msg.to_compact_str()}"' for msg in arg]
-            return f"[{', '.join(formatted_messages)}]"
+        def _format_message_dict(msg_dict: Dict[str, Any]) -> str:
+            """Format a message dict in the same compact style as Message.to_compact_str()."""
+            from playbooks.utils.text_utils import simple_shorten
 
-        # Handle single message compactly
-        if isinstance(arg, Message):
-            return f'"{arg.to_compact_str()}"'
+            sender_id = msg_dict.get("sender_id")
+            sender_klass = msg_dict.get("sender_klass")
+            recipient_id = msg_dict.get("recipient_id")
+            recipient_klass = msg_dict.get("recipient_klass")
+            meeting_id = msg_dict.get("meeting_id")
+            message_type = msg_dict.get("message_type")
+            content = simple_shorten(str(msg_dict.get("content", "")), 100)
+
+            # Sender
+            if (
+                sender_id == "human"
+                or sender_klass == "HumanAgent"
+                or sender_klass == "User"
+            ):
+                sender = "User"
+            else:
+                sender = f"{sender_klass}({sender_id})"
+
+            # Recipient
+            if recipient_id == "human":
+                recipient = "User"
+            elif recipient_klass is None or recipient_id is None:
+                recipient = "Everyone"
+            else:
+                recipient = f"{recipient_klass}({recipient_id})"
+
+            # Meeting info
+            meeting_info = ""
+            if message_type == "meeting_invitation" and meeting_id:
+                meeting_info = f" [MEETING_INVITATION for meeting {meeting_id}]"
+            elif message_type == "meeting_broadcast" and meeting_id:
+                meeting_info = f" [in meeting {meeting_id}]"
+
+            return f"{sender} → {recipient}{meeting_info}: {content}"
+
+        # Handle list of message dicts compactly
+        if isinstance(arg, list) and len(arg) > 0:
+            first_elem = arg[0]
+            # Check if this looks like a list of message dicts
+            if (
+                isinstance(first_elem, dict)
+                and "content" in first_elem
+                and "sender_id" in first_elem
+            ):
+                if all(isinstance(item, dict) and "content" in item for item in arg):
+                    formatted_messages = []
+                    for msg_dict in arg:
+                        formatted_messages.append(f'"{_format_message_dict(msg_dict)}"')
+                    return f"[{', '.join(formatted_messages)}]"
+
+        # Handle single message dict compactly
+        if isinstance(arg, dict) and "content" in arg and "sender_id" in arg:
+            return f'"{_format_message_dict(arg)}"'
 
         # Default to str() for other types
         return str(arg)

@@ -10,6 +10,7 @@ import traceback
 import uuid
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from playbooks.core.exceptions import ExecutionFinished
 from playbooks.execution.incremental_code_buffer import CodeBuffer
 from playbooks.execution.python_executor import (
     ExecutionResult,
@@ -195,6 +196,12 @@ class StreamingPythonExecutor:
         Args:
             stmt: AST statement to execute
         """
+        if self.agent.program.execution_finished:
+            debug(
+                f"Skipping execution of statement: {stmt} because program execution is finished"
+            )
+            raise ExecutionFinished("Program execution finished")
+
         # Get current frame and its locals
         current_frame = self.agent.call_stack.peek()
         if not current_frame:
@@ -204,6 +211,113 @@ class StreamingPythonExecutor:
 
         # Convert the statement back to source code
         statement_code = ast.unparse(stmt)
+
+        # Safety filters for streamed LLM output:
+        # - Some models occasionally leak markdown/code-fence artifacts that parse as
+        #   bare identifiers (e.g. a standalone `python` line). Those are no-ops and
+        #   should not crash execution with NameError.
+        # - Prevent LLM-generated code from mutating agent runtime internals that are
+        #   not part of the playbook state API (e.g. joined_meetings).
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Name):
+            debug(f"Skipping no-op bare identifier expression: {stmt.value.id}")
+            return
+
+        def _is_rooted_at_state(n: ast.AST) -> bool:
+            """Return True if `n` is an Attribute chain whose base is `self.state`/`agent.state`."""
+            if not isinstance(n, ast.Attribute):
+                return False
+            cur: ast.AST = n
+            # Walk left through `.value` until we hit a non-Attribute node.
+            while isinstance(cur, ast.Attribute):
+                if (
+                    cur.attr == "state"
+                    and isinstance(cur.value, ast.Name)
+                    and cur.value.id in {"self", "agent"}
+                ):
+                    return True
+                cur = cur.value
+            return False
+
+        # Some LLM outputs try to treat state fields as lists and call .append().
+        # When the field is actually a DotMap/dict, this can raise AttributeError
+        # and unnecessarily fail the whole run. Prefer to skip these calls.
+        if (
+            isinstance(stmt, ast.Expr)
+            and isinstance(stmt.value, ast.Call)
+            and isinstance(stmt.value.func, ast.Attribute)
+            and stmt.value.func.attr in {"append", "extend", "insert", "pop", "remove"}
+            and _is_rooted_at_state(stmt.value.func.value)
+        ):
+            debug(f"Skipping list-like mutation on state field: {statement_code}")
+            return
+
+        protected_self_attrs = {
+            # Runtime wiring / infrastructure
+            "program",
+            "event_bus",
+            "call_stack",
+            "session_log",
+            "namespace_manager",
+            "meeting_manager",
+            # Meeting runtime state (not playbook state)
+            "owned_meetings",
+            "joined_meetings",
+        }
+
+        def _is_protected_target(t: ast.AST) -> bool:
+            # self.<protected>
+            if (
+                isinstance(t, ast.Attribute)
+                and isinstance(t.value, ast.Name)
+                and t.value.id in {"self", "agent"}
+                and t.attr in protected_self_attrs
+            ):
+                return True
+            # self.<protected>[...]
+            if isinstance(t, ast.Subscript):
+                base = t.value
+                if (
+                    isinstance(base, ast.Attribute)
+                    and isinstance(base.value, ast.Name)
+                    and base.value.id in {"self", "agent"}
+                    and base.attr in protected_self_attrs
+                ):
+                    return True
+            return False
+
+        if isinstance(stmt, ast.Assign):
+            if any(_is_protected_target(t) for t in stmt.targets):
+                debug(
+                    f"Skipping assignment to protected agent attribute: {statement_code}"
+                )
+                return
+        elif isinstance(stmt, ast.AnnAssign):
+            if _is_protected_target(stmt.target):
+                debug(
+                    f"Skipping annotated assignment to protected agent attribute: {statement_code}"
+                )
+                return
+        elif isinstance(stmt, ast.AugAssign):
+            if _is_protected_target(stmt.target):
+                debug(
+                    f"Skipping augmented assignment to protected agent attribute: {statement_code}"
+                )
+                return
+
+        # Also block *reads* of protected attributes: LLM code occasionally introspects
+        # runtime internals (e.g. iterating self.joined_meetings as if it were a list),
+        # which is brittle and can crash streaming execution.
+        for node in ast.walk(stmt):
+            if (
+                isinstance(node, ast.Attribute)
+                and isinstance(node.value, ast.Name)
+                and node.value.id in {"self", "agent"}
+                and node.attr in protected_self_attrs
+            ):
+                debug(
+                    f"Skipping statement that reads protected agent attribute {node.attr}: {statement_code}"
+                )
+                return
 
         # Update current span with statement-specific information
         langfuse = get_client()
@@ -215,7 +329,7 @@ class StreamingPythonExecutor:
         )
 
         self._update_statement_span(langfuse, stmt, statement_code, exec_id)
-        debug(f"Executing: {statement_code}")
+        debug(f"Executing: {statement_code}", agent=self.agent)
 
         # Check if this is a function/class definition
         # These don't need wrapping and should execute directly

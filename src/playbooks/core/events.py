@@ -7,7 +7,7 @@ playbook execution events, and messaging events.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 
 
 @dataclass(frozen=True)
@@ -166,3 +166,28 @@ class ChannelCreatedEvent(Event):
     channel_id: str = ""
     is_meeting: bool = False
     participant_ids: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class AgentCreatedEvent(Event):
+    """Agent instance created and registered in the Program."""
+
+    agent_id: str = ""
+    agent_klass: str = ""
+
+
+@dataclass(frozen=True)
+class MessageRoutedEvent(Event):
+    """A message was routed via Program/Channel."""
+
+    channel_id: str = ""
+    message: Any = None
+
+
+@dataclass(frozen=True)
+class WaitForMessageEvent(Event):
+    """An agent waited for messages and either received some or timed out."""
+
+    wait_for_message_from: str = ""
+    timeout: Optional[float] = None
+    received_count: int = 0

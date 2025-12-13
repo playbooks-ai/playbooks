@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from playbooks.core.events import AgentPausedEvent, AgentResumedEvent
 from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.core.message import MessageType
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.messages import AgentCommunicationLLMMessage
 
@@ -115,42 +116,110 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         """Send message to a meeting.
 
         Args:
-            meeting_spec: Meeting specification (e.g., "meeting 123")
+            meeting_spec: Meeting specification (e.g., "meeting 123" or "meeting 123, agent 456")
             message: Message content to broadcast
 
         Returns:
             The message content
         """
-        meeting_id = MeetingID.parse(meeting_spec).id
+        # Extract just the meeting ID for participation check (before any comma)
+        meeting_id_part = meeting_spec.split(",")[0].strip()
+        meeting_id = MeetingID.parse(meeting_id_part).id
 
-        # Check meeting participation and broadcast accordingly
-        if hasattr(self, "owned_meetings"):
-            if meeting_id in self.owned_meetings:
-                debug(f"{str(self)}: Broadcasting to meeting {meeting_id} as owner")
-                await self.meeting_manager.broadcast_to_meeting_as_owner(
-                    meeting_id, message
-                )
-                return message
+        # Check if not a participant - log error and return early
+        is_participant = False
+        if hasattr(self, "owned_meetings") and meeting_id in self.owned_meetings:
+            is_participant = True
+        elif hasattr(self, "joined_meetings") and meeting_id in self.joined_meetings:
+            is_participant = True
 
-        if hasattr(self, "joined_meetings"):
-            if meeting_id in self.joined_meetings:
-                debug(
-                    f"{str(self)}: Broadcasting to meeting {meeting_id} as participant"
-                )
-                await self.meeting_manager.broadcast_to_meeting_as_participant(
-                    meeting_id, message
-                )
-                return message
-
-        # Not a participant - log error
-        debug(
-            f"{str(self)}: Cannot broadcast to meeting {meeting_id} - not a participant"
-        )
-        if hasattr(self, "session_log"):
-            self.session_log.append(
-                f"Cannot broadcast to meeting {meeting_id} - not a participant"
+        if not is_participant:
+            debug(
+                f"{str(self)}: Cannot broadcast to meeting {meeting_id} - not a participant"
             )
+            if hasattr(self, "session_log"):
+                self.session_log.append(
+                    f"Cannot broadcast to meeting {meeting_id} - not a participant"
+                )
+            return message
+
+        # Use streaming infrastructure like _say_direct does
+        already_streamed = getattr(self, "_currently_streaming", False)
+
+        debug(f"{str(self)}: _say_to_meeting: already_streamed={already_streamed}")
+
+        if not already_streamed and self.program:
+            debug(f"{str(self)}: _say_to_meeting: Calling _say_meeting_with_streaming")
+            await self._say_meeting_with_streaming(meeting_spec, message)
+        else:
+            debug(
+                f"{str(self)}: _say_to_meeting: Calling _say_meeting_without_streaming"
+            )
+            await self._say_meeting_without_streaming(meeting_spec, message)
+
         return message
+
+    async def _say_meeting_with_streaming(
+        self, meeting_spec: str, message: str
+    ) -> None:
+        """Send meeting message with streaming support.
+
+        Args:
+            meeting_spec: Meeting specification
+            message: Message content to broadcast
+        """
+        stream_result = await self.start_streaming_say_via_channel(meeting_spec)
+
+        if stream_result.should_stream:
+            # Use streaming path - this will deliver the message
+            await self.stream_say_update_via_channel(
+                stream_result.stream_id, meeting_spec, message
+            )
+            await self.complete_streaming_say_via_channel(
+                stream_result.stream_id, meeting_spec, message
+            )
+        else:
+            # Streaming was skipped (no human and agent streaming disabled) - still route via channel.
+            # Extract meeting ID for message metadata, but always go through Program routing.
+            meeting_id_part = meeting_spec.split(",")[0].strip()
+            meeting_id = MeetingID.parse(meeting_id_part).id
+            await self.program.route_message(
+                sender_id=self.id,
+                sender_klass=self.klass,
+                receiver_spec=meeting_spec,
+                message=message,
+                message_type=MessageType.MEETING_BROADCAST,
+                meeting_id=meeting_id,
+            )
+
+    async def _say_meeting_without_streaming(
+        self, meeting_spec: str, message: str
+    ) -> None:
+        """Send meeting message without streaming.
+
+        Args:
+            meeting_spec: Meeting specification
+            message: Message content to broadcast
+        """
+        # If currently in streaming context, message was already delivered via channel.complete_stream
+        # Skip to avoid duplicate delivery
+        if getattr(self, "_currently_streaming", False):
+            debug(
+                f"{str(self)}: _say_meeting_without_streaming: SKIPPING (already streamed)"
+            )
+            return
+
+        # Extract meeting ID for metadata
+        meeting_id_part = meeting_spec.split(",")[0].strip()
+        meeting_id = MeetingID.parse(meeting_id_part).id
+        await self.program.route_message(
+            sender_id=self.id,
+            sender_klass=self.klass,
+            receiver_spec=meeting_spec,
+            message=message,
+            message_type=MessageType.MEETING_BROADCAST,
+            meeting_id=meeting_id,
+        )
 
     async def _say_direct(self, resolved_target: str, message: str) -> str:
         """Send direct message to agent or human.
@@ -261,15 +330,9 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             target_agent=target_name,
         )
 
-        # Add to call stack (handles both frame and top-level message cases)
+        # Add to call stack (always add to the current top frame; if stack is empty, goes to top-level)
         if hasattr(self, "call_stack"):
-            current_frame = self.call_stack.peek()
-            if current_frame is not None and current_frame.playbook == "Say":
-                # If we're in Say playbook, add to its parent context
-                self.call_stack.add_llm_message_on_parent(agent_comm_msg)
-            else:
-                # Add to current frame or top-level if stack is empty
-                self.call_stack.add_llm_message(agent_comm_msg)
+            self.call_stack.add_llm_message(agent_comm_msg)
 
         # Route through program runtime
         # target_agent_id is a raw ID, convert to spec format for routing

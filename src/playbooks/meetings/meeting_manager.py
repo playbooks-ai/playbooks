@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
 from playbooks.agents.human_agent import HumanAgent
 from playbooks.core.exceptions import KlassNotFoundError
-from playbooks.core.identifiers import MeetingID
+from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.core.message import Message, MessageType
 from playbooks.debug.debug_handler import debug
 from playbooks.llm.messages import MeetingLLMMessage, SessionLogLLMMessage
@@ -215,17 +215,56 @@ class MeetingManager:
                 f"Unknown attendees for meeting {meeting_id} with playbook {playbook.name}"
             )
 
+        # Ensure all attendee agents are running so they can process invitations
+        for attendee in meeting.required_attendees + meeting.optional_attendees:
+            if isinstance(attendee, HumanAgent):
+                continue
+            await self.program.runtime.start_agent(attendee)
+
         # Create meeting channel with all potential participants
-        all_participants = list(
-            set(
-                [self.playbook_executor]
-                + meeting.required_attendees
-                + meeting.optional_attendees
-            )
+        # Deduplicate by agent ID to avoid duplicate message delivery
+        participant_list = (
+            [self.playbook_executor]
+            + meeting.required_attendees
+            + meeting.optional_attendees
         )
+        seen_ids = set()
+        all_participants = []
+        for participant in participant_list:
+            if participant.id not in seen_ids:
+                seen_ids.add(participant.id)
+                all_participants.append(participant)
+
         await self.program.create_meeting_channel(meeting_id, all_participants)
         debug(
             f"Agent {self.agent_id}: Created meeting channel {meeting_id} with {len(all_participants)} participants"
+        )
+
+        # Kickoff broadcast: inform everyone the meeting started
+        attendee_strs = []
+        for p in all_participants:
+            if isinstance(p, HumanAgent):
+                attendee_strs.append("User(human)")
+            else:
+                attendee_strs.append(f"{p.klass}(agent {p.id})")
+        kickoff = (
+            f"Meeting {meeting_id} about {meeting.topic} started with {attendee_strs}"
+        )
+        await self.program.route_message(
+            sender_id=self.agent_id,
+            sender_klass=self.agent_klass,
+            receiver_spec=str(MeetingID.parse(meeting_id)),
+            message=kickoff,
+            message_type=MessageType.MEETING_BROADCAST,
+            meeting_id=meeting_id,
+        )
+        # Also send to the owner (meeting broadcasts don't deliver to sender)
+        await self.program.route_message(
+            sender_id=self.agent_id,
+            sender_klass=self.agent_klass,
+            receiver_spec=str(AgentID.parse(self.agent_id)),
+            message=kickoff,
+            message_type=MessageType.DIRECT,
         )
 
         # Send invitations concurrently
@@ -303,16 +342,20 @@ class MeetingManager:
             Response message confirming invitation was sent
         """
 
-        # Send structured invitation message
+        # Send structured invitation message (as background task to avoid deadlock)
+        # The invitation handler on receiving side will process synchronously and
+        # send response as another background task, breaking the cycle.
         invitation_content = meeting.topic or "Meeting"
 
-        await self.program.route_message(
-            sender_id=self.agent_id,
-            sender_klass=self.agent_klass,
-            receiver_spec=f"agent {target_agent.id}",
-            message=invitation_content,
-            message_type=MessageType.MEETING_INVITATION,
-            meeting_id=meeting.id,
+        asyncio.create_task(
+            self.program.route_message(
+                sender_id=self.agent_id,
+                sender_klass=self.agent_klass,
+                receiver_spec=str(AgentID.parse(target_agent.id)),
+                message=invitation_content,
+                message_type=MessageType.MEETING_INVITATION,
+                meeting_id=meeting.id,
+            )
         )
 
         response = (
@@ -405,6 +448,19 @@ class MeetingManager:
                 )
                 meeting.invitation_event.clear()  # Reset for next wait
 
+                # If any required attendee rejected, fail fast
+                required_ids = {a.id for a in meeting.required_attendees}
+                rejected_required = [
+                    inv.agent
+                    for aid, inv in meeting.invitations.items()
+                    if aid in required_ids
+                    and inv.status == MeetingInvitationStatus.REJECTED
+                ]
+                if rejected_required:
+                    raise ValueError(
+                        f"Required attendee(s) rejected meeting {meeting.id}: {[a.__repr__() for a in rejected_required]}"
+                    )
+
                 # Check if all required attendees have joined
                 if not meeting.has_pending_invitations():
                     break
@@ -442,74 +498,6 @@ class MeetingManager:
                 return frame.meeting_id
         return None
 
-    async def broadcast_to_meeting_as_owner(
-        self,
-        meeting_id: str,
-        message: str,
-        from_agent_id: str = None,
-        from_agent_klass: str = None,
-    ):
-        """Broadcast a message to all participants via unified channel.
-
-        Args:
-            meeting_id: ID of the meeting to broadcast to
-            message: Message content to send
-            from_agent_id: ID of the sender (defaults to self)
-            from_agent_klass: Class of the sender (defaults to self)
-        """
-        # Check if I'm the owner of this meeting
-        assert (
-            hasattr(self.agent, "owned_meetings")
-            and meeting_id in self.agent.owned_meetings
-        )
-
-        if not from_agent_id or not from_agent_klass:
-            from_agent_id = self.agent_id
-            from_agent_klass = self.agent_klass
-
-        self.agent.session_log.append(
-            f"Broadcasting to meeting {meeting_id}: {message}"
-        )
-
-        # Use unified channel architecture - route_message handles channel multicast
-        await self.program.route_message(
-            sender_id=from_agent_id,
-            sender_klass=from_agent_klass,
-            receiver_spec=f"meeting {meeting_id}",
-            message=message,
-            message_type=MessageType.MEETING_BROADCAST,
-            meeting_id=meeting_id,
-        )
-
-    async def broadcast_to_meeting_as_participant(
-        self, meeting_id: str, message: str
-    ) -> None:
-        """Broadcast a message to all participants via unified channel.
-
-        Args:
-            meeting_id: ID of the meeting to broadcast to
-            message: Message content to send
-        """
-        assert (
-            hasattr(self.agent, "owned_meetings")
-            and hasattr(self.agent, "joined_meetings")
-            and meeting_id in self.agent.joined_meetings
-        )
-
-        self.agent.session_log.append(
-            f"Broadcasting to meeting {meeting_id} as participant: {message}"
-        )
-
-        # Use unified channel architecture - participants can send directly to meeting channel
-        await self.program.route_message(
-            sender_id=self.agent_id,
-            sender_klass=self.agent_klass,
-            receiver_spec=f"meeting {meeting_id}",
-            message=message,
-            message_type=MessageType.MEETING_BROADCAST,
-            meeting_id=meeting_id,
-        )
-
     async def _add_message_to_buffer(self, message: Message) -> bool:
         """Add a message to buffer and notify waiting processes.
 
@@ -544,6 +532,19 @@ class MeetingManager:
                     )
 
             return True
+        elif message.message_type == MessageType.MEETING_BROADCAST:
+            # Treat system kickoff banners as informational only: add to session log
+            # and keep them out of the message queue so ProcessMessages doesn't try
+            # to "join" a meeting based on them.
+            if (
+                message.content.startswith("Meeting ")
+                and " started with " in message.content
+            ):
+                self.agent.session_log.append(message.content)
+                meeting_id = message.meeting_id.id if message.meeting_id else None
+                meeting_msg = MeetingLLMMessage(message.content, meeting_id=meeting_id)
+                self.agent.call_stack.add_llm_message(meeting_msg)
+                return True
         return False
 
     async def _handle_meeting_invitation_immediately(self, message) -> None:
@@ -596,16 +597,51 @@ class MeetingManager:
             meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
             self.agent.call_stack.add_llm_message(meeting_msg)
             if self.program:
-                await self.program.route_message(
-                    sender_id=self.agent_id,
-                    sender_klass=self.agent_klass,
-                    receiver_spec=f"agent {inviter_id}",
-                    message=f"REJECTED {meeting_id}",
-                    message_type=MessageType.MEETING_INVITATION_RESPONSE,
-                    meeting_id=meeting_id,
+                # Send rejection as background task to avoid reentrancy deadlock
+                asyncio.create_task(
+                    self.program.route_message(
+                        sender_id=self.agent_id,
+                        sender_klass=self.agent_klass,
+                        receiver_spec=str(AgentID.parse(inviter_id)),
+                        message=f"REJECTED {meeting_id}",
+                        message_type=MessageType.MEETING_INVITATION_RESPONSE,
+                        meeting_id=meeting_id,
+                    )
                 )
             return True
-        return False
+
+        # Deterministic meeting handling: accept + run the (single) meeting playbook.
+        meeting_playbooks = [
+            pb.name
+            for pb in self.playbook_executor.playbooks.values()
+            if getattr(pb, "meeting", False)
+        ]
+        if len(meeting_playbooks) != 1:
+            if self.program:
+                # Send rejection as background task to avoid reentrancy deadlock
+                asyncio.create_task(
+                    self.program.route_message(
+                        sender_id=self.agent_id,
+                        sender_klass=self.agent_klass,
+                        receiver_spec=str(AgentID.parse(inviter_id)),
+                        message=f"REJECTED {meeting_id}",
+                        message_type=MessageType.MEETING_INVITATION_RESPONSE,
+                        meeting_id=meeting_id,
+                    )
+                )
+            return True
+
+        playbook_name = meeting_playbooks[0]
+        await self._accept_meeting_invitation(
+            meeting_id=meeting_id,
+            inviter_id=inviter_id,
+            topic=topic,
+            playbook_name=playbook_name,
+        )
+        await self._execute_meeting_playbook(
+            meeting_id=MeetingID.parse(meeting_id).id, playbook_name=playbook_name
+        )
+        return True
 
     async def _accept_meeting_invitation(
         self, meeting_id: str, inviter_id: str, topic: str, playbook_name: str
@@ -629,15 +665,18 @@ class MeetingManager:
         )
         debug(f"Agent {self.agent_id}: joined_meetings {self.agent.joined_meetings}")
 
-        # Send structured JOINED response
+        # Send structured JOINED response as background task to avoid reentrancy deadlock
+        # (we're currently inside a message delivery path; awaiting route_message would deadlock)
         if self.program:
-            await self.program.route_message(
-                sender_id=self.agent_id,
-                sender_klass=self.agent_klass,
-                receiver_spec=f"agent {inviter_id}",
-                message=f"JOINED {meeting_id}",
-                message_type=MessageType.MEETING_INVITATION_RESPONSE,
-                meeting_id=meeting_id,
+            asyncio.create_task(
+                self.program.route_message(
+                    sender_id=self.agent_id,
+                    sender_klass=self.agent_klass,
+                    receiver_spec=str(AgentID.parse(inviter_id)),
+                    message=f"JOINED {meeting_id}",
+                    message_type=MessageType.MEETING_INVITATION_RESPONSE,
+                    meeting_id=meeting_id,
+                )
             )
 
         # The initiator will add us as a participant when they receive our JOINED message
@@ -690,7 +729,7 @@ class MeetingManager:
                 await self.program.route_message(
                     sender_id=self.agent_id,
                     sender_klass=self.agent_klass,
-                    receiver_spec=f"agent {meeting.owner_id}",
+                    receiver_spec=str(AgentID.parse(meeting.owner_id)),
                     message=f"Meeting {meeting_id}: Error in playbook execution - {str(e)}",
                     message_type=MessageType.MEETING_INVITATION_RESPONSE,
                     meeting_id=meeting_id,

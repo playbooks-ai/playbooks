@@ -332,9 +332,9 @@ class ProgramAgentsCommunicationMixin:
                 )
 
         # Get sender agent
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(sender_agent_id.id)
         if not sender_agent:
-            raise ValueError(f"Sender agent {sender_id} not found")
+            raise ValueError(f"Sender agent {sender_agent_id.id} not found")
 
         # Get or create channel for this communication
         try:
@@ -370,6 +370,18 @@ class ProgramAgentsCommunicationMixin:
             stream_id=stream_id,
         )
 
+        # Publish routed-message event for observers (web/cli should subscribe instead of monkey-patching)
+        from playbooks.core.events import MessageRoutedEvent
+
+        self.event_bus.publish(
+            MessageRoutedEvent(
+                session_id=self.event_bus.session_id,
+                agent_id=sender_agent_id.id,
+                channel_id=channel.channel_id,
+                message=msg,
+            )
+        )
+
         # Send via channel (channel handles delivery to all participants)
         await channel.send(msg, sender_agent_id.id)
 
@@ -390,7 +402,7 @@ class ProgramAgentsCommunicationMixin:
         Returns:
             StreamResult indicating whether streaming was started and providing stream_id
         """
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(AgentID.parse(sender_id).id)
         if not sender_agent:
             return StreamResult.start(stream_id)
 
@@ -442,7 +454,7 @@ class ProgramAgentsCommunicationMixin:
         content: str,
     ) -> None:
         """Send a chunk of streaming content via channel."""
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(AgentID.parse(sender_id).id)
         if not sender_agent:
             return
 
@@ -460,7 +472,7 @@ class ProgramAgentsCommunicationMixin:
         final_content: Optional[str] = None,
     ) -> None:
         """Complete a streaming message via channel."""
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(AgentID.parse(sender_id).id)
         if not sender_agent:
             return
 
@@ -486,13 +498,13 @@ class ProgramAgentsCommunicationMixin:
 
             # Create the final message with structured IDs
             final_message = Message(
-                sender_id=AgentID(sender_id),
+                sender_id=AgentID.parse(sender_id),
                 sender_klass=sender_agent.klass,
                 content=final_content or "",
                 recipient_klass=recipient_klass,
-                recipient_id=AgentID(recipient_id) if recipient_id else None,
+                recipient_id=AgentID.parse(recipient_id) if recipient_id else None,
                 message_type=message_type,
-                meeting_id=MeetingID(meeting_id) if meeting_id else None,
+                meeting_id=MeetingID.parse(meeting_id) if meeting_id else None,
                 stream_id=stream_id,
             )
 
@@ -790,6 +802,17 @@ class Program(ProgramAgentsCommunicationMixin):
         if self._debug_server:
             await self._debug_server.send_thread_started_event(agent.id)
 
+        # Publish creation event for observers (web/cli apps should subscribe instead of monkey-patching)
+        from playbooks.core.events import AgentCreatedEvent
+
+        self.event_bus.publish(
+            AgentCreatedEvent(
+                session_id=self.event_bus.session_id,
+                agent_id=agent.id,
+                agent_klass=agent.klass,
+            )
+        )
+
         return agent
 
     async def get_or_create_agent(self, agent_klass: str, **create_kwargs) -> BaseAgent:
@@ -888,7 +911,7 @@ class Program(ProgramAgentsCommunicationMixin):
 
     def _emit_compiled_program_event(self) -> None:
         """Emit an event with the compiled program content for debugging."""
-        from .events import CompiledProgramEvent
+        from playbooks.core.events import CompiledProgramEvent
 
         compiled_file_path = self._get_compiled_file_name()
         event = CompiledProgramEvent(
@@ -1028,10 +1051,11 @@ class Program(ProgramAgentsCommunicationMixin):
             reason: Reason for finishing (e.g., "normal", "error")
             exit_code: Exit code (0 for success, non-zero for errors)
         """
+        self.execution_finished = True
+
         # Wait for all agents to become idle
         await self.runtime.wait_for_all_agents_idle()
 
-        self.execution_finished = True
         if hasattr(self, "execution_finished_event"):
             self.execution_finished_event.set()
         if self.event_bus:

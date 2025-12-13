@@ -165,7 +165,11 @@ class PythonExecutor:
         """
         self.result = ExecutionResult()
 
-        if self.agent.program.execution_finished:
+        if (
+            hasattr(self.agent, "program")
+            and self.agent.program
+            and getattr(self.agent.program, "execution_finished", False)
+        ):
             self.result.playbook_finished = True
             self.result.return_value = "Program execution finished"
             return self.result
@@ -383,7 +387,10 @@ class PythonExecutor:
                     meeting_id = meeting_id_obj.id
                     if meeting_id == "current":
                         meeting_id = self.agent.call_stack.peek().meeting_id
-                    messages = await self.agent.WaitForMessage(f"meeting {meeting_id}")
+                    messages = await self.agent.WaitForMessage(
+                        f"meeting {meeting_id}", timeout=10.0
+                    )
+                    # On timeout, return None (do not inject a synthetic message into the meeting).
                 else:
                     messages = await self.agent.WaitForMessage(target_agent_id)
         if messages:

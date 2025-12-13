@@ -67,6 +67,18 @@ class PlaybookDotMap(DotMap):
             return PlaybookDotMap(value)
         return value
 
+    def __getattr__(self, key: str) -> Any:
+        """Attribute access with Pythonic 'missing attribute' semantics.
+
+        DotMap's default behavior can make `hasattr(state, "x")` always return True
+        (by materializing missing keys). That pattern is common in both library
+        code and LLM-generated code, so we make missing attributes raise
+        AttributeError as normal Python objects do.
+        """
+        if key in self:
+            return self.__getitem__(key)
+        raise AttributeError(key)
+
     @staticmethod
     def _to_native_dict(value: Any) -> Any:
         """Recursively convert DotMap to native dict.

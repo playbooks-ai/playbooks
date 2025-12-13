@@ -179,16 +179,16 @@ class Meeting:
         """
         self.agent_last_message_index[agent.id] = len(self.message_history)
 
-    def is_participant(self, agent: BaseAgent) -> bool:
+    def is_participant(self, agent_id: str) -> bool:
         """Check if an agent is a participant in the meeting.
 
         Args:
-            agent: Agent to check
+            agent_id: Agent id to check
 
         Returns:
             True if agent is in joined_attendees, False otherwise
         """
-        return agent in self.joined_attendees
+        return any(a.id == agent_id for a in self.joined_attendees)
 
     def has_pending_invitation(self, agent: BaseAgent) -> bool:
         """Check if an agent has a pending invitation.

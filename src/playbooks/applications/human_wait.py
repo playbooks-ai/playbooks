@@ -24,7 +24,9 @@ def build_human_wait_patch(
     on_prompt: optional hook to proactively solicit/enqueue human input when none is queued.
     """
 
-    async def patched_wait_for_message(agent_self, source_agent_id: str):
+    async def patched_wait_for_message(
+        agent_self, source_agent_id: str, *, timeout: Optional[float] = None
+    ):
         if on_wait:
             await on_wait(agent_self, source_agent_id)
 
@@ -38,12 +40,16 @@ def build_human_wait_patch(
                     if not existing:
                         await on_prompt(agent_self)
 
-                messages = await original_wait_for_message(agent_self, source_agent_id)
+                messages = await original_wait_for_message(
+                    agent_self, source_agent_id, timeout=timeout
+                )
                 if messages:
                     return messages
                 # No messages yet; yield to event loop and keep waiting
                 await asyncio.sleep(0)
 
-        return await original_wait_for_message(agent_self, source_agent_id)
+        return await original_wait_for_message(
+            agent_self, source_agent_id, timeout=timeout
+        )
 
     return patched_wait_for_message

@@ -188,9 +188,13 @@ class InterpreterPrompt:
         agents = agent_dict.get("agents", [])
         owned_meetings = agent_dict.get("owned_meetings", [])
         joined_meetings = agent_dict.get("joined_meetings", [])
-        lines.append(f"call_stack = {call_stack}")
-        lines.append(f"owned_meetings = {owned_meetings if owned_meetings else []}")
-        lines.append(f"joined_meetings = {joined_meetings if joined_meetings else []}")
+        lines.append(f"call_stack = {call_stack} # managed by the runtime")
+        lines.append(
+            f"owned_meetings = {owned_meetings if owned_meetings else []} # managed by the runtime"
+        )
+        lines.append(
+            f"joined_meetings = {joined_meetings if joined_meetings else []} # managed by the runtime"
+        )
 
         lines.append(
             "all_agents.by_klass(agent_klass) = ... # method to access agents by type"
@@ -402,7 +406,8 @@ class InterpreterPrompt:
         )
 
         debug(
-            f"LLM Context Compaction: {original_tokens} -> {compacted_tokens} tokens ({compression_ratio:.2%})"
+            f"LLM Context Compaction: {original_tokens} -> {compacted_tokens} tokens ({compression_ratio:.2%})",
+            agent=self.agent,
         )
 
         messages.extend(compacted_dict_messages)

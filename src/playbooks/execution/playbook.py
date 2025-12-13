@@ -369,10 +369,17 @@ class PlaybookLLMExecution(LLMExecution):
                 # Update the AssistantResponseLLMMessage with the actual response
                 self.llm_response_msg.set_content(buffer)
 
+                # Update langfuse generation output during streaming
+                generation.update(output=buffer)
+
                 # Feed chunk to streaming executor for incremental execution
                 try:
                     await streaming_executor.add_chunk(chunk)
-                    if self.agent.program.execution_finished:
+                    if (
+                        hasattr(self.agent, "program")
+                        and self.agent.program
+                        and getattr(self.agent.program, "execution_finished", False)
+                    ):
                         raise ExecutionFinished("Program execution finished")
                 except StreamingExecutionError as e:
                     # Check if the underlying error is InteractiveInputRequired
@@ -439,9 +446,6 @@ class PlaybookLLMExecution(LLMExecution):
                                 current_say_content = ""
                                 say_has_placeholders = False  # Reset for new Say call
                                 processed_up_to = say_start_pos
-                                # Set flag indicating we're actively streaming Say() calls
-                                # This prevents double-processing when the generated code executes
-                                self.agent._currently_streaming = True
                                 # Use channel-based streaming infrastructure
                                 stream_result = (
                                     await self.agent.start_streaming_say_via_channel(
@@ -453,6 +457,11 @@ class PlaybookLLMExecution(LLMExecution):
                                     if stream_result.should_stream
                                     else None
                                 )
+                                # Set flag indicating we're actively streaming Say() calls
+                                # This prevents double-processing when the generated code executes
+                                # Only set if streaming is actually happening
+                                if say_stream_id:
+                                    self.agent._currently_streaming = True
                             else:
                                 # Not streaming this Say call
                                 processed_up_to = recipient_end_pos + len(
@@ -585,6 +594,9 @@ class PlaybookLLMExecution(LLMExecution):
             generation.update(output=buffer)
             generation_ctx.__exit__(None, None, None)
 
+        except ExecutionFinished as e:
+            # Program execution finished, stop streaming
+            raise e
         except Exception as e:
             # Unexpected error during streaming (not a StreamingExecutionError)
             logger.error(

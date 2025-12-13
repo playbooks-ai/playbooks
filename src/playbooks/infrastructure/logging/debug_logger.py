@@ -77,6 +77,15 @@ def debug(msg: str = None, **context: Any) -> None:
     # Extract special context keys
     enable_markup = context.pop("markup", True) if context else True
 
+    if "agent" in context:
+        agent = context.get("agent")
+        context_prefix = str(agent) + " - "
+        context.pop("agent")
+    else:
+        context_prefix = ""
+
+    msg = f"{context_prefix}{msg}"
+
     # Format the message with context
     if context:
         try:

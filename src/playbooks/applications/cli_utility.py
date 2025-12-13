@@ -211,12 +211,14 @@ async def main(
 
         original_wait_for_message = MessagingMixin.WaitForMessage
 
-        async def patched_wait(self, source_agent_id: str):
+        async def patched_wait(self, source_agent_id: str, *, timeout: float = None):
             if source_agent_id in ("human", "user"):
                 raise InteractiveInputRequired(
                     "Interactive input required but --non-interactive mode is enabled"
                 )
-            return await original_wait_for_message(self, source_agent_id)
+            return await original_wait_for_message(
+                self, source_agent_id, timeout=timeout
+            )
 
         MessagingMixin.WaitForMessage = patched_wait
 

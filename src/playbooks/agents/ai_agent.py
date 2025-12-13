@@ -22,6 +22,7 @@ from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 from playbooks.core.enums import StartupMode
 from playbooks.core.exceptions import ExecutionFinished
 from playbooks.core.identifiers import AgentID
+from playbooks.core.message import MessageType
 from playbooks.execution.agents_accessor import AgentsAccessor
 from playbooks.execution.call import PlaybookCall, PlaybookCallResult
 from playbooks.infrastructure.event_bus import EventBus
@@ -452,8 +453,9 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         playbook = self.playbooks.get(playbook_name)
 
         # Ignore trigger and note step, e.g. `PB:T1`, `PB:N1`
-        if playbook and step_number[0] not in ["T", "N"] and playbook.steps:
-            line = playbook.steps.get_step(step_number)
+        steps = getattr(playbook, "steps", None) if playbook else None
+        if playbook and step_number[0] not in ["T", "N"] and steps:
+            line = steps.get_step(step_number)
             if line:
                 return InstructionPointer(
                     playbook=playbook_name,
@@ -1034,7 +1036,17 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
                     meeting_msg = MeetingLLMMessage(message, meeting_id=meeting.id)
                     self.call_stack.add_llm_message(meeting_msg)
+
+                    # Add meeting_id and topic to kwargs so the owner's meeting playbook has context
+                    kwargs["meeting_id"] = meeting.id
+                    kwargs["topic"] = meeting.topic
         except TimeoutError as e:
+            error_msg = f"Meeting initialization failed: {str(e)}"
+            await self._post_execute(call, False, error_msg, langfuse_span)
+            return (False, error_msg)
+        except ValueError as e:
+            # Treat meeting attendee rejection (and other meeting init validation errors)
+            # as a normal playbook failure rather than crashing streaming execution.
             error_msg = f"Meeting initialization failed: {str(e)}"
             await self._post_execute(call, False, error_msg, langfuse_span)
             return (False, error_msg)
@@ -1049,6 +1061,23 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 success, result = await self._post_execute(
                     call, True, result, langfuse_span
                 )
+                # End-of-meeting signal: when the meeting owner finishes the meeting playbook,
+                # notify participants so any waiting Yld("meeting ...") can unblock and exit.
+                if getattr(playbook, "meeting", False):
+                    meeting_id = kwargs.get("meeting_id")
+                    if (
+                        meeting_id
+                        and hasattr(self, "owned_meetings")
+                        and meeting_id in self.owned_meetings
+                    ):
+                        await self.program.route_message(
+                            sender_id=self.id,
+                            sender_klass=self.klass,
+                            receiver_spec=f"meeting {meeting_id}",
+                            message=f"MEETING_ENDED {meeting_id}",
+                            message_type=MessageType.MEETING_BROADCAST,
+                            meeting_id=meeting_id,
+                        )
                 return (success, result)
             except ExecutionFinished as e:
                 debug("Execution finished, exiting", agent=str(self))
