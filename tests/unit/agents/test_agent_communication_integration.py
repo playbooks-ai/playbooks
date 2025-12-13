@@ -16,6 +16,7 @@ class MockProgram:
     def __init__(self):
         self.agents_by_id = {}
         self.runtime = AsyncMock()
+        self.execution_finished = False
 
     async def route_message(self, sender_id, receiver_spec, message):
         """Mock message routing."""
@@ -74,14 +75,9 @@ class TestAgentCommunicationIntegration:
         )
 
         # Test the call stack logic (same as in SendMessage)
-        if hasattr(base_agent, "state") and hasattr(base_agent.state, "call_stack"):
-            current_frame = base_agent.call_stack.peek()
-            if current_frame is not None and current_frame.playbook == "Say":
-                # If we're in Say playbook, add to its parent context
-                base_agent.call_stack.add_llm_message_on_parent(agent_comm_msg)
-            else:
-                # Add to current frame or top-level if stack is empty
-                base_agent.call_stack.add_llm_message(agent_comm_msg)
+        if hasattr(base_agent, "call_stack"):
+            # Add to current frame or top-level if stack is empty
+            base_agent.call_stack.add_llm_message(agent_comm_msg)
 
         # Check that message was added to top-level
         assert len(base_agent.call_stack.top_level_llm_messages) == 1

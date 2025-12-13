@@ -9,6 +9,7 @@ from playbooks.state.variables import PlaybookDotMap
 class _MockProgram:
     def __init__(self):
         self._debug_server = None
+        self.execution_finished = False
 
 
 class _MockAgent:

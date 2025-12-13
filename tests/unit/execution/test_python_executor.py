@@ -14,6 +14,7 @@ class MockProgram:
 
     def __init__(self):
         self._debug_server = None
+        self.execution_finished = False
 
 
 class MockState:
