@@ -103,14 +103,15 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         Returns:
             The message content (for compatibility with existing code)
         """
-
+        # Note: Tracing is handled by the Say() playbook wrapper, not here
+        # to avoid double-tracing (playbook span + method span)
         resolved_target = self.resolve_target(target, allow_fallback=True)
 
         # Route to appropriate handler based on target type
         if resolved_target.startswith("meeting "):
             return await self._say_to_meeting(resolved_target, message)
-
-        return await self._say_direct(resolved_target, message)
+        else:
+            return await self._say_direct(resolved_target, message)
 
     async def _say_to_meeting(self, meeting_spec: str, message: str) -> str:
         """Send message to a meeting.
