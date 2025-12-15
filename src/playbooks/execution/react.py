@@ -38,7 +38,7 @@ class ReActLLMExecution(PlaybookLLMExecution):
         """
         # Add react loop steps if not present
         if not self._has_steps():
-            self._add_react_steps()
+            await self._add_react_steps()
 
         # Delegate to parent's playbook execution
         return await super().execute(*args, **kwargs)
@@ -51,7 +51,7 @@ class ReActLLMExecution(PlaybookLLMExecution):
             and len(self.playbook.step_collection.ordered_line_numbers) > 0
         )
 
-    def _add_react_steps(self) -> None:
+    async def _add_react_steps(self) -> None:
         """Add react loop steps to the playbook."""
         # Create a ReactAgent playbook for compilation
         react_playbook = """# ReactAgent
@@ -69,12 +69,12 @@ class ReActLLMExecution(PlaybookLLMExecution):
 """
 
         # Compile the playbook to get proper step structure
-        compiled_steps = self._compile_and_extract_steps(react_playbook)
+        compiled_steps = await self._compile_and_extract_steps(react_playbook)
 
         # Set the compiled step collection on the playbook
         self.playbook.step_collection = compiled_steps
 
-    def _compile_and_extract_steps(
+    async def _compile_and_extract_steps(
         self, playbook_content: str
     ) -> PlaybookStepCollection:
         """Compile the playbook content and extract step collection.
@@ -89,7 +89,7 @@ class ReActLLMExecution(PlaybookLLMExecution):
             compiler = Compiler()
 
             # Compile the playbook content
-            _, compiled_content, _ = compiler.compile(content=playbook_content)
+            _, compiled_content, _ = await compiler.compile(content=playbook_content)
 
             # Parse the compiled content to extract steps
             ast = markdown_to_ast(compiled_content)

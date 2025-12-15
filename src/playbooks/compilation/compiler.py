@@ -5,11 +5,11 @@ This module handles the compilation of playbook files from various formats
 metadata extraction, and parallel compilation.
 """
 
+import asyncio
 import hashlib
 import os
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Dict, Iterator, List, NamedTuple, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import frontmatter
 from rich.console import Console
@@ -20,10 +20,12 @@ from playbooks.compilation.markdown_to_ast import (
 )
 from playbooks.config import config
 from playbooks.core.exceptions import CompilationError, ProgramLoadError
+from playbooks.llm.messages.timestamp import get_timestamp
 from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import (
     _check_llm_calls_allowed,
+    ensure_async_iterable,
     get_completion,
     get_messages_for_prompt,
 )
@@ -84,7 +86,7 @@ class Compiler:
         except (IOError, OSError) as e:
             raise ProgramLoadError(f"Error reading prompt template: {str(e)}") from e
 
-    def process_files(
+    async def process_files(
         self, files: List[FileCompilationSpec]
     ) -> List[FileCompilationResult]:
         """
@@ -152,35 +154,22 @@ class Compiler:
                     )
                 )
         else:
-            # Need compilation - use parallel processing for LLM calls
-            with ThreadPoolExecutor(max_workers=min(len(agents), 4)) as executor:
-                # Submit all compilation tasks with their original index
-                future_to_index = {
-                    executor.submit(self._compile_agent_with_caching, agent_info): i
-                    for i, agent_info in enumerate(agents)
-                }
-
-                # Collect results maintaining original order
-                results_by_index = {}
-                for future in as_completed(future_to_index):
-                    index = future_to_index[future]
-                    try:
-                        result = future.result()
-                        results_by_index[index] = result
-                    except Exception as exc:
-                        agent_name = agents[index]["name"]
-                        console.print(
-                            f"[red]Agent {agent_name} compilation failed: {exc}[/red]"
-                        )
-                        raise
-
-                # Sort results by original index to maintain order
-                compilation_results = [results_by_index[i] for i in range(len(agents))]
+            # Need compilation - use async parallel processing for LLM calls
+            try:
+                compilation_results = await asyncio.gather(
+                    *[
+                        self._compile_agent_with_caching(agent_info)
+                        for agent_info in agents
+                    ]
+                )
+            except Exception as exc:
+                console.print(f"[red]Agent compilation failed: {exc}[/red]")
+                raise
 
         compilation_results[0].frontmatter_dict.update(all_frontmatter)
         return compilation_results
 
-    def compile(
+    async def compile(
         self, file_path: Optional[str] = None, content: Optional[str] = None
     ) -> Tuple[dict, str, Path]:
         """Compile a single .pb file.
@@ -215,7 +204,7 @@ class Compiler:
             is_compiled=file_path and file_path.endswith(".pbasm"),
         )
 
-        results = self.process_files([spec])
+        results = await self.process_files([spec])
         result = results[0]
 
         return result.frontmatter_dict, result.content, Path(result.compiled_file_path)
@@ -281,7 +270,7 @@ class Compiler:
         cache_filename = f"{safe_name}_{cache_key}.pbasm"
         return cache_dir / cache_filename
 
-    def _compile_agent_with_caching(
+    async def _compile_agent_with_caching(
         self, agent_info: Dict[str, str]
     ) -> FileCompilationResult:
         """Compile a single agent with caching, suitable for parallel execution.
@@ -319,7 +308,7 @@ class Compiler:
 
             print(f"  Compiling agent: {agent_name}", file=sys.stderr)
 
-            compiled_agent = self._compile_agent(agent_content)
+            compiled_agent = await self._compile_agent(agent_content)
 
             # Validate compilation result before caching
             if not compiled_agent or not compiled_agent.strip():
@@ -365,7 +354,7 @@ class Compiler:
             compiled_file_path=str(cache_path),
         )
 
-    def _compile_agent(self, agent_content: str) -> str:
+    async def _compile_agent(self, agent_content: str) -> str:
         """
         Compile a single agent using LLM.
 
@@ -381,16 +370,23 @@ class Compiler:
         # Get LLM response
         messages = get_messages_for_prompt(prompt)
         langfuse_span = LangfuseHelper.instance().start_observation(
-            name="compile_agent", as_type="generation", input=agent_content
+            name="compile_agent",
+            as_type="generation",
+            input=agent_content,
+            metadata={"timestamp": get_timestamp()},
         )
 
-        response: Iterator[str] = get_completion(
-            llm_config=self.llm_config,
-            messages=messages,
-            stream=False,
-        )
+        response_chunks = []
+        async for chunk in ensure_async_iterable(
+            get_completion(
+                llm_config=self.llm_config,
+                messages=messages,
+                stream=False,
+            )
+        ):
+            response_chunks.append(chunk)
 
-        compiled = next(response)
+        compiled = "".join(response_chunks)
         langfuse_span.update(output=compiled)
         langfuse_span.end()
 

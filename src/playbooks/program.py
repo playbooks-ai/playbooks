@@ -584,28 +584,7 @@ class Program(ProgramAgentsCommunicationMixin):
         self.parse_metadata()
 
         self.agent_klasses = {}
-
-        if self.program_content:
-            # Using program content directly (no cache file)
-            ast = markdown_to_ast(self.program_content)
-            self.agent_klasses.update(AgentBuilder.create_agent_classes_from_ast(ast))
-        else:
-            # Using compiled program paths (cache files)
-            for i, markdown_content in enumerate(self.markdown_contents):
-                # Use original source file path for relative path resolution
-                # (e.g., for memory:// MCP server paths)
-                # source_file_paths has one entry per compiled file and points to the original .pb source
-                if self.source_file_paths and i < len(self.source_file_paths):
-                    source_path = str(Path(self.source_file_paths[i]).resolve())
-                elif self.program_paths and i < len(self.program_paths):
-                    source_path = str(Path(self.program_paths[i]).resolve())
-                else:
-                    source_path = None
-
-                ast = markdown_to_ast(markdown_content, source_file_path=source_path)
-                self.agent_klasses.update(
-                    AgentBuilder.create_agent_classes_from_ast(ast)
-                )
+        # Note: agent_klasses will be populated in async initialize() method
 
         self.agents = []
         self.agents_by_klass = {}
@@ -621,6 +600,31 @@ class Program(ProgramAgentsCommunicationMixin):
         )
 
     async def initialize(self) -> None:
+        # Create agent classes from AST (requires async for LLM compilation)
+        if self.program_content:
+            # Using program content directly (no cache file)
+            ast = markdown_to_ast(self.program_content)
+            self.agent_klasses.update(
+                await AgentBuilder.create_agent_classes_from_ast(ast)
+            )
+        else:
+            # Using compiled program paths (cache files)
+            for i, markdown_content in enumerate(self.markdown_contents):
+                # Use original source file path for relative path resolution
+                # (e.g., for memory:// MCP server paths)
+                # source_file_paths has one entry per compiled file and points to the original .pb source
+                if self.source_file_paths and i < len(self.source_file_paths):
+                    source_path = str(Path(self.source_file_paths[i]).resolve())
+                elif self.program_paths and i < len(self.program_paths):
+                    source_path = str(Path(self.program_paths[i]).resolve())
+                else:
+                    source_path = None
+
+                ast = markdown_to_ast(markdown_content, source_file_path=source_path)
+                self.agent_klasses.update(
+                    await AgentBuilder.create_agent_classes_from_ast(ast)
+                )
+
         self.agents = [
             await self.create_agent(klass)
             for klass in self.agent_klasses.values()
@@ -1249,7 +1253,7 @@ class Program(ProgramAgentsCommunicationMixin):
     ) -> Channel:
         """Get or create a channel for communication.
 
-        When a new channel is created, all registered callbacks are invoked immediately
+        When a new channel is created, a ChannelCreatedEvent is published to the EventBus
         to enable event-driven channel discovery.
 
         Args:
@@ -1324,7 +1328,7 @@ class Program(ProgramAgentsCommunicationMixin):
         """Create a channel for a meeting.
 
         This is called by MeetingManager when creating a meeting.
-        When a new channel is created, all registered callbacks are invoked immediately.
+        When a new channel is created, a ChannelCreatedEvent is published to the EventBus.
 
         Args:
             meeting_id: ID of the meeting

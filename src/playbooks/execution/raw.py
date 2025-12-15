@@ -11,7 +11,7 @@ from playbooks.core.events import PlaybookEndEvent, PlaybookStartEvent
 from playbooks.execution.call import PlaybookCall
 from playbooks.llm.messages import AssistantResponseLLMMessage, UserInputLLMMessage
 from playbooks.utils.llm_config import LLMConfig
-from playbooks.utils.llm_helper import get_completion
+from playbooks.utils.llm_helper import ensure_async_iterable, get_completion
 
 from .base import LLMExecution
 
@@ -104,7 +104,7 @@ class RawLLMExecution(LLMExecution):
         ]
 
         # Create user input message
-        user_msg = UserInputLLMMessage(resolved_description)
+        user_msg = UserInputLLMMessage(instruction=resolved_description)
 
         # Convert to dict format
         messages = [msg.to_full_message() for msg in file_load_messages]
@@ -124,14 +124,18 @@ class RawLLMExecution(LLMExecution):
             Response string from the LLM
         """
         # Get completion
-        response_generator = get_completion(
-            messages=messages,
-            llm_config=LLMConfig(),
-            stream=False,
-            json_mode=False,
-        )
+        response_chunks = []
+        async for chunk in ensure_async_iterable(
+            get_completion(
+                messages=messages,
+                llm_config=LLMConfig(),
+                stream=False,
+                json_mode=False,
+            )
+        ):
+            response_chunks.append(chunk)
 
-        response = next(response_generator)
+        response = "".join(response_chunks)
 
         # Add the response to call stack (will be marked for caching as last message)
         response_msg = AssistantResponseLLMMessage(response)

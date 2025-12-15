@@ -12,16 +12,14 @@ class BuiltinPlaybooks:
     """Provides built-in playbooks that are automatically added to every agent."""
 
     @staticmethod
-    def get_ast_nodes():
+    async def get_ast_nodes():
         """Get AST nodes for built-in playbooks.
 
         Returns:
             List of AST nodes representing built-in playbooks.
         """
-        return (
-            BuiltinPlaybooks.get_python_playbooks_ast_nodes()
-            + BuiltinPlaybooks.get_llm_playbooks_ast_nodes()
-        )
+        llm_playbooks = await BuiltinPlaybooks.get_llm_playbooks_ast_nodes()
+        return BuiltinPlaybooks.get_python_playbooks_ast_nodes() + llm_playbooks
 
     @staticmethod
     def get_python_playbooks_ast_nodes():
@@ -134,12 +132,14 @@ hidden: true
 """
 
     @staticmethod
-    def get_llm_playbooks_ast_nodes():
+    async def get_llm_playbooks_ast_nodes():
         markdown = BuiltinPlaybooks.get_llm_playbooks_markdown()
         compiler = Compiler()
 
         # Compile the playbooks content
-        _, compiled_content, compiled_file_path = compiler.compile(content=markdown)
+        _, compiled_content, compiled_file_path = await compiler.compile(
+            content=markdown
+        )
 
         # Parse the compiled content to extract steps
         ast = markdown_to_ast(compiled_content, source_file_path=compiled_file_path)

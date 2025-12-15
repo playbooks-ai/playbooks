@@ -54,6 +54,27 @@ playbooks_handler = PlaybooksLMHandler()
 _original_completion = completion
 
 
+def ensure_async_iterable(obj: Any):
+    """Coerce an iterable into an async iterable.
+
+    This keeps call sites compatible with tests that monkeypatch `get_completion`
+    to return a plain (sync) iterator while production code returns an async
+    generator.
+    """
+    if hasattr(obj, "__aiter__"):
+        return obj
+
+    if hasattr(obj, "__iter__"):
+
+        async def _gen():
+            for item in obj:
+                yield item
+
+        return _gen()
+
+    raise TypeError(f"Expected async iterable or iterable, got {type(obj).__name__}")
+
+
 def completion_with_preprocessing(*args: Any, **kwargs: Any) -> Any:
     """Wrapper for litellm.completion that applies preprocessing for playbooks-lm models.
 
@@ -230,22 +251,10 @@ def _make_completion_request(completion_kwargs: dict) -> str:
     return content
 
 
-def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
-    """Make a streaming completion request to the LLM with automatic retries on overload.
+def _make_completion_request_stream_sync(completion_kwargs: dict) -> Iterator[str]:
+    """Synchronous helper that performs the actual streaming.
 
-    Since exceptions occur on the first token (during initial call), we can retry
-    the entire stream creation and maintain true streaming.
-
-    Args:
-        completion_kwargs: Dictionary of arguments for litellm.completion
-
-    Yields:
-        Response text chunks as they arrive from the LLM
-
-    Raises:
-        VendorAPIOverloadedError: If API is overloaded after retries
-        VendorAPIRateLimitError: If rate limit exceeded after retries
-        litellm exceptions: Various litellm exceptions if request fails
+    This runs in a thread pool to avoid blocking the event loop.
     """
     max_retries = 5
     base_delay = 1.0
@@ -268,7 +277,7 @@ def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
             if content is not None:
                 yield content
 
-            # Now stream the rest normally
+            # Stream the rest
             for chunk in response_iter:
                 content = chunk.choices[0].delta.content
                 if content is not None:
@@ -294,6 +303,66 @@ def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
             continue
 
 
+async def _make_completion_request_stream(completion_kwargs: dict):
+    """Make a streaming completion request to the LLM without blocking the event loop.
+
+    Runs the synchronous streaming in a thread pool to keep the event loop responsive.
+
+    Args:
+        completion_kwargs: Dictionary of arguments for litellm.completion
+
+    Yields:
+        Response text chunks as they arrive from the LLM
+
+    Raises:
+        VendorAPIOverloadedError: If API is overloaded after retries
+        VendorAPIRateLimitError: If rate limit exceeded after retries
+        litellm exceptions: Various litellm exceptions if request fails
+    """
+    import asyncio
+    import queue
+    import threading
+
+    # Create a queue to transfer chunks from thread to async code
+    chunk_queue = queue.Queue()
+    exception_holder = []
+
+    def _stream_in_thread():
+        """Run the synchronous streaming in a background thread."""
+        try:
+            for chunk in _make_completion_request_stream_sync(completion_kwargs):
+                chunk_queue.put(("chunk", chunk))
+            chunk_queue.put(("done", None))
+        except Exception as e:
+            exception_holder.append(e)
+            chunk_queue.put(("error", e))
+
+    # Start streaming in background thread
+    stream_thread = threading.Thread(target=_stream_in_thread, daemon=True)
+    stream_thread.start()
+
+    # Yield chunks as they arrive, without blocking the event loop
+    while True:
+        # Check queue in thread pool to avoid blocking
+        try:
+            item_type, item_value = await asyncio.to_thread(
+                chunk_queue.get, timeout=0.1
+            )
+        except queue.Empty:
+            # No chunk yet, yield control and try again
+            await asyncio.sleep(0.01)
+            continue
+
+        if item_type == "chunk":
+            yield item_value
+            # Yield control after each chunk
+            await asyncio.sleep(0)
+        elif item_type == "error":
+            raise item_value
+        elif item_type == "done":
+            break
+
+
 def _check_llm_calls_allowed() -> bool:
     """Check if LLM calls are allowed in the current context.
 
@@ -313,7 +382,7 @@ def _check_llm_calls_allowed() -> bool:
     return allow_llm == "true"
 
 
-def get_completion(
+async def get_completion(
     llm_config: LLMConfig,
     messages: List[dict],
     stream: bool = False,
@@ -322,7 +391,7 @@ def get_completion(
     session_id: Optional[str] = None,
     execution_id: Optional[int] = None,
     **kwargs,
-) -> Iterator[str]:
+):
     """Get completion from LLM with optional streaming and caching support.
 
     Args:
@@ -424,7 +493,7 @@ def get_completion(
             langfuse_generation.update(metadata={"cache_hit": False})
 
         if stream:
-            for chunk in _make_completion_request_stream(completion_kwargs):
+            async for chunk in _make_completion_request_stream(completion_kwargs):
                 full_response.append(chunk)  # type: ignore
                 yield chunk
             full_response = "".join(full_response)  # type: ignore
