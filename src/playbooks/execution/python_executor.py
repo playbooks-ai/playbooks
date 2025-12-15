@@ -11,6 +11,8 @@ import traceback
 import types
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
+from box import Box
+
 from playbooks.core.constants import EOM
 from playbooks.core.identifiers import MeetingID
 from playbooks.debug.debug_handler import NoOpDebugHandler
@@ -130,6 +132,8 @@ class PythonExecutor:
         # Add asyncio for await syntax
         namespace["asyncio"] = asyncio
 
+        # Add Box for meeting shared state and general use
+        namespace["Box"] = Box
         # Add agent's namespace items (imports, playbook wrappers, etc.)
         if hasattr(self.agent, "namespace_manager") and hasattr(
             self.agent.namespace_manager, "namespace"

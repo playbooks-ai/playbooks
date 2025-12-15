@@ -11,7 +11,7 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
-from dotmap import DotMap
+from box import Box
 
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.variables import Artifact
@@ -365,10 +365,10 @@ class ExpressionContext:
 
             # Try state variables
             if hasattr(self.agent, "state"):
-                if isinstance(self.agent.state, DotMap):
+                if isinstance(self.agent.state, Box):
                     try:
                         # Check if key exists by safely converting to dict
-                        # Note: Use try/except because dict() might fail on certain DotMap states
+                        # Note: Use try/except because dict() might fail on certain Box states
                         vars_dict = dict(self.agent.state)
                         if name in vars_dict:
                             value = vars_dict[name]
@@ -427,9 +427,9 @@ class ExpressionContext:
 
         # State variables (global)
         if hasattr(self.agent, "state"):
-            from dotmap import DotMap
+            from box import Box
 
-            if isinstance(self.agent.state, DotMap):
+            if isinstance(self.agent.state, Box):
                 variables.extend(dict(self.agent.state).keys())
 
         # Namespace variables

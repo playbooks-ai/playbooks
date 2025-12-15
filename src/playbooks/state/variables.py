@@ -1,103 +1,15 @@
 """Variable management system for playbook execution.
 
-Uses DotMap for attribute-style access (state.x) with diff-based change tracking.
+Uses Box for attribute-style access (state.x) with diff-based change tracking.
 """
 
 import types
 from typing import Any, Dict, Optional
 
-from dotmap import DotMap
+from box import Box
 
 from playbooks.core.events import VariableUpdateEvent
 from playbooks.infrastructure.event_bus import EventBus
-
-
-class PlaybookDotMap(DotMap):
-    """Custom DotMap that supports format specifiers in f-strings.
-
-    This subclass fixes the issue where DotMap objects don't support format
-    specifiers like `:,` in f-strings. When accessing dictionary values via
-    __getitem__, primitive types (int, str, float, bool, None) are returned
-    as native Python types to support format specifiers.
-
-    When format specifiers are used on a DotMap itself, it converts to a
-    native dict for formatting.
-    """
-
-    def __format__(self, format_spec: str) -> str:
-        """Format DotMap with format specifiers by converting to dict first.
-
-        Args:
-            format_spec: Format specification (e.g., ':,' for number formatting)
-
-        Returns:
-            Formatted string representation
-        """
-        # Convert to native dict to support format specifiers
-        native_dict = self._to_native_dict(self)
-        # Format the dict using the format spec
-        if format_spec:
-            return format(native_dict, format_spec)
-        return str(native_dict)
-
-    def __getitem__(self, key: Any) -> Any:
-        """Get item, returning native types for primitives.
-
-        This ensures that when accessing nested dictionary values like
-        report_data['sales'], we get a native int that supports format
-        specifiers, rather than a DotMap-wrapped value.
-
-        Args:
-            key: Dictionary key
-
-        Returns:
-            Native Python type for primitives, PlaybookDotMap for dicts
-        """
-        value = super().__getitem__(key)
-        # If it's a dict-like DotMap, keep it as PlaybookDotMap for nested access
-        if isinstance(value, DotMap) and not isinstance(value, PlaybookDotMap):
-            # Convert to PlaybookDotMap for consistency
-            return PlaybookDotMap(value)
-        # For primitive values, ensure they're native types
-        # DotMap should already return primitives as-is, but be safe
-        if isinstance(value, (int, str, float, bool, type(None))):
-            return value
-        # For dicts stored in DotMap, they become DotMap - keep as PlaybookDotMap
-        if isinstance(value, dict):
-            return PlaybookDotMap(value)
-        return value
-
-    def __getattr__(self, key: str) -> Any:
-        """Attribute access with Pythonic 'missing attribute' semantics.
-
-        DotMap's default behavior can make `hasattr(state, "x")` always return True
-        (by materializing missing keys). That pattern is common in both library
-        code and LLM-generated code, so we make missing attributes raise
-        AttributeError as normal Python objects do.
-        """
-        if key in self:
-            return self.__getitem__(key)
-        raise AttributeError(key)
-
-    @staticmethod
-    def _to_native_dict(value: Any) -> Any:
-        """Recursively convert DotMap to native dict.
-
-        Args:
-            value: Value to convert
-
-        Returns:
-            Native Python dict/list/primitive
-        """
-        if isinstance(value, (DotMap, dict)):
-            result = {}
-            for k, v in dict(value).items():
-                result[k] = PlaybookDotMap._to_native_dict(v)
-            return result
-        elif isinstance(value, list):
-            return [PlaybookDotMap._to_native_dict(item) for item in value]
-        else:
-            return value
 
 
 class Artifact:
@@ -177,11 +89,11 @@ class VariablesTracker:
     """Static utility methods for computing variable diffs and publishing events."""
 
     @staticmethod
-    def snapshot(variables: DotMap) -> Dict[str, Any]:
+    def snapshot(variables: Box) -> Dict[str, Any]:
         """Create a snapshot of variables for diff computation.
 
         Args:
-            variables: DotMap to snapshot
+            variables: Box to snapshot
 
         Returns:
             Dictionary copy of variables
@@ -190,12 +102,12 @@ class VariablesTracker:
 
     @staticmethod
     def compute_diff(
-        current: DotMap, previous: Optional[Dict[str, Any]]
+        current: Box, previous: Optional[Dict[str, Any]]
     ) -> Dict[str, Any]:
         """Compute diff between current and previous state.
 
         Args:
-            current: Current variables DotMap
+            current: Current variables Box
             previous: Previous snapshot (or None for full state)
 
         Returns:
@@ -239,7 +151,7 @@ class VariablesTracker:
     def publish_changes(
         event_bus: EventBus,
         agent_id: str,
-        current: DotMap,
+        current: Box,
         previous: Optional[Dict[str, Any]],
     ) -> None:
         """Publish VariableUpdateEvent for all changes.
@@ -275,11 +187,11 @@ class VariablesTracker:
             event_bus.publish(event)
 
     @staticmethod
-    def to_dict(variables: DotMap, include_private: bool = False) -> Dict[str, Any]:
+    def to_dict(variables: Box, include_private: bool = False) -> Dict[str, Any]:
         """Convert variables to dictionary for state output.
 
         Args:
-            variables: DotMap to convert
+            variables: Box to convert
             include_private: Include private variables starting with _
 
         Returns:
@@ -299,11 +211,11 @@ class VariablesTracker:
         return result
 
     @staticmethod
-    def public_variables(variables: DotMap) -> Dict[str, Any]:
+    def public_variables(variables: Box) -> Dict[str, Any]:
         """Get public variables only.
 
         Args:
-            variables: DotMap to filter
+            variables: Box to filter
 
         Returns:
             Dictionary of public variables (excludes None values and private vars)
@@ -320,7 +232,3 @@ class VariablesTracker:
         if isinstance(value, Artifact):
             return f"Artifact: {value.summary}"
         return value
-
-
-# Backwards compatibility alias - use PlaybookDotMap instead of DotMap
-Variables = PlaybookDotMap
