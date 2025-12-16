@@ -9,6 +9,8 @@ import textwrap
 from abc import ABC
 from typing import Dict, Iterator, List
 
+from playbooks.llm.messages.timestamp import get_timestamp
+
 
 class SessionLogItem(ABC):
     """Base class for all session log items."""
@@ -114,7 +116,7 @@ class SessionLog:
             if not item.strip():
                 return
             item = SessionLogItemMessage(item)
-        self.log.append({"item": item})
+        self.log.append({"item": item, "timestamp": get_timestamp()})
 
     def __str__(self) -> str:
         """Return formatted log as string."""

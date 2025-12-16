@@ -5,6 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Dict, List, Optional
 
+from box import Box
+
 from playbooks.agents.base_agent import BaseAgent
 from playbooks.core.message import Message
 
@@ -43,6 +45,14 @@ class Meeting:
         default_factory=list
     )  # All messages in this meeting
     agent_last_message_index: Dict[str, int] = field(default_factory=dict)
+
+    shared_state: Box = field(default_factory=Box)
+
+    def __repr__(self) -> str:
+        """Return a string representation of the meeting."""
+        attendee_strs = [f"{a.klass}(agent {a.id})" for a in self.joined_attendees]
+        topic_str = f'"{self.topic}"' if self.topic else "None"
+        return f'Meeting<id="{self.id}", topic={topic_str}, owner="agent {self.owner_id}", attendees={attendee_strs}>'
 
     def agent_joined(self, agent: BaseAgent) -> None:
         """Add a participant to the meeting."""
@@ -213,3 +223,9 @@ class JoinedMeeting:
     owner_id: str
     joined_at: datetime
     topic: Optional[str] = None
+    shared_state: Box = field(default_factory=Box)
+
+    def __repr__(self) -> str:
+        """Return a string representation of the joined meeting."""
+        topic_str = f'"{self.topic}"' if self.topic else "None"
+        return f'JoinedMeeting<id="{self.id}", topic={topic_str}, owner="agent {self.owner_id}">'

@@ -7,7 +7,12 @@ inherit from, along with the BaseAgentMeta metaclass for agent configuration.
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from playbooks.core.events import AgentPausedEvent, AgentResumedEvent
+from playbooks.core.events import (
+    AgentPausedEvent,
+    AgentResumedEvent,
+    MethodCallEndedEvent,
+    MethodCallStartedEvent,
+)
 from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.core.message import MessageType
 from playbooks.infrastructure.logging.debug_logger import debug
@@ -103,15 +108,56 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         Returns:
             The message content (for compatibility with existing code)
         """
-        # Note: Tracing is handled by the Say() playbook wrapper, not here
-        # to avoid double-tracing (playbook span + method span)
-        resolved_target = self.resolve_target(target, allow_fallback=True)
+        # Publish method call start event for telemetry
+        self.event_bus.publish(
+            MethodCallStartedEvent(
+                session_id=self.program.event_bus.session_id if self.program else "",
+                agent_id=self.id,
+                method_name="Say",
+                args=[
+                    target,
+                    message[:100] + "..." if len(message) > 100 else message,
+                ],  # Truncate long messages
+                kwargs={},
+            )
+        )
 
-        # Route to appropriate handler based on target type
-        if resolved_target.startswith("meeting "):
-            return await self._say_to_meeting(resolved_target, message)
-        else:
-            return await self._say_direct(resolved_target, message)
+        try:
+            resolved_target = self.resolve_target(target, allow_fallback=True)
+
+            # Route to appropriate handler based on target type
+            if resolved_target.startswith("meeting "):
+                result = await self._say_to_meeting(resolved_target, message)
+            else:
+                result = await self._say_direct(resolved_target, message)
+
+            # Publish method call end event
+            self.event_bus.publish(
+                MethodCallEndedEvent(
+                    session_id=(
+                        self.program.event_bus.session_id if self.program else ""
+                    ),
+                    agent_id=self.id,
+                    method_name="Say",
+                    result=result,
+                )
+            )
+
+            return result
+
+        except Exception as e:
+            # Publish method call end event with error
+            self.event_bus.publish(
+                MethodCallEndedEvent(
+                    session_id=(
+                        self.program.event_bus.session_id if self.program else ""
+                    ),
+                    agent_id=self.id,
+                    method_name="Say",
+                    error=str(e),
+                )
+            )
+            raise
 
     async def _say_to_meeting(self, meeting_spec: str, message: str) -> str:
         """Send message to a meeting.

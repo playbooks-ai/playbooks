@@ -6,6 +6,8 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
 from playbooks.agents.human_agent import HumanAgent
+from playbooks.agents.local_ai_agent import LocalAIAgent
+from playbooks.config import config
 from playbooks.core.exceptions import KlassNotFoundError
 from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.core.message import Message, MessageType
@@ -26,6 +28,176 @@ if TYPE_CHECKING:
     from playbooks.program import Program
 
 logger = logging.getLogger(__name__)
+
+
+class RollingMessageCollector:
+    """Collects messages with a rolling timeout to minimize thrashing.
+
+    When a message is received, starts a timeout. If another message arrives
+    before timeout, collects it and resets the timer. When timeout expires
+    without new messages, delivers all collected messages.
+
+    Implements absolute maximum wait time to prevent starvation: if messages
+    keep arriving continuously, the oldest message will still be delivered
+    within max_batch_wait seconds.
+    """
+
+    def __init__(self, timeout_seconds: float = 2.0, max_batch_wait: float = 10.0):
+        """Initialize the collector.
+
+        Args:
+            timeout_seconds: Rolling timeout duration in seconds (default 2.0)
+            max_batch_wait: Absolute maximum wait for oldest message (default 10.0)
+        """
+        self.timeout_seconds = timeout_seconds
+        self.max_batch_wait = max_batch_wait
+        self.buffer: List[Message] = []
+        self.timer_task: Optional[asyncio.Task] = None
+        self.delivery_callback = None
+        self._lock = asyncio.Lock()
+        self.first_message_time: Optional[float] = None
+        self._timer_seq = (
+            0  # Monotonically increasing sequence to invalidate old timers
+        )
+
+    async def add_message(self, message: Message) -> None:
+        """Add a message to the buffer and reset the rolling timeout.
+
+        Args:
+            message: Message to add to the buffer
+        """
+        async with self._lock:
+            # Track when first message arrived for absolute max wait enforcement
+            if not self.buffer:
+                self.first_message_time = asyncio.get_event_loop().time()
+
+            # Add message to buffer
+            self.buffer.append(message)
+
+            # Check if we've exceeded absolute maximum wait time
+            if self.first_message_time:
+                elapsed = asyncio.get_event_loop().time() - self.first_message_time
+                if elapsed >= self.max_batch_wait:
+                    # Force immediate delivery
+                    if len(self.buffer) > 0:
+                        await self._deliver_now()
+                    return
+
+            # Decide whether to reset the timer based on elapsed time
+            # Don't reset timer if we're past half the max_batch_wait to ensure delivery
+            should_reset_timer = True
+            if self.first_message_time:
+                elapsed = asyncio.get_event_loop().time() - self.first_message_time
+                # If we've waited more than half of max_batch_wait, don't reset timer
+                # This ensures messages don't wait indefinitely due to rolling resets
+                if elapsed >= (self.max_batch_wait / 2):
+                    should_reset_timer = False
+
+            # Cancel existing timer if any (unless we're close to max wait)
+            if should_reset_timer:
+                if self.timer_task and not self.timer_task.done():
+                    # Just cancel, don't await - the task will clean up asynchronously
+                    # Awaiting would cause deadlock since timer tries to acquire this same lock
+                    self.timer_task.cancel()
+                # Always start a new timer on reset (don't rely on .done() immediately after cancel)
+                self._timer_seq += 1
+                self.timer_task = asyncio.create_task(
+                    self._timer_expired(self._timer_seq)
+                )
+            else:
+                # Ensure there is a timer running (but don't reset it)
+                if not self.timer_task or self.timer_task.done():
+                    self._timer_seq += 1
+                    self.timer_task = asyncio.create_task(
+                        self._timer_expired(self._timer_seq)
+                    )
+
+        # Yield control OUTSIDE the lock to ensure timer task can be scheduled
+        await asyncio.sleep(0)
+
+    async def flush(self) -> None:
+        """Immediately deliver all buffered messages, canceling any pending timer.
+
+        Called before prompt construction to ensure all agent communications
+        are included in the LLM context.
+        """
+        async with self._lock:
+            if len(self.buffer) > 0:
+                # Cancel pending timer
+                if self.timer_task and not self.timer_task.done():
+                    # Just cancel, don't await - would cause deadlock
+                    self.timer_task.cancel()
+                    self._timer_seq += 1
+
+                # Deliver immediately
+                await self._deliver_now()
+            else:
+                debug("RollingMessageCollector: flush() called but buffer is empty")
+
+    async def _timer_expired(self, timer_seq: int) -> None:
+        """Called when the rolling timeout expires without new messages."""
+        try:
+            await asyncio.sleep(self.timeout_seconds)
+
+            # Acquire lock to safely extract and clear buffer
+            async with self._lock:
+                if timer_seq != self._timer_seq:
+                    return
+                if not self.buffer:
+                    return
+
+                await self._deliver_now()
+        except asyncio.CancelledError:
+            pass  # Timer was cancelled, waiting for more messages
+
+    async def _deliver_now(self) -> None:
+        """Deliver buffered messages immediately.
+
+        Must be called while holding self._lock or from within a locked context.
+        """
+        # Invalidate any existing timer (whether cancelled or racing to expire).
+        if self.timer_task and not self.timer_task.done():
+            self.timer_task.cancel()
+        self._timer_seq += 1
+        self.timer_task = None
+
+        if self.buffer and self.delivery_callback:
+            message_count = len(self.buffer)
+            messages = self.buffer.copy()
+            wait_time = None
+            if self.first_message_time:
+                wait_time = asyncio.get_event_loop().time() - self.first_message_time
+            self.buffer.clear()
+            self.first_message_time = None
+
+            if wait_time:
+                debug(
+                    f"RollingMessageCollector: _deliver_now() delivering {message_count} messages after {wait_time:.2f}s wait"
+                )
+            else:
+                debug(
+                    f"RollingMessageCollector: _deliver_now() delivering {message_count} messages"
+                )
+
+            # Deliver messages outside the lock to avoid deadlock
+            delivery_task = asyncio.create_task(self.delivery_callback(messages))
+            debug(
+                f"RollingMessageCollector: _deliver_now() created delivery task (id={id(delivery_task)})"
+            )
+        elif not self.buffer:
+            debug("RollingMessageCollector: _deliver_now() called but buffer is empty")
+        elif not self.delivery_callback:
+            debug(
+                "RollingMessageCollector: _deliver_now() called but no delivery callback set!"
+            )
+
+    def set_delivery_callback(self, callback) -> None:
+        """Set the callback to call when messages should be delivered.
+
+        Args:
+            callback: Async function that takes a list of messages
+        """
+        self.delivery_callback = callback
 
 
 class PlaybookExecutor(Protocol):
@@ -76,6 +248,13 @@ class MeetingManager:
         self.meeting_message_handler = MeetingMessageHandler(
             self.agent_id, self.agent_klass
         )
+
+        # Initialize rolling message collector with config timeouts
+        self.message_collector = RollingMessageCollector(
+            timeout_seconds=config.meeting_message_batch_timeout,
+            max_batch_wait=config.meeting_message_batch_max_wait,
+        )
+        self.message_collector.set_delivery_callback(self._deliver_collected_messages)
 
     def ensure_meeting_playbook_kwargs(self, playbooks: Dict[str, Any]) -> None:
         """Ensure that all meeting playbooks have the required kwargs.
@@ -171,6 +350,9 @@ class MeetingManager:
             topic=kwargs.get("topic", f"{playbook.name} meeting"),
         )
 
+        debug(
+            f"DEBUG create_meeting: Created meeting with id={meeting_id}, shared_state id={id(meeting.shared_state)}"
+        )
         self.agent.owned_meetings[meeting_id] = meeting
         # Note: Meeting class requires BaseAgent object - playbook_executor is the agent
         meeting.agent_joined(self.playbook_executor)
@@ -308,9 +490,8 @@ class MeetingManager:
         """
         # Check if the target agent is already a participant
         if meeting.is_participant(target_agent.id):
-            response = f"Agent {target_agent.id} is already a participant of meeting {meeting.id}"
+            pass
         elif isinstance(target_agent, HumanAgent):
-            response = f"User joined meeting {meeting.id}"
             meeting.agent_joined(target_agent)
         else:
             meeting.invitations[target_agent.id] = MeetingInvitation(
@@ -318,14 +499,34 @@ class MeetingManager:
                 created_at=datetime.now(),
                 status=MeetingInvitationStatus.PENDING,
             )
-            response = f"Inviting {str(target_agent)} to meeting {meeting.id}: {meeting.topic or 'Meeting'}"
+
+            # For LocalAIAgents, store meeting reference for direct shared_state access
+            debug(
+                f"DEBUG _invite: target_agent={target_agent}, id={target_agent.id}, type={type(target_agent)}, is LocalAIAgent={isinstance(target_agent, LocalAIAgent)}"
+            )
+
+            if isinstance(target_agent, LocalAIAgent):
+                if not hasattr(target_agent, "_pending_meeting_invitations"):
+                    target_agent._pending_meeting_invitations = {}
+                    debug(
+                        f"DEBUG _invite: Created _pending_meeting_invitations for agent {target_agent.id}"
+                    )
+                target_agent._pending_meeting_invitations[meeting.id] = meeting
+                debug(
+                    f"DEBUG _invite: Stored meeting {meeting.id} for agent {target_agent.id}, dict now has keys: {list(target_agent._pending_meeting_invitations.keys())}"
+                )
+                debug(
+                    f"DEBUG _invite: shared_state id for meeting {meeting.id}: {id(meeting.shared_state)}"
+                )
+            else:
+                debug(
+                    f"DEBUG _invite: target_agent {target_agent.id} is NOT a LocalAIAgent!"
+                )
+
             await self._send_invitation(meeting, target_agent)
 
-        self.agent.session_log.append(response)
-        meeting_msg = MeetingLLMMessage(response, meeting_id=meeting.id)
-        self.agent.call_stack.add_llm_message(meeting_msg)
-
-        return response
+        # Response is not currently surfaced; callers use a summary message.
+        return f"Invited attendees to meeting {meeting.id}"
 
     async def _send_invitation(
         self, meeting: Meeting, target_agent: "BaseAgent"
@@ -503,6 +704,7 @@ class MeetingManager:
 
         This is the single entry point for all incoming messages.
         Handles meeting invitations and responses immediately.
+        Meeting broadcasts are batched with a rolling timeout to minimize thrashing.
 
         Args:
             message: Message to add to buffer
@@ -510,11 +712,19 @@ class MeetingManager:
         Returns:
             True if message was handled, False otherwise
         """
+        debug(
+            f"Agent {self.agent_id}: _add_message_to_buffer: type={message.message_type}, from={message.sender_id}, preview={message.content[:60]}..."
+        )
+
         if message.message_type == MessageType.MEETING_INVITATION:
             # Process meeting invitation immediately
+            debug(f"Agent {self.agent_id}: Processing MEETING_INVITATION immediately")
             return await self._handle_meeting_invitation_immediately(message)
         elif message.message_type == MessageType.MEETING_INVITATION_RESPONSE:
             # Process meeting response immediately and signal event
+            debug(
+                f"Agent {self.agent_id}: Processing MEETING_INVITATION_RESPONSE immediately"
+            )
             await self._handle_meeting_response_immediately(message)
 
             # Signal the meeting's invitation event to wake up _wait_for_required_attendees
@@ -540,15 +750,64 @@ class MeetingManager:
                 message.content.startswith("Meeting ")
                 and " started with " in message.content
             ):
+                debug(f"Agent {self.agent_id}: Processing meeting kickoff banner")
                 self.agent.session_log.append(message.content)
                 meeting_id = message.meeting_id.id if message.meeting_id else None
                 meeting_msg = MeetingLLMMessage(message.content, meeting_id=meeting_id)
                 self.agent.call_stack.add_llm_message(meeting_msg)
                 return True
+
+            # Batch other meeting broadcasts with rolling timeout to minimize thrashing
+            debug(
+                f"Agent {self.agent_id}: Adding meeting broadcast to collector (will wait up to {self.message_collector.timeout_seconds}s)"
+            )
+            await self.message_collector.add_message(message)
+            return True
         return False
+
+    async def _deliver_collected_messages(self, messages: List[Message]) -> None:
+        """Deliver batched messages to the agent's message queue.
+
+        This is called by RollingMessageCollector when the timeout expires.
+
+        Args:
+            messages: List of messages to deliver
+        """
+        debug(
+            f"Agent {self.agent_id}: _deliver_collected_messages: Delivering {len(messages)} batched messages to queue"
+        )
+        # Add all messages to the agent's message queue
+        for i, message in enumerate(messages):
+            debug(
+                f"Agent {self.agent_id}: Queuing message {i+1}/{len(messages)} from {message.sender_id}: {message.content[:60]}..."
+            )
+            await self.agent._message_queue.put(message)
+        debug(
+            f"Agent {self.agent_id}: All {len(messages)} messages queued successfully"
+        )
+
+    async def flush_pending_messages(self, meeting_id: Optional[str] = None) -> None:
+        """Force immediate delivery of buffered messages from RollingMessageCollector.
+
+        Called before prompt construction to ensure all agent communications
+        are included in the LLM context.
+
+        Args:
+            meeting_id: Optional meeting ID (currently unused, reserved for future filtering)
+        """
+        if self.message_collector:
+            buffer_size = len(self.message_collector.buffer)
+            if buffer_size > 0:
+                debug(
+                    f"Agent {self.agent_id}: flush_pending_messages: Flushing {buffer_size} buffered messages"
+                )
+            await self.message_collector.flush()
 
     async def _handle_meeting_invitation_immediately(self, message) -> None:
         """Handle meeting invitation immediately without buffering."""
+        debug(
+            f"DEBUG _handle_meeting_invitation_immediately: CALLED for agent {self.agent_id}, message from {message.sender_id}"
+        )
         # Extract meeting information from the message
         meeting_id_obj = getattr(message, "meeting_id", None)
         sender_id = message.sender_id.id
@@ -583,6 +842,9 @@ class MeetingManager:
             meeting_id: ID of the meeting
             topic: Topic/description of the meeting
         """
+        debug(
+            f"DEBUG _process_meeting_invitation: CALLED for agent {self.agent_id}, meeting {meeting_id}"
+        )
         log = f"Received meeting invitation for meeting {meeting_id} from {inviter_id} for '{topic}'"
         self.agent.session_log.append(log)
         meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
@@ -647,21 +909,60 @@ class MeetingManager:
         self, meeting_id: str, inviter_id: str, topic: str, playbook_name: str
     ) -> bool:
         # Accept the invitation and join the meeting
+        debug(
+            f"DEBUG _accept_meeting_invitation: CALLED for agent {self.agent_id}, meeting {meeting_id}"
+        )
         debug(f"Agent {self.agent_id}: Accepting meeting invitation {meeting_id}")
         log = f"Accepting meeting invitation {meeting_id}"
         meeting_id_obj = MeetingID.parse(meeting_id)
+        debug(
+            f"DEBUG _accept: Original meeting_id={meeting_id}, parsed meeting_id={meeting_id_obj.id}"
+        )
         meeting_id = meeting_id_obj.id
         self.agent.session_log.append(log)
         meeting_msg = MeetingLLMMessage(log, meeting_id=meeting_id)
         self.agent.call_stack.add_llm_message(meeting_msg)
 
         # Store meeting info in joined_meetings for future message routing
+        # Get meeting reference if available (LocalAIAgent)
+        shared_state_ref = None
+        debug(
+            f"DEBUG _accept: agent={self.agent_id}, type={type(self.agent)}, has _pending={hasattr(self.agent, '_pending_meeting_invitations')}"
+        )
+
+        if hasattr(self.agent, "_pending_meeting_invitations"):
+            debug(
+                f"DEBUG _accept: _pending keys before pop: {list(self.agent._pending_meeting_invitations.keys())}"
+            )
+            pending_meeting = self.agent._pending_meeting_invitations.pop(
+                meeting_id, None
+            )
+            debug(
+                f"DEBUG _accept: popped meeting for {meeting_id}: {pending_meeting is not None}"
+            )
+            if pending_meeting:
+                shared_state_ref = pending_meeting.shared_state
+                debug(
+                    f"DEBUG _accept: Got shared_state ref: {id(shared_state_ref)}, type={type(shared_state_ref)}, empty={len(shared_state_ref) == 0}"
+                )
+            else:
+                debug(f"DEBUG _accept: No pending_meeting found for {meeting_id}")
+        else:
+            debug(
+                f"DEBUG _accept: Agent {self.agent_id} doesn't have _pending_meeting_invitations attribute"
+            )
+
+        if shared_state_ref is None:
+            raise ValueError(
+                f"Shared state reference not found for meeting {meeting_id}"
+            )
 
         self.agent.joined_meetings[meeting_id] = JoinedMeeting(
             id=meeting_id,
             owner_id=inviter_id,
             topic=topic,
             joined_at=datetime.now(),
+            shared_state=shared_state_ref,
         )
         debug(f"Agent {self.agent_id}: joined_meetings {self.agent.joined_meetings}")
 
@@ -703,13 +1004,16 @@ class MeetingManager:
                 agent_id=self.agent_id,
                 playbook_name=meeting_playbook.name,
             )
-            task = asyncio.create_task(
-                self.playbook_executor.execute_playbook(
+
+            async def execute_with_agent_context():
+                """Execute meeting playbook."""
+                await self.playbook_executor.execute_playbook(
                     meeting_playbook.name,
                     args=[],
                     kwargs={"meeting_id": meeting_id, "topic": topic},
                 )
-            )
+
+            task = asyncio.create_task(execute_with_agent_context())
             task.add_done_callback(
                 lambda t: debug(
                     "Meeting playbook task done",

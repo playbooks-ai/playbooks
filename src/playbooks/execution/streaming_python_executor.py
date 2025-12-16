@@ -5,6 +5,7 @@ allowing statements to execute progressively rather than waiting for complete co
 """
 
 import ast
+import asyncio
 import logging
 import traceback
 import uuid
@@ -17,7 +18,6 @@ from playbooks.execution.python_executor import (
     PythonExecutor,
 )
 from playbooks.infrastructure.logging.debug_logger import debug
-from playbooks.utils.langfuse_client import get_client, observe
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
@@ -148,7 +148,7 @@ class StreamingPythonExecutor:
             current_frame = self.agent.call_stack.peek()
             if current_frame:
                 current_frame.executor = self.base_executor
-            self._executor_set = True
+                self._executor_set = True
 
         try:
             # Parse the code (no preprocessing needed - uses state.x syntax)
@@ -157,6 +157,7 @@ class StreamingPythonExecutor:
             # Execute each statement
             for stmt in parsed.body:
                 await self._execute_statement(stmt)
+                await asyncio.sleep(0)  # Yield to event loop for other events
 
             # Success - remove executed code from buffer and track it
             self.code_buffer.consume_prefix(executable)
@@ -186,7 +187,6 @@ class StreamingPythonExecutor:
                 f"Execution failed: {type(e).__name__}: {e}", e, executed_code
             )
 
-    @observe(capture_input=False, capture_output=False, as_type="span")
     async def _execute_statement(self, stmt: ast.stmt) -> None:
         """Execute a single AST statement with tracing.
 
@@ -237,19 +237,6 @@ class StreamingPythonExecutor:
                     return True
                 cur = cur.value
             return False
-
-        # Some LLM outputs try to treat state fields as lists and call .append().
-        # When the field is actually a DotMap/dict, this can raise AttributeError
-        # and unnecessarily fail the whole run. Prefer to skip these calls.
-        if (
-            isinstance(stmt, ast.Expr)
-            and isinstance(stmt.value, ast.Call)
-            and isinstance(stmt.value.func, ast.Attribute)
-            and stmt.value.func.attr in {"append", "extend", "insert", "pop", "remove"}
-            and _is_rooted_at_state(stmt.value.func.value)
-        ):
-            debug(f"Skipping list-like mutation on state field: {statement_code}")
-            return
 
         protected_self_attrs = {
             # Runtime wiring / infrastructure
@@ -319,16 +306,6 @@ class StreamingPythonExecutor:
                 )
                 return
 
-        # Update current span with statement-specific information
-        langfuse = get_client()
-
-        exec_id = (
-            self.execution_id
-            if self.execution_id is not None
-            else getattr(self.agent, "execution_counter", None)
-        )
-
-        self._update_statement_span(langfuse, stmt, statement_code, exec_id)
         debug(f"Executing: {statement_code}", agent=self.agent)
 
         # Check if this is a function/class definition
@@ -394,35 +371,9 @@ class StreamingPythonExecutor:
                             and key not in ["asyncio", "self"]
                         ):
                             frame_locals[key] = value
-
-                # Mark statement as successful
-                langfuse.update_current_span(output={"success": True})
-        except Exception as e:
-            # Mark statement as failed - @observe will capture the exception
-            langfuse.update_current_span(output={"success": False, "error": str(e)})
+        except Exception:
+            # Mark statement as failed
             raise
-
-    def _update_statement_span(
-        self,
-        langfuse_client: Any,
-        stmt: ast.stmt,
-        statement_code: str,
-        exec_id: Optional[int],
-    ) -> None:
-        """Update the current span with statement metadata for tracing."""
-        display_code = (
-            statement_code
-            if len(statement_code) <= 100
-            else statement_code[:97] + "..."
-        )
-        langfuse_client.update_current_span(
-            name=display_code,
-            input={"code": statement_code},
-            metadata={
-                "statement_type": stmt.__class__.__name__,
-                "execution_id": exec_id,
-            },
-        )
 
     def get_executed_code(self, include_error_line: bool = False) -> str:
         """Get the code that has been successfully executed.

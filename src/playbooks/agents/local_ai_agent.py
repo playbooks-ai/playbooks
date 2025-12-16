@@ -8,10 +8,10 @@ import logging
 from typing import TYPE_CHECKING, Any, Dict, Optional, Type
 
 from playbooks.agents.namespace_manager import AgentNamespaceManager
-from playbooks.infrastructure.event_bus import EventBus
-from playbooks.core.exceptions import AgentConfigurationError
-from playbooks.playbook import LLMPlaybook, PythonPlaybook
 from playbooks.compilation.markdown_to_ast import refresh_markdown_attributes
+from playbooks.core.exceptions import AgentConfigurationError
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.playbook import LLMPlaybook, PythonPlaybook
 
 from .ai_agent import AIAgent
 from .registry import AgentClassRegistry
@@ -156,7 +156,6 @@ class LocalAIAgent(AIAgent):
             program=program,
             **kwargs,
         )
-        # Namespace setup is now handled in AIAgent.__init__
         # Track execution counter for Python code execution
         self.execution_counter = 0
 

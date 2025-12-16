@@ -1,13 +1,11 @@
-"""LLM Context Compaction for managing growing message context in playbooks."""
+"""LLM context compaction for managing conversation history size."""
 
-import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
 from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     LLMMessage,
-    UserInputLLMMessage,
 )
 
 
@@ -16,41 +14,31 @@ class CompactionConfig:
     """Configuration for LLM context compaction.
 
     Attributes:
-        min_preserved_assistant_messages: Always keep last N assistant messages
-        batch_size: Compact in batches of N messages
-        enabled: Master enable/disable flag for compaction
+        enabled: Whether compaction is enabled
+        keep_last_n_assistant_messages: Number of most recent assistant messages to keep in full
     """
 
-    # Core strategy parameters
-    min_preserved_assistant_messages: Optional[int] = None
-    batch_size: Optional[int] = None
+    enabled: bool = True
+    min_preserved_assistant_messages: int = (
+        2  # Alias for keep_last_n_assistant_messages
+    )
 
-    # Feature toggles
-    enabled: Optional[bool] = None
-
-    def __post_init__(self) -> None:
-        """Initialize from environment variables if values not provided."""
-        if self.enabled is None:
-            self.enabled = os.getenv("LLM_COMPACTION_ENABLED", "true").lower() == "true"
-
-        if self.min_preserved_assistant_messages is None:
-            self.min_preserved_assistant_messages = int(
-                os.getenv("LLM_COMPACTION_MIN_PRESERVED_ASSISTANT_MESSAGES", "1")
-            )
-
-        if self.batch_size is None:
-            self.batch_size = int(os.getenv("LLM_COMPACTION_BATCH_SIZE", "3"))
+    @property
+    def keep_last_n_assistant_messages(self) -> int:
+        """Alias for min_preserved_assistant_messages for backward compatibility."""
+        return self.min_preserved_assistant_messages
 
 
 class LLMContextCompactor:
-    """Handles progressive compaction of LLM messages.
+    """Manages compaction of LLM conversation history to reduce token usage.
 
-    Compacts older messages while preserving recent conversation context
-    to manage token limits and improve performance.
+    The compactor preserves the most recent N assistant message cycles in full
+    while compacting older messages to summaries. This maintains context while
+    reducing token consumption for long conversations.
     """
 
-    def __init__(self, config: Optional[CompactionConfig] = None) -> None:
-        """Initialize context compactor.
+    def __init__(self, config: Optional[CompactionConfig] = None):
+        """Initialize the compactor with configuration.
 
         Args:
             config: Compaction configuration, uses defaults if None
@@ -58,13 +46,13 @@ class LLMContextCompactor:
         self.config = config or CompactionConfig()
 
     def compact_messages(self, messages: List[LLMMessage]) -> List[Dict[str, Any]]:
-        """Main entry point for message compaction - returns LLM API format.
+        """Compact a list of LLM messages based on configuration.
 
-        Compacts messages before a safe point (recent assistant responses)
-        while keeping recent conversation intact.
+        Keeps the last N assistant message cycles in full format while compacting
+        older messages to summaries.
 
         Args:
-            messages: List of LLM messages to compact
+            messages: List of LLMMessage objects to potentially compact
 
         Returns:
             List of message dictionaries in LLM API format (with compacted older messages)
@@ -78,7 +66,7 @@ class LLMContextCompactor:
         for i in range(len(messages) - 1, -1, -1):
             if isinstance(messages[i], AssistantResponseLLMMessage):
                 assistant_count += 1
-                if assistant_count >= self.config.min_preserved_assistant_messages:
+                if assistant_count >= self.config.keep_last_n_assistant_messages:
                     safe_assistant_index = i
                     break
 
@@ -86,19 +74,11 @@ class LLMContextCompactor:
         if safe_assistant_index == -1:
             return [msg.to_full_message() for msg in messages]
 
-        # Find user message that resulted in assistant response at safe_assistant_index
-        # This user message is the one that came before the safe assistant message
-        safe_user_index = -1
-        for i in range(safe_assistant_index - 1, -1, -1):
-            if isinstance(messages[i], UserInputLLMMessage):
-                safe_user_index = i
-                break
-
-        # Determine final safe index
-        if safe_user_index == -1:
-            safe_index = safe_assistant_index
-        else:
-            safe_index = safe_user_index
+        # The safe_assistant_index is the first assistant message we want to keep full.
+        # We compact ALL messages before this index (including user messages).
+        # We keep ALL messages at or after this index full.
+        # This ensures only user messages that are part of the last N assistant cycles are kept full.
+        safe_index = safe_assistant_index
 
         # All messages before safe_index are compacted
         # Messages at or after safe_index are kept full

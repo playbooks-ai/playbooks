@@ -50,9 +50,9 @@ def get_messages_token_count(
         # OpenAI's ChatML format adds some overhead per message
         total_tokens += 4  # Approximate overhead per message
 
-        # Add tokens for role
-        role = message.get("role", "")
-        total_tokens += get_token_count(role, model)
+        # Handle name field if present
+        if "name" in message:
+            total_tokens += 1
 
     # Add tokens for conversation structure
     total_tokens += 2  # Approximate overhead for the conversation

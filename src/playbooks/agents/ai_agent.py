@@ -10,7 +10,9 @@ import hashlib
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
+from box import Box
 
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
@@ -20,6 +22,11 @@ from playbooks.config import config
 from playbooks.core.argument_types import LiteralValue, VariableReference
 from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
 from playbooks.core.enums import StartupMode
+from playbooks.core.events import (
+    AgentTerminatedEvent,
+    PlaybookEndEvent,
+    PlaybookStartEvent,
+)
 from playbooks.core.exceptions import ExecutionFinished
 from playbooks.core.identifiers import AgentID
 from playbooks.core.message import MessageType
@@ -32,14 +39,19 @@ from playbooks.llm.messages import (
     FileLoadLLMMessage,
     MeetingLLMMessage,
 )
-from playbooks.llm.messages.types import ArtifactLLMMessage
+from playbooks.llm.messages.types import (
+    AgentInfoLLMMessage,
+    ArtifactLLMMessage,
+    OtherAgentInfoLLMMessage,
+    SystemPromptLLMMessage,
+    TriggerInstructionsLLMMessage,
+)
 from playbooks.meetings import MeetingManager
 from playbooks.meetings.meeting import JoinedMeeting, Meeting
 from playbooks.playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
-from playbooks.state.call_stack import CallStackFrame, InstructionPointer
-from playbooks.state.variables import Artifact, PlaybookDotMap
-from playbooks.utils.langfuse_client import get_client, observe
-from playbooks.utils.langfuse_helper import LangfuseHelper
+from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
+from playbooks.state.session_log import SessionLog
+from playbooks.state.variables import Artifact, VariablesTracker
 from playbooks.utils.misc import copy_func
 from playbooks.utils.text_utils import indent, simple_shorten
 
@@ -154,13 +166,14 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self._setup_isolated_namespace()
 
         # Execution state attributes (flattened from ExecutionState)
-        from playbooks.state.call_stack import CallStack
-        from playbooks.state.session_log import SessionLog
-
         self.event_bus: EventBus = event_bus
         self.session_log: SessionLog = SessionLog(self.klass, self.id)
         self.call_stack: CallStack = CallStack(event_bus, self.id)
-        self.state: PlaybookDotMap = PlaybookDotMap()
+
+        # Initialize system messages in call stack
+        self._initialize_system_messages()
+
+        self.state: Box = Box()
         self.previous_variables: Optional[Dict[str, Any]] = None
         self.agents_list: List[str] = []
         self.last_llm_response: str = ""
@@ -190,6 +203,36 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.bgn_playbook_name = None
         self.create_begin_playbook()
 
+    def _initialize_system_messages(self) -> None:
+        """Initialize system messages that are always present in the call stack."""
+        # Add system prompt
+        system_msg = SystemPromptLLMMessage()
+        self.call_stack.top_level_llm_messages.append(system_msg)
+
+        # Add agent information
+        agent_info_msg = AgentInfoLLMMessage(self.get_compact_information())
+        self.call_stack.top_level_llm_messages.append(agent_info_msg)
+
+        # Add other agents information if available
+        other_agents_info = self.other_agent_klasses_information()
+        if other_agents_info:
+            other_agents_msg = OtherAgentInfoLLMMessage("\n\n".join(other_agents_info))
+            self.call_stack.top_level_llm_messages.append(other_agents_msg)
+
+        # Add trigger instructions
+        trigger_instructions = self.all_trigger_instructions()
+        if trigger_instructions:
+            trigger_instructions_content = [
+                "*Available playbook triggers*",
+                "```md",
+                *trigger_instructions,
+                "```",
+            ]
+            trigger_msg = TriggerInstructionsLLMMessage(
+                "\n".join(trigger_instructions_content)
+            )
+            self.call_stack.top_level_llm_messages.append(trigger_msg)
+
     def deep_copy_playbooks(self, playbooks):
         """Deep copy the playbooks."""
         playbooks_copy = copy.deepcopy(playbooks)
@@ -216,6 +259,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.namespace_manager.namespace["self"] = self
         self.namespace_manager.namespace["agent"] = (
             self  # Allow 'agent' as alias for 'self'
+        )
+        self.namespace_manager.namespace["agents"] = (
+            self.all_agents  # Provide access to agents list
         )
 
         # Set up cross-playbook wrapper functions and bind agent-specific functions
@@ -254,8 +300,6 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         """
         if not self.program or not hasattr(self.program, "agent_klasses"):
             return
-
-        from playbooks.agents import AIAgent
 
         # Add all AIAgent subclasses to namespace (including own class)
         for agent_klass_name, agent_class in self.program.agent_klasses.items():
@@ -379,34 +423,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         self.playbooks.update(new_playbook)
 
     async def begin(self):
-        # Create agent-level span under program trace with OTEL context
-        # Using start_as_current_span ensures @observe decorators nest under this span
-        program_trace = LangfuseHelper.get_program_trace()
-        if program_trace:
-            self._agent_span_ctx = program_trace.start_as_current_observation(
-                name=f"Agent: {str(self)}",
-                as_type="agent",
-                metadata={
-                    "agent_klass": self.klass,
-                    "agent_id": self.id,
-                    "description": self.description[:200] if self.description else None,
-                },
-                input={
-                    "agent_klass": self.klass,
-                    "agent_id": self.id,
-                },
-            )
-            agent_span = self._agent_span_ctx.__enter__()
-
-            LangfuseHelper.set_agent_span(self.id, agent_span)
-
-            # Flush immediately so agent span appears in Langfuse right away
-            LangfuseHelper.flush()
-
         # Pre-load initial artifacts if any
         if hasattr(self, "_initial_artifacts_to_load"):
-            from playbooks.state.variables import Artifact
-
             # Create a temporary frame to hold artifact messages before BGN starts
             # Actually, we need to load them in the BGN frame, so store for _pre_execute
             self._artifacts_to_preload = []
@@ -421,6 +439,16 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         success, result = await self.execute_playbook(
             self.bgn_playbook_name, kwargs=cli_args
         )
+
+        # Publish agent terminated event for telemetry
+        self.event_bus.publish(
+            AgentTerminatedEvent(
+                session_id=self.program.event_bus.session_id if self.program else "",
+                agent_id=self.id,
+                agent_klass=self.klass,
+            )
+        )
+
         return
 
     async def cleanup(self):
@@ -428,15 +456,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         # Only cleanup if execution is truly finished
         if not (self.program and self.program.execution_finished):
             return
-
-        # Exit agent span context (ends the span and removes from OTEL context)
-        if hasattr(self, "_agent_span_ctx") and self._agent_span_ctx:
-            try:
-                self._agent_span_ctx.__exit__(None, None, None)
-            except Exception:
-                pass
-
-        LangfuseHelper.clear_agent_span(self.id)
 
     def parse_instruction_pointer(self, step_id: str) -> InstructionPointer:
         """Parse a step string into an InstructionPointer.
@@ -501,12 +520,26 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
     def all_trigger_instructions(self) -> List[str]:
         """Get all trigger instructions including from other agents.
 
+        Only includes public triggers from other agents since private playbooks
+        cannot be called cross-agent. Deduplicates triggers from multiple instances
+        of the same agent class.
+
         Returns:
             List of all trigger instruction strings
         """
         instructions = self.trigger_instructions(with_namespace=False)
+        seen = set(instructions)
+
         for agent in self.other_agents:
-            instructions.extend(agent.trigger_instructions(with_namespace=True))
+            # Only include public triggers from other agents
+            agent_instructions = agent.trigger_instructions(
+                with_namespace=True, public_only=True
+            )
+            for instr in agent_instructions:
+                if instr not in seen:
+                    instructions.append(instr)
+                    seen.add(instr)
+
         return instructions
 
     @classmethod
@@ -606,8 +639,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         # Meeting targets
         if target == "meeting":
-            if meeting_id := self.get_current_meeting():
-                return f"meeting {meeting_id}"
+            if meeting := self.get_current_meeting():
+                return f"meeting {meeting.id}"
             return None
 
         if target.startswith("meeting "):
@@ -661,8 +694,8 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             Fallback target identifier
         """
         # Current meeting context
-        if meeting_id := self.get_current_meeting():
-            return f"meeting {meeting_id}"
+        if meeting := self.get_current_meeting():
+            return f"meeting {meeting.id}"
 
         # Last 1:1 conversation target
         if self.last_message_target:
@@ -685,7 +718,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         return public_playbooks
 
     def _build_input_log(self, playbook: Playbook, call: PlaybookCall) -> str:
-        """Build the input log string for Langfuse tracing.
+        """Build the input log string for telemetry.
 
         Args:
             playbook: The playbook being executed
@@ -717,7 +750,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         call = PlaybookCall(playbook_name, args, kwargs)
         playbook = self.playbooks.get(playbook_name)
 
-        # Build trace name for the span (will be set via langfuse.update_current_span)
+        # Build proper trace name
         trace_str = str(self) + "." + call.to_log_full()
 
         if playbook:
@@ -729,26 +762,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 trace_str = f"Remote: {trace_str}"
         else:
             trace_str = f"External: {trace_str}"
-
-        # Update the current span name (created by @observe) with our detailed trace string
-
-        langfuse = get_client()
-        langfuse_span = None
-        if langfuse:
-            get_span_fn = getattr(langfuse, "get_current_span", None)
-            if callable(get_span_fn):
-                try:
-                    langfuse_span = get_span_fn()
-                except Exception:
-                    langfuse_span = None
-        langfuse.update_current_span(name=trace_str)
-
-        # Build and set input on the current span
-        if playbook:
-            input_log = self._build_input_log(playbook, call)
-            langfuse.update_current_span(input=input_log)
-        else:
-            langfuse.update_current_span(input=trace_str)
 
         # Add the call to the call stack
         if playbook:
@@ -762,10 +775,10 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         # Check if this is a meeting playbook and get meeting context
         is_meeting = False
         meeting_id = None
-        if playbook and playbook.meeting:
+        meeting = self.get_current_meeting()
+        if meeting:
             is_meeting = True
-            # Try to get meeting ID from kwargs or current context
-            meeting_id = kwargs.get("meeting_id") or self.get_current_meeting()
+            meeting_id = meeting.id
         elif "meeting_id" in kwargs:
             # Even if not a meeting playbook, if meeting_id is in kwargs (e.g., AcceptAndJoinMeeting),
             # mark as meeting context so get_current_meeting_from_call_stack() can find it
@@ -788,7 +801,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             is_meeting=is_meeting,
             meeting_id=meeting_id,
         )
-        call_stack_frame.langfuse_span = langfuse_span
         self.call_stack.push(call_stack_frame)
         self.session_log.append(call)
 
@@ -796,15 +808,13 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         # Pre-load initial artifacts if this is the first playbook execution
         if hasattr(self, "_artifacts_to_preload") and self._artifacts_to_preload:
-            from playbooks.llm.messages import ArtifactLLMMessage
-
             for artifact in self._artifacts_to_preload:
                 artifact_msg = ArtifactLLMMessage(artifact)
                 call_stack_frame.add_llm_message(artifact_msg)
             # Clear so we don't re-add on subsequent playbooks
             self._artifacts_to_preload = []
 
-        return playbook, call, langfuse_span
+        return playbook, call
 
     def _is_external_playbook(self, playbook_name: str, playbook: Any) -> bool:
         """Determine if playbook is external (cross-agent communication).
@@ -815,8 +825,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         - RemotePlaybook (MCP tools)
         - Cross-agent calls (OtherAgent.PlaybookName)
         """
-        from playbooks.playbook import RemotePlaybook
-
         # Say to any target (user, agent, meeting)
         if playbook_name == "Say":
             return True
@@ -904,8 +912,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             agent_name, agent_id_spec = agent_part.split(":", 1)
 
             # Parse agent ID to handle both "agent 1020" and "1020" formats
-            from playbooks.core.identifiers import AgentID
-
             try:
                 agent_id_obj = AgentID.parse(agent_id_spec)
                 normalized_agent_id = agent_id_obj.id  # Just the numeric part
@@ -931,7 +937,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
 
         return (target_agent, actual_playbook_name)
 
-    @observe(capture_input=True, capture_output=True, as_type="tool")
     async def execute_playbook(
         self, playbook_name: str, args: List[Any] = [], kwargs: Dict[str, Any] = {}
     ) -> tuple[bool, Any]:
@@ -946,12 +951,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         if self.program and self.program.execution_finished:
             return (True, EXECUTION_FINISHED)
 
-        pre_execute_result = await self._pre_execute(playbook_name, args, kwargs)
-        if isinstance(pre_execute_result, tuple) and len(pre_execute_result) == 3:
-            playbook, call, langfuse_span = pre_execute_result
-        else:
-            playbook, call = pre_execute_result
-            langfuse_span = None
+        playbook, call = await self._pre_execute(playbook_name, args, kwargs)
 
         # Type-based argument resolution
         # Use call.args and call.kwargs which contain typed arguments from _pre_execute
@@ -1042,13 +1042,13 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     kwargs["topic"] = meeting.topic
         except TimeoutError as e:
             error_msg = f"Meeting initialization failed: {str(e)}"
-            await self._post_execute(call, False, error_msg, langfuse_span)
+            await self._post_execute(call, False, error_msg)
             return (False, error_msg)
         except ValueError as e:
             # Treat meeting attendee rejection (and other meeting init validation errors)
             # as a normal playbook failure rather than crashing streaming execution.
             error_msg = f"Meeting initialization failed: {str(e)}"
-            await self._post_execute(call, False, error_msg, langfuse_span)
+            await self._post_execute(call, False, error_msg)
             return (False, error_msg)
 
         # Execute local playbook in this agent
@@ -1057,10 +1057,53 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 if self.program and self.program.execution_finished:
                     return (False, EXECUTION_FINISHED)
 
+                # Publish playbook start event for telemetry (only for Python playbooks)
+                # LLM/markdown playbooks publish their own events from PlaybookLLMExecution
+                # Built-in playbooks (Say, CreateAgent, etc.) are skipped since they're thin wrappers
+                is_python_playbook = isinstance(playbook, PythonPlaybook)
+                builtin_playbooks = {
+                    "Say",
+                    "CreateAgent",
+                    "LoadArtifact",
+                    "SaveArtifact",
+                    "SendMessage",
+                    "WaitForMessage",
+                    "Loadfile",
+                }
+                is_builtin = playbook.name in builtin_playbooks
+
+                if is_python_playbook and not is_builtin:
+                    self.event_bus.publish(
+                        PlaybookStartEvent(
+                            session_id=(
+                                self.program.event_bus.session_id
+                                if self.program
+                                else ""
+                            ),
+                            agent_id=self.id,
+                            playbook=playbook.name,
+                        )
+                    )
+
                 result = await playbook.execute(*args, **kwargs)
-                success, result = await self._post_execute(
-                    call, True, result, langfuse_span
-                )
+
+                # Publish playbook end event for telemetry (only for Python playbooks, excluding built-ins)
+                if is_python_playbook and not is_builtin:
+                    self.event_bus.publish(
+                        PlaybookEndEvent(
+                            session_id=(
+                                self.program.event_bus.session_id
+                                if self.program
+                                else ""
+                            ),
+                            agent_id=self.id,
+                            playbook=playbook.name,
+                            return_value=result,
+                            call_stack_depth=len(self.call_stack.frames),
+                        )
+                    )
+
+                success, result = await self._post_execute(call, True, result)
                 # End-of-meeting signal: when the meeting owner finishes the meeting playbook,
                 # notify participants so any waiting Yld("meeting ...") can unblock and exit.
                 if getattr(playbook, "meeting", False):
@@ -1084,11 +1127,11 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 self.state._busy = False
                 await self.program.set_execution_finished(reason="normal", exit_code=0)
                 message = str(e)
-                await self._post_execute(call, False, message, langfuse_span)
+                await self._post_execute(call, False, message)
                 return (False, message)
             except Exception as e:
                 message = f"Error: {str(e)}"
-                await self._post_execute(call, False, message, langfuse_span)
+                await self._post_execute(call, False, message)
                 raise
         else:
             # Handle cross-agent playbook calls (AgentName.PlaybookName or AgentName:AgentId.PlaybookName format)
@@ -1105,7 +1148,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                 success, result = await target_agent.execute_playbook(
                     actual_playbook_name, args, kwargs
                 )
-                await self._post_execute(call, success, result, langfuse_span)
+                await self._post_execute(call, success, result)
                 return (success, result)
 
             # Try to execute playbook in other agents (fallback)
@@ -1117,12 +1160,12 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
                     success, result = await agent.execute_playbook(
                         playbook_name, args, kwargs
                     )
-                    await self._post_execute(call, success, result, langfuse_span)
+                    await self._post_execute(call, success, result)
                     return (success, result)
 
             # Playbook not found
             error_msg = f"Playbook '{playbook_name}' not found in agent '{self.klass}' or any registered agents"
-            await self._post_execute(call, False, error_msg, langfuse_span)
+            await self._post_execute(call, False, error_msg)
             return (False, error_msg)
 
     async def _post_execute(
@@ -1130,11 +1173,10 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         call: PlaybookCall,
         success: bool,
         result: Any,
-        langfuse_span: Optional[Any] = None,
     ) -> tuple[bool, Any]:
         """Handle post-execution tasks: artifact creation, call stack management, and session logging."""
 
-        # Note: __ (double underscore) cannot use attribute access in DotMap
+        # Note: __ (double underscore) cannot use attribute access in Box
         # due to Python's dunder name handling, so we use bracket notation
         if "__" in self.state:
             execution_summary = self.state["__"]
@@ -1220,28 +1262,15 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             self.call_stack.add_llm_message(artifact_msg)
 
         if call.playbook_klass not in ["WaitForMessage"]:
-            result_msg = ExecutionResultLLMMessage(
-                call_result.to_log_full(),
-                playbook_name=call.playbook_klass,
-                success=success,
-            )
-            self.call_stack.add_llm_message(result_msg)
-
-        # Update the current span (created by @observe) with output
-        # The @observe decorator will automatically end the span and capture this return value
-
-        span_target = artifact_obj.value if artifact_result else result
-
-        if langfuse_span and hasattr(langfuse_span, "update"):
-            try:
-                langfuse_span.update(output=span_target)
-            except Exception:
-                # Fall back to client if span update fails
-                langfuse = get_client()
-                langfuse.update_current_span(output=span_target)
-        else:
-            langfuse = get_client()
-            langfuse.update_current_span(output=span_target)
+            content = call_result.to_log_full()
+            # Only add message if content is not empty (Say/SaveArtifact return empty string)
+            if content:
+                result_msg = ExecutionResultLLMMessage(
+                    content,
+                    playbook_name=call.playbook_klass,
+                    success=success,
+                )
+                self.call_stack.add_llm_message(result_msg)
 
         return success, (artifact_obj if artifact_result else result)
 
@@ -1314,7 +1343,7 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             self.state._busy = False
 
             # Wait for messages
-            _, messages = await self.execute_playbook("WaitForMessage", ["*"])
+            messages = await self.WaitForMessage("*")
 
             if not messages:
                 continue
@@ -1444,27 +1473,54 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         """Setter for agents_list."""
         self.agents_list = value
 
-    def get_current_meeting(self) -> Optional[str]:
-        """Get meeting ID from top meeting playbook in call stack.
+    def get_current_meeting(self) -> Optional[Union[Meeting, JoinedMeeting]]:
+        """Get the current meeting object from top meeting playbook in call stack.
 
         Returns:
-            Meeting ID if currently in a meeting, None otherwise
+            Meeting or JoinedMeeting object if currently in a meeting, None otherwise
         """
         for frame in reversed(self.call_stack.frames):
             if frame.is_meeting and frame.meeting_id:
-                return frame.meeting_id
+                meeting_id = frame.meeting_id
+                # Check owned meetings first
+                if meeting_id in self.owned_meetings:
+                    return self.owned_meetings[meeting_id]
+                # Check joined meetings
+                if meeting_id in self.joined_meetings:
+                    return self.joined_meetings[meeting_id]
+
+                raise RuntimeError(
+                    f"Meeting {meeting_id} is not an owned or joined meeting in agent {self.id}"
+                )
         return None
+
+    @property
+    def current_meeting(self) -> Optional[Union[Meeting, JoinedMeeting]]:
+        """Get the current meeting object (Meeting or JoinedMeeting).
+
+        Returns:
+            Meeting or JoinedMeeting object if currently in a meeting, None otherwise
+        """
+        return self.get_current_meeting()
+
+    @property
+    def active_meetings(self) -> List[Union[Meeting, JoinedMeeting]]:
+        """Get all active meetings (owned and joined).
+
+        Returns:
+            List of all Meeting and JoinedMeeting objects this agent is part of
+        """
+        meetings = []
+        meetings.extend(self.owned_meetings.values())
+        meetings.extend(self.joined_meetings.values())
+        return meetings
 
     def snapshot_variables(self) -> None:
         """Snapshot current variables for diff computation."""
-        from playbooks.state.variables import VariablesTracker
-
         self.previous_variables = VariablesTracker.snapshot(self.state)
 
     def publish_variable_changes(self) -> None:
         """Publish events for any variable changes since last snapshot."""
-        from playbooks.state.variables import VariablesTracker
-
         VariablesTracker.publish_changes(
             self.event_bus, self.id, self.state, self.previous_variables
         )
@@ -1475,8 +1531,6 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         Returns:
             Dictionary containing call stack, variables, agents, and meetings
         """
-        from playbooks.state.variables import VariablesTracker
-
         # Owned meetings
         owned_meetings_list = []
         joined_meetings_list = []

@@ -87,6 +87,15 @@ class PlaybooksConfig(BaseModel):
         500, gt=0
     )  # Min chars to auto-create artifact
     max_llm_calls: int = Field(100)
+    meeting_message_batch_timeout: float = Field(
+        2.0, gt=0
+    )  # Rolling timeout for batching meeting messages (seconds)
+    meeting_message_batch_max_wait: float = Field(
+        10.0, gt=0
+    )  # Absolute maximum wait time for oldest message in batch (seconds)
+    timestamp_granularity: int = Field(
+        0, ge=-3, le=6
+    )  # Timestamp granularity: 0=seconds, 3=milliseconds, -1=10s, etc.
     model: ModelsConfig = ModelsConfig()
     llm_cache: LLMCacheConfig = LLMCacheConfig()
     langfuse: LangfuseConfig = LangfuseConfig()

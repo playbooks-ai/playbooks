@@ -410,13 +410,3 @@ await self.Step("Main:04:QUE")
 self.state.__ = "Main() asked user for gross income, but no agent type for accountant found"
 await self.Return({"error": "No agent type for accountant found"})
 ```
-====SYSTEM_PROMPT_DELIMITER====
-{{AGENT_INSTRUCTIONS}}
-
-{{INSTRUCTION}}
-
-*Python Code Context*
-{{CONTEXT_PREFIX}}
-
-Carefully analyze session activity log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly. You must act like an intelligent, conscientious and responsible expert. Keep your thinking concise and don't repeat yourself.
-**Follow the contract exactly; deviations break execution.**

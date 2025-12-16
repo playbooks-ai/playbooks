@@ -20,7 +20,6 @@ from playbooks.execution.call import PlaybookCall
 from playbooks.execution.step import PlaybookStep
 from playbooks.state.call_stack import InstructionPointer
 from playbooks.state.variables import Artifact
-from playbooks.utils.langfuse_client import get_client
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
@@ -134,6 +133,7 @@ class PythonExecutor:
 
         # Add Box for meeting shared state and general use
         namespace["Box"] = Box
+
         # Add agent's namespace items (imports, playbook wrappers, etc.)
         if hasattr(self.agent, "namespace_manager") and hasattr(
             self.agent.namespace_manager, "namespace"
@@ -149,6 +149,12 @@ class PythonExecutor:
                 except TypeError:
                     # Skip if namespace is not iterable (e.g., Mock in tests)
                     pass
+
+        # Add meeting object if agent is in a meeting context
+        # Use the most proximal meeting (closest to top of call stack)
+        meeting = self.agent.get_current_meeting()
+
+        namespace["meeting"] = meeting
 
         return namespace
 
@@ -230,11 +236,12 @@ class PythonExecutor:
             exec(compiled_code, temp_namespace)
             method = temp_namespace["__exec_method__"]
 
-            # Merge namespace with frame locals and self reference
+            # Merge namespace with frame locals and self/agent reference
             execution_namespace = namespace.copy()
             if current_frame:
                 execution_namespace.update(current_frame.locals)
             execution_namespace["self"] = self.agent
+            execution_namespace["agent"] = self.agent  # Allow 'agent' as alias
 
             # Create bound method with merged namespace
             bound_method = types.MethodType(
@@ -310,13 +317,6 @@ class PythonExecutor:
 
         if not step_code:
             step_code = location
-
-        try:
-            langfuse = get_client()
-            if langfuse and hasattr(langfuse, "update_current_span"):
-                langfuse.update_current_span(name=step_code)
-        except Exception as exc:
-            logger.debug("Failed to update Langfuse span with step code: %s", exc)
 
         # Check if this is a thinking step
         is_thinking = step_type == "TNK"

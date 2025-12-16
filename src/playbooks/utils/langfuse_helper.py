@@ -123,6 +123,17 @@ class PlaybooksLangfuseSpan:
         """
         return self
 
+    def trace(self, **kwargs: Any) -> "PlaybooksLangfuseSpan":
+        """Create a trace (no-op).
+
+        Args:
+            **kwargs: Trace configuration (ignored)
+
+        Returns:
+            No-op span instance
+        """
+        return PlaybooksLangfuseSpan()
+
 
 class PlaybooksLangfuseNoOpContextManager:
     """No-op context manager for langfuse observations."""
@@ -227,8 +238,7 @@ class LangfuseHelper:
     """
 
     langfuse: Langfuse | PlaybooksLangfuseInstance | None = None
-    _program_trace: Optional[Any] = None  # StatefulTraceClient
-    _agent_spans: dict[str, Any] = {}  # agent_id -> span
+    _session_id: Optional[str] = None  # Session ID for agent traces
 
     @classmethod
     def instance(cls) -> Langfuse | PlaybooksLangfuseInstance:
@@ -271,50 +281,19 @@ class LangfuseHelper:
             cls.langfuse.flush()
 
     @classmethod
-    def set_program_trace(cls, trace: Optional[Any]) -> None:
-        """Set the program-level trace.
+    def set_session_id(cls, session_id: str) -> None:
+        """Set the session ID for agent traces.
 
         Args:
-            trace: The trace client for the current program execution
+            session_id: The session ID for this program execution
         """
-        cls._program_trace = trace
+        cls._session_id = session_id
 
     @classmethod
-    def get_program_trace(cls) -> Optional[Any]:
-        """Get the program-level trace.
+    def get_session_id(cls) -> Optional[str]:
+        """Get the session ID for agent traces.
 
         Returns:
-            The current program trace or None
+            The current session ID or None
         """
-        return cls._program_trace
-
-    @classmethod
-    def set_agent_span(cls, agent_id: str, span: Any) -> None:
-        """Set the span for a specific agent.
-
-        Args:
-            agent_id: The agent ID
-            span: The span for this agent
-        """
-        cls._agent_spans[agent_id] = span
-
-    @classmethod
-    def get_agent_span(cls, agent_id: str) -> Optional[Any]:
-        """Get the span for a specific agent.
-
-        Args:
-            agent_id: The agent ID
-
-        Returns:
-            The agent's span or None
-        """
-        return cls._agent_spans.get(agent_id)
-
-    @classmethod
-    def clear_agent_span(cls, agent_id: str) -> None:
-        """Clear the span for a specific agent.
-
-        Args:
-            agent_id: The agent ID
-        """
-        cls._agent_spans.pop(agent_id, None)
+        return cls._session_id

@@ -7,6 +7,7 @@ from typing import List, Optional
 
 from playbooks.agents.async_queue import AsyncMessageQueue
 from playbooks.core.constants import EOM, EXECUTION_FINISHED
+from playbooks.core.events import MessageReceivedEvent, WaitForMessageEvent
 from playbooks.core.exceptions import ExecutionFinished
 from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.core.message import Message, MessageType
@@ -39,6 +40,26 @@ class MessagingMixin:
         debug(f"{str(self)}: Adding message to queue: {message}")
         await self._message_queue.put(message)
 
+        # Publish message received event for telemetry
+        if hasattr(self, "event_bus") and hasattr(self, "program"):
+            self.event_bus.publish(
+                MessageReceivedEvent(
+                    session_id=(
+                        self.program.event_bus.session_id if self.program else ""
+                    ),
+                    agent_id=self.id,
+                    message_id=message.id,
+                    recipient_id=self.id,
+                    recipient_klass=self.klass,
+                    sender_id=(
+                        message.sender_id.id
+                        if hasattr(message.sender_id, "id")
+                        else str(message.sender_id)
+                    ),
+                    sender_klass=message.sender_klass,
+                )
+            )
+
     async def WaitForMessage(
         self, wait_for_message_from: str, *, timeout: Optional[float] = None
     ) -> List[Message]:
@@ -52,7 +73,9 @@ class MessagingMixin:
         Returns:
             List of Message objects
         """
-        debug(f"{str(self)}: Waiting for message from {wait_for_message_from}")
+        debug(
+            f"{str(self)}: WaitForMessage STARTING - waiting for message from {wait_for_message_from}"
+        )
 
         if self.program.execution_finished:
             raise ExecutionFinished(EXECUTION_FINISHED)
@@ -66,6 +89,10 @@ class MessagingMixin:
                 # For direct messages (human/agent), release immediately
                 timeout = 5.0
 
+        debug(
+            f"{str(self)}: WaitForMessage - using timeout={timeout}s for {wait_for_message_from}"
+        )
+
         # Create predicate for message filtering
         def message_predicate(message: Message) -> bool:
             # Always match EOM
@@ -74,6 +101,14 @@ class MessagingMixin:
 
             # Match based on source specification
             if wait_for_message_from == "*":
+                # Exclude messages from meetings we've joined - those should only
+                # be handled by meeting playbook's WaitForMessage calls
+                if (
+                    message.meeting_id
+                    and hasattr(self, "joined_meetings")
+                    and message.meeting_id.id in self.joined_meetings
+                ):
+                    return False
                 return True
             elif wait_for_message_from in ("human", "user"):
                 # Compare structured IDs
@@ -97,8 +132,6 @@ class MessagingMixin:
             if getattr(self, "program", None) and getattr(
                 self.program, "event_bus", None
             ):
-                from playbooks.core.events import WaitForMessageEvent
-
                 self.program.event_bus.publish(
                     WaitForMessageEvent(
                         session_id=self.program.event_bus.session_id,
@@ -109,6 +142,9 @@ class MessagingMixin:
                     )
                 )
 
+            debug(
+                f"{str(self)}: WaitForMessage - calling get_batch with timeout={timeout}s..."
+            )
             messages = await self._message_queue.get_batch(
                 predicate=message_predicate,
                 timeout=timeout,
@@ -118,11 +154,12 @@ class MessagingMixin:
 
             # Process and return messages
             if messages:
+                debug(
+                    f"{str(self)}: WaitForMessage - RECEIVED {len(messages)} messages!"
+                )
                 if getattr(self, "program", None) and getattr(
                     self.program, "event_bus", None
                 ):
-                    from playbooks.core.events import WaitForMessageEvent
-
                     self.program.event_bus.publish(
                         WaitForMessageEvent(
                             session_id=self.program.event_bus.session_id,
@@ -134,11 +171,12 @@ class MessagingMixin:
                     )
                 return await self._process_collected_messages_from_queue(messages)
             else:
+                debug(
+                    f"{str(self)}: WaitForMessage - TIMEOUT with no messages after {timeout}s"
+                )
                 if getattr(self, "program", None) and getattr(
                     self.program, "event_bus", None
                 ):
-                    from playbooks.core.events import WaitForMessageEvent
-
                     self.program.event_bus.publish(
                         WaitForMessageEvent(
                             session_id=self.program.event_bus.session_id,
@@ -152,12 +190,10 @@ class MessagingMixin:
                 return []
 
         except asyncio.TimeoutError:
-            debug(f"{str(self)}: Timeout waiting for messages")
+            debug(f"{str(self)}: WaitForMessage - TIMEOUT exception after {timeout}s")
             if getattr(self, "program", None) and getattr(
                 self.program, "event_bus", None
             ):
-                from playbooks.core.events import WaitForMessageEvent
-
                 self.program.event_bus.publish(
                     WaitForMessageEvent(
                         session_id=self.program.event_bus.session_id,

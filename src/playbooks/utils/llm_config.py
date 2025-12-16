@@ -139,6 +139,8 @@ class LLMConfig:
                 api_key_env_var = "GROQ_API_KEY"
             elif "openrouter" in provider or "openrouter" in model:
                 api_key_env_var = "OPENROUTER_API_KEY"
+            elif "xai" in provider or "xai" in model:
+                api_key_env_var = "XAI_API_KEY"
             else:
                 # Default to OpenAI for other models
                 api_key_env_var = "OPENAI_API_KEY"

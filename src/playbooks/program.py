@@ -8,6 +8,7 @@ communication between all system components.
 import asyncio
 import json
 import logging
+import random
 import re
 from pathlib import Path
 
@@ -15,8 +16,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.config import config
 from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
-from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
+from playbooks.core.events import (
+    AgentCreatedEvent,
+    ChannelCreatedEvent,
+    CompiledProgramEvent,
+    MessageRoutedEvent,
+    MessageSentEvent,
+    ProgramTerminatedEvent,
+)
 from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
 from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.core.message import Message, MessageType
@@ -24,8 +33,10 @@ from playbooks.core.stream_result import StreamResult
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.state.variables import Artifact
+from playbooks.utils.error_utils import log_agent_errors
+from playbooks.utils.langfuse_event_handler import LangfuseEventHandler
 
-from .agents import AIAgent, HumanAgent
+from .agents import AIAgent, HumanAgent, RemoteAIAgent
 from .agents.agent_builder import AgentBuilder
 from .agents.base_agent import BaseAgent
 from .channels import AgentParticipant, Channel, HumanParticipant
@@ -220,8 +231,6 @@ class AsyncAgentRuntime:
             self.program._has_agent_errors = True
 
             # Log agent error using error_utils for consistency
-            from playbooks.utils.error_utils import log_agent_errors
-
             error_info = [
                 {
                     "agent_id": agent.id,
@@ -371,14 +380,26 @@ class ProgramAgentsCommunicationMixin:
         )
 
         # Publish routed-message event for observers (web/cli should subscribe instead of monkey-patching)
-        from playbooks.core.events import MessageRoutedEvent
-
         self.event_bus.publish(
             MessageRoutedEvent(
                 session_id=self.event_bus.session_id,
                 agent_id=sender_agent_id.id,
                 channel_id=channel.channel_id,
                 message=msg,
+            )
+        )
+
+        # Publish message sent event for telemetry
+        self.event_bus.publish(
+            MessageSentEvent(
+                session_id=self.event_bus.session_id,
+                agent_id=sender_agent_id.id,
+                message_id=msg.id,
+                sender_id=sender_agent_id.id,
+                sender_klass=sender_klass,
+                recipients=receiver_spec,
+                content_preview=message_str[:100] if message_str else "",
+                channel_id=channel.channel_id,
             )
         )
 
@@ -599,6 +620,11 @@ class Program(ProgramAgentsCommunicationMixin):
             False  # Enable streaming for agent-to-agent messages (for snoop mode)
         )
 
+        # Initialize telemetry handler if enabled
+        self._langfuse_handler = None
+        if config.langfuse.enabled:
+            self._langfuse_handler = LangfuseEventHandler(self.event_bus)
+
     async def initialize(self) -> None:
         # Create agent classes from AST (requires async for LLM compilation)
         if self.program_content:
@@ -633,17 +659,11 @@ class Program(ProgramAgentsCommunicationMixin):
 
         # Set initial state variables on all agents
         if self.initial_state:
-            from playbooks.config import config as playbooks_config
-            from playbooks.state.variables import Artifact
-
             for agent in self.agents:
                 if hasattr(agent, "state"):
                     for var_name, var_value in self.initial_state.items():
                         # Check if should be promoted to Artifact based on threshold
-                        if (
-                            len(str(var_value))
-                            > playbooks_config.artifact_result_threshold
-                        ):
+                        if len(str(var_value)) > config.artifact_result_threshold:
                             artifact = Artifact(
                                 name=var_name,
                                 summary=f"Initial state variable: {var_name}",
@@ -662,8 +682,6 @@ class Program(ProgramAgentsCommunicationMixin):
         # Validate public.json count (only for local AI agents, not remote/MCP agents)
         # Remote agents (MCPAgent, RemoteAIAgent) don't have playbooks in the current playbook
         # Allow empty or missing public.json for testing scenarios
-        from playbooks.agents import RemoteAIAgent
-
         # Get non-empty public json lists
         non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
 
@@ -807,8 +825,6 @@ class Program(ProgramAgentsCommunicationMixin):
             await self._debug_server.send_thread_started_event(agent.id)
 
         # Publish creation event for observers (web/cli apps should subscribe instead of monkey-patching)
-        from playbooks.core.events import AgentCreatedEvent
-
         self.event_bus.publish(
             AgentCreatedEvent(
                 session_id=self.event_bus.session_id,
@@ -836,8 +852,6 @@ class Program(ProgramAgentsCommunicationMixin):
             ValueError: If agent_klass is not found in agent_klasses
             RuntimeError: If agent creation fails after registration
         """
-        import random
-
         # Validate that the agent class exists
         if agent_klass not in self.agent_klasses:
             raise ValueError(
@@ -915,8 +929,6 @@ class Program(ProgramAgentsCommunicationMixin):
 
     def _emit_compiled_program_event(self) -> None:
         """Emit an event with the compiled program content for debugging."""
-        from playbooks.core.events import CompiledProgramEvent
-
         compiled_file_path = self._get_compiled_file_name()
         event = CompiledProgramEvent(
             session_id="program",
@@ -1078,6 +1090,10 @@ class Program(ProgramAgentsCommunicationMixin):
 
         # Stop all agent tasks via runtime
         await self.runtime.stop_all_agents()
+
+        # Shutdown telemetry handler
+        if self._langfuse_handler:
+            self._langfuse_handler.shutdown()
 
         # Shutdown debug server if running
         await self.shutdown_debug_server()

@@ -19,9 +19,9 @@ from playbooks.compilation.markdown_to_ast import (
     refresh_markdown_attributes,
 )
 from playbooks.config import config
+from playbooks.core.events import CompilationEndedEvent, CompilationStartedEvent
 from playbooks.core.exceptions import CompilationError, ProgramLoadError
-from playbooks.llm.messages.timestamp import get_timestamp
-from playbooks.utils.langfuse_helper import LangfuseHelper
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import (
     _check_llm_calls_allowed,
@@ -58,12 +58,15 @@ class Compiler:
     Uses agent-level caching to avoid redundant LLM calls.
     """
 
-    def __init__(self, use_cache: bool = True) -> None:
+    def __init__(
+        self, use_cache: bool = True, event_bus: Optional[EventBus] = None
+    ) -> None:
         """
         Initialize the compiler.
 
         Args:
             use_cache: Whether to use compilation caching
+            event_bus: Optional event bus for publishing compilation events
         """
         compilation_model = config.model.compilation
         self.llm_config = LLMConfig(
@@ -74,6 +77,7 @@ class Compiler:
         )
 
         self.use_cache = use_cache
+        self.event_bus = event_bus
         self.prompt_path = os.path.join(
             os.path.dirname(os.path.dirname(__file__)),
             "prompts/preprocess_playbooks.txt",
@@ -98,6 +102,21 @@ class Compiler:
         Returns:
             List of FileCompilationResult objects
         """
+        # Publish compilation started event
+        if self.event_bus:
+            # Calculate total content length for telemetry
+            total_content_length = sum(len(file_spec.content) for file_spec in files)
+            file_paths = [file_spec.file_path for file_spec in files]
+
+            self.event_bus.publish(
+                CompilationStartedEvent(
+                    session_id=self.event_bus.session_id,
+                    agent_id="",  # Compilation happens before agents exist
+                    file_path=file_paths[0] if file_paths else "",
+                    content_length=total_content_length,
+                )
+            )
+
         # Combine all file contents into one document
         all_content_parts = []
         all_frontmatter = {}
@@ -163,10 +182,42 @@ class Compiler:
                     ]
                 )
             except Exception as exc:
+                # Publish compilation ended event with error
+                if self.event_bus:
+                    file_paths = [file_spec.file_path for file_spec in files]
+                    self.event_bus.publish(
+                        CompilationEndedEvent(
+                            session_id=self.event_bus.session_id,
+                            agent_id="",  # Compilation happens before agents exist
+                            file_path=file_paths[0] if file_paths else "",
+                            compiled_content_length=0,
+                            error=str(exc),
+                        )
+                    )
+
                 console.print(f"[red]Agent compilation failed: {exc}[/red]")
                 raise
 
         compilation_results[0].frontmatter_dict.update(all_frontmatter)
+
+        # Publish compilation ended event
+        if self.event_bus:
+            # Calculate total compiled content length
+            total_compiled_length = sum(
+                len(result.content) for result in compilation_results
+            )
+            file_paths = [file_spec.file_path for file_spec in files]
+
+            self.event_bus.publish(
+                CompilationEndedEvent(
+                    session_id=self.event_bus.session_id,
+                    agent_id="",  # Compilation happens before agents exist
+                    file_path=file_paths[0] if file_paths else "",
+                    compiled_content_length=total_compiled_length,
+                    error=None,
+                )
+            )
+
         return compilation_results
 
     async def compile(
@@ -369,12 +420,6 @@ class Compiler:
 
         # Get LLM response
         messages = get_messages_for_prompt(prompt)
-        langfuse_span = LangfuseHelper.instance().start_observation(
-            name="compile_agent",
-            as_type="generation",
-            input=agent_content,
-            metadata={"timestamp": get_timestamp()},
-        )
 
         response_chunks = []
         async for chunk in ensure_async_iterable(
@@ -382,13 +427,14 @@ class Compiler:
                 llm_config=self.llm_config,
                 messages=messages,
                 stream=False,
+                event_bus=None,  # Compilation happens before event bus is available
+                agent_id=None,
+                session_id=None,
             )
         ):
             response_chunks.append(chunk)
 
         compiled = "".join(response_chunks)
-        langfuse_span.update(output=compiled)
-        langfuse_span.end()
 
         version = get_playbooks_version()
         compiled = (

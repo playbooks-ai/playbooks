@@ -2,6 +2,9 @@ debug = false
 timeout_s = 60
 artifact_result_threshold = 500  # Auto-create artifact for playbook results longer than this (# of chars)
 max_llm_calls = 50
+meeting_message_batch_timeout = 2.0  # Rolling timeout in seconds for batching meeting messages to minimize thrashing
+meeting_message_batch_max_wait = 10.0  # Absolute maximum wait time in seconds (prevents starvation under heavy load)
+timestamp_granularity = 0  # Timestamp precision: 0=seconds, 1=0.1s, 2=0.01s, 3=milliseconds, -1=10s, -2=100s
 
 [model]
 provider = "anthropic"
@@ -10,12 +13,15 @@ name = "claude-haiku-4-5-20251001"
 temperature = 0.2
 max_completion_tokens=15000
 
-# Specific model overrides can be added
-# [model.execution]
-# [model.compilation]
+[model.execution]
+provider = "xai"
+name = "xai/grok-4-1-fast-non-reasoning" # fast and accurate!
 
 [model.compilation]
+provider = "anthropic"
 name = "claude-sonnet-4-5-20250929"
+temperature = 0.2
+max_completion_tokens=15000
 
 [llm_cache]
 enabled = true

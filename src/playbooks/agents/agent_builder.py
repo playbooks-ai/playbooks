@@ -9,9 +9,9 @@ import re
 from typing import TYPE_CHECKING, Dict, Optional, Type, Union
 
 from playbooks.agents.delivery_preferences import DeliveryPreferences
-from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.compilation.markdown_to_ast import refresh_markdown_attributes
 from playbooks.compilation.parse_utils import parse_metadata_and_description
+from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.utils.text_utils import is_camel_case, to_camel_case
 
 from . import LocalAIAgent, MCPAgent

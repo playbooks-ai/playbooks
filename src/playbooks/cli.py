@@ -67,7 +67,7 @@ def load_public_json_from_program(
         else:
             # Need to compile
             compiler = Compiler()
-            compiled_results = compiler.process_files(program_files)
+            compiled_results = asyncio.run(compiler.process_files(program_files))
             compiled_contents = [r.content for r in compiled_results]
 
         # Extract public.json from each compiled agent
@@ -181,7 +181,7 @@ def compile(program_paths: List[str], output_file: str = None) -> None:
 
     # Let compiler handle all compilation logic
     compiler = Compiler()
-    compiled_results = compiler.process_files(program_files)
+    compiled_results = asyncio.run(compiler.process_files(program_files))
 
     try:
         for result in compiled_results:

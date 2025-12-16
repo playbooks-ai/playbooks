@@ -131,6 +131,9 @@ class RawLLMExecution(LLMExecution):
                 llm_config=LLMConfig(),
                 stream=False,
                 json_mode=False,
+                event_bus=self.agent.event_bus,
+                agent_id=self.agent.id,
+                session_id=self.agent.program.event_bus.session_id,
             )
         ):
             response_chunks.append(chunk)

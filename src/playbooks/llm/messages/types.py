@@ -1,5 +1,6 @@
 """Clean semantic LLM message types with minimal, maintainable design."""
 
+import os
 from typing import Any, Dict, Optional
 
 from playbooks.core.enums import LLMMessageRole, LLMMessageType
@@ -12,27 +13,105 @@ from playbooks.state.variables import Artifact
 class SystemPromptLLMMessage(LLMMessage):
     """System prompts and instructions."""
 
-    def __init__(self, content: str) -> None:
+    def __init__(self) -> None:
+        # Load system prompt from file
+        prompt_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.dirname(__file__))),
+            "prompts",
+            "interpreter_run.txt",
+        )
+
+        try:
+            with open(prompt_path, "r", encoding="utf-8") as f:
+                system_prompt = f.read().strip()
+        except FileNotFoundError:
+            raise FileNotFoundError(f"System prompt file not found: {prompt_path}")
+
         super().__init__(
-            content=content,
+            content=system_prompt,
             role=LLMMessageRole.SYSTEM,
             type=LLMMessageType.SYSTEM_PROMPT,
         )
 
 
 class UserInputLLMMessage(LLMMessage):
-    """User inputs and instructions."""
+    """User inputs and instructions with component-based storage.
 
-    def __init__(self, content: str) -> None:
+    Components:
+    - about_you: Optional section with agent context (starts with "Remember:")
+    - instruction: The main instruction to execute
+    - python_code_context: Optional Python context section with execution state
+    - final_instructions: Optional closing instructions (starts with "Carefully analyze...")
+    """
+
+    def __init__(
+        self,
+        about_you: str = "",
+        instruction: str = "",
+        python_code_context: str = "",
+        final_instructions: str = "",
+    ) -> None:
+        """Initialize UserInputLLMMessage with components.
+
+        Args:
+            about_you: Agent context section
+            instruction: Main instruction
+            python_code_context: Python execution context
+            final_instructions: Closing instructions
+        """
+        # Store components
+        self.about_you = about_you
+        self.instruction = instruction
+        self.python_code_context = python_code_context
+        self.final_instructions = final_instructions
+
+        # Build content from components
+        parts = []
+        if self.about_you:
+            parts.append(self.about_you)
+        if self.python_code_context:
+            parts.append(self.python_code_context)
+        if self.instruction:
+            parts.append(self.instruction)
+        if self.final_instructions:
+            parts.append(self.final_instructions)
+
         super().__init__(
-            content=content,
+            content="\n\n".join(parts),
             role=LLMMessageRole.USER,
             type=LLMMessageType.USER_INPUT,
         )
 
     def to_compact_message(self) -> Optional[Dict[str, Any]]:
-        """Remove user inputs during compaction."""
-        return None
+        """Return message with only the instruction component."""
+        return {"role": self.role.value, "content": self.instruction}
+
+    def __eq__(self, other: object) -> bool:
+        """Check equality including component attributes."""
+        if not isinstance(other, self.__class__):
+            return False
+        return (
+            super().__eq__(other)
+            and self.about_you == other.about_you
+            and self.instruction == other.instruction
+            and self.python_code_context == other.python_code_context
+            and self.final_instructions == other.final_instructions
+        )
+
+    def __hash__(self) -> int:
+        """Hash including component attributes."""
+        return hash(
+            (
+                self.__class__.__name__,
+                self.content,
+                self.role,
+                self.type,
+                self.about_you,
+                self.instruction,
+                self.python_code_context,
+                self.final_instructions,
+            )
+        )
 
 
 class AssistantResponseLLMMessage(LLMMessage):

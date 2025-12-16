@@ -19,7 +19,6 @@ from playbooks.compilation.compiler import (
 from playbooks.compilation.loader import Loader
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.infrastructure.logging.setup import configure_logging
-from playbooks.utils.langfuse_helper import LangfuseHelper
 from playbooks.utils.llm_config import LLMConfig
 
 from .program import Program
@@ -73,164 +72,102 @@ class Playbooks:
             )
         )
 
-        # Check if all files are already compiled (.pbasm files)
-        all_files_compiled = all(
-            file_spec.is_compiled for file_spec in self.program_files
-        )
-
-        if all_files_compiled:
-            # Skip compilation - convert FileCompilationSpec to FileCompilationResult directly
-            self.compiled_program_files = []
-            for file_spec in self.program_files:
-                fm_data = frontmatter.loads(file_spec.content)
-                self.compiled_program_files.append(
-                    FileCompilationResult(
-                        file_path=file_spec.file_path,
-                        frontmatter_dict=fm_data.metadata,
-                        content=fm_data.content,
-                        is_compiled=True,
-                        compiled_file_path=file_spec.file_path,
-                    )
-                )
-        else:
-            # Some files need compilation
-            compiler = Compiler()
-            self.compiled_program_files = compiler.process_files(self.program_files)
-
-        # Extract and apply frontmatter from all files (.pb and .pbasm)
+        # Compilation and Program creation will be done in async initialize() method
+        self.compiled_program_files = None
         self.program_metadata = {}
-        # compiled_content = []
-        for i, result in enumerate(self.compiled_program_files):
-            if result.frontmatter_dict:
-                # Check for duplicate attributes
-                for key, value in result.frontmatter_dict.items():
-                    if key in self.program_metadata:
-                        raise ValueError(
-                            f"Duplicate frontmatter attribute '{key}' found in {result.file_path}. "
-                            f"Previously defined with value: {self.program_metadata[key]}"
-                        )
-                    self.program_metadata[key] = value
-
-            # compiled_content.append(file_content)
-
-        # Compiled agents without frontmatter
-        # self.compiled_program_content = "\n\n".join(compiled_content)
-
-        # Apply program metadata
-        self._apply_program_metadata()
-
         self.event_bus = EventBus(self.session_id)
-        compiled_program_paths = [
-            result.compiled_file_path for result in self.compiled_program_files
-        ]
-        # Build source_file_paths mapping - map each compiled file back to its original source
-        # Multiple compiled files can come from the same original .pb file
-        source_file_paths = []
-        for result in self.compiled_program_files:
-            # Find the original source file by matching the compiled path's base name
-            # or using direct mapping from program_files
-            original_source = None
-            for file_spec in self.program_files:
-                # The file_spec has the original path before compilation
-                if not file_spec.is_compiled:
-                    # This was a .pb file that got compiled
-                    original_source = file_spec.file_path
-                    break
-
-            if not original_source and self.program_paths:
-                # Fallback to first program path
-                original_source = self.program_paths[0]
-
-            source_file_paths.append(original_source)
-
-        self.program = Program(
-            event_bus=self.event_bus,
-            program_paths=self.program_paths,
-            compiled_program_paths=compiled_program_paths,
-            source_file_paths=source_file_paths,
-            metadata=self.program_metadata,
-            cli_args=self.cli_args,
-            initial_state=self.initial_state,
-        )
+        self.program = None
 
     async def initialize(self):
         """Initialize the playbook execution environment and agents."""
-        # Initialize program first so we can access its name property
+        # Compile files if needed
+        if self.compiled_program_files is None:
+            all_files_compiled = all(
+                file_spec.is_compiled for file_spec in self.program_files
+            )
+
+            if all_files_compiled:
+                # Skip compilation - convert FileCompilationSpec to FileCompilationResult directly
+                self.compiled_program_files = []
+                for file_spec in self.program_files:
+                    fm_data = frontmatter.loads(file_spec.content)
+                    self.compiled_program_files.append(
+                        FileCompilationResult(
+                            file_path=file_spec.file_path,
+                            frontmatter_dict=fm_data.metadata,
+                            content=fm_data.content,
+                            is_compiled=True,
+                            compiled_file_path=file_spec.file_path,
+                        )
+                    )
+            else:
+                # Some files need compilation
+                compiler = Compiler(event_bus=self.event_bus)
+                self.compiled_program_files = await compiler.process_files(
+                    self.program_files
+                )
+
+            # Extract and apply frontmatter from all files (.pb and .pbasm)
+            for i, result in enumerate(self.compiled_program_files):
+                if result.frontmatter_dict:
+                    # Check for duplicate attributes
+                    for key, value in result.frontmatter_dict.items():
+                        if key in self.program_metadata:
+                            raise ValueError(
+                                f"Duplicate frontmatter attribute '{key}' found in {result.file_path}. "
+                                f"Previously defined with value: {self.program_metadata[key]}"
+                            )
+                        self.program_metadata[key] = value
+
+            # Apply program metadata
+            self._apply_program_metadata()
+
+        # Create Program if not already created
+        if self.program is None:
+            compiled_program_paths = [
+                result.compiled_file_path for result in self.compiled_program_files
+            ]
+            # Build source_file_paths mapping - map each compiled file back to its original source
+            # Multiple compiled files can come from the same original .pb file
+            source_file_paths = []
+            for result in self.compiled_program_files:
+                # Find the original source file by matching the compiled path's base name
+                # or using direct mapping from program_files
+                original_source = None
+                for file_spec in self.program_files:
+                    # The file_spec has the original path before compilation
+                    if not file_spec.is_compiled:
+                        # This was a .pb file that got compiled
+                        original_source = file_spec.file_path
+                        break
+
+                if not original_source and self.program_paths:
+                    # Fallback to first program path
+                    original_source = self.program_paths[0]
+
+                source_file_paths.append(original_source)
+
+            self.program = Program(
+                event_bus=self.event_bus,
+                program_paths=self.program_paths,
+                compiled_program_paths=compiled_program_paths,
+                source_file_paths=source_file_paths,
+                metadata=self.program_metadata,
+                cli_args=self.cli_args,
+                initial_state=self.initial_state,
+            )
+
+        # Initialize program to create agents
         await self.program.initialize()
-
-        # Create program-level Langfuse trace
-
-        langfuse = LangfuseHelper.instance()
-        program_name = self.program.name
-
-        # Create root observation with OTEL context (so @observe decorators nest correctly)
-        # Using start_as_current_observation sets this as the active span in OTEL context
-        self._root_observation_ctx = langfuse.start_as_current_observation(
-            name=program_name,
-            as_type="chain",
-            metadata={
-                "program_paths": self.program_paths,
-                "cli_args": self.cli_args,
-                "agent_count": (
-                    len(self.program.agents) if hasattr(self.program, "agents") else 0
-                ),
-            },
-            input={
-                "program_paths": self.program_paths,
-                "cli_args": self.cli_args,
-            },
-        )
-        root_observation = self._root_observation_ctx.__enter__()
-
-        # Update the trace with name and session_id
-        langfuse.update_current_trace(
-            name=program_name,
-            session_id=self.session_id,
-        )
-
-        # Flush immediately so the trace name and session appear in Langfuse right away
-        LangfuseHelper.flush()
-
-        LangfuseHelper.set_program_trace(root_observation)
 
     async def begin(self):
         """Start execution of the playbook."""
         await self.program.begin()
 
     async def shutdown(self):
-        """Shutdown the program and finalize Langfuse trace."""
-
-        # Finalize program trace with output
-        trace = LangfuseHelper.get_program_trace()
-        if trace:
-            trace.update(
-                output={
-                    "execution_finished": (
-                        self.program.execution_finished
-                        if hasattr(self.program, "execution_finished")
-                        else False
-                    ),
-                    "has_errors": self.has_agent_errors(),
-                    "agent_count": (
-                        len(self.program.agents)
-                        if hasattr(self.program, "agents")
-                        else 0
-                    ),
-                }
-            )
-
-        # Exit the root observation context manager
-        if hasattr(self, "_root_observation_ctx") and self._root_observation_ctx:
-            try:
-                self._root_observation_ctx.__exit__(None, None, None)
-            except Exception:
-                pass
-
+        """Shutdown the program."""
         # Shutdown the program
         await self.program.shutdown()
-
-        # Flush Langfuse to ensure all data is sent
-        LangfuseHelper.flush()
 
     def _apply_program_metadata(self):
         """Apply program-level metadata from frontmatter."""
