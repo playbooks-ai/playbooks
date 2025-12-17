@@ -7,7 +7,7 @@ import pytest
 
 from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.program import Program
-from playbooks.state.variables import DotMap
+from playbooks.state.variables import Box
 
 
 @pytest.fixture
@@ -51,7 +51,7 @@ class TestGetOrCreate:
 
         # Create idle agent
         idle_agent = Mock()
-        idle_agent.state = DotMap()
+        idle_agent.state = Box()
         idle_agent.state._busy = False
 
         mock_program.agents_by_klass = {"AccountantExpert": [idle_agent]}
@@ -92,7 +92,7 @@ class TestGetOrCreate:
 
         # Create busy agent
         busy_agent = Mock()
-        busy_agent.state = DotMap()
+        busy_agent.state = Box()
         busy_agent.state._busy = True
 
         mock_program.agents_by_klass = {"AccountantExpert": [busy_agent]}
@@ -209,11 +209,11 @@ class TestGetOrCreate:
 
         # Create multiple idle agents
         idle1 = Mock()
-        idle1.state = DotMap()
+        idle1.state = Box()
         idle1.state._busy = False
 
         idle2 = Mock()
-        idle2.state = DotMap()
+        idle2.state = Box()
         idle2.state._busy = False
 
         mock_program.agents_by_klass = {"AccountantExpert": [idle1, idle2]}

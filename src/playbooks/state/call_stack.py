@@ -304,6 +304,19 @@ class CallStack:
 
         return messages
 
+    def get_llm_message_objects(self) -> List[LLMMessage]:
+        """Get the raw LLM message objects for context compaction."""
+        messages = []
+
+        # Add top-level messages first (system messages, etc.)
+        messages.extend(self.top_level_llm_messages)
+
+        # Then add frame messages (execution context)
+        for frame in self.frames:
+            messages.extend(frame.llm_messages)
+
+        return messages
+
     def add_llm_message(self, message: LLMMessage) -> None:
         """Add an LLM message to the top frame, or to top_level_llm_messages if stack is empty.
 

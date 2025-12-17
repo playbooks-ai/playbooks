@@ -45,8 +45,15 @@ class DummyAgent:
         self.klass = "DummyAgent"
         self.state = DummyState()
         self.call_stack = self.state.call_stack  # Use call_stack from state
+        self.event_bus = self.state.event_bus  # Add event_bus reference for telemetry
         self.program = type(
-            "Program", (), {"enable_agent_streaming": False, "_debug_server": None}
+            "Program",
+            (),
+            {
+                "enable_agent_streaming": False,
+                "_debug_server": None,
+                "event_bus": self.state.event_bus,
+            },
         )()  # noqa: E501
         self.playbooks = {}
         self.description = "Test agent"

@@ -167,15 +167,15 @@ class TestExpressionContext:
 
     def setup_method(self):
         """Set up test fixtures."""
-        from dotmap import DotMap
+        from box import Box
 
         self.agent = Mock()
         self.state = Mock()
         self.call = Mock()
         self.call.playbook_klass = "TestPlaybook"
 
-        # Use real DotMap for variables (no $ prefix, no .value wrapper)
-        self.agent.state = DotMap()
+        # Use real Box for variables (no $ prefix, no .value wrapper)
+        self.agent.state = Box()
         self.agent.state.test_var = "test_value"
 
         # Mock namespace manager
@@ -380,14 +380,14 @@ class TestResolveDescriptionPlaceholders:
 
     def setup_method(self):
         """Set up test fixtures."""
-        from dotmap import DotMap
+        from box import Box
 
         self.agent = Mock()
         self.state = Mock()
         self.call = Mock()
 
-        # Use real DotMap for variables (no $ prefix, no .value wrapper)
-        self.agent.state = DotMap()
+        # Use real Box for variables (no $ prefix, no .value wrapper)
+        self.agent.state = Box()
         self.agent.state.order_id = "12345"
 
         # Mock namespace manager
@@ -517,15 +517,15 @@ class TestIntegration:
 
     def setup_method(self):
         """Set up integration test fixtures."""
-        from dotmap import DotMap
+        from box import Box
 
         self.agent = Mock()
         self.state = Mock()
         self.call = Mock()
         self.call.playbook_klass = "TestPlaybook"
 
-        # Use real DotMap for variables with raw values (no $ prefix, no wrappers)
-        self.agent.state = DotMap()
+        # Use real Box for variables with raw values (no $ prefix, no wrappers)
+        self.agent.state = Box()
         self.agent.state.order = {
             "id": "12345",
             "status": "pending",
@@ -800,7 +800,7 @@ class TestParameterResolution:
 
     def setup_method(self):
         """Set up test fixtures."""
-        from dotmap import DotMap
+        from box import Box
 
         self.agent = Mock()
         self.state = Mock()
@@ -820,8 +820,8 @@ class TestParameterResolution:
         # Mock agent playbooks
         self.agent.playbooks = {"LoadRelevantContext": self.playbook}
 
-        # Use real DotMap for variables
-        self.agent.state = DotMap()
+        # Use real Box for variables
+        self.agent.state = Box()
 
         # Mock namespace manager
         self.agent.namespace_manager = Mock(namespace={})

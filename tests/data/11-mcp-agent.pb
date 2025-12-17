@@ -13,6 +13,6 @@ remote:
 - When program starts
 
 ### Steps
-- get secret from Example MCP Server
+- Call ExampleMCPServer.get_secret() to get the secret
 - reveal secret to user
 - end program

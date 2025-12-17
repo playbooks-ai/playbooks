@@ -10,7 +10,12 @@ from playbooks.core.exceptions import (
     VendorAPIOverloadedError,
     VendorAPIRateLimitError,
 )
-from playbooks.llm.messages import LLMMessage
+from playbooks.llm.messages import (
+    AssistantResponseLLMMessage,
+    LLMMessage,
+    SystemPromptLLMMessage,
+    UserInputLLMMessage,
+)
 from playbooks.utils.llm_helper import (
     _make_completion_request,
     consolidate_messages,
@@ -127,15 +132,9 @@ def test_ensure_upto_N_cached_messages_user_message_cached():
 
 def test_semantic_message_integration():
     """Test that semantic message types work correctly with helper functions."""
-    from playbooks.llm.messages import (
-        AssistantResponseLLMMessage,
-        SystemPromptLLMMessage,
-        UserInputLLMMessage,
-    )
-
     messages = [
-        SystemPromptLLMMessage("System prompt").to_full_message(is_cached=True),
-        UserInputLLMMessage("User input").to_full_message(is_cached=False),
+        SystemPromptLLMMessage().to_full_message(is_cached=True),
+        UserInputLLMMessage(instruction="User input").to_full_message(is_cached=False),
         AssistantResponseLLMMessage("Assistant response").to_full_message(
             is_cached=False
         ),

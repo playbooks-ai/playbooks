@@ -45,7 +45,6 @@ from playbooks.core.exceptions import (
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.messages import (
     LLMMessage,
-    SystemPromptLLMMessage,
     UserInputLLMMessage,
 )
 
@@ -397,6 +396,7 @@ async def get_completion(
     execution_id: Optional[int] = None,
     event_bus: Optional[Any] = None,
     agent_id: Optional[str] = None,
+    response_validator: Optional[Callable[[str], bool]] = None,
     **kwargs,
 ):
     """Get completion from LLM with optional streaming and caching support.
@@ -410,6 +410,8 @@ async def get_completion(
         session_id: Optional session ID to associate with the generation
         execution_id: Optional counter identifying this LLM call for tracing
         event_bus: Optional event bus for telemetry events
+        response_validator: Optional function to validate responses before caching.
+                          Should return True if response is valid, False otherwise.
         **kwargs: Additional arguments passed to litellm.completion
 
     Returns:
@@ -521,7 +523,7 @@ async def get_completion(
         error_msg = str(e)
         raise e  # Re-raise the exception to be caught by the decorator if applicable
     finally:
-        # Update cache
+        # Update cache - only store valid responses
         if (
             not error_occurred
             and llm_cache_enabled
@@ -533,7 +535,15 @@ async def get_completion(
             if isinstance(full_response, list):
                 full_response = "".join(full_response)
             full_response = str(full_response)
-            cache.set(cache_key, full_response)
+
+            # Validate response before caching if validator provided
+            if response_validator is None or response_validator(full_response):
+                cache.set(cache_key, full_response)
+            else:
+                debug(
+                    "Response validation failed - not caching invalid response",
+                    cache_key=cache_key,
+                )
 
         # Publish LLM call ended event
         if event_bus and agent_id and session_id:
@@ -589,7 +599,7 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
 
         messages = [
-            SystemPromptLLMMessage().to_full_message(),
+            {"role": LLMMessageRole.SYSTEM, "content": system.strip()},
             UserInputLLMMessage(instruction=user.strip()).to_full_message(),
         ]
         # System message should always be cached

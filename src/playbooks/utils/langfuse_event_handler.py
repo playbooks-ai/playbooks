@@ -498,7 +498,7 @@ class LangfuseEventHandler:
 
             # Create event span for message received
             message_span = langfuse.start_observation(
-                name=f"📥 {event.sender_klass} -> {event.recipient_klass}: {event.content_preview}",
+                name=f"📥 {event.sender_klass} -> {event.recipient_klass}",
                 as_type="event",
                 trace_context=trace_context,
                 metadata={

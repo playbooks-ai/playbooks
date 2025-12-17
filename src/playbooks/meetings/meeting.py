@@ -46,7 +46,7 @@ class Meeting:
     )  # All messages in this meeting
     agent_last_message_index: Dict[str, int] = field(default_factory=dict)
 
-    shared_state: Box = field(default_factory=Box)
+    shared_state: Box = field(default_factory=lambda: Box(default_box=True))
 
     def __repr__(self) -> str:
         """Return a string representation of the meeting."""
@@ -223,7 +223,7 @@ class JoinedMeeting:
     owner_id: str
     joined_at: datetime
     topic: Optional[str] = None
-    shared_state: Box = field(default_factory=Box)
+    shared_state: Box = field(default_factory=lambda: Box(default_box=True))
 
     def __repr__(self) -> str:
         """Return a string representation of the joined meeting."""

@@ -1,12 +1,11 @@
 """Tests for PythonExecutor class."""
 
 import pytest
-from dotmap import DotMap
+from box import Box
 
 from playbooks.execution.python_executor import PythonExecutor
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.state.variables import PlaybookDotMap
 
 
 class MockProgram:
@@ -22,7 +21,7 @@ class MockState:
 
     def __init__(self):
         event_bus = EventBus("test-session")
-        self.variables = DotMap()
+        self.variables = Box()
         self.call_stack = CallStack(event_bus)
         # Push a dummy frame for testing so Step() calls work
         instruction_pointer = InstructionPointer(
@@ -43,7 +42,7 @@ class MockAgent:
 
         # Set up state matching the new flattened architecture
         event_bus = EventBus("test-session")
-        self._variables_internal = PlaybookDotMap()
+        self._variables_internal = Box()
         self.call_stack = CallStack(event_bus)
         # Push a dummy frame for testing so Step() calls work
         instruction_pointer = InstructionPointer(
@@ -55,11 +54,16 @@ class MockAgent:
         self.call_stack.push(frame)
 
         self.playbooks = {}
+        self.program = None
+
+    def get_current_meeting(self):
+        """Mock get_current_meeting method."""
+        return None
         self.program = MockProgram()
 
     @property
     def state(self):
-        """Return variables DotMap for new architecture compatibility."""
+        """Return variables Box for new architecture compatibility."""
         return self._variables_internal
 
     def parse_instruction_pointer(self, step: str):
@@ -372,7 +376,7 @@ self.state.total_plus_ten = total + 10
     async def test_variable_read_before_write_no_unbound_error(self, executor):
         """Test that reading a variable via state.x before writing works correctly.
 
-        With state.x syntax, variables are accessed through the DotMap directly,
+        With state.x syntax, variables are accessed through the Box directly,
         so there's no UnboundLocalError issue.
         """
         # Set up initial state
@@ -401,7 +405,7 @@ self.state.current_symbol = 'X' if self.state.current_symbol == 'O' else 'O'
         This tests the exact failure case reported:
         - FormatSummary called with report_data={'sales': 1000, 'region': 'North', 'trend': 'positive'}
         - Code tries to format: f"${self.state.report_data['sales']:,}"
-        - Previously failed with: "unsupported format string passed to DotMap.__format__"
+        - Previously failed with: "unsupported format string passed to Box.__format__"
         """
         # Set up the state as it would be in the actual scenario
         executor.agent.state.report_data = {

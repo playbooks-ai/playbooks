@@ -4,7 +4,7 @@ Tests for CLI compilation functionality including the new compiler improvements.
 
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
@@ -73,15 +73,17 @@ class TestCLICompilation:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent\nCompiled content",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test.pbasm"),
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent\nCompiled content",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test.pbasm"),
+                )
+            ]
+        )
 
         # Create test file
         test_file = temp_dir / "test.pb"
@@ -110,15 +112,17 @@ class TestCLICompilation:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent\nCompiled content",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test.pbasm"),
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent\nCompiled content",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test.pbasm"),
+                )
+            ]
+        )
 
         # Create test file
         test_file = temp_dir / "test.pb"
@@ -141,22 +145,24 @@ class TestCLICompilation:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test1.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent1\nCompiled content 1",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test1.pbasm"),
-            ),
-            FileCompilationResult(
-                file_path=str(temp_dir / "test2.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent2\nCompiled content 2",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test2.pbasm"),
-            ),
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test1.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent1\nCompiled content 1",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test1.pbasm"),
+                ),
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test2.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent2\nCompiled content 2",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test2.pbasm"),
+                ),
+            ]
+        )
 
         # Create test files
         test_file1 = temp_dir / "test1.pb"
@@ -188,22 +194,24 @@ class TestCLICompilation:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test1.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent1\nCompiled content 1",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test1.pbasm"),
-            ),
-            FileCompilationResult(
-                file_path=str(temp_dir / "test2.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent2\nCompiled content 2",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test2.pbasm"),
-            ),
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test1.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent1\nCompiled content 1",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test1.pbasm"),
+                ),
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test2.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent2\nCompiled content 2",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test2.pbasm"),
+                ),
+            ]
+        )
 
         # Create test files
         test_file1 = temp_dir / "test1.pb"
@@ -225,18 +233,20 @@ class TestCLICompilation:
         # Setup mock with frontmatter
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test.pb"),
-                frontmatter_dict={
-                    "title": "CLI Test Playbook",
-                    "author": "Test Author",
-                },
-                content="# CompiledCLIAgent\nCompiled CLI content",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test.pbasm"),
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test.pb"),
+                    frontmatter_dict={
+                        "title": "CLI Test Playbook",
+                        "author": "Test Author",
+                    },
+                    content="# CompiledCLIAgent\nCompiled CLI content",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test.pbasm"),
+                )
+            ]
+        )
 
         # Create test file
         test_file = temp_dir / "test.pb"
@@ -265,22 +275,24 @@ class TestCLICompilation:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "source.pb"),
-                frontmatter_dict={},
-                content="# CompiledFromPB\nCompiled from .pb",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "source.pbasm"),
-            ),
-            FileCompilationResult(
-                file_path=str(temp_dir / "precompiled.pbasm"),
-                frontmatter_dict={},
-                content="# AlreadyCompiled\nAlready compiled",
-                is_compiled=True,
-                compiled_file_path=str(temp_dir / "precompiled.pbasm"),
-            ),
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "source.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledFromPB\nCompiled from .pb",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "source.pbasm"),
+                ),
+                FileCompilationResult(
+                    file_path=str(temp_dir / "precompiled.pbasm"),
+                    frontmatter_dict={},
+                    content="# AlreadyCompiled\nAlready compiled",
+                    is_compiled=True,
+                    compiled_file_path=str(temp_dir / "precompiled.pbasm"),
+                ),
+            ]
+        )
 
         # Create test files
         pb_file = temp_dir / "source.pb"
@@ -334,15 +346,17 @@ class TestCLICompilation:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "no_extension"),
-                frontmatter_dict={},
-                content="# CompiledAgent\nCompiled content",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "no_extension"),
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "no_extension"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent\nCompiled content",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "no_extension"),
+                )
+            ]
+        )
 
         # Create test file without extension
         test_file = temp_dir / "no_extension"
@@ -373,15 +387,17 @@ class TestCLICompilation:
 
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent\nCompiled content",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test.pbasm"),
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent\nCompiled content",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test.pbasm"),
+                )
+            ]
+        )
 
         # Create test file
         test_file = temp_dir / "test.pb"
@@ -409,15 +425,17 @@ class TestCLICompilation:
         # Setup mock with empty frontmatter
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent\nCompiled content",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test.pbasm"),
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent\nCompiled content",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test.pbasm"),
+                )
+            ]
+        )
 
         # Create test file
         test_file = temp_dir / "test.pb"
@@ -450,15 +468,17 @@ class TestCLIIntegration:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path=str(temp_dir / "test.pb"),
-                frontmatter_dict={},
-                content="# CompiledAgent\nCompiled content",
-                is_compiled=False,
-                compiled_file_path=str(temp_dir / "test.pbasm"),
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path=str(temp_dir / "test.pb"),
+                    frontmatter_dict={},
+                    content="# CompiledAgent\nCompiled content",
+                    is_compiled=False,
+                    compiled_file_path=str(temp_dir / "test.pbasm"),
+                )
+            ]
+        )
 
         # Create test file
         test_file = temp_dir / "test.pb"
@@ -484,15 +504,17 @@ class TestCLIIntegration:
         # Setup mock
         mock_compiler = Mock()
         mock_compiler_class.return_value = mock_compiler
-        mock_compiler.process_files.return_value = [
-            FileCompilationResult(
-                file_path="./test.pb",
-                frontmatter_dict={},
-                content="# CompiledAgent\nCompiled content",
-                is_compiled=False,
-                compiled_file_path="./test.pbasm",
-            )
-        ]
+        mock_compiler.process_files = AsyncMock(
+            return_value=[
+                FileCompilationResult(
+                    file_path="./test.pb",
+                    frontmatter_dict={},
+                    content="# CompiledAgent\nCompiled content",
+                    is_compiled=False,
+                    compiled_file_path="./test.pbasm",
+                )
+            ]
+        )
 
         # Create test file
         test_file = temp_dir / "test.pb"

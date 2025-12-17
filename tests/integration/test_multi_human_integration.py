@@ -12,13 +12,13 @@ import uuid
 
 import pytest
 
+from playbooks.agents.delivery_preferences import DeliveryPreferences
 from playbooks.agents.human_agent import HumanAgent
 from playbooks.channels.stream_events import StreamChunkEvent, StreamStartEvent
-from playbooks.agents.delivery_preferences import DeliveryPreferences
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.core.identifiers import AgentID
-from playbooks.meetings.meeting import Meeting
 from playbooks.core.message import Message, MessageType
+from playbooks.infrastructure.event_bus import EventBus
+from playbooks.meetings.meeting import Meeting
 from playbooks.program import Program
 
 
@@ -674,6 +674,9 @@ metadata:
         async with event_bus:
             program = Program(event_bus=event_bus, program_content=content)
 
+            # Initialize to create agent classes
+            await program.initialize()
+
             # Check class was created correctly
             assert "ProjectManager" in program.agent_klasses
             pm_class = program.agent_klasses["ProjectManager"]
@@ -684,9 +687,6 @@ metadata:
             assert pm_class.metadata["role"] == "PM"
             assert pm_class.delivery_preferences.channel == "streaming"
             assert pm_class.delivery_preferences.meeting_notifications == "all"
-
-            # Initialize to create instance
-            await program.initialize()
 
             pm = program.agents_by_klass["ProjectManager"][0]
 

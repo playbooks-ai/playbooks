@@ -172,9 +172,10 @@ class StreamingPythonExecutor:
             # Update result with error info
             if isinstance(e, SyntaxError):
                 self.result.syntax_error = e
+                self.result.error_message = f"{type(e).__name__}: {e}"
             else:
                 self.result.runtime_error = e
-            self.result.error_message = f"{type(e).__name__}: {e}"
+                self.result.error_message = f"{type(e).__name__}: {e}"
             self.result.error_traceback = self.error_traceback
 
             logger.error(f"Error executing statement: {type(e).__name__}: {e}")
@@ -196,7 +197,9 @@ class StreamingPythonExecutor:
         Args:
             stmt: AST statement to execute
         """
-        if self.agent.program.execution_finished:
+        if self.agent.program and getattr(
+            self.agent.program, "execution_finished", False
+        ):
             debug(
                 f"Skipping execution of statement: {stmt} because program execution is finished"
             )
@@ -206,6 +209,10 @@ class StreamingPythonExecutor:
         current_frame = self.agent.call_stack.peek()
         if not current_frame:
             raise RuntimeError("No call stack frame available for execution")
+
+        # Ensure executor is set on frame for Return/Yield calls
+        if not hasattr(current_frame, "executor") or current_frame.executor is None:
+            current_frame.executor = self.base_executor
 
         frame_locals = current_frame.locals
 

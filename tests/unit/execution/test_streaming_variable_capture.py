@@ -5,11 +5,11 @@ CallStackFrame.locals during incremental code execution as chunks arrive.
 """
 
 import pytest
+from box import Box
 
 from playbooks.execution.streaming_python_executor import StreamingPythonExecutor
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.state.variables import PlaybookDotMap
 
 
 class MockProgram:
@@ -29,7 +29,7 @@ class MockAgent:
 
         # Set up state matching the architecture
         event_bus = EventBus("test-session")
-        self._variables_internal = PlaybookDotMap()
+        self._variables_internal = Box()
         self.call_stack = CallStack(event_bus)
         # Push a dummy frame for testing
         instruction_pointer = InstructionPointer(
@@ -41,12 +41,17 @@ class MockAgent:
         self.call_stack.push(frame)
 
         self.playbooks = {}
+        self.program = None
+
+    def get_current_meeting(self):
+        """Mock get_current_meeting method."""
+        return None
         self.program = MockProgram()
         self.namespace_manager = None
 
     @property
     def state(self):
-        """Return variables DotMap."""
+        """Return variables Box."""
         return self._variables_internal
 
     def parse_instruction_pointer(self, step: str):
@@ -63,9 +68,9 @@ class MockAgent:
         """Mock resolve_target method."""
         return target
 
-    async def WaitForMessage(self, target: str):
+    async def WaitForMessage(self, target: str, timeout: float = None):
         """Mock WaitForMessage method."""
-        pass
+        return []
 
     async def Say(self, target: str, message: str):
         """Mock Say method."""
@@ -86,6 +91,10 @@ class MockAgent:
     async def Step(self, location: str):
         """Mock Step method that delegates to executor."""
         await self._current_executor.capture_step(location)
+
+    async def Yield(self, target: str = "user"):
+        """Mock Yield method that delegates to executor."""
+        return await self._current_executor.capture_yld(target)
 
 
 @pytest.fixture
@@ -407,3 +416,36 @@ class TestStreamingPartialChunks:
 
         frame = mock_agent.call_stack.peek()
         assert frame.locals["result"] == 50  # 10 + (20 * 2)
+
+    @pytest.mark.asyncio
+    async def test_yield_in_streaming_context(self, mock_agent):
+        """Test that Yield works correctly in streaming execution context.
+
+        This tests the fix for the bug where _executor_set was set to True even if
+        current_frame was None, preventing the executor from ever being set on the frame.
+        """
+        executor = StreamingPythonExecutor(mock_agent)
+
+        # Add chunks that include a Yield call
+        await executor.add_chunk('await self.Step("Test:01:QUE")\n')
+        await executor.add_chunk('await self.Yield("user")\n')
+        result = await executor.finalize()
+
+        # Should execute without error and capture the yield
+        assert result.error_message is None
+        assert result.wait_for_user_input is True
+
+    @pytest.mark.asyncio
+    async def test_yield_meeting_in_streaming_context(self, mock_agent):
+        """Test that Yield with meeting target works in streaming execution context."""
+        executor = StreamingPythonExecutor(mock_agent)
+
+        # Add chunks that include a Yield to a meeting
+        await executor.add_chunk('await self.Step("Meeting:01:QUE")\n')
+        await executor.add_chunk('await self.Yield("meeting 100")\n')
+        result = await executor.finalize()
+
+        # Should execute without error and capture the yield
+        assert result.error_message is None
+        assert result.wait_for_agent_input is True
+        assert result.wait_for_agent_target == "meeting 100"

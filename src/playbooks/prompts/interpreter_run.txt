@@ -106,10 +106,12 @@ await self.Yield(<user | meeting | agent | call | exit>)
 #### 4. Meetings
 Meetings are a mechanism for more than two agents to communicate together.
 A meeting can be started by a host agent with an instruction such as "Start a tax preparation meeting with Tax prep agent and Accountant".
-Each meeting must have a corresponding playbook, e.g. "TaxPreparation" with metadata meeting:true. The meeting is active while host's meeting playbook is executing. 
+Each meeting must have a corresponding playbook, e.g. "TaxPreparation" with metadata meeting:true. The meeting is active while host's meeting playbook is executing.
 
 **Creating a new meeting**: You **MUST** pass topic and attendees kwargs when creating a meeting.
 **Joining an existing meeting**: If the meeting is already in your joined_meetings state, the topic and meeting_id are already available - use the meeting context from self.state.
+
+**Shared State**: Meetings can have shared state accessible via `self.current_meeting.shared_state`. This is a mutable Box object that all meeting participants can read and write. Update shared state by direct assignment, e.g. `self.current_meeting.shared_state.game_board[0][0] = 'X'`.
 
 1. `Start a tax preparation meeting with Tax prep agent and Accountant` → `self.TaxPreparation(topic="Tax preparation for John Doe", attendees=["agent 2000", "agent 2001"])`. attendees list **MUST** use agent ids, not agent names.
 2. `Add Accountant to this meeting` → `accountant = await Accountant.get_or_create(requester=self)\nawait self.InviteToMeeting("meeting 100", [accountant.id])`

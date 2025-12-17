@@ -7,9 +7,9 @@ import pytest
 
 from playbooks.agents import MCPAgent
 from playbooks.agents.agent_builder import AgentBuilder
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.program import Program
-from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class TestMCPIntegration:
@@ -114,7 +114,8 @@ This is a weather MCP agent that provides weather information.
             "get_weather", {"location": "San Francisco"}
         )
 
-    def test_agent_builder_creates_mcp_agent_from_markdown(self):
+    @pytest.mark.asyncio
+    async def test_agent_builder_creates_mcp_agent_from_markdown(self):
         """Test that AgentBuilder correctly creates MCP agents from markdown."""
         markdown_text = """# TestMCPAgent
 metadata:
@@ -127,7 +128,7 @@ This is a test MCP agent.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agent_classes_from_ast(ast)
+        agents = await AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "TestMCPAgent" in agents

@@ -88,7 +88,7 @@ class TestReturnedArtifactLLMMessage:
         assert frame2_message_count == 0
 
         # The playbook returns an artifact object
-        await agent._post_execute(playbook_call, True, artifact, Mock())
+        await agent._post_execute(playbook_call, True, artifact)
 
         # Get the messages from the call stack (after pop)
         assert len(agent.call_stack.frames) == 1
@@ -116,7 +116,7 @@ class TestReturnedArtifactLLMMessage:
         frame = CallStackFrame(instruction_pointer)
         agent.call_stack.push(frame)
 
-        await agent._post_execute(playbook_call, True, artifact, Mock())
+        await agent._post_execute(playbook_call, True, artifact)
 
         # Get the artifact message
         final_messages = agent.call_stack.peek().llm_messages
@@ -144,7 +144,7 @@ class TestReturnedArtifactLLMMessage:
 
         initial_message_count = len(agent.call_stack.peek().llm_messages)
 
-        await agent._post_execute(playbook_call, True, result, Mock())
+        await agent._post_execute(playbook_call, True, result)
 
         # Get the messages from the call stack
         final_messages = agent.call_stack.peek().llm_messages
@@ -183,7 +183,7 @@ class TestReturnedArtifactLLMMessage:
         frame = CallStackFrame(instruction_pointer)
         agent.call_stack.push(frame)
 
-        await agent._post_execute(call, True, artifact, Mock())
+        await agent._post_execute(call, True, artifact)
 
         # Check that ArtifactLLMMessage was added
         final_messages = agent.call_stack.peek().llm_messages
@@ -205,7 +205,7 @@ class TestReturnedArtifactLLMMessage:
         frame = CallStackFrame(instruction_pointer)
         agent.call_stack.push(frame)
 
-        await agent._post_execute(playbook_call, True, long_result, Mock())
+        await agent._post_execute(playbook_call, True, long_result)
 
         # Should have ArtifactLLMMessage
         final_messages = agent.call_stack.peek().llm_messages
@@ -234,7 +234,7 @@ class TestReturnedArtifactLLMMessage:
         initial_message_count = len(agent.call_stack.peek().llm_messages)
 
         # Failed execution
-        await agent._post_execute(playbook_call, False, artifact, Mock())
+        await agent._post_execute(playbook_call, False, artifact)
 
         # Should only have ExecutionResultLLMMessage, not ArtifactLLMMessage
         final_messages = agent.call_stack.peek().llm_messages

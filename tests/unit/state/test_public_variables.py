@@ -1,15 +1,15 @@
 """Tests for VariablesTracker.public_variables() utility method."""
 
 import pytest
-from dotmap import DotMap
+from box import Box
 
 from playbooks.state.variables import Artifact, VariablesTracker
 
 
 @pytest.fixture
 def variables():
-    """Create a DotMap instance for testing."""
-    return DotMap()
+    """Create a Box instance for testing."""
+    return Box()
 
 
 class TestPublicVariables:

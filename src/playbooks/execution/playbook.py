@@ -17,7 +17,7 @@ from playbooks.core.exceptions import ExecutionFinished, InteractiveInputRequire
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
 from playbooks.execution.call import PlaybookCall
 from playbooks.execution.interpreter_prompt import InterpreterPrompt
-from playbooks.execution.llm_response import LLMResponse
+from playbooks.execution.llm_response import LLMResponse, _strip_code_block_markers
 from playbooks.execution.streaming_python_executor import (
     StreamingExecutionError,
     StreamingPythonExecutor,
@@ -37,6 +37,40 @@ if TYPE_CHECKING:
     from playbooks.playbook.llm_playbook import LLMPlaybook
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_interpreter_response(response: str) -> bool:
+    """Validate that an LLM response is properly formatted for interpreter/playbook execution.
+
+    Args:
+        response: Raw LLM response string
+
+    Returns:
+        True if response is valid and should be cached, False otherwise
+    """
+    if not response or not response.strip():
+        return False
+
+    response = response.strip()
+
+    # must start with ```python
+    if not response.startswith("```python"):
+        return False
+
+    # must end with ```
+    if not response.endswith("```"):
+        return False
+
+    # Strip code block markers if present
+    processed = _strip_code_block_markers(response)
+
+    # Check if it starts with the expected comment format
+    lines = processed.strip().split("\n")
+    if not lines:
+        return False
+
+    first_line = lines[0].strip()
+    return first_line.startswith("# execution_id:")
 
 
 class PlaybookLLMExecution(LLMExecution):
@@ -156,13 +190,15 @@ class PlaybookLLMExecution(LLMExecution):
             playbook_args = self._extract_playbook_arguments(call)
 
             # Make the LLM call and execute the generated code streaming
+            raw_llm_response = await self.make_llm_call(
+                instruction=instruction,
+                agent_instructions=f"Remember: You are {str(self.agent)}. {description_paragraph}",
+                artifacts_to_load=artifacts_to_load,
+                playbook_args=playbook_args,
+            )
+
             llm_response = await LLMResponse.create(
-                await self.make_llm_call(
-                    instruction=instruction,
-                    agent_instructions=f"Remember: You are {str(self.agent)}. {description_paragraph}",
-                    artifacts_to_load=artifacts_to_load,
-                    playbook_args=playbook_args,
-                ),
+                raw_llm_response,
                 event_bus=self.agent.event_bus,
                 agent=self.agent,
             )
@@ -387,6 +423,7 @@ class PlaybookLLMExecution(LLMExecution):
                     event_bus=self.agent.event_bus,
                     agent_id=self.agent.id,
                     session_id=self.agent.program.event_bus.session_id,
+                    response_validator=_validate_interpreter_response,
                 )
             ):
                 buffer += chunk

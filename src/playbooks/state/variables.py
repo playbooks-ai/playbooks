@@ -12,6 +12,26 @@ from playbooks.core.events import VariableUpdateEvent
 from playbooks.infrastructure.event_bus import EventBus
 
 
+class PlaybookBox(Box):
+    """Custom Box that supports format specifiers in f-strings and raises AttributeError for missing attributes.
+
+    This subclass fixes issues where Box objects don't support format specifiers like `:,` in f-strings,
+    and ensures that missing attributes raise AttributeError as normal Python objects do.
+    """
+
+    def __getattr__(self, key: str) -> Any:
+        """Attribute access with Pythonic 'missing attribute' semantics.
+
+        Box's default behavior can make `hasattr(state, "x")` always return True
+        (by materializing missing keys). That pattern is common in both library
+        code and LLM-generated code, so we make missing attributes raise
+        AttributeError as normal Python objects do.
+        """
+        if key in self:
+            return self[key]
+        raise AttributeError(key)
+
+
 class Artifact:
     """Artifact with summary and value for large content.
 

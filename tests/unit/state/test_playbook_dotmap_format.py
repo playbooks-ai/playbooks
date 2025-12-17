@@ -1,44 +1,40 @@
-"""Tests for PlaybookDotMap format specifier support.
+"""Tests for Box format specifier support.
 
-This test file ensures that PlaybookDotMap properly handles format specifiers
-in f-strings, fixing the issue where DotMap objects don't support format
+This test file ensures that Box properly handles format specifiers
+in f-strings, fixing the issue where Box objects don't support format
 specifiers like `:,` for number formatting.
 """
 
-from playbooks.state.variables import PlaybookDotMap
+from box import Box
 
 
-class TestPlaybookDotMapFormatSpecifiers:
-    """Test PlaybookDotMap format specifier support."""
+class TestBoxFormatSpecifiers:
+    """Test Box format specifier support."""
 
     def test_format_specifier_with_nested_dict_int(self):
         """Test format specifier with nested dictionary containing int values.
 
         This is the regression test for the reported issue where:
         f"${self.state.report_data['sales']:,}" would fail with:
-        "unsupported format string passed to DotMap.__format__"
+        "unsupported format string passed to Box.__format__"
         """
-        state = PlaybookDotMap()
-        state.report_data = PlaybookDotMap(
-            {"sales": 1000, "region": "North", "trend": "positive"}
-        )
+        state = Box()
+        state.report_data = Box({"sales": 1000, "region": "North", "trend": "positive"})
 
         # This should work without errors
         sales_value = state.report_data["sales"]
         formatted = f"${sales_value:,}"
 
         assert formatted == "$1,000"
-        assert isinstance(sales_value, int)  # Should be native int, not DotMap
+        assert isinstance(sales_value, int)  # Should be native int, not Box
 
     def test_format_specifier_in_f_string_directly(self):
         """Test format specifier used directly in f-string with nested access.
 
         This tests the exact pattern from the user's error case.
         """
-        state = PlaybookDotMap()
-        state.report_data = PlaybookDotMap(
-            {"sales": 1000, "region": "North", "trend": "positive"}
-        )
+        state = Box()
+        state.report_data = Box({"sales": 1000, "region": "North", "trend": "positive"})
 
         # This is the exact pattern that was failing
         summary = f'📊 **North Region Report**: Sales reached **${state.report_data["sales"]:,}** with a **{state.report_data["trend"]}** trend—excellent momentum!'
@@ -49,8 +45,8 @@ class TestPlaybookDotMapFormatSpecifiers:
 
     def test_format_specifier_with_large_number(self):
         """Test format specifier with large numbers."""
-        state = PlaybookDotMap()
-        state.report_data = PlaybookDotMap({"sales": 1234567, "revenue": 9876543.21})
+        state = Box()
+        state.report_data = Box({"sales": 1234567, "revenue": 9876543.21})
 
         sales_formatted = f"${state.report_data['sales']:,}"
         revenue_formatted = f"${state.report_data['revenue']:,.2f}"
@@ -60,8 +56,8 @@ class TestPlaybookDotMapFormatSpecifiers:
 
     def test_format_specifier_with_float(self):
         """Test format specifier with float values."""
-        state = PlaybookDotMap()
-        state.metrics = PlaybookDotMap({"percentage": 95.5, "ratio": 0.1234})
+        state = Box()
+        state.metrics = Box({"percentage": 95.5, "ratio": 0.1234})
 
         percentage = f"{state.metrics['percentage']:.1f}%"
         ratio = f"{state.metrics['ratio']:.2%}"
@@ -71,12 +67,12 @@ class TestPlaybookDotMapFormatSpecifiers:
 
     def test_nested_dict_access_returns_native_types(self):
         """Test that accessing nested dict values returns native Python types."""
-        state = PlaybookDotMap()
-        state.data = PlaybookDotMap(
+        state = Box()
+        state.data = Box(
             {"count": 42, "name": "test", "price": 99.99, "active": True, "empty": None}
         )
 
-        # All should be native types, not DotMap
+        # All should be native types, not Box
         assert isinstance(state.data["count"], int)
         assert isinstance(state.data["name"], str)
         assert isinstance(state.data["price"], float)
@@ -85,13 +81,9 @@ class TestPlaybookDotMapFormatSpecifiers:
 
     def test_deeply_nested_dict_format_specifier(self):
         """Test format specifier with deeply nested dictionaries."""
-        state = PlaybookDotMap()
-        state.company = PlaybookDotMap(
-            {
-                "financials": PlaybookDotMap(
-                    {"q1": PlaybookDotMap({"revenue": 1000000, "profit": 250000})}
-                )
-            }
+        state = Box()
+        state.company = Box(
+            {"financials": Box({"q1": Box({"revenue": 1000000, "profit": 250000})})}
         )
 
         revenue = f"${state.company.financials.q1.revenue:,}"
@@ -102,7 +94,7 @@ class TestPlaybookDotMapFormatSpecifiers:
 
     def test_format_specifier_with_list_of_numbers(self):
         """Test format specifier when accessing list elements."""
-        state = PlaybookDotMap()
+        state = Box()
         state.sales = [1000, 2000, 3000]
 
         # Accessing list elements should work normally
@@ -111,8 +103,8 @@ class TestPlaybookDotMapFormatSpecifiers:
 
     def test_multiple_format_specifiers_in_one_string(self):
         """Test multiple format specifiers in a single f-string."""
-        state = PlaybookDotMap()
-        state.report_data = PlaybookDotMap(
+        state = Box()
+        state.report_data = Box(
             {"sales": 1000, "region": "North", "trend": "positive", "growth": 15.5}
         )
 
@@ -128,10 +120,8 @@ class TestPlaybookDotMapFormatSpecifiers:
 
     def test_format_specifier_preserves_dict_access(self):
         """Test that format specifiers work but dict access still works."""
-        state = PlaybookDotMap()
-        state.report_data = PlaybookDotMap(
-            {"sales": 1000, "details": PlaybookDotMap({"region": "North"})}
-        )
+        state = Box()
+        state.report_data = Box({"sales": 1000, "details": Box({"region": "North"})})
 
         # Format specifier should work
         sales_formatted = f"${state.report_data['sales']:,}"

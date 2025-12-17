@@ -10,11 +10,11 @@ and properly captures locals.
 """
 
 import pytest
+from box import Box
 
 from playbooks.execution.streaming_python_executor import StreamingPythonExecutor
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.state.variables import PlaybookDotMap
 
 
 class MockProgram:
@@ -34,7 +34,7 @@ class MockAgent:
 
         # Set up state matching the architecture
         event_bus = EventBus("test-session")
-        self._variables_internal = PlaybookDotMap()
+        self._variables_internal = Box()
         self.call_stack = CallStack(event_bus)
         # Push a dummy frame for testing
         instruction_pointer = InstructionPointer(
@@ -46,11 +46,16 @@ class MockAgent:
         self.call_stack.push(frame)
 
         self.playbooks = {}
+        self.program = None
+
+    def get_current_meeting(self):
+        """Mock get_current_meeting method."""
+        return None
         self.program = MockProgram()
 
     @property
     def state(self):
-        """Return variables DotMap."""
+        """Return variables Box."""
         return self._variables_internal
 
     def parse_instruction_pointer(self, step: str):

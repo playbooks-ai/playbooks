@@ -30,7 +30,7 @@ async def test_react_playbook_steps(playbooks):
 
     # When the playbook is executed, the steps are created
     execution = ReActLLMExecution(agent, agent.playbooks["Solver"])
-    execution._add_react_steps()
+    await execution._add_react_steps()
     assert len(agent.playbooks["Solver"].step_collection) > 0
 
 

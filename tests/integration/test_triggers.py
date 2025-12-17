@@ -7,7 +7,7 @@ from playbooks.core.constants import EOM
 @pytest.mark.asyncio
 async def test_triggers(test_data_dir):
     playbooks = Playbooks([test_data_dir / "06-triggers.pb"])
-    await playbooks.program.initialize()
+    await playbooks.initialize()
 
     # The default human agent is created with klass="User", not HUMAN_AGENT_KLASS
     human = playbooks.program.agents_by_klass["User"][0]

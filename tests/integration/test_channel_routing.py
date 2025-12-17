@@ -1,11 +1,13 @@
 """Integration tests for channel-based message routing."""
 
+import asyncio
+
 import pytest
 import pytest_asyncio
 
 from playbooks.agents.human_agent import HumanAgent
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.core.message import MessageType
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.program import Program
 
 
@@ -257,8 +259,14 @@ class TestTargetedMessaging:
             message_type=MessageType.MEETING_BROADCAST,
         )
 
-        # Agent B should have received the message with targeting metadata
+        # Flush pending messages to ensure they are delivered to the queue
         agent_b = mock_participants[1]
+        await agent_b.meeting_manager.flush_pending_messages(meeting_id)
+
+        # Wait a bit for the async delivery task to complete
+        await asyncio.sleep(0.1)
+
+        # Agent B should have received the message with targeting metadata
         assert agent_b._message_queue.size == 1
         message = await agent_b._message_queue.peek()
         assert message.target_agent_ids is not None
@@ -287,6 +295,10 @@ class TestTargetedMessaging:
             message_type=MessageType.MEETING_BROADCAST,
         )
 
+        # Flush pending messages
+        await agent_b.meeting_manager.flush_pending_messages(meeting_id)
+        await asyncio.sleep(0.1)
+
         # Agent B should receive with targeting
         message = await agent_b._message_queue.peek()
         assert message.target_agent_ids is not None
@@ -312,6 +324,10 @@ class TestTargetedMessaging:
             message="Broadcast to all",
             message_type=MessageType.MEETING_BROADCAST,
         )
+
+        # Flush pending messages
+        await agent_b.meeting_manager.flush_pending_messages(meeting_id)
+        await asyncio.sleep(0.1)
 
         # Agent B should receive without targeting metadata
         message = await agent_b._message_queue.peek()

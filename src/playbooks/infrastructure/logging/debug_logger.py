@@ -251,7 +251,7 @@ def _setup_debug_logger() -> None:
 
     # Only add standard handler if not using Rich or for file output
     if not _USE_RICH_CONSOLE:
-        # Console handler (timestamp and DEBUG_PREFIX added in debug() function)
+        # Console handler
         handler = logging.StreamHandler()
         handler.setFormatter(logging.Formatter("%(message)s"))
         _debug_logger.addHandler(handler)

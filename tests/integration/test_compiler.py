@@ -6,15 +6,13 @@ enabling better parallelization and caching at the agent level.
 """
 
 import tempfile
-from concurrent.futures import Future
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from playbooks.compilation.compiler import (
     Compiler,
-    FileCompilationResult,
     FileCompilationSpec,
 )
 from playbooks.core.exceptions import ProgramLoadError
@@ -276,33 +274,32 @@ class TestCacheKeyGeneration:
 class TestAgentCompilation:
     """Test agent-level compilation functionality."""
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    def test_compile_single_agent(
+    async def test_compile_single_agent(
         self, mock_completion, compiler, single_agent_content
     ):
         """Test compiling a single agent."""
         mock_completion.return_value = iter(["# CompiledTestAgent\nCompiled content"])
 
-        compiled = compiler._compile_agent(single_agent_content)
+        compiled = await compiler._compile_agent(single_agent_content)
 
         assert "CompiledTestAgent" in compiled
         assert "Playbooks Assembly Language" in compiled  # Version header
         mock_completion.assert_called_once()
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
-    def test_compile_agent_with_caching(
+    async def test_compile_agent_with_caching(
         self,
         mock_exists,
-        mock_langfuse,
         mock_completion,
         compiler,
         single_agent_content,
     ):
         """Test agent compilation with caching."""
         mock_completion.return_value = iter(["# CompiledAgent\nCompiled content"])
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
 
         # First call - cache doesn't exist
         mock_exists.return_value = False
@@ -310,7 +307,7 @@ class TestAgentCompilation:
         agent_info = {"name": "TestAgent", "content": single_agent_content}
 
         # First compilation - should call LLM
-        result1 = compiler._compile_agent_with_caching(agent_info)
+        result1 = await compiler._compile_agent_with_caching(agent_info)
         assert mock_completion.call_count == 1
         assert result1.is_compiled is True
 
@@ -329,48 +326,46 @@ Playbooks Assembly Language v{version}
 # CompiledAgent
 Compiled content"""
         with patch("pathlib.Path.read_text", return_value=cached_content):
-            result2 = compiler._compile_agent_with_caching(agent_info)
+            result2 = await compiler._compile_agent_with_caching(agent_info)
             assert mock_completion.call_count == 0  # No LLM call
 
         # Results should be identical
         assert result1.content == result2.content
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
-    def test_compile_without_cache(
-        self, mock_langfuse, mock_completion, compiler_no_cache, single_agent_content
+    async def test_compile_without_cache(
+        self, mock_completion, compiler_no_cache, single_agent_content
     ):
         """Test compilation with caching disabled."""
         mock_completion.side_effect = [
             iter(["# CompiledAgent\nCompiled content"]),
             iter(["# CompiledAgent\nCompiled content"]),
         ]
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
 
         agent_info = {"name": "TestAgent", "content": single_agent_content}
 
         # Multiple compilations should all call LLM
-        compiler_no_cache._compile_agent_with_caching(agent_info)
+        await compiler_no_cache._compile_agent_with_caching(agent_info)
         assert mock_completion.call_count == 1
 
-        compiler_no_cache._compile_agent_with_caching(agent_info)
+        await compiler_no_cache._compile_agent_with_caching(agent_info)
         assert mock_completion.call_count == 2
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.write_text")
-    def test_cache_write_failure_handling(
-        self, mock_write, mock_langfuse, mock_completion, compiler, single_agent_content
+    async def test_cache_write_failure_handling(
+        self, mock_write, mock_completion, compiler, single_agent_content
     ):
         """Test graceful handling of cache write failures."""
         mock_completion.return_value = iter(["# CompiledAgent\nCompiled content"])
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
         mock_write.side_effect = PermissionError("Cannot write cache")
 
         agent_info = {"name": "TestAgent", "content": single_agent_content}
 
         # Should complete successfully despite cache write failure
-        result = compiler._compile_agent_with_caching(agent_info)
+        result = await compiler._compile_agent_with_caching(agent_info)
         assert result.is_compiled is True
         assert "CompiledAgent" in result.content
 
@@ -378,20 +373,18 @@ Compiled content"""
 class TestFileProcessing:
     """Test file processing with agent-level compilation."""
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
-    def test_process_single_pb_file(
+    async def test_process_single_pb_file(
         self,
         mock_exists,
-        mock_langfuse,
         mock_completion,
         compiler,
         single_agent_content,
     ):
         """Test processing a single .pb file."""
         mock_completion.return_value = iter(["# CompiledAgent\nCompiled content"])
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
         mock_exists.return_value = False  # Cache doesn't exist
 
         files = [
@@ -400,14 +393,15 @@ class TestFileProcessing:
             )
         ]
 
-        results = compiler.process_files(files)
+        results = await compiler.process_files(files)
 
         assert len(results) == 1
         assert results[0].is_compiled is True
         assert "CompiledAgent" in results[0].content
         mock_completion.assert_called_once()
 
-    def test_process_single_pbasm_file(self, compiler):
+    @pytest.mark.asyncio
+    async def test_process_single_pbasm_file(self, compiler):
         """Test processing a single .pbasm file (no compilation needed)."""
         compiled_content = "# AlreadyCompiled\nPre-compiled content"
 
@@ -418,7 +412,7 @@ class TestFileProcessing:
         ]
 
         with patch.object(compiler, "_compile_agent") as mock_compile:
-            results = compiler.process_files(files)
+            results = await compiler.process_files(files)
 
             assert len(results) == 1
             assert results[0].is_compiled is True
@@ -426,17 +420,16 @@ class TestFileProcessing:
             mock_compile.assert_not_called()  # No compilation needed
 
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
-    def test_process_multiple_pb_files(
-        self, mock_exists, mock_langfuse, mock_completion, compiler, multi_agent_content
+    @pytest.mark.asyncio
+    async def test_process_multiple_pb_files(
+        self, mock_exists, mock_completion, compiler, multi_agent_content
     ):
         """Test processing multiple .pb files with multiple agents."""
         mock_completion.side_effect = [
             iter(["# CompiledFirst\nFirst compiled"]),
             iter(["# CompiledSecond\nSecond compiled"]),
         ]
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
         mock_exists.return_value = False  # Cache doesn't exist
 
         files = [
@@ -445,7 +438,7 @@ class TestFileProcessing:
             )
         ]
 
-        results = compiler.process_files(files)
+        results = await compiler.process_files(files)
 
         # Should have one result per agent
         assert len(results) == 2
@@ -453,12 +446,11 @@ class TestFileProcessing:
         assert mock_completion.call_count == 2
 
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
-    def test_process_mixed_files(
+    @pytest.mark.asyncio
+    async def test_process_mixed_files(
         self,
         mock_exists,
-        mock_langfuse,
         mock_completion,
         compiler,
         single_agent_content,
@@ -470,7 +462,6 @@ class TestFileProcessing:
             iter(["# CompiledTestAgent\nCompiled test agent"]),
             iter(["# CompiledExistingAgent\nCompiled existing agent"]),
         ]
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
         mock_exists.return_value = False  # Cache doesn't exist
 
         files = [
@@ -484,13 +475,14 @@ class TestFileProcessing:
             ),
         ]
 
-        results = compiler.process_files(files)
+        results = await compiler.process_files(files)
 
         assert len(results) == 2
         # Both agents get compiled when there are mixed file types
         assert mock_completion.call_count == 2
 
-    def test_process_all_pbasm_files(self, compiler):
+    @pytest.mark.asyncio
+    async def test_process_all_pbasm_files(self, compiler):
         """Test processing all .pbasm files (no LLM calls)."""
         files = [
             FileCompilationSpec(
@@ -506,44 +498,21 @@ class TestFileProcessing:
         ]
 
         with patch.object(compiler, "_compile_agent") as mock_compile:
-            results = compiler.process_files(files)
+            results = await compiler.process_files(files)
 
             assert len(results) == 2
             assert all(r.is_compiled for r in results)
             mock_compile.assert_not_called()  # No compilation needed
 
-    @patch("playbooks.compilation.compiler.ThreadPoolExecutor")
     @patch("playbooks.compilation.compiler.get_completion")
-    def test_parallel_compilation(
-        self, mock_completion, mock_executor_class, compiler, multi_agent_content
+    @patch("pathlib.Path.exists")
+    @pytest.mark.asyncio
+    async def test_parallel_compilation(
+        self, mock_exists, mock_completion, compiler, multi_agent_content
     ):
-        """Test that multiple agents are compiled in parallel."""
+        """Test that multiple agents are compiled."""
         mock_completion.side_effect = [iter(["# Compiled1"]), iter(["# Compiled2"])]
-
-        # Mock the executor to track parallel execution
-        mock_executor = Mock()
-        mock_executor_class.return_value.__enter__ = Mock(return_value=mock_executor)
-        mock_executor_class.return_value.__exit__ = Mock(return_value=None)
-
-        # Create mock futures
-        future1 = Mock(spec=Future)
-        future2 = Mock(spec=Future)
-        future1.result.return_value = FileCompilationResult(
-            file_path="cache1.pbasm",
-            frontmatter_dict={},
-            content="# Compiled1",
-            is_compiled=True,
-            compiled_file_path="cache1.pbasm",
-        )
-        future2.result.return_value = FileCompilationResult(
-            file_path="cache2.pbasm",
-            frontmatter_dict={},
-            content="# Compiled2",
-            is_compiled=True,
-            compiled_file_path="cache2.pbasm",
-        )
-
-        mock_executor.submit.side_effect = [future1, future2]
+        mock_exists.return_value = False  # No cache exists
 
         files = [
             FileCompilationSpec(
@@ -551,13 +520,11 @@ class TestFileProcessing:
             )
         ]
 
-        with patch("playbooks.compilation.compiler.as_completed") as mock_as_completed:
-            mock_as_completed.return_value = [future1, future2]
-            results = compiler.process_files(files)
+        results = await compiler.process_files(files)
 
-        # Verify parallel submission
-        assert mock_executor.submit.call_count == 2
-        assert len(results) == 2
+        # Verify compilation happened
+        assert mock_completion.call_count == 2
+        assert len(results) == 2  # One result per agent
 
 
 class TestFrontmatterHandling:
@@ -573,8 +540,9 @@ class TestFrontmatterHandling:
         assert fm_data.metadata["author"] == "Test Author"
         assert fm_data.metadata["version"] == "1.0"
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    def test_frontmatter_preservation(
+    async def test_frontmatter_preservation(
         self, mock_completion, compiler, content_with_frontmatter
     ):
         """Test that frontmatter is extracted at file level for duplicate detection."""
@@ -586,14 +554,15 @@ class TestFrontmatterHandling:
             )
         ]
 
-        results = compiler.process_files(files)
+        results = await compiler.process_files(files)
 
         assert len(results) == 1
         # Frontmatter is extracted at the file level for duplicate checking
         # Individual agent results get frontmatter from their compiled content
         assert results[0].is_compiled is True
 
-    def test_duplicate_frontmatter_detection(self, compiler):
+    @pytest.mark.asyncio
+    async def test_duplicate_frontmatter_detection(self, compiler):
         """Test detection of duplicate frontmatter keys across files."""
         content1 = """---
 shared_key: "value1"
@@ -619,9 +588,10 @@ Content"""
         with pytest.raises(
             ValueError, match="Duplicate frontmatter attribute 'shared_key'"
         ):
-            compiler.process_files(files)
+            await compiler.process_files(files)
 
-    def test_frontmatter_in_pbasm_files(self, compiler):
+    @pytest.mark.asyncio
+    async def test_frontmatter_in_pbasm_files(self, compiler):
         """Test frontmatter extraction from .pbasm files."""
         # For pbasm files, the agent content itself should contain frontmatter
         pbasm_content = """# CompiledAgent
@@ -633,7 +603,7 @@ Already compiled content"""
             )
         ]
 
-        results = compiler.process_files(files)
+        results = await compiler.process_files(files)
 
         assert len(results) == 1
         # For .pbasm files, frontmatter comes from the agent content itself
@@ -645,13 +615,12 @@ Already compiled content"""
 class TestBackwardCompatibility:
     """Test backward compatibility with the compile() method."""
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
-    def test_compile_method_single_file(
+    async def test_compile_method_single_file(
         self,
         mock_exists,
-        mock_langfuse,
         mock_completion,
         compiler,
         single_agent_content,
@@ -659,49 +628,51 @@ class TestBackwardCompatibility:
     ):
         """Test the compile() method for backward compatibility."""
         mock_completion.return_value = iter(["# CompiledAgent\nCompiled"])
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
         mock_exists.return_value = False  # Cache doesn't exist
 
         test_file = temp_dir / "test.pb"
         test_file.write_text(single_agent_content)
 
-        frontmatter, content, cache_path = compiler.compile(file_path=str(test_file))
+        frontmatter, content, cache_path = await compiler.compile(
+            file_path=str(test_file)
+        )
 
         assert "CompiledAgent" in content
         assert isinstance(cache_path, Path)
         mock_completion.assert_called_once()
 
+    @pytest.mark.asyncio
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
-    def test_compile_method_with_content(
-        self, mock_langfuse, mock_completion, compiler, single_agent_content
+    async def test_compile_method_with_content(
+        self, mock_completion, compiler, single_agent_content
     ):
         """Test compile() method with content parameter."""
         mock_completion.return_value = iter(["# CompiledAgent\nCompiled"])
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
 
-        frontmatter, content, cache_path = compiler.compile(
+        frontmatter, content, cache_path = await compiler.compile(
             content=single_agent_content
         )
 
         assert "CompiledAgent" in content
         assert isinstance(cache_path, Path)
 
-    def test_compile_method_invalid_params(self, compiler):
+    @pytest.mark.asyncio
+    async def test_compile_method_invalid_params(self, compiler):
         """Test compile() method with invalid parameters."""
         # Both file_path and content provided
         with pytest.raises(ValueError):
-            compiler.compile(file_path="test.pb", content="content")
+            await compiler.compile(file_path="test.pb", content="content")
 
         # Neither provided
         with pytest.raises(ValueError):
-            compiler.compile()
+            await compiler.compile()
 
 
 class TestErrorHandling:
     """Test error handling in the compiler."""
 
-    def test_no_agents_found_error(self, compiler):
+    @pytest.mark.asyncio
+    async def test_no_agents_found_error(self, compiler):
         """Test error when no agents are found in content."""
         content_without_agents = """## Just a Playbook
 No H1 headers here
@@ -719,31 +690,30 @@ No H1 headers here
         ]
 
         with pytest.raises(ProgramLoadError, match="No agents found"):
-            compiler.process_files(files)
+            await compiler.process_files(files)
 
-    def test_empty_content_handling(self, compiler):
+    @pytest.mark.asyncio
+    async def test_empty_content_handling(self, compiler):
         """Test handling of empty file content."""
         files = [
             FileCompilationSpec(file_path="empty.pb", content="", is_compiled=False)
         ]
 
         with pytest.raises(ProgramLoadError, match="No agents found"):
-            compiler.process_files(files)
+            await compiler.process_files(files)
 
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
-    def test_llm_failure_handling(
+    @pytest.mark.asyncio
+    async def test_llm_failure_handling(
         self,
         mock_exists,
-        mock_langfuse,
         mock_completion,
         compiler,
         single_agent_content,
     ):
         """Test handling of LLM failures during compilation."""
         mock_completion.side_effect = Exception("LLM API error")
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
         mock_exists.return_value = False  # Cache doesn't exist, force LLM call
 
         files = [
@@ -753,13 +723,13 @@ No H1 headers here
         ]
 
         with pytest.raises(Exception, match="LLM API error"):
-            compiler.process_files(files)
+            await compiler.process_files(files)
 
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
     @patch("pathlib.Path.exists")
-    def test_partial_compilation_failure(
-        self, mock_exists, mock_langfuse, mock_completion, compiler, multi_agent_content
+    @pytest.mark.asyncio
+    async def test_partial_compilation_failure(
+        self, mock_exists, mock_completion, compiler, multi_agent_content
     ):
         """Test handling when one agent fails to compile in multi-agent scenario."""
         # First agent compiles successfully, second fails
@@ -767,7 +737,6 @@ No H1 headers here
             iter(["# CompiledFirst\nFirst compiled"]),
             Exception("Second agent compilation failed"),
         ]
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
         mock_exists.return_value = False  # Cache doesn't exist, force LLM calls
 
         files = [
@@ -777,7 +746,7 @@ No H1 headers here
         ]
 
         with pytest.raises(Exception, match="Second agent compilation failed"):
-            compiler.process_files(files)
+            await compiler.process_files(files)
 
 
 class TestLLMConfiguration:
@@ -915,10 +884,8 @@ class TestParallelCompilation:
     """Test parallel compilation of multiple agents."""
 
     @patch("playbooks.compilation.compiler.get_completion")
-    @patch("playbooks.compilation.compiler.LangfuseHelper")
-    def test_agents_compiled_in_parallel(
-        self, mock_langfuse, mock_completion, compiler
-    ):
+    @pytest.mark.asyncio
+    async def test_agents_compiled_in_parallel(self, mock_completion, compiler):
         """Test that multiple agents are compiled in parallel and maintain order."""
         # Create content with 3 agents
         content = """# Agent1
@@ -948,7 +915,6 @@ Third agent
             iter(["# Compiled2"]),
             iter(["# Compiled3"]),
         ]
-        mock_langfuse.instance.return_value.trace.return_value = MagicMock()
 
         files = [
             FileCompilationSpec(
@@ -956,7 +922,7 @@ Third agent
             )
         ]
 
-        results = compiler.process_files(files)
+        results = await compiler.process_files(files)
 
         # Should have 3 results in order
         assert len(results) == 3

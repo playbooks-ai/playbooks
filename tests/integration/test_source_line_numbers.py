@@ -3,11 +3,12 @@
 import pytest
 
 from playbooks.agents.agent_builder import AgentBuilder
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.infrastructure.event_bus import EventBus
 
 
-def test_source_line_numbers_simple_playbook():
+@pytest.mark.asyncio
+async def test_source_line_numbers_simple_playbook():
     """Test source_line_number on a simple playbook structure."""
     markdown_text = """# TestAgent
 This is a test agent description.
@@ -32,7 +33,7 @@ This is a test playbook description.
     ast = markdown_to_ast(markdown_text)
 
     # Create agents from AST
-    agents = AgentBuilder.create_agent_classes_from_ast(ast)
+    agents = await AgentBuilder.create_agent_classes_from_ast(ast)
     assert len(agents) == 1
 
     # Create agent instance
@@ -87,7 +88,8 @@ This is a test playbook description.
     assert step_03.content == "Return the result"
 
 
-def test_source_line_numbers_builtin_playbooks():
+@pytest.mark.asyncio
+async def test_source_line_numbers_builtin_playbooks():
     """Test that built-in playbooks have None for source_line_number."""
     markdown_text = """# TestAgent
 This is a test agent.
@@ -106,7 +108,7 @@ This is a test playbook.
     ast = markdown_to_ast(markdown_text)
 
     # Create agents from AST
-    agents = AgentBuilder.create_agent_classes_from_ast(ast)
+    agents = await AgentBuilder.create_agent_classes_from_ast(ast)
     agent_class = agents.get("TestAgent")
     assert agent_class is not None
 
@@ -132,7 +134,8 @@ This is a test playbook.
     assert user_playbook.source_line_number == 4
 
 
-def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
+@pytest.mark.asyncio
+async def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
     """Test source_line_number is set on all objects in multi-agent.pbasm."""
     # Read the actual multi-agent.pbasm file
     with open(test_data_dir / "multi-agent.pbasm", "r") as f:
@@ -142,7 +145,7 @@ def test_source_line_numbers_multi_agent_pbasm(test_data_dir):
     ast = markdown_to_ast(markdown_text)
 
     # Create agents from AST
-    agents = AgentBuilder.create_agent_classes_from_ast(ast)
+    agents = await AgentBuilder.create_agent_classes_from_ast(ast)
     assert len(agents) == 2
 
     # Create agent instances

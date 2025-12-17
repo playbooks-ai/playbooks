@@ -67,6 +67,7 @@ async def test_playbooks_compilation_skip(test_data_dir, tmp_path):
 
     # First, compile the .pb file to get the compiled content
     playbooks_pb = Playbooks([str(pb_file_path)])
+    await playbooks_pb.initialize()
     pbasm_file_path = playbooks_pb.compiled_program_files[0].compiled_file_path
 
     # The compiled content should be different from the original content
@@ -76,6 +77,7 @@ async def test_playbooks_compilation_skip(test_data_dir, tmp_path):
 
     # Test with .pbasm file - should skip compilation
     playbooks_pbasm = Playbooks([str(pbasm_file_path)])
+    await playbooks_pbasm.initialize()
 
     # The compiled content should be the same as what we wrote to the .pbasm file
     # (no additional compilation should occur)

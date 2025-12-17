@@ -29,7 +29,7 @@ class TestCallStackFrameMessages:
         ip = InstructionPointer("test_playbook", "01", 1)
         frame = CallStackFrame(ip)
 
-        msg = UserInputLLMMessage("Test message")
+        msg = UserInputLLMMessage(instruction="Test message")
         frame.add_llm_message(msg)
 
         messages = frame.get_llm_messages()
@@ -46,7 +46,7 @@ class TestCallStackFrameMessages:
         frame = CallStackFrame(ip)
 
         msg1 = PlaybookImplementationLLMMessage("# Playbook", "test")
-        msg2 = UserInputLLMMessage("User input")
+        msg2 = UserInputLLMMessage(instruction="User input")
         msg3 = AssistantResponseLLMMessage("Assistant response")
 
         frame.add_llm_message(msg1)
@@ -69,14 +69,14 @@ class TestCallStackFrameMessages:
         ip = InstructionPointer("test_playbook", "01", 1)
         frame = CallStackFrame(ip)
 
-        msg1 = UserInputLLMMessage("First message")
+        msg1 = UserInputLLMMessage(instruction="First message")
         frame.add_llm_message(msg1)
 
         messages1 = frame.get_llm_messages()
         assert len(messages1) == 1
 
         # Add a second message
-        msg2 = UserInputLLMMessage("Second message")
+        msg2 = UserInputLLMMessage(instruction="Second message")
         frame.add_llm_message(msg2)
 
         messages2 = frame.get_llm_messages()

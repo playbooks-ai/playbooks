@@ -1,9 +1,9 @@
 import pytest
+from box import Box
 
 from playbooks.execution.streaming_python_executor import StreamingPythonExecutor
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.state.variables import PlaybookDotMap
 
 
 class _MockProgram:
@@ -19,7 +19,7 @@ class _MockAgent:
         self.id = "test_agent"
         self.klass = "MockAgent"
         event_bus = EventBus("test-session")
-        self._variables_internal = PlaybookDotMap()
+        self._variables_internal = Box()
         self.call_stack = CallStack(event_bus)
         self.program = _MockProgram()
         self.playbooks = {}
@@ -46,6 +46,10 @@ class _MockAgent:
             source_line_number=0,
             step=parts[2] if len(parts) > 2 else None,
         )
+
+    def get_current_meeting(self):
+        """Mock get_current_meeting method."""
+        return None
 
     def resolve_target(self, target: str, allow_fallback: bool = True) -> str:
         return target

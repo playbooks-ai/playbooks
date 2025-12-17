@@ -4,11 +4,12 @@ import types
 from unittest.mock import MagicMock, Mock
 
 import pytest
+from box import Box
 
 from playbooks.execution.interpreter_prompt import InterpreterPrompt, SetEncoder
 from playbooks.infrastructure.event_bus import EventBus
+from playbooks.llm.messages import AssistantResponseLLMMessage, UserInputLLMMessage
 from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
-from playbooks.state.variables import PlaybookDotMap
 
 
 class MockNamespaceManager:
@@ -24,7 +25,7 @@ class MockAgent:
     def __init__(self, state=None, namespace=None, call_stack=None):
         self.id = "test_agent"
         self.klass = "TestAgent"
-        self.state = state or PlaybookDotMap()
+        self.state = state or Box()
         self.namespace_manager = MockNamespaceManager(namespace or {})
 
         # Set up call stack
@@ -41,6 +42,24 @@ class MockAgent:
             )
             frame = CallStackFrame(instruction_pointer=instruction_pointer)
             self.call_stack.push(frame)
+
+        # Mock meeting manager
+        self.meeting_manager = Mock()
+        self.meeting_manager.get_current_meeting_from_call_stack = Mock(
+            return_value=None
+        )
+
+        # Mock meeting attributes
+        self.owned_meetings = {}
+        self.joined_meetings = {}
+
+    @property
+    def active_meetings(self):
+        """Get all active meetings (owned + joined)."""
+        meetings = []
+        meetings.extend(self.owned_meetings.values())
+        meetings.extend(self.joined_meetings.values())
+        return meetings
 
     def to_dict(self):
         """Convert agent to dict representation."""
@@ -68,7 +87,6 @@ def interpreter_prompt(mock_agent):
         instruction="Test instruction",
         agent_instructions="Test agent instructions",
         artifacts_to_load=[],
-        trigger_instructions=[],
         agent_information="Test agent info",
         other_agent_klasses_information=[],
         execution_id=1,
@@ -184,12 +202,12 @@ class TestInterpreterPromptHelpers:
         mock_agent.klass = "TestAgent"
 
         result = interpreter_prompt._get_type_hint(mock_agent)
-        assert result == "TestAgent instance"
+        assert result == "TestAgent"
 
     def test_get_type_hint_regular_object(self, interpreter_prompt):
         """Test _get_type_hint with regular object."""
         result = interpreter_prompt._get_type_hint([1, 2, 3])
-        assert result == "list"
+        assert result == "list[int]"
 
     def test_get_type_hint_custom_class(self, interpreter_prompt):
         """Test _get_type_hint with custom class."""
@@ -233,7 +251,7 @@ class TestInterpreterPromptHelpers:
         mock_agent.klass = "WorkerAgent"
 
         result = interpreter_prompt._format_variable("worker", mock_agent)
-        assert result == "worker = ...  # WorkerAgent instance"
+        assert result == "worker = ...  # WorkerAgent"
 
     def test_format_state_dict_with_literals(self, interpreter_prompt):
         """Test _format_state_dict with literal values."""
@@ -323,7 +341,8 @@ class TestInterpreterPromptHelpers:
     def test_extract_imports_empty_namespace(self, interpreter_prompt):
         """Test _extract_imports with empty namespace."""
         result = interpreter_prompt._extract_imports()
-        assert result == []
+        # Box and asyncio are always included
+        assert result == ["from box import Box", "import asyncio"]
 
     def test_extract_imports_with_modules(self):
         """Test _extract_imports with modules in namespace."""
@@ -342,15 +361,16 @@ class TestInterpreterPromptHelpers:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._extract_imports()
+        assert "from box import Box" in result
+        assert "import asyncio" in result
         assert "import json" in result
         assert "import os" in result
-        assert len(result) == 2
+        assert len(result) == 4
 
     def test_extract_imports_with_alias(self):
         """Test _extract_imports with aliased modules."""
@@ -369,12 +389,12 @@ class TestInterpreterPromptHelpers:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._extract_imports()
+        assert "from box import Box" in result
         assert "import original_name as alias" in result
 
     def test_extract_imports_skips_private(self):
@@ -394,14 +414,15 @@ class TestInterpreterPromptHelpers:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._extract_imports()
+        assert "from box import Box" in result
+        assert "import asyncio" in result
         assert "import json" in result
-        assert len(result) == 1  # Only json, not private ones
+        assert len(result) == 3  # Box + asyncio + json, not private ones
 
     def test_extract_imports_sorted(self):
         """Test _extract_imports returns sorted results."""
@@ -422,7 +443,6 @@ class TestInterpreterPromptHelpers:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
@@ -442,21 +462,26 @@ class TestBuildContextPrefix:
         assert result.startswith("```python\n")
         assert "```" in result
 
-        # Should include call_stack
-        assert "call_stack = " in result
+        # Should include self object with type
+        assert "self: AIAgent" in result
+        assert "TestAgent" in result
 
-        # Should include agents references
+        # Should include self.call_stack with type
+        assert "self.call_stack: list[str]" in result
+
+        # Should include self.active_meetings (not owned/joined separately)
+        assert "self.active_meetings: list[Meeting]" in result
+
+        # Should include self.current_meeting with type
+        assert "self.current_meeting:" in result
+
+        # Should include self.state with Box type
+        assert "self.state: Box" in result
+
+        # Should include agents references with types
         assert "agents.by_klass" in result
         assert "agents.by_id" in result
-        assert "agents.all" in result
-
-        # Should include meetings
-        assert "owned_meetings" in result
-        assert "joined_meetings" in result
-
-        # Should include self reference
-        assert "self = ..." in result
-        assert "TestAgent" in result
+        assert "agents.all: list[str]" in result
 
     def test_context_prefix_with_imports(self):
         """Test context prefix includes imports."""
@@ -475,7 +500,6 @@ class TestBuildContextPrefix:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
@@ -498,15 +522,16 @@ class TestBuildContextPrefix:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
-        assert "self.state.count = 42" in result
-        assert "self.state.name = 'Alice'" in result
-        assert "self.state.active = True" in result
+        # State is now shown as Box with JSON
+        assert "self.state: Box = Box(" in result
+        assert '"count": 42' in result
+        assert '"name": "Alice"' in result
+        assert '"active": true' in result
 
     def test_context_prefix_with_local_variables(self):
         """Test context prefix includes local variables from frame."""
@@ -533,15 +558,14 @@ class TestBuildContextPrefix:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
-        assert "order_id = '12345'" in result
-        assert "customer_name = 'Bob'" in result
-        assert "total = 99.99" in result
+        assert "order_id: str = '12345'" in result
+        assert "customer_name: str = 'Bob'" in result
+        assert "total: float = 99.99" in result
 
     def test_context_prefix_skips_busy_state(self):
         """Test context prefix skips _busy internal state."""
@@ -556,13 +580,13 @@ class TestBuildContextPrefix:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
-        assert "self.state.count = 10" in result
+        assert "self.state: Box" in result
+        assert '"count": 10' in result
         assert "_busy" not in result
 
     def test_context_prefix_with_non_literal_state(self):
@@ -582,14 +606,15 @@ class TestBuildContextPrefix:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
-        assert "self.state.count = 5" in result
-        assert "self.state.obj = ...  # CustomObject" in result
+        assert "self.state: Box" in result
+        assert '"count": 5' in result
+        # Non-literal objects are serialized as type placeholders
+        assert '"obj": "<CustomObject' in result
 
     def test_context_prefix_with_agent_dict_structure(self):
         """Test context prefix includes agent dictionary structure."""
@@ -612,16 +637,15 @@ class TestBuildContextPrefix:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
-        assert "call_stack = ['Playbook1:01', 'Playbook2:05']" in result
-        assert "agents.all = ['agent_1', 'agent_2']" in result
-        assert "owned_meetings = ['meeting_1']" in result
-        assert "joined_meetings = ['meeting_2', 'meeting_3']" in result
+        assert "self.call_stack: list[str] = ['Playbook1:01', 'Playbook2:05']" in result
+        assert "agents.all: list[str] = ['agent_1', 'agent_2']" in result
+        # active_meetings now combines owned and joined
+        assert "self.active_meetings: list[Meeting]" in result
 
     def test_context_prefix_ends_with_double_newline(self, interpreter_prompt):
         """Test context prefix ends with proper formatting."""
@@ -764,17 +788,16 @@ class TestContextPrefixLocalVariables:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
 
-        # Verify local variables are shown
-        assert "count = 42" in result
-        assert "message = 'Hello'" in result
-        assert "active = True" in result
+        # Verify local variables are shown with type hints
+        assert "count: int = 42" in result
+        assert "message: str = 'Hello'" in result
+        assert "active: bool = True" in result
 
     def test_context_shows_locals_and_state(self):
         """Test that both local and state variables are displayed correctly."""
@@ -803,20 +826,20 @@ class TestContextPrefixLocalVariables:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
 
-        # Verify local variables (not prefixed with self.state)
-        assert "local_var = 100" in result
-        assert "name = 'Alice'" in result
+        # Verify local variables (not prefixed with self.state) with type hints
+        assert "local_var: int = 100" in result
+        assert "name: str = 'Alice'" in result
 
-        # Verify state variables (prefixed with self.state)
-        assert "self.state.state_var = 200" in result
-        assert "self.state.status = 'active'" in result
+        # Verify state variables (in Box format under self.state)
+        assert "self.state: Box" in result
+        assert '"state_var": 200' in result
+        assert '"status": "active"' in result
 
     def test_context_shows_playbook_args_as_locals(self):
         """Test that playbook arguments appear as local variables in context."""
@@ -844,17 +867,16 @@ class TestContextPrefixLocalVariables:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
 
-        # Playbook args should appear as regular local variables
-        assert "order_id = '12345'" in result
-        assert "customer_name = 'John Doe'" in result
-        assert "total = 99.99" in result
+        # Playbook args should appear as local variables with type hints
+        assert "order_id: str = '12345'" in result
+        assert "customer_name: str = 'John Doe'" in result
+        assert "total: float = 99.99" in result
 
     def test_context_locals_formatting(self):
         """Test that local variables are formatted correctly (literal vs non-literal)."""
@@ -888,21 +910,21 @@ class TestContextPrefixLocalVariables:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
 
         result = prompt._build_context_prefix()
 
-        # Literals should show actual values
-        assert "simple_int = 42" in result
-        assert "simple_str = 'test'" in result
-        assert "simple_list = [1, 2, 3]" in result
+        # Literals should show actual values with type hints
+        assert "simple_int: int = 42" in result
+        assert "simple_str: str = 'test'" in result
+        assert "simple_list: list[int] = [1, 2, 3]" in result
 
         # Non-literals should show type hints with ...
-        assert "custom_obj = ...  # CustomObject" in result
-        assert "long_string = ...  # str" in result
+        assert "custom_obj: CustomObject = ...  # CustomObject" in result
+        # Long string should be shown in full (or compacted if very long)
+        assert "long_string: str" in result
 
     def test_context_empty_frame_no_locals(self):
         """Test that context handles frames with no locals gracefully."""
@@ -926,7 +948,6 @@ class TestContextPrefixLocalVariables:
             instruction="Test",
             agent_instructions="",
             artifacts_to_load=[],
-            trigger_instructions=[],
             agent_information="",
             other_agent_klasses_information=[],
         )
@@ -936,24 +957,177 @@ class TestContextPrefixLocalVariables:
         # Should still produce valid context, just without local variables
         assert "```python" in result
         assert "```" in result
-        assert "self = ..." in result
-        # Should not have any variable assignments before self
+        assert "self: AIAgent" in result
+        # Should have self attributes
         lines = result.split("\n")
         found_self = False
         for line in lines:
-            if "self = ..." in line:
+            if "self: AIAgent" in line:
                 found_self = True
                 break
-            # Before self line, should only have imports, call_stack, agents, meetings
-            if "=" in line and line.strip() and not line.strip().startswith("#"):
-                assert any(
-                    keyword in line
-                    for keyword in [
-                        "call_stack",
-                        "owned_meetings",
-                        "joined_meetings",
-                        "agents",
-                        "import",
-                    ]
-                )
         assert found_self
+        # Should have self.call_stack, self.state, agents.all, etc.
+        assert "self.call_stack" in result
+        assert "self.state" in result
+        assert "agents.all" in result
+
+
+class TestInterpreterPromptCompaction:
+    """Test suite for InterpreterPrompt message compaction functionality."""
+
+    def test_compaction_with_multiple_user_input_messages(self):
+        """Test that InterpreterPrompt applies compaction to multiple UserInputLLMMessage objects."""
+        event_bus = EventBus("test-session")
+        call_stack = CallStack(event_bus, "test-agent")
+
+        # Add multiple user/assistant message pairs to trigger compaction
+        # Old message (should be compacted)
+        old_user_msg = UserInputLLMMessage(
+            about_you="Remember: You are Agent Test",
+            instruction="Execute step 1",
+            python_code_context="*Python Code Context*\n```python\nself.state = {}\n```",
+            final_instructions="Follow the contract.",
+        )
+        call_stack.add_llm_message(old_user_msg)
+
+        old_assistant_msg = AssistantResponseLLMMessage(
+            "# execution_id: 1\n# recap: Step 1 done\nsome logs"
+        )
+        call_stack.add_llm_message(old_assistant_msg)
+
+        # Another old message pair
+        old_user_msg2 = UserInputLLMMessage(
+            about_you="Remember: You are Agent Test",
+            instruction="Execute step 2",
+            python_code_context="*Python Code Context*\n```python\nself.state = {'x': 1}\n```",
+            final_instructions="Follow the contract.",
+        )
+        call_stack.add_llm_message(old_user_msg2)
+
+        old_assistant_msg2 = AssistantResponseLLMMessage(
+            "# execution_id: 2\n# recap: Step 2 done\nmore logs"
+        )
+        call_stack.add_llm_message(old_assistant_msg2)
+
+        # New message (should NOT be compacted - it's recent)
+        new_user_msg = UserInputLLMMessage(
+            about_you="Remember: You are Agent Test",
+            instruction="Execute step 3",
+            python_code_context="*Python Code Context*\n```python\nself.state = {'x': 2}\n```",
+            final_instructions="Follow the contract.",
+        )
+        call_stack.add_llm_message(new_user_msg)
+
+        new_assistant_msg = AssistantResponseLLMMessage(
+            "# execution_id: 3\n# recap: Step 3 done\neven more logs"
+        )
+        call_stack.add_llm_message(new_assistant_msg)
+
+        agent = MockAgent(call_stack=call_stack)
+        prompt = InterpreterPrompt(
+            agent=agent,
+            playbooks={},
+            current_playbook=None,
+            instruction="Test instruction",
+            agent_instructions="Test agent instructions",
+            artifacts_to_load=[],
+            agent_information="Test agent info",
+            other_agent_klasses_information=[],
+            execution_id=1,
+        )
+
+        # Get compacted messages
+        messages = prompt.messages
+
+        # Verify compaction worked
+        # With min_preserved_assistant_messages=2, we keep the last 2 assistant messages full
+        # So assistant messages at indices 3 and 5 should be full, everything before index 3 should be compacted
+
+        # First user message should be compacted (only instruction)
+        assert messages[0]["role"] == "user"
+        assert messages[0]["content"] == "Execute step 1"
+        assert "Remember: You are Agent Test" not in messages[0]["content"]
+        assert "*Python Code Context*" not in messages[0]["content"]
+
+        # First assistant message should be compacted (first 2 lines only)
+        assert messages[1]["role"] == "assistant"
+        assert "# execution_id: 1" in messages[1]["content"]
+        assert "# recap: Step 1 done" in messages[1]["content"]
+        # Should NOT contain the full logs
+        assert "some logs" not in messages[1]["content"]
+
+        # Second user message should be compacted (only instruction)
+        assert messages[2]["role"] == "user"
+        assert messages[2]["content"] == "Execute step 2"
+        assert "Remember: You are Agent Test" not in messages[2]["content"]
+        assert "*Python Code Context*" not in messages[2]["content"]
+
+        # Second assistant message should be full (it's one of the last 2 preserved)
+        assert messages[3]["role"] == "assistant"
+        assert "# execution_id: 2" in messages[3]["content"]
+        assert "# recap: Step 2 done" in messages[3]["content"]
+        assert "more logs" in messages[3]["content"]
+
+        # Third user message should be full (it's recent, after the preserved assistant)
+        assert messages[4]["role"] == "user"
+        assert "Remember: You are Agent Test" in messages[4]["content"]
+        assert "Execute step 3" in messages[4]["content"]
+        assert "*Python Code Context*" in messages[4]["content"]
+
+        # Third assistant message should be full (most recent)
+        assert messages[5]["role"] == "assistant"
+        assert "even more logs" in messages[5]["content"]
+
+    def test_compaction_disabled_returns_full_messages(self):
+        """Test that when compaction is disabled, all messages are returned in full."""
+
+        # Create a mock compactor with disabled compaction
+        class DisabledCompactor:
+            def __init__(self):
+                pass
+
+            def compact_messages(self, messages):
+                return [msg.to_full_message() for msg in messages]
+
+        event_bus = EventBus("test-session")
+        call_stack = CallStack(event_bus, "test-agent")
+
+        # Add a user message with components
+        user_msg = UserInputLLMMessage(
+            about_you="Remember: You are Agent Test",
+            instruction="Execute step 1",
+            python_code_context="*Python Code Context*\n```python\nself.state = {}\n```",
+            final_instructions="Follow the contract.",
+        )
+        call_stack.add_llm_message(user_msg)
+
+        agent = MockAgent(call_stack=call_stack)
+        prompt = InterpreterPrompt(
+            agent=agent,
+            playbooks={},
+            current_playbook=None,
+            instruction="Test instruction",
+            agent_instructions="Test agent instructions",
+            artifacts_to_load=[],
+            agent_information="Test agent info",
+            other_agent_klasses_information=[],
+            execution_id=1,
+        )
+
+        # Temporarily replace the compactor with a disabled one
+        original_compactor = prompt.compactor
+        prompt.compactor = DisabledCompactor()
+
+        try:
+            messages = prompt.messages
+
+            # Should return full message with all components
+            assert len(messages) == 1
+            assert messages[0]["role"] == "user"
+            assert "Remember: You are Agent Test" in messages[0]["content"]
+            assert "Execute step 1" in messages[0]["content"]
+            assert "*Python Code Context*" in messages[0]["content"]
+            assert "Follow the contract." in messages[0]["content"]
+        finally:
+            # Restore original compactor
+            prompt.compactor = original_compactor

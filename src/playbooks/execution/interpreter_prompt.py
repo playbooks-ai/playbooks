@@ -78,6 +78,7 @@ class InterpreterPrompt:
             execution_id: Sequential execution counter for this LLM call
         """
         self.agent = agent
+        self.call_stack = agent.call_stack  # Access to call stack for LLM messages
         self.playbooks = playbooks
         self.current_playbook = current_playbook
         self.instruction = instruction
@@ -128,13 +129,7 @@ class InterpreterPrompt:
 
     def _get_final_instructions(self) -> str:
         """Get the final instructions for user input messages."""
-        return """Carefully analyze session activity log above to understand anything unexpected like
-infinite loops, errors, inconsistancies, tasks already done or expected, and reflect
-that in recap and plan accordingly. You must act like an intelligent, conscientious and
-responsible expert. Keep your thinking concise and don't repeat yourself. Yield for call
-if you need to do semantic processing/extraction on the result of a playbook call.
-
-**Follow the contract exactly; deviations break execution.**"""
+        return """Carefully analyze session activity log above to understand anything unexpected like infinite loops, errors, inconsistancies, tasks already done or expected, and reflect that in recap and plan accordingly. You must act like an intelligent, conscientious and responsible expert. Keep your thinking concise and don't repeat yourself. Precisely follow python code context, available variables and available playbooks. **Follow the contract exactly; deviations break execution.**"""
 
     def _add_artifact_hints(self, state_json: str, state_dict: Dict[str, Any]) -> str:
         """Add artifact load status hints to state JSON.
@@ -473,5 +468,10 @@ if you need to do semantic processing/extraction on the result of a playbook cal
     @property
     def messages(self) -> List[Dict[str, str]]:
         """Return all messages including user input and call stack messages."""
-        # Collect all messages from call stack (includes user message, system messages already in top_level_llm_messages)
-        return self.agent.call_stack.get_llm_messages()
+        # Get raw LLMMessage objects from call stack for proper compaction
+        llm_message_objects = self.call_stack.get_llm_message_objects()
+
+        # Apply compaction
+        compacted_messages = self.compactor.compact_messages(llm_message_objects)
+
+        return compacted_messages

@@ -72,7 +72,7 @@ class PythonExecutor:
         self.result = ExecutionResult()
         self.debug_handler = (
             agent.program._debug_server.debug_handler
-            if agent.program._debug_server
+            if agent.program and agent.program._debug_server
             else NoOpDebugHandler()
         )
         self.current_instruction_pointer: Optional[InstructionPointer] = (
@@ -153,8 +153,8 @@ class PythonExecutor:
         # Add meeting object if agent is in a meeting context
         # Use the most proximal meeting (closest to top of call stack)
         meeting = self.agent.get_current_meeting()
-
-        namespace["meeting"] = meeting
+        if meeting is not None:
+            namespace["meeting"] = meeting
 
         return namespace
 

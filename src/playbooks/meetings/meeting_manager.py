@@ -5,6 +5,7 @@ import logging
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Protocol
 
+from playbooks.agents.ai_agent import AIAgent
 from playbooks.agents.human_agent import HumanAgent
 from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.config import config
@@ -23,7 +24,6 @@ from playbooks.meetings.meeting_message_handler import MeetingMessageHandler
 from playbooks.playbook import LLMPlaybook, Playbook
 
 if TYPE_CHECKING:
-    from playbooks.agents import AIAgent
     from playbooks.agents.base_agent import BaseAgent
     from playbooks.program import Program
 
@@ -42,12 +42,18 @@ class RollingMessageCollector:
     within max_batch_wait seconds.
     """
 
-    def __init__(self, timeout_seconds: float = 2.0, max_batch_wait: float = 10.0):
+    def __init__(
+        self,
+        timeout_seconds: float = 2.0,
+        max_batch_wait: float = 10.0,
+        task_factory=None,
+    ):
         """Initialize the collector.
 
         Args:
             timeout_seconds: Rolling timeout duration in seconds (default 2.0)
             max_batch_wait: Absolute maximum wait for oldest message (default 10.0)
+            task_factory: Optional factory function for creating background tasks (default: asyncio.create_task)
         """
         self.timeout_seconds = timeout_seconds
         self.max_batch_wait = max_batch_wait
@@ -59,6 +65,8 @@ class RollingMessageCollector:
         self._timer_seq = (
             0  # Monotonically increasing sequence to invalidate old timers
         )
+        self._task_factory = task_factory or asyncio.create_task
+        self._background_tasks: set = set()
 
     async def add_message(self, message: Message) -> None:
         """Add a message to the buffer and reset the rolling timeout.
@@ -101,16 +109,20 @@ class RollingMessageCollector:
                     self.timer_task.cancel()
                 # Always start a new timer on reset (don't rely on .done() immediately after cancel)
                 self._timer_seq += 1
-                self.timer_task = asyncio.create_task(
+                self.timer_task = self._task_factory(
                     self._timer_expired(self._timer_seq)
                 )
+                self._background_tasks.add(self.timer_task)
+                self.timer_task.add_done_callback(self._background_tasks.discard)
             else:
                 # Ensure there is a timer running (but don't reset it)
                 if not self.timer_task or self.timer_task.done():
                     self._timer_seq += 1
-                    self.timer_task = asyncio.create_task(
+                    self.timer_task = self._task_factory(
                         self._timer_expired(self._timer_seq)
                     )
+                    self._background_tasks.add(self.timer_task)
+                    self.timer_task.add_done_callback(self._background_tasks.discard)
 
         # Yield control OUTSIDE the lock to ensure timer task can be scheduled
         await asyncio.sleep(0)
@@ -180,7 +192,9 @@ class RollingMessageCollector:
                 )
 
             # Deliver messages outside the lock to avoid deadlock
-            delivery_task = asyncio.create_task(self.delivery_callback(messages))
+            delivery_task = self._task_factory(self.delivery_callback(messages))
+            self._background_tasks.add(delivery_task)
+            delivery_task.add_done_callback(self._background_tasks.discard)
             debug(
                 f"RollingMessageCollector: _deliver_now() created delivery task (id={id(delivery_task)})"
             )
@@ -198,6 +212,21 @@ class RollingMessageCollector:
             callback: Async function that takes a list of messages
         """
         self.delivery_callback = callback
+
+    async def cleanup(self) -> None:
+        """Clean up background tasks."""
+        # Cancel all background tasks
+        for task in self._background_tasks.copy():
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    # Ignore other exceptions during cleanup
+                    pass
+            self._background_tasks.discard(task)
 
 
 class PlaybookExecutor(Protocol):
@@ -253,8 +282,39 @@ class MeetingManager:
         self.message_collector = RollingMessageCollector(
             timeout_seconds=config.meeting_message_batch_timeout,
             max_batch_wait=config.meeting_message_batch_max_wait,
+            task_factory=self._create_background_task,
         )
         self.message_collector.set_delivery_callback(self._deliver_collected_messages)
+
+        # Track background tasks for proper cleanup
+        self._background_tasks: set = set()
+
+    async def cleanup(self) -> None:
+        """Clean up background tasks and resources."""
+        # Cancel all background tasks
+        for task in self._background_tasks.copy():
+            if not task.done():
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+                except Exception:
+                    # Ignore other exceptions during cleanup
+                    pass
+            self._background_tasks.discard(task)
+
+        # Clean up message collector
+        if self.message_collector:
+            await self.message_collector.flush()
+
+    def _create_background_task(self, coro) -> asyncio.Task:
+        """Create a background task and track it for cleanup."""
+        task = asyncio.create_task(coro)
+        self._background_tasks.add(task)
+        # Remove task from tracking when it completes
+        task.add_done_callback(self._background_tasks.discard)
+        return task
 
     def ensure_meeting_playbook_kwargs(self, playbooks: Dict[str, Any]) -> None:
         """Ensure that all meeting playbooks have the required kwargs.
@@ -511,9 +571,10 @@ class MeetingManager:
                     debug(
                         f"DEBUG _invite: Created _pending_meeting_invitations for agent {target_agent.id}"
                     )
-                target_agent._pending_meeting_invitations[meeting.id] = meeting
+                meeting_id_obj = MeetingID.parse(meeting.id)
+                target_agent._pending_meeting_invitations[meeting_id_obj.id] = meeting
                 debug(
-                    f"DEBUG _invite: Stored meeting {meeting.id} for agent {target_agent.id}, dict now has keys: {list(target_agent._pending_meeting_invitations.keys())}"
+                    f"DEBUG _invite: Stored meeting {meeting.id} (parsed: {meeting_id_obj.id}) for agent {target_agent.id}, dict now has keys: {list(target_agent._pending_meeting_invitations.keys())}"
                 )
                 debug(
                     f"DEBUG _invite: shared_state id for meeting {meeting.id}: {id(meeting.shared_state)}"
@@ -548,7 +609,7 @@ class MeetingManager:
         # send response as another background task, breaking the cycle.
         invitation_content = meeting.topic or "Meeting"
 
-        asyncio.create_task(
+        self._create_background_task(
             self.program.route_message(
                 sender_id=self.agent_id,
                 sender_klass=self.agent_klass,
@@ -860,7 +921,7 @@ class MeetingManager:
             self.agent.call_stack.add_llm_message(meeting_msg)
             if self.program:
                 # Send rejection as background task to avoid reentrancy deadlock
-                asyncio.create_task(
+                self._create_background_task(
                     self.program.route_message(
                         sender_id=self.agent_id,
                         sender_klass=self.agent_klass,
@@ -881,7 +942,7 @@ class MeetingManager:
         if len(meeting_playbooks) != 1:
             if self.program:
                 # Send rejection as background task to avoid reentrancy deadlock
-                asyncio.create_task(
+                self._create_background_task(
                     self.program.route_message(
                         sender_id=self.agent_id,
                         sender_klass=self.agent_klass,
@@ -953,9 +1014,26 @@ class MeetingManager:
             )
 
         if shared_state_ref is None:
-            raise ValueError(
-                f"Shared state reference not found for meeting {meeting_id}"
-            )
+            # Look up the shared state from the meeting owner's owned_meetings
+            inviter_agent = self.program.agents_by_id.get(inviter_id)
+            if (
+                inviter_agent
+                and hasattr(inviter_agent, "owned_meetings")
+                and meeting_id in inviter_agent.owned_meetings
+            ):
+                meeting_obj = inviter_agent.owned_meetings[meeting_id]
+                shared_state_ref = meeting_obj.shared_state
+                debug(
+                    f"DEBUG _accept: Got shared_state from inviter's meeting: {id(shared_state_ref)}"
+                )
+            else:
+                debug(
+                    f"DEBUG _accept: Could not find meeting {meeting_id} in inviter {inviter_id}'s owned_meetings, creating fallback"
+                )
+                # Create a new shared state as fallback (though this won't be shared with other participants)
+                from box import Box
+
+                shared_state_ref = Box(default_box=True)
 
         self.agent.joined_meetings[meeting_id] = JoinedMeeting(
             id=meeting_id,
@@ -969,7 +1047,7 @@ class MeetingManager:
         # Send structured JOINED response as background task to avoid reentrancy deadlock
         # (we're currently inside a message delivery path; awaiting route_message would deadlock)
         if self.program:
-            asyncio.create_task(
+            self._create_background_task(
                 self.program.route_message(
                     sender_id=self.agent_id,
                     sender_klass=self.agent_klass,

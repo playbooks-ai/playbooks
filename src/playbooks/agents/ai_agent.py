@@ -12,8 +12,6 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from box import Box
-
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
     resolve_description_placeholders,
@@ -46,12 +44,11 @@ from playbooks.llm.messages.types import (
     SystemPromptLLMMessage,
     TriggerInstructionsLLMMessage,
 )
-from playbooks.meetings import MeetingManager
 from playbooks.meetings.meeting import JoinedMeeting, Meeting
 from playbooks.playbook import LLMPlaybook, Playbook, PythonPlaybook, RemotePlaybook
 from playbooks.state.call_stack import CallStack, CallStackFrame, InstructionPointer
 from playbooks.state.session_log import SessionLog
-from playbooks.state.variables import Artifact, VariablesTracker
+from playbooks.state.variables import Artifact, PlaybookBox, VariablesTracker
 from playbooks.utils.misc import copy_func
 from playbooks.utils.text_utils import indent, simple_shorten
 
@@ -173,7 +170,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         # Initialize system messages in call stack
         self._initialize_system_messages()
 
-        self.state: Box = Box()
+        self.state: PlaybookBox = PlaybookBox()
         self.previous_variables: Optional[Dict[str, Any]] = None
         self.agents_list: List[str] = []
         self.last_llm_response: str = ""
@@ -184,6 +181,9 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.joined_meetings: Dict[str, JoinedMeeting] = {}
 
         # Initialize meeting manager with dependency injection (after state is created)
+        # Import MeetingManager here to avoid circular import
+        from playbooks.meetings.meeting_manager import MeetingManager
+
         self.meeting_manager = MeetingManager(
             agent_id=self.id,
             agent_klass=self.klass,
@@ -205,6 +205,10 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
 
     def _initialize_system_messages(self) -> None:
         """Initialize system messages that are always present in the call stack."""
+        # Only add system messages for agents with playbooks (skip test/mock agents)
+        if not self.playbooks:
+            return
+
         # Add system prompt
         system_msg = SystemPromptLLMMessage()
         self.call_stack.top_level_llm_messages.append(system_msg)
@@ -457,6 +461,16 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         if not (self.program and self.program.execution_finished):
             return
 
+        # Clean up meeting manager background tasks
+        if hasattr(self, "meeting_manager") and self.meeting_manager:
+            await self.meeting_manager.cleanup()
+            # Also clean up the message collector
+            if (
+                hasattr(self.meeting_manager, "message_collector")
+                and self.meeting_manager.message_collector
+            ):
+                await self.meeting_manager.message_collector.cleanup()
+
     def parse_instruction_pointer(self, step_id: str) -> InstructionPointer:
         """Parse a step string into an InstructionPointer.
 
@@ -591,6 +605,9 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         Returns:
             List of information strings for other agents
         """
+        if not self.program or not hasattr(self.program, "agent_klasses"):
+            return []
+
         return [
             agent_klass.get_public_information()
             for agent_klass in self.program.agent_klasses.values()
@@ -784,6 +801,10 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             # mark as meeting context so get_current_meeting_from_call_stack() can find it
             is_meeting = True
             meeting_id = kwargs.get("meeting_id")
+        elif playbook and playbook.meeting:
+            # If the playbook itself is a meeting playbook, mark as meeting context
+            is_meeting = True
+            # meeting_id will remain None for now - it will be set when the meeting is actually created
 
         source_file_path = (
             playbook.source_file_path

@@ -174,8 +174,8 @@ class TestCallStackMethodsIntegration:
         from playbooks.llm.messages import UserInputLLMMessage
 
         # Test with empty stack
-        msg1 = UserInputLLMMessage("Message 1")
-        msg2 = UserInputLLMMessage("Message 2")
+        msg1 = UserInputLLMMessage(instruction="Message 1")
+        msg2 = UserInputLLMMessage(instruction="Message 2")
 
         call_stack.add_llm_message(msg1)  # Should go to top-level
         call_stack.add_llm_message_on_parent(msg2)  # Should also go to top-level
@@ -187,8 +187,8 @@ class TestCallStackMethodsIntegration:
         frame = CallStackFrame(ip)
         call_stack.push(frame)
 
-        msg3 = UserInputLLMMessage("Message 3")
-        msg4 = UserInputLLMMessage("Message 4")
+        msg3 = UserInputLLMMessage(instruction="Message 3")
+        msg4 = UserInputLLMMessage(instruction="Message 4")
 
         call_stack.add_llm_message(msg3)  # Should go to frame
         call_stack.add_llm_message_on_parent(
@@ -203,8 +203,8 @@ class TestCallStackMethodsIntegration:
         frame2 = CallStackFrame(ip2)
         call_stack.push(frame2)
 
-        msg5 = UserInputLLMMessage("Message 5")
-        msg6 = UserInputLLMMessage("Message 6")
+        msg5 = UserInputLLMMessage(instruction="Message 5")
+        msg6 = UserInputLLMMessage(instruction="Message 6")
 
         call_stack.add_llm_message(msg5)  # Should go to frame2
         call_stack.add_llm_message_on_parent(
@@ -220,7 +220,7 @@ class TestCallStackMethodsIntegration:
         from playbooks.llm.messages import UserInputLLMMessage
 
         # Test add_llm_message_with_fallback
-        msg1 = UserInputLLMMessage("Fallback test")
+        msg1 = UserInputLLMMessage(instruction="Fallback test")
         result = call_stack.add_llm_message_with_fallback(msg1)
 
         assert result is False  # No frame to add to
@@ -231,14 +231,14 @@ class TestCallStackMethodsIntegration:
         frame = CallStackFrame(ip)
         call_stack.push(frame)
 
-        msg2 = UserInputLLMMessage("Fallback test 2")
+        msg2 = UserInputLLMMessage(instruction="Fallback test 2")
         result = call_stack.add_llm_message_with_fallback(msg2)
 
         assert result is True  # Added to frame
         assert len(frame.llm_messages) == 1
 
         # Test add_llm_message_on_caller
-        msg3 = UserInputLLMMessage("Caller test")
+        msg3 = UserInputLLMMessage(instruction="Caller test")
         call_stack.add_llm_message_on_caller(msg3)
 
         # Should behave same as add_on_parent (go to top-level since only one frame)

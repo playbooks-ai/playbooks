@@ -4,7 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from playbooks.utils.llm_helper import completion_with_preprocessing
+from playbooks.utils.llm_config import LLMConfig
+from playbooks.utils.llm_helper import completion_with_preprocessing, get_completion
 from playbooks.utils.playbooks_lm_handler import PlaybooksLMHandler
 
 
@@ -215,15 +216,13 @@ class TestPlaybooksLMHandler:
 class TestCompletionWrapper:
     """Test the completion wrapper function."""
 
+    @pytest.mark.asyncio
     @patch("playbooks.utils.llm_helper._check_llm_calls_allowed", return_value=True)
     @patch("playbooks.utils.llm_helper._original_completion")
-    def test_playbooks_lm_preprocessing_via_get_completion(
+    async def test_playbooks_lm_preprocessing_via_get_completion(
         self, mock_completion, mock_check
     ):
         """Test that playbooks-lm models get preprocessing through get_completion."""
-        from playbooks.utils.llm_config import LLMConfig
-        from playbooks.utils.llm_helper import get_completion
-
         mock_completion.return_value = MagicMock()
 
         messages = [
@@ -238,13 +237,12 @@ class TestCompletionWrapper:
         llm_config = LLMConfig(model="ollama/playbooks-lm", api_key="test-key")
 
         # Call get_completion (which does the preprocessing)
-        list(
-            get_completion(
-                llm_config=llm_config,
-                messages=messages,
-                use_cache=False,  # Disable cache to ensure actual call
-            )
-        )
+        async for _chunk in get_completion(
+            llm_config=llm_config,
+            messages=messages,
+            use_cache=False,  # Disable cache to ensure actual call
+        ):
+            pass
 
         # Check that messages were preprocessed
         call_args = mock_completion.call_args
