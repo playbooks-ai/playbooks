@@ -35,6 +35,7 @@ from playbooks.infrastructure.logging.constants import (
     ENV_DEBUG_FILE,
     parse_boolean_env,
 )
+from playbooks.llm.messages.timestamp import get_timestamp
 
 _debug_logger: Optional[logging.Logger] = None
 _console: Optional[Console] = None
@@ -60,6 +61,7 @@ def debug(msg: str = None, **context: Any) -> None:
                   - 'markup': bool - Enable/disable markup parsing (default: True)
                   - 'color': str - Apply a color to the entire message
                   - 'style': str - Apply a style to the entire message
+                  - 'include_timestamp': bool - Include timestamp prefix (default: True)
     """
     if not config.debug:
         return
@@ -76,6 +78,19 @@ def debug(msg: str = None, **context: Any) -> None:
 
     # Extract special context keys
     enable_markup = context.pop("markup", True) if context else True
+    include_timestamp = context.pop("include_timestamp", True) if context else True
+
+    # Get timestamp for prefix (will be added with DEBUG_PREFIX later)
+    timestamp = get_timestamp() if include_timestamp else None
+
+    if "agent" in context:
+        agent = context.get("agent")
+        context_prefix = str(agent) + " - "
+        context.pop("agent")
+    else:
+        context_prefix = ""
+
+    msg = f"{context_prefix}{msg}"
 
     # Format the message with context
     if context:
@@ -117,20 +132,34 @@ def debug(msg: str = None, **context: Any) -> None:
                     clean_msg = (
                         Text.from_markup(full_msg).plain if enable_markup else full_msg
                     )
+                    # Add timestamp and DEBUG_PREFIX for file logging
+                    if timestamp is not None:
+                        clean_msg = f"{timestamp:05d}: {DEBUG_PREFIX}{clean_msg}"
+                    else:
+                        clean_msg = f"{DEBUG_PREFIX}{clean_msg}"
                     _debug_logger.debug(clean_msg)
                     break
-        _print_with_rich(msg, full_msg, context, enable_markup)
+        _print_with_rich(msg, full_msg, context, enable_markup, timestamp)
     else:
         # Strip markup for standard logging if markup was in the message
         if enable_markup and "[" in full_msg and "]" in full_msg:
             from rich.text import Text
 
             full_msg = Text.from_markup(full_msg).plain
+        # Add timestamp and DEBUG_PREFIX for standard logging
+        if timestamp is not None:
+            full_msg = f"{timestamp:05d}: {DEBUG_PREFIX}{full_msg}"
+        else:
+            full_msg = f"{DEBUG_PREFIX}{full_msg}"
         _debug_logger.debug(full_msg)
 
 
 def _print_with_rich(
-    original_msg: str, full_msg: str, context: dict, enable_markup: bool
+    original_msg: str,
+    full_msg: str,
+    context: dict,
+    enable_markup: bool,
+    timestamp: int | None,
 ) -> None:
     """Print debug message using Rich console with colors and markup support.
 
@@ -139,19 +168,24 @@ def _print_with_rich(
         full_msg: The formatted message with context
         context: The original context dict for determining colors
         enable_markup: Whether to parse Rich markup in the message
+        timestamp: Optional timestamp to include in output
     """
+    # Create the prefix with timestamp
+    if timestamp is not None:
+        prefix = f"{timestamp:05d}: {DEBUG_PREFIX}"
+    else:
+        prefix = DEBUG_PREFIX
+
     # If markup is enabled and present in the message, use Rich's markup parsing
     if enable_markup and "[" in full_msg and "]" in full_msg:
         # Print with markup - Rich will handle the colors
-        _console.print(
-            f"[bold blue]{DEBUG_PREFIX}[/bold blue]{full_msg}", highlight=False
-        )
+        _console.print(f"[bold blue]{prefix}[/bold blue]{full_msg}", highlight=False)
     else:
         # Create styled text based on context (original behavior)
         text = Text()
 
-        # Add prefix with color
-        text.append(DEBUG_PREFIX, style="bold blue")
+        # Add prefix with color (includes timestamp if provided)
+        text.append(prefix, style="bold blue")
 
         # Determine color based on context
         style = "white"  # Default color
@@ -219,16 +253,15 @@ def _setup_debug_logger() -> None:
     if not _USE_RICH_CONSOLE:
         # Console handler
         handler = logging.StreamHandler()
-        handler.setFormatter(logging.Formatter(f"{DEBUG_PREFIX}%(message)s"))
+        handler.setFormatter(logging.Formatter("%(message)s"))
         _debug_logger.addHandler(handler)
 
     # Optional file handler (always add regardless of Rich usage)
+    # Timestamp and DEBUG_PREFIX added in debug() function, but add asctime for file logging
     debug_file = os.getenv(ENV_DEBUG_FILE)
     if debug_file:
         file_handler = logging.FileHandler(debug_file)
-        file_handler.setFormatter(
-            logging.Formatter(f"%(asctime)s {DEBUG_PREFIX}%(message)s")
-        )
+        file_handler.setFormatter(logging.Formatter("%(asctime)s %(message)s"))
         _debug_logger.addHandler(file_handler)
 
     # Prevent propagation to root logger

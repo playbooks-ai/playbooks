@@ -53,11 +53,11 @@ class MeetingMessageHandler:
             return False
 
         meeting_id = meeting_id_obj.id
-        if meeting_id not in agent.state.owned_meetings:
+        if meeting_id not in agent.owned_meetings:
             return False
 
-        session_log = agent.state.session_log
-        meeting = agent.state.owned_meetings[meeting_id]
+        session_log = agent.session_log
+        meeting = agent.owned_meetings[meeting_id]
         sender_id = agent_message.sender_id.id
         sender = agent.program.agents_by_id.get(sender_id)
         content = agent_message.content

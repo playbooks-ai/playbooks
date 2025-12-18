@@ -12,7 +12,8 @@ from playbooks.infrastructure.event_bus import EventBus
 class TestAgentBuilderMCP:
     """Test cases for AgentBuilder MCP functionality."""
 
-    def test_create_local_agent_from_ast(self):
+    @pytest.mark.asyncio
+    async def test_create_local_agent_from_ast(self):
         """Test creating a local agent from AST (no remote config)."""
         markdown_text = """# TestAgent
 This is a test agent.
@@ -25,7 +26,7 @@ This is a test playbook.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agent_classes_from_ast(ast)
+        agents = await AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "TestAgent" in agents
@@ -36,7 +37,8 @@ This is a test playbook.
         assert isinstance(agent_instance, LocalAIAgent)
         assert agent_instance.klass == "TestAgent"
 
-    def test_create_mcp_agent_from_ast(self):
+    @pytest.mark.asyncio
+    async def test_create_mcp_agent_from_ast(self):
         """Test creating an MCP agent from AST with remote config."""
         markdown_text = """# MCPTestAgent
 metadata:
@@ -49,7 +51,7 @@ This is an MCP test agent.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agent_classes_from_ast(ast)
+        agents = await AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "MCPTestAgent" in agents
@@ -62,7 +64,8 @@ This is an MCP test agent.
         assert agent_instance.remote_config["type"] == "mcp"
         assert agent_instance.remote_config["url"] == "http://localhost:8000/mcp"
 
-    def test_mcp_agent_missing_url_raises_error(self):
+    @pytest.mark.asyncio
+    async def test_mcp_agent_missing_url_raises_error(self):
         """Test that MCP agent without URL raises configuration error."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -79,9 +82,10 @@ MCP agent without URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' requires 'url' in remote configuration",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mixed_agent_types_from_ast(self):
+    @pytest.mark.asyncio
+    async def test_mixed_agent_types_from_ast(self):
         """Test creating both local and MCP agents from the same AST."""
         markdown_text = """# LocalAgent
 This is a local agent.
@@ -102,7 +106,7 @@ This is a remote MCP agent.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agent_classes_from_ast(ast)
+        agents = await AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 2
         assert "LocalAgent" in agents
@@ -145,7 +149,8 @@ This is a remote MCP agent.
         assert agent_instance.klass == "DirectMCPAgent"
         assert agent_instance.remote_config == metadata["remote"]
 
-    def test_mcp_configuration_validation_invalid_url_type(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_invalid_url_type(self):
         """Test MCP configuration validation with invalid URL type."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -162,9 +167,10 @@ MCP agent with invalid URL type.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' requires a valid URL string, got: int",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_empty_url(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_empty_url(self):
         """Test MCP configuration validation with empty URL."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -181,9 +187,10 @@ MCP agent with empty URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' requires a valid URL string, got empty string",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_invalid_transport(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_invalid_transport(self):
         """Test MCP configuration validation with invalid transport."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -201,9 +208,10 @@ MCP agent with invalid transport.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' has invalid transport 'invalid_transport'",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_invalid_timeout(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_invalid_timeout(self):
         """Test MCP configuration validation with invalid timeout."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -221,9 +229,10 @@ MCP agent with invalid timeout.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' timeout must be a positive number, got: -5",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_invalid_auth_type(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_invalid_auth_type(self):
         """Test MCP configuration validation with invalid auth type."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -242,9 +251,10 @@ MCP agent with invalid auth type.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' has invalid auth type 'invalid_auth'",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_missing_api_key(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_missing_api_key(self):
         """Test MCP configuration validation with missing API key."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -264,9 +274,10 @@ MCP agent with missing API key.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with api_key auth requires 'key' field",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_missing_bearer_token(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_missing_bearer_token(self):
         """Test MCP configuration validation with missing bearer token."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -286,9 +297,10 @@ MCP agent with missing bearer token.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with bearer auth requires 'token' field",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_missing_basic_auth_fields(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_missing_basic_auth_fields(self):
         """Test MCP configuration validation with missing basic auth fields."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -309,9 +321,10 @@ MCP agent with incomplete basic auth.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with basic auth requires 'username' and 'password' fields",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_missing_mtls_fields(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_missing_mtls_fields(self):
         """Test MCP configuration validation with missing mTLS fields."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -332,9 +345,10 @@ MCP agent with incomplete mTLS auth.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with mtls auth requires 'cert' and 'key' fields",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_stdio_with_http_url(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_stdio_with_http_url(self):
         """Test MCP configuration validation with stdio transport and HTTP URL."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -352,9 +366,10 @@ MCP agent with stdio transport and HTTP URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with stdio transport should not use HTTP/WebSocket/Memory URL",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_sse_with_non_http_url(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_sse_with_non_http_url(self):
         """Test MCP configuration validation with SSE transport and non-HTTP URL."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -372,9 +387,10 @@ MCP agent with SSE transport and file path URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with sse transport requires HTTP\\(S\\) URL",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_websocket_with_invalid_url(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_websocket_with_invalid_url(self):
         """Test MCP configuration validation with WebSocket transport and invalid URL."""
         markdown_text = """# BadMCPAgent
 metadata:
@@ -392,9 +408,10 @@ MCP agent with WebSocket transport and file path URL.
             AgentConfigurationError,
             match="MCP agent 'BadMCPAgent' with websocket transport requires WebSocket or HTTP URL",
         ):
-            AgentBuilder.create_agent_classes_from_ast(ast)
+            await AgentBuilder.create_agent_classes_from_ast(ast)
 
-    def test_mcp_configuration_validation_valid_configurations(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_validation_valid_configurations(self):
         """Test that valid MCP configurations pass validation."""
         # Test various valid configurations
         valid_configs = [
@@ -447,5 +464,5 @@ Valid MCP agent with WebSocket.
         for config_text in valid_configs:
             ast = markdown_to_ast(config_text)
             # Should not raise any exceptions
-            agents = AgentBuilder.create_agent_classes_from_ast(ast)
+            agents = await AgentBuilder.create_agent_classes_from_ast(ast)
             assert len(agents) == 1

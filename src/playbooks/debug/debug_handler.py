@@ -5,8 +5,8 @@ import logging
 from typing import TYPE_CHECKING, Dict, Optional
 
 from playbooks.infrastructure.logging.debug_logger import debug
-
 from playbooks.state.call_stack import InstructionPointer
+
 from .server import DebugServer
 
 # Constants
@@ -149,7 +149,6 @@ class DebugHandler:
         _agent_id: str = None,
     ):
         """Handle execution start operations."""
-        # Stop-on-entry is now handled at the program level, not here
         pass
 
     async def handle_step(self, agent_id: str, step_mode: str, request_seq: int):

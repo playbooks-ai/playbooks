@@ -25,7 +25,7 @@ class TestCallStackTopLevelMessages:
         event_bus = EventBus("test_session")
         call_stack = CallStack(event_bus, "test_agent")
 
-        msg = UserInputLLMMessage("Test message")
+        msg = UserInputLLMMessage(instruction="Test message")
         call_stack.add_llm_message(msg)
 
         assert len(call_stack.top_level_llm_messages) == 1
@@ -41,7 +41,7 @@ class TestCallStackTopLevelMessages:
         frame = CallStackFrame(ip)
         call_stack.push(frame)
 
-        msg = UserInputLLMMessage("Test message")
+        msg = UserInputLLMMessage(instruction="Test message")
         call_stack.add_llm_message(msg)
 
         # Should go to frame, not top-level
@@ -54,7 +54,7 @@ class TestCallStackTopLevelMessages:
         event_bus = EventBus("test_session")
         call_stack = CallStack(event_bus, "test_agent")
 
-        msg1 = UserInputLLMMessage("Message 1")
+        msg1 = UserInputLLMMessage(instruction="Message 1")
         msg2 = AssistantResponseLLMMessage("Message 2")
         msg3 = AgentCommunicationLLMMessage("Message 3", "Agent1", "Agent2")
 
@@ -72,8 +72,8 @@ class TestCallStackTopLevelMessages:
         event_bus = EventBus("test_session")
         call_stack = CallStack(event_bus, "test_agent")
 
-        msg1 = UserInputLLMMessage("Top level message 1")
-        msg2 = UserInputLLMMessage("Top level message 2")
+        msg1 = UserInputLLMMessage(instruction="Top level message 1")
+        msg2 = UserInputLLMMessage(instruction="Top level message 2")
 
         call_stack.add_llm_message(msg1)
         call_stack.add_llm_message(msg2)
@@ -90,7 +90,7 @@ class TestCallStackTopLevelMessages:
         call_stack = CallStack(event_bus, "test_agent")
 
         # Add top-level message first
-        top_msg = UserInputLLMMessage("Top level message")
+        top_msg = UserInputLLMMessage(instruction="Top level message")
         call_stack.add_llm_message(top_msg)
 
         # Add a frame with messages
@@ -101,17 +101,17 @@ class TestCallStackTopLevelMessages:
         call_stack.push(frame)
 
         # Add another top-level message (should go to frame now)
-        frame_msg2 = UserInputLLMMessage("Another message")
+        frame_msg2 = UserInputLLMMessage(instruction="Another message")
         call_stack.add_llm_message(frame_msg2)
 
         messages = call_stack.get_llm_messages()
 
-        # Should have: frame_msg + frame_msg2 + top_msg
+        # Should have: top_msg + frame_msg + frame_msg2
         assert len(messages) == 3
-        # Frame messages come first, then top-level messages
-        assert messages[0]["content"] == "Frame message"
-        assert messages[1]["content"] == "Another message"  # went to frame
-        assert messages[2]["content"] == "Top level message"  # top-level
+        # Top-level messages come first, then frame messages
+        assert messages[0]["content"] == "Top level message"  # top-level first
+        assert messages[1]["content"] == "Frame message"  # frame messages
+        assert messages[2]["content"] == "Another message"  # went to frame
 
     def test_transition_from_empty_to_frame_preserves_top_level(self):
         """Test that pushing frame after top-level messages preserves them."""
@@ -119,8 +119,8 @@ class TestCallStackTopLevelMessages:
         call_stack = CallStack(event_bus, "test_agent")
 
         # Add messages to empty stack (go to top-level)
-        msg1 = UserInputLLMMessage("Before frame 1")
-        msg2 = UserInputLLMMessage("Before frame 2")
+        msg1 = UserInputLLMMessage(instruction="Before frame 1")
+        msg2 = UserInputLLMMessage(instruction="Before frame 2")
         call_stack.add_llm_message(msg1)
         call_stack.add_llm_message(msg2)
 
@@ -130,7 +130,7 @@ class TestCallStackTopLevelMessages:
         call_stack.push(frame)
 
         # Add message after frame (should go to frame)
-        msg3 = UserInputLLMMessage("After frame")
+        msg3 = UserInputLLMMessage(instruction="After frame")
         call_stack.add_llm_message(msg3)
 
         # Check that top-level messages are preserved
@@ -153,14 +153,14 @@ class TestCallStackTopLevelMessages:
         call_stack.push(frame)
 
         # Add message to frame
-        msg1 = UserInputLLMMessage("Frame message")
+        msg1 = UserInputLLMMessage(instruction="Frame message")
         call_stack.add_llm_message(msg1)
 
         # Pop frame
         call_stack.pop()
 
         # Add message after pop (should go to top-level)
-        msg2 = UserInputLLMMessage("After pop")
+        msg2 = UserInputLLMMessage(instruction="After pop")
         call_stack.add_llm_message(msg2)
 
         assert len(call_stack.top_level_llm_messages) == 1
@@ -275,7 +275,7 @@ class TestCallStackAddLLMMessageWithFallbackDeprecated:
         event_bus = EventBus("test_session")
         call_stack = CallStack(event_bus, "test_agent")
 
-        msg = UserInputLLMMessage("Fallback message")
+        msg = UserInputLLMMessage(instruction="Fallback message")
         result = call_stack.add_llm_message_with_fallback(msg)
 
         assert result is False  # No frame to add to
@@ -292,7 +292,7 @@ class TestCallStackAddLLMMessageWithFallbackDeprecated:
         frame = CallStackFrame(ip)
         call_stack.push(frame)
 
-        msg = UserInputLLMMessage("Fallback message")
+        msg = UserInputLLMMessage(instruction="Fallback message")
         result = call_stack.add_llm_message_with_fallback(msg)
 
         assert result is True  # Added to frame
@@ -310,7 +310,7 @@ class TestCallStackMessageOrderAndIntegration:
         call_stack = CallStack(event_bus, "test_agent")
 
         # 1. Add messages to empty stack (go to top-level)
-        msg1 = UserInputLLMMessage("Initial message")
+        msg1 = UserInputLLMMessage(instruction="Initial message")
         call_stack.add_llm_message(msg1)
 
         # 2. Push frame and add messages
@@ -344,7 +344,7 @@ class TestCallStackMessageOrderAndIntegration:
         call_stack.pop()
 
         # 8. Add message (should go to top-level)
-        msg6 = UserInputLLMMessage("Back to top level")
+        msg6 = UserInputLLMMessage(instruction="Back to top level")
         call_stack.add_llm_message(msg6)
 
         # Verify final state
@@ -367,8 +367,8 @@ class TestCallStackMessageOrderAndIntegration:
         call_stack = CallStack(event_bus, "test_agent")
 
         # Add multiple top-level messages
-        top_msg1 = UserInputLLMMessage("Top 1")
-        top_msg2 = UserInputLLMMessage("Top 2")
+        top_msg1 = UserInputLLMMessage(instruction="Top 1")
+        top_msg2 = UserInputLLMMessage(instruction="Top 2")
         call_stack.add_llm_message(top_msg1)
         call_stack.add_llm_message(top_msg2)
 
@@ -382,15 +382,15 @@ class TestCallStackMessageOrderAndIntegration:
         call_stack.push(frame)
 
         # Add more messages to frame
-        frame_msg3 = UserInputLLMMessage("Frame 3")
+        frame_msg3 = UserInputLLMMessage(instruction="Frame 3")
         call_stack.add_llm_message(frame_msg3)
 
         messages = call_stack.get_llm_messages()
 
-        # Should be: frame messages in order, then top-level messages in order
+        # Should be: top-level messages in order, then frame messages in order
         assert len(messages) == 5
-        assert messages[0]["content"] == "Frame 1"  # frame messages first
-        assert messages[1]["content"] == "Frame 2"
-        assert messages[2]["content"] == "Frame 3"
-        assert messages[3]["content"] == "Top 1"  # top-level messages last
-        assert messages[4]["content"] == "Top 2"
+        assert messages[0]["content"] == "Top 1"  # top-level messages first
+        assert messages[1]["content"] == "Top 2"
+        assert messages[2]["content"] == "Frame 1"  # frame messages last
+        assert messages[3]["content"] == "Frame 2"
+        assert messages[4]["content"] == "Frame 3"

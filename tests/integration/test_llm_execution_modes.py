@@ -30,7 +30,7 @@ async def test_react_playbook_steps(playbooks):
 
     # When the playbook is executed, the steps are created
     execution = ReActLLMExecution(agent, agent.playbooks["Solver"])
-    execution._add_react_steps()
+    await execution._add_react_steps()
     assert len(agent.playbooks["Solver"].step_collection) > 0
 
 
@@ -52,6 +52,6 @@ async def test_execution(playbooks):
     await human.SendMessage(agent.id, "sin(exp(3!))")
 
     await playbooks.program.run_till_exit()
-    log = agent.state.session_log.to_log_full()
+    log = agent.session_log.to_log_full()
     assert "0.9" in log
     assert "Joke() → " in log

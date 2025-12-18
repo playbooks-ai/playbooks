@@ -11,12 +11,13 @@ from datetime import datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
+from box import Box
+
 from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.variables import Artifact
 
 if TYPE_CHECKING:
     from playbooks.agents.base_agent import Agent
-    from playbooks.state.execution_state import ExecutionState
     from playbooks.execution.call import PlaybookCall
 
 # ============================================================================
@@ -305,18 +306,14 @@ def bind_call_parameters(
 class ExpressionContext:
     """Minimal context for variable and function resolution."""
 
-    def __init__(
-        self, agent: "Agent", state: "ExecutionState", call: "PlaybookCall"
-    ) -> None:
+    def __init__(self, agent: "Agent", call: "PlaybookCall") -> None:
         """Initialize expression context.
 
         Args:
-            agent: Agent instance for namespace resolution
-            state: Execution state for variable lookup
+            agent: Agent instance for namespace resolution and variable lookup
             call: Current playbook call for context
         """
         self.agent = agent
-        self.state = state
         self.call = call
         self._cache: Dict[str, Any] = {}
         self._resolving: Set[str] = set()  # Circular reference detection
@@ -325,7 +322,9 @@ class ExpressionContext:
         )
 
         # Pre-populate built-in context
-        self._cache.update({"agent": agent, "call": call, "timestamp": datetime.now()})
+        self._cache.update(
+            {"agent": agent, "self": agent, "call": call, "timestamp": datetime.now()}
+        )
 
     def resolve_variable(self, name: str) -> Any:
         """Resolve single variable with caching.
@@ -333,7 +332,7 @@ class ExpressionContext:
         Resolution order (local-before-global):
         1. Built-in context (agent, call, timestamp)
         2. Local parameters from current playbook call
-        3. State variables (state.variables["$" + name]) - global scope
+        3. State variables (state.name) - global scope
         4. Namespace manager (agent.namespace_manager.namespace[name])
         5. KeyError with suggestions
 
@@ -364,28 +363,29 @@ class ExpressionContext:
                 self._cache[name] = value
                 return value
 
-            # Try state variables (with or without $)
-            var_key = f"${name}" if not name.startswith("$") else name
-            if hasattr(self.state, "variables") and hasattr(
-                self.state.variables, "variables"
-            ):
-                if var_key in self.state.variables.variables:
-                    variable = self.state.variables.variables[var_key]
-                    # If the variable itself is an Artifact, return it directly
-                    # Otherwise, return its value
-                    if isinstance(variable, Artifact):
-                        value = variable
-                        # Auto-load artifact if not already loaded in any frame
-                        if hasattr(
-                            self.state, "call_stack"
-                        ) and not self.state.call_stack.is_artifact_loaded(var_key):
-
-                            artifact_msg = ArtifactLLMMessage(variable)
-                            self.state.call_stack.add_llm_message(artifact_msg)
-                    else:
-                        value = variable.value
-                    self._cache[name] = value
-                    return value
+            # Try state variables
+            if hasattr(self.agent, "state"):
+                if isinstance(self.agent.state, Box):
+                    try:
+                        # Check if key exists by safely converting to dict
+                        # Note: Use try/except because dict() might fail on certain Box states
+                        vars_dict = dict(self.agent.state)
+                        if name in vars_dict:
+                            value = vars_dict[name]
+                            # Auto-load artifact if not already loaded
+                            if isinstance(value, Artifact):
+                                if hasattr(
+                                    self.agent, "call_stack"
+                                ) and not self.agent.call_stack.is_artifact_loaded(
+                                    name
+                                ):
+                                    artifact_msg = ArtifactLLMMessage(value)
+                                    self.agent.call_stack.add_llm_message(artifact_msg)
+                            self._cache[name] = value
+                            return value
+                    except (AttributeError, KeyError):
+                        # Dict conversion or access failed, continue to other scopes
+                        pass
 
             # Try namespace manager
             if (
@@ -415,7 +415,7 @@ class ExpressionContext:
         variables = []
 
         # Built-in variables
-        variables.extend(["agent", "call", "timestamp"])
+        variables.extend(["agent", "self", "call", "timestamp"])
 
         # Local parameters from current playbook call
         try:
@@ -426,12 +426,11 @@ class ExpressionContext:
             pass
 
         # State variables (global)
-        if hasattr(self.state, "variables") and hasattr(
-            self.state.variables, "variables"
-        ):
-            for key in self.state.variables.variables.keys():
-                if key.startswith("$"):
-                    variables.append(key[1:])  # Remove $ prefix
+        if hasattr(self.agent, "state"):
+            from box import Box
+
+            if isinstance(self.agent.state, Box):
+                variables.extend(dict(self.agent.state).keys())
 
         # Namespace variables
         if hasattr(self.agent, "namespace_manager") and hasattr(

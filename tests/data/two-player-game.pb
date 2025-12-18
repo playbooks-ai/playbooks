@@ -14,58 +14,64 @@ You are a game show host who can orchestrate AI agents playing games. You make s
 - Conclude by sharing the outcome
 - End program
 
-## Game Room
+## GameRoom
 meeting: true
 
 ### Steps
-- Welcome both players to the game show, announce what $game will be played, explain game rules briefly
-- Say which player will go first
-- Initialize the starting $game_state as a suitable python data structure, e.g. ["1 ✖ 3","4 ○ 6","7 8 ✖"] for tic-tac-toe
-- Set turn_count to 0
-- While the game is not finished and turn_count < 100
-  - Increment turn_count
-  - Show current game state, ideally by creating string using info from $game_state e.g. Say(meeting, f'Board:\n{"\n".join($game_state)}')
-  - Select the player whose turn it is based on the game rules or your decision as the host
-    - While the player hasn't provided their next move yet, up to 2 retries
-      - Openly say player your move
-      - Wait for player to respond
-    - If no reply from player after retries, apologize to everyone that you need to abort, and return to end meeting
-    - If the move is not valid, openly say so and ask player for a different move, loop till valid move
-    - Surgically update game state based on the move, e.g. $game_board[2][3] = "○"
-  - Check for win condition or draw
-  - If game is over
-    - Display final game state
-    - If there's a winner, announce the winner
-    - Otherwise announce that it's a draw
-    - Thank both players for the match and say that the game is over
-    - Return
-- If turn limit reached
-  - Say that the game exceeded the maximum turns so it's a draw
+- Initialize the shared game state, e.g. for tic-tac-toe, self.current_meeting.shared_state.game_state = Box({"board": [[1, 2, 3], [4, 5, 6], [7, 8, 9]], "turn": 1, "current_player": "1001"})
+- Welcome both players to the game show and ask them to wait till you start the game
+- Announce what $game will be played, explain game rules briefly
+- Tell the players that they must play only when they are the current player. Explain that they should make moves by changing the game state, e.g. for tic-tac-toe, by replacing numbers on the board with symbols (e.g. '✖' or '○')
+- In certain games like card games, as a host/dealer, you need to set up some private state for each player, like dealing cards to them. In that cast, send each player a private message with the initial state, e.g. list of cards in their hand using Say("agent 2001", "You have the following cards in your hand: 10♠, 9♠, 8♠, 7♠, 6♠").
+- Show the initial game board to everyone and list legend of the symbols we will use in the game board, e.g. for tic-tac-toe, say "Starting the game:\n\n1 2 3\n4 5 6\n7 8 9\n\nPlayers will use ✖ and ○ to represent their moves".
+- Set shared_state.current_player to the first player's id
+- Announce that the game has started and the first player should make their move
+- While the game is not finished
+  - Check if game state is valid, e.g. if the game board is updated properly, if the current player is the one who should be playing, if the game board shows too many or too few moves by a player, etc. If game health issues are found: 
+    - set game_state.current_player to "game paused"
+    - Ask players to halt the game, tell them what is wrong and what fixes you applied or they should apply
+    - If any players needs to make fixes
+      - wait for a message from those players confirming the fix. Stay on this step, until game health issues are resolved, actively driving the resolution.
+    - set game_state.current_player to appropriate player's id and ask them to resume the game
+  - Check game state for game finished condition: if so
+    - announce the result and break out of the loop
+  - Wait for a message
+- Thank all players for participating
 
 ### Notes
 - Keep chatter to a minimum
+- Maximum number of turns is 100. If the game exceeds this number, say that the game exceeded the maximum turns so it's a draw, and return.
+- store game state is in self.current_meeting.shared_state.game_state
+- Don't intervene while players are taking turns appropriately
 
 # Player
-You are a player agent that participates in game matches and follows game rules and etiquette. You are highly intelligent and show genuine understanding and proficiency in the game.
+You are a player agent that participates in game matches and follows game rules and etiquette. You are highly intelligent and show genuine understanding and proficiency in the game. Don't make a move if host has paused the game by setting game_state.current_player to "paused"; resume when host tell you and sets game_state.current_player to your id. Messages from host and other players may have been delayed. Be intelligent, follow game rules and etiquette. Host will decide game outcome. Store your private state in self.state. Access meeting shared state in self.current_meeting.shared_state.
 
 ## Game Playing Meeting
 meeting: true
 
 ### Steps
-- Note which game is being played, introduce yourself, ready to play
+- Wait for the host to start the game. Stay on this step until you receive a message from the host to start the game.
+- Understand the game, the rules, game board location, how to check if it is your turn, how to update game state when you make a move and so on.
+- Say that you are ready to play
+- Wait for the host to start the game. Stay on this step until then.
+
 - While the game is active
-  - When game ends, graciousy accept victory, defeat or draw
-  - When asked to make a move or it's your turn according to rules
-    - Think about current game state, your options and the best possible move you will make; keep thinking compact, don't rewrite the whole game state, e.g. "Diagnoal X59 threat, block 5, take center? X4X is bigger threat, must block 4."
-    - Clearly announce your move concisely, no need to explain why (e.g., "O at 4")
-  - When told your move is invalid
-    - Think deeply about whether and how your move was invalid
-    - If your move was indeed invalid
-      - Apologize for the error
-      - Recalculate a valid move
-      - Announce the corrected move
-    - Otherwise
-      - Pushback and ask the host to validate the move again with your justification
+  - Observe any game activity so far, communication from host and other players, and look at shared game state and whose turn it is. Don't say anything.
+
+  - If it is NOT your turn based on the game_state.current_player
+    - Keep waiting until it is your turn.
+
+  - decide your move considering the game state, rules and your best strategy; verify that your move is legal.
+  - update self.current_meeting.shared_state.game_state to reflect the move. For example, when playing tic-tac-toe, replace the chosen position with your symbol (e.g. self.current_meeting.shared_state.game_state.board[1][1] = '✖')
+  - increment game_state.turn by 1
+  - update game_state.current_player to the next player's id so next player can make their move
+  - send message to the meeting showing move, updated game board, and whose turn it is now, e.g. "I move ✖ at 5\n\n1 2 ○\n4 ✖ 6\n7 ✖ 9\n\nIt is now player 2000's turn"
+
+- Graciousy accept victory, defeat or draw.
 
 ### Notes
 - Keep chatter to a minimum, use compact messages
+- Obey the game host (ok to push back if you think the host is wrong)
+- Game state is stored in self.current_meeting.shared_state.game_state, e.g. Box({"board": [[1, 2, 3], [4, 5, 6], [7, 8, 9]], "turn": 1, "current_player": "1001"})
+- If host sends you a private message with initial state, store it in your self.state, e.g. self.state.cards = ["10♠", "9♠", "8♠", "7♠", "6♠"]

@@ -3,6 +3,7 @@
 from typing import Any, Dict, Optional
 
 from playbooks.core.enums import LLMMessageRole, LLMMessageType
+from playbooks.llm.messages.timestamp import get_timestamp
 
 
 class LLMMessage:
@@ -15,6 +16,7 @@ class LLMMessage:
         content: The text content of the message
         role: The role of the message sender (system, user, assistant)
         type: The type of message
+        timestamp: Relative integer timestamp (elapsed time since program start)
         cached: Whether this message should be cached by the LLM provider
     """
 
@@ -27,6 +29,7 @@ class LLMMessage:
         content: str,
         role: LLMMessageRole,
         type: LLMMessageType = LLMMessageType.USER_INPUT,
+        timestamp: Optional[int] = None,
     ) -> None:
         """Initialize an LLMMessage.
 
@@ -34,6 +37,7 @@ class LLMMessage:
             content: The text content of the message
             role: The role of the message sender
             type: The type of message (defaults to USER_INPUT)
+            timestamp: Relative integer timestamp (defaults to current time if not provided)
 
         Raises:
             TypeError: If content is not a string
@@ -45,6 +49,16 @@ class LLMMessage:
         # Validate role and type
         self._role = self._validate_role(role)
         self._type = self._validate_type(type)
+
+        # Set timestamp - use provided value or get current relative timestamp
+        if timestamp is not None:
+            if not isinstance(timestamp, int):
+                raise TypeError(
+                    f"timestamp must be an integer, got {type(timestamp).__name__}"
+                )
+            self._timestamp = timestamp
+        else:
+            self._timestamp = get_timestamp()
 
         # Cached flag - set later by InterpreterPrompt based on frame position
         self._cached = False
@@ -174,6 +188,11 @@ class LLMMessage:
         return self._type
 
     @property
+    def timestamp(self) -> int:
+        """Get the message timestamp (relative integer)."""
+        return self._timestamp
+
+    @property
     def cached(self) -> bool:
         """Get whether this message should be cached."""
         return self._cached
@@ -192,7 +211,7 @@ class LLMMessage:
             is_cached: Optional override for caching (uses self.cached if False)
 
         Returns:
-            A dictionary with role, type, content, and optionally cache_control fields
+            A dictionary with role, type, content, timestamp, and optionally cache_control fields
         """
         message = {
             "role": self.role.value,
@@ -220,7 +239,7 @@ class LLMMessage:
 
     def __repr__(self) -> str:
         """String representation of the message."""
-        return f"{self.__class__.__name__}(role={self.role}, type={self.type}, content_length={len(self.content)})"
+        return f"{self.__class__.__name__}(role={self.role}, type={self.type}, content_length={len(self.content)}, timestamp={self.timestamp})"
 
     def __eq__(self, other: object) -> bool:
         """Check equality with another message.

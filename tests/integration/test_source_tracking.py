@@ -3,15 +3,18 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from playbooks.agents.agent_builder import AgentBuilder
-from playbooks.infrastructure.event_bus import EventBus
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.infrastructure.event_bus import EventBus
 
 
 class TestSourceTracking:
     """Test that Agent objects have correct source tracking from cache files."""
 
-    def test_agent_source_tracking_from_cache(self):
+    @pytest.mark.asyncio
+    async def test_agent_source_tracking_from_cache(self):
         """Test that agents created from cached .pbasm files have correct source info."""
         # Create a simple playbook content (simulating compiled content)
         compiled_content = """# TestAgent
@@ -35,7 +38,7 @@ Say hello to {name}.
                 )
 
                 # Create agent classes from the AST
-                agent_classes = AgentBuilder.create_agent_classes_from_ast(ast)
+                agent_classes = await AgentBuilder.create_agent_classes_from_ast(ast)
 
                 # Verify we have the TestAgent
                 assert "TestAgent" in agent_classes
@@ -93,7 +96,8 @@ Say hello to {name}.
             # Clean up
             Path(f.name).unlink()
 
-    def test_program_passes_cache_paths(self):
+    @pytest.mark.asyncio
+    async def test_program_passes_cache_paths(self):
         """Test that Program class correctly passes cache file paths to markdown_to_ast."""
         from playbooks.program import Program
 
@@ -116,6 +120,9 @@ This method came from cache.
                 event_bus=EventBus("test_session"),
                 compiled_program_paths=[str(cache_file)],
             )
+
+            # Initialize to load agent classes
+            await program.initialize()
 
             # Verify we have the CachedAgent
             assert "CachedAgent" in program.agent_klasses

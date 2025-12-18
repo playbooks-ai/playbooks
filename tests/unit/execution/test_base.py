@@ -4,8 +4,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from playbooks.execution.base import LLMExecution
 from playbooks.compilation.expression_engine import ExpressionContext
+from playbooks.execution.base import LLMExecution
 
 
 class ConcreteLLMExecution(LLMExecution):
@@ -183,7 +183,7 @@ class TestLLMExecution:
 
                     # Verify ExpressionContext was created
                     mock_context_class.assert_called_once_with(
-                        agent, agent.state, mock_call_class.return_value
+                        agent, call=mock_call_class.return_value
                     )
 
     @pytest.mark.asyncio

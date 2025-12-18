@@ -7,7 +7,7 @@ playbook execution events, and messaging events.
 
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, List
+from typing import Any, List, Optional
 
 
 @dataclass(frozen=True)
@@ -166,3 +166,116 @@ class ChannelCreatedEvent(Event):
     channel_id: str = ""
     is_meeting: bool = False
     participant_ids: List[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class AgentCreatedEvent(Event):
+    """Agent instance created and registered in the Program."""
+
+    agent_id: str = ""
+    agent_klass: str = ""
+
+
+@dataclass(frozen=True)
+class AgentTerminatedEvent(Event):
+    """Agent instance terminated."""
+
+    agent_id: str = ""
+    agent_klass: str = ""
+
+
+@dataclass(frozen=True)
+class MessageSentEvent(Event):
+    """Message sent across a channel."""
+
+    message_id: str = ""
+    sender_id: str = ""
+    sender_klass: str = ""
+    recipients: str = ""  # e.g., "user", "agent 1002", "meeting 100, agent 1002"
+    content_preview: str = ""  # First 100 chars of message
+    channel_id: str = ""
+
+
+@dataclass(frozen=True)
+class MessageReceivedEvent(Event):
+    """Message added to an agent's message queue."""
+
+    message_id: str = ""
+    recipient_id: str = ""
+    recipient_klass: str = ""
+    sender_id: str = ""
+    sender_klass: str = ""
+
+
+@dataclass(frozen=True)
+class MessageRoutedEvent(Event):
+    """A message was routed via Program/Channel."""
+
+    channel_id: str = ""
+    message: Any = None
+
+
+@dataclass(frozen=True)
+class WaitForMessageEvent(Event):
+    """An agent waited for messages and either received some or timed out."""
+
+    wait_for_message_from: str = ""
+    timeout: Optional[float] = None
+    received_count: int = 0
+
+
+@dataclass(frozen=True)
+class LLMCallStartedEvent(Event):
+    """LLM call initiated."""
+
+    model: str = ""
+    input_tokens: int = 0
+    input: Any = None
+    stream: bool = False
+    metadata: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class LLMCallEndedEvent(Event):
+    """LLM call completed."""
+
+    model: str = ""
+    output_tokens: int = 0
+    output: Any = None
+    error: Optional[str] = None
+    cache_hit: bool = False
+
+
+@dataclass(frozen=True)
+class MethodCallStartedEvent(Event):
+    """Agent method call started."""
+
+    method_name: str = ""
+    args: Any = None
+    kwargs: Any = None
+
+
+@dataclass(frozen=True)
+class MethodCallEndedEvent(Event):
+    """Agent method call completed."""
+
+    method_name: str = ""
+    result: Any = None
+    error: Optional[str] = None
+
+
+@dataclass(frozen=True)
+class CompilationStartedEvent(Event):
+    """Playbook compilation started."""
+
+    file_path: str = ""
+    content_length: int = 0
+
+
+@dataclass(frozen=True)
+class CompilationEndedEvent(Event):
+    """Playbook compilation completed."""
+
+    file_path: str = ""
+    compiled_content_length: int = 0
+    error: Optional[str] = None

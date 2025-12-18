@@ -1,9 +1,9 @@
 """Enhanced SessionLogItem types for comprehensive execution tracking."""
 
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from playbooks.llm.messages.timestamp import get_timestamp
 from playbooks.state.session_log import SessionLogItem
 
 
@@ -11,9 +11,17 @@ from playbooks.state.session_log import SessionLogItem
 class SessionLogItemBase(SessionLogItem):
     """Base class for all enhanced session log items with metadata."""
 
-    timestamp: datetime
+    timestamp: int
     agent_id: str
     agent_klass: str
+
+    def __post_init__(self):
+        """Set timestamp if not provided."""
+        if not hasattr(self, "_timestamp_set"):
+            # If timestamp is 0 or not set, get current timestamp
+            if self.timestamp == 0:
+                object.__setattr__(self, "timestamp", get_timestamp())
+            object.__setattr__(self, "_timestamp_set", True)
 
     @property
     def item_type(self) -> str:
@@ -35,7 +43,7 @@ class SessionLogItemBase(SessionLogItem):
         """
         return {
             "type": self.item_type,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": self.timestamp,
             "agent_id": self.agent_id,
             "agent_klass": self.agent_klass,
         }

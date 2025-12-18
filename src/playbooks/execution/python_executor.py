@@ -1,7 +1,7 @@
-"""Python code executor with controlled namespace and capture functions.
+"""Python code executor for self-bound agent methods.
 
-This module provides execution of LLM-generated Python code with injected
-capture functions (Step, Say, Var, etc.) that record directives.
+This module executes LLM-generated Python code as bound methods on agent
+instances, with 'self' naturally referring to the agent.
 """
 
 import ast
@@ -9,101 +9,29 @@ import asyncio
 import logging
 import traceback
 import types
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
-from playbooks.agent_proxy import create_agent_proxies, create_playbook_wrapper
-from playbooks.compilation.inject_setvar import inject_setvar
+from box import Box
+
+from playbooks.core.constants import EOM
 from playbooks.core.identifiers import MeetingID
 from playbooks.debug.debug_handler import NoOpDebugHandler
 from playbooks.execution.call import PlaybookCall
 from playbooks.execution.step import PlaybookStep
-from playbooks.llm.messages.types import ArtifactLLMMessage
 from playbooks.state.call_stack import InstructionPointer
 from playbooks.state.variables import Artifact
-from playbooks.utils.langfuse_client import get_client
 
 if TYPE_CHECKING:
     from playbooks.agents import LocalAIAgent
 
 logger = logging.getLogger(__name__)
 
-
-class LLMNamespace(dict):
-    """Custom namespace that tracks variable assignments.
-
-    This namespace intercepts assignments to capture variables and make them
-    available to subsequent code. When a variable is assigned (e.g., x = 10),
-    the namespace automatically captures it via the executor's _capture_var method.
-
-    Note: The code is pre-processed before execution (e.g., $x = 10 becomes x = 10)
-    by preprocess_program() in expression_engine.py, so this namespace just needs
-    to intercept the assignments.
-    """
-
-    def __init__(self, executor: "PythonExecutor", *args, **kwargs):
-        """Initialize the namespace with reference to executor for callbacks.
-
-        Args:
-            executor: The PythonExecutor instance that owns this namespace
-        """
-        super().__init__(*args, **kwargs)
-        self.executor = executor
-
-    def __getitem__(self, key: str) -> Any:
-        """Get item from namespace, proxying state variables when needed.
-
-        When a variable is requested, first check the local namespace.
-        If not found and it looks like a user variable, try to get it from
-        the execution state (with $ prefix).
-
-        Args:
-            key: The variable name
-
-        Returns:
-            The value from namespace or state
-
-        Raises:
-            KeyError: If the variable is not found
-        """
-        # First try the local namespace
-        if not key.endswith("_") and key in self:
-            return super().__getitem__(key)
-
-        # If not in namespace and looks like a user variable,
-        # try to get it from state with $ prefix
-        if self.executor.agent.state and hasattr(
-            self.executor.agent.state, "variables"
-        ):
-            state_key = f"${key}"
-            if state_key in self.executor.agent.state.variables:
-                var = self.executor.agent.state.variables[state_key]
-                # Extract the actual value from Variable objects
-                from playbooks.state.variables import Variable
-
-                if isinstance(var, Artifact):
-                    # Auto-load artifact if not already loaded in any frame
-                    if hasattr(
-                        self.executor.agent.state, "call_stack"
-                    ) and not self.executor.agent.state.call_stack.is_artifact_loaded(
-                        state_key
-                    ):
-
-                        artifact_msg = ArtifactLLMMessage(var)
-                        self.executor.agent.state.call_stack.add_llm_message(
-                            artifact_msg
-                        )
-                    return var
-                elif isinstance(var, Variable):
-                    return var.value
-                else:
-                    raise ValueError(f"Invalid variable object: {var}")
-
-        # Not found anywhere, raise KeyError
-        raise KeyError(key)
+# Constants for namespace building
+EXCLUDED_NAMESPACE_KEYS = ["agent", "self"]
 
 
 class ExecutionResult:
-    """Result of executing Python code with capture functions.
+    """Result of executing Python code as a bound agent method.
 
     Captures all directives and state changes from executing LLM-generated
     Python code, including steps, messages, variables, artifacts, and control flow.
@@ -113,7 +41,6 @@ class ExecutionResult:
         """Initialize an empty execution result."""
         self.steps: List[InstructionPointer] = []
         self.messages: List[Tuple[str, str]] = []  # List of (recipient, message)
-        self.vars: Dict[str, Any] = {}  # Variables captured by Var()
         self.artifacts: Dict[str, Artifact] = {}  # Artifacts captured
         self.triggers: List[str] = []  # Trigger names
         self.playbook_calls: List[PlaybookCall] = []  # Playbook calls
@@ -133,7 +60,7 @@ class ExecutionResult:
 
 
 class PythonExecutor:
-    """Executes Python code with controlled namespace and capture functions."""
+    """Executes Python code as bound methods on agent instances."""
 
     def __init__(self, agent: "LocalAIAgent") -> None:
         """Initialize Python executor.
@@ -145,54 +72,38 @@ class PythonExecutor:
         self.result = ExecutionResult()
         self.debug_handler = (
             agent.program._debug_server.debug_handler
-            if agent.program._debug_server
+            if agent.program and agent.program._debug_server
             else NoOpDebugHandler()
         )
         self.current_instruction_pointer: Optional[InstructionPointer] = (
-            self.agent.state.call_stack.peek()
+            self.agent.call_stack.peek()
         )
-        self._base_namespace_cache: Optional[Dict[str, Any]] = None
 
-    def _build_base_namespace(self) -> Dict[str, Any]:
-        """Build the static/cacheable part of the namespace.
+    def _handle_syntax_error(self, e: SyntaxError) -> ExecutionResult:
+        """Handle syntax error by populating result.
 
-        This includes:
-        - Capture functions (Step, Say, Var, etc.)
-        - Playbook wrappers
-        - Agent proxies
-        - Builtins (with dangerous ones blocked)
-        - asyncio module
-
-        The result is cached and reused across executions to improve performance.
+        Args:
+            e: The SyntaxError exception
 
         Returns:
-            Dictionary with static namespace entries (functions, modules, etc.)
+            ExecutionResult with error details populated
         """
-        base_namespace = {
-            "Step": self._capture_step,
-            "Say": self._capture_say,
-            "Var": self._capture_var,
-            "Artifact": self._capture_artifact,
-            "Trigger": self._capture_trigger,
-            "Return": self._capture_return,
-            "Yld": self._capture_yld,
-            "asyncio": asyncio,
-        }
+        self.result.syntax_error = e
+        self.result.error_message = f"SyntaxError: {e}"
+        self.result.error_traceback = traceback.format_exc()
+        return self.result
 
-        # Add playbook functions from registry
-        if hasattr(self.agent, "playbooks"):
-            for playbook_name, playbook in self.agent.playbooks.items():
-                # Note: Say() wrapper needs namespace, so we'll create it fresh each time
-                if playbook_name != "Say":
-                    base_namespace[playbook_name] = create_playbook_wrapper(
-                        playbook_name=playbook_name,
-                        current_agent=self.agent,
-                        namespace=None,  # Will be set in build_namespace()
-                    )
+    def build_namespace(self) -> Dict[str, Any]:
+        """Build minimal namespace for generated code execution.
 
-        # Add agent proxies (these are static per agent)
-        agent_proxies = create_agent_proxies(self.agent, None)
-        base_namespace.update(agent_proxies)
+        Code executes as if inside an agent instance method, so 'self'
+        is bound to the agent. Most functionality accessed via self.
+
+        Returns:
+            Dict containing necessary functions and variables
+        """
+        # Minimal namespace - most things accessed via self
+        namespace = {}
 
         # Add builtins with dangerous ones removed
         import builtins
@@ -215,104 +126,91 @@ class PythonExecutor:
 
         for name in dir(builtins):
             if not name.startswith("_") and name not in blocked_builtins:
-                base_namespace[name] = getattr(builtins, name)
+                namespace[name] = getattr(builtins, name)
 
-        return base_namespace
+        # Add asyncio for await syntax
+        namespace["asyncio"] = asyncio
 
-    def build_namespace(
-        self, playbook_args: Optional[Dict[str, Any]] = None
-    ) -> LLMNamespace:
-        """Build namespace with injected capture functions.
+        # Add Box for meeting shared state and general use
+        namespace["Box"] = Box
 
-        Uses caching for static parts (capture functions, playbooks, builtins)
-        and adds dynamic parts (variables, playbook args) fresh each time.
+        # Add agent's namespace items (imports, playbook wrappers, etc.)
+        if hasattr(self.agent, "namespace_manager") and hasattr(
+            self.agent.namespace_manager, "namespace"
+        ):
+            agent_namespace = self.agent.namespace_manager.namespace
+            # Check if namespace is actually iterable (not a Mock)
+            if hasattr(agent_namespace, "items") and callable(agent_namespace.items):
+                try:
+                    # Only add non-conflicting items
+                    for key, value in agent_namespace.items():
+                        if key not in namespace and key not in EXCLUDED_NAMESPACE_KEYS:
+                            namespace[key] = value
+                except TypeError:
+                    # Skip if namespace is not iterable (e.g., Mock in tests)
+                    pass
 
-        Args:
-            playbook_args: Optional dict of playbook argument names to values
-
-        Returns:
-            LLMNamespace containing all necessary functions and variables
-        """
-        # Build or reuse base namespace cache
-        if self._base_namespace_cache is None:
-            self._base_namespace_cache = self._build_base_namespace()
-
-        # Shallow copy the base namespace for this execution
-        namespace_dict = self._base_namespace_cache.copy()
-
-        # Create LLMNamespace with the copied base
-        namespace = LLMNamespace(self, namespace_dict)
-
-        # Add Say() wrapper (needs fresh namespace reference)
-        if hasattr(self.agent, "playbooks") and "Say" in self.agent.playbooks:
-            dict.__setitem__(namespace, "Say", self._create_say_wrapper())
-
-        # Update playbook wrappers with the namespace reference
-        # (they were created with namespace=None in base cache)
-        if hasattr(self.agent, "playbooks"):
-            for playbook_name, playbook in self.agent.playbooks.items():
-                if playbook_name != "Say" and playbook_name in namespace_dict:
-                    wrapper = namespace_dict[playbook_name]
-                    if hasattr(wrapper, "namespace"):
-                        wrapper.namespace = namespace
-
-        # Add dynamic parts: existing variables from state
-        if self.agent.state and hasattr(self.agent.state, "variables"):
-            for var_name, var_value in self.agent.state.variables.to_dict().items():
-                # Strip $ prefix from variable names for the namespace
-                clean_name = var_name[1:] if var_name.startswith("$") else var_name
-                dict.__setitem__(namespace, clean_name, var_value)
-
-        # Add dynamic parts: playbook arguments
-        if playbook_args:
-            for arg_name, arg_value in playbook_args.items():
-                dict.__setitem__(namespace, arg_name, arg_value)
+        # Add meeting object if agent is in a meeting context
+        # Use the most proximal meeting (closest to top of call stack)
+        meeting = self.agent.get_current_meeting()
+        if meeting is not None:
+            namespace["meeting"] = meeting
 
         return namespace
 
     async def execute(
         self, code: str, playbook_args: Optional[Dict[str, Any]] = None
     ) -> ExecutionResult:
-        """Execute Python code and return captured results.
+        """Execute Python code as if it's a method on the agent instance.
 
-        Preprocesses code, builds namespace, compiles, and executes in a controlled
-        environment. All directives (Step, Say, Var, etc.) are captured via the
-        namespace functions.
+        The code is transformed into an async method and bound to the agent,
+        so 'self' naturally refers to the agent instance.
 
         Args:
-            code: Python code to execute (may contain $var = value syntax)
+            code: Python code to execute
             playbook_args: Optional dict of playbook argument names to values
 
         Returns:
             ExecutionResult containing captured directives and any errors
-
-        Raises:
-            SyntaxError: If code has syntax errors (also captured in result)
-            Exception: If code raises an exception (also captured in result)
         """
         self.result = ExecutionResult()
 
+        if (
+            hasattr(self.agent, "program")
+            and self.agent.program
+            and getattr(self.agent.program, "execution_finished", False)
+        ):
+            self.result.playbook_finished = True
+            self.result.return_value = "Program execution finished"
+            return self.result
+
+        # Set executor on current call stack frame for Log* methods
+        # This automatically handles nested execution contexts - when the frame
+        # is popped, the previous frame's executor becomes current
+        current_frame = self.agent.call_stack.peek()
+        if current_frame:
+            current_frame.executor = self
+
+            # Store playbook arguments in frame locals
+            if playbook_args:
+                current_frame.locals.update(playbook_args)
+
         try:
-            # Pre-process code to handle $variable syntax
-            # Convert $variable → variable so the code is valid Python
-            from playbooks.compilation.expression_engine import preprocess_program
+            # Build namespace (without playbook_args)
+            namespace = self.build_namespace()
 
-            code = preprocess_program(code)
-
-            # Build namespace with capture functions
-            namespace = self.build_namespace(playbook_args=playbook_args)
-
-            # Wrap in async function, then inject Var() calls
-            # These can raise SyntaxError if the code has syntax issues
+            # Parse and transform code into async method
             try:
-                # Wrap code in async function for execution first
-                # Use AST to properly indent without mangling string literals
                 parsed = ast.parse(code)
+
+                # Create method that takes self as parameter
                 func_def = ast.AsyncFunctionDef(
-                    name="__async_exec__",
+                    name="__exec_method__",
                     args=ast.arguments(
                         posonlyargs=[],
-                        args=[],
+                        args=[
+                            ast.arg(arg="self", annotation=None)
+                        ],  # Add self parameter
                         kwonlyargs=[],
                         kw_defaults=[],
                         defaults=[],
@@ -322,78 +220,65 @@ class PythonExecutor:
                     returns=None,
                 )
                 module = ast.Module(body=[func_def], type_ignores=[])
-                # Fix missing location information for manually created AST nodes
                 ast.fix_missing_locations(module)
                 code = ast.unparse(module)
-                # Now inject SetVar calls (works on function bodies)
-                code = inject_setvar(code)
             except SyntaxError as e:
-                self.result.syntax_error = e
-                self.result.error_message = f"SyntaxError: {e}"
-                logger.error(f"Syntax error during preprocessing: {e}")
-                backtrace = traceback.format_exc()
-                logger.error(f"Backtrace: {backtrace}")
-                self.result.error_traceback = backtrace
-                return self.result
+                return self._handle_syntax_error(e)
 
-            # Compile code to check for syntax errors early
+            # Compile and execute
             try:
                 compiled_code = compile(code, "<llm>", "exec")
             except SyntaxError as e:
-                self.result.syntax_error = e
-                self.result.error_message = f"SyntaxError: {e}"
-                logger.error(f"Syntax error executing code: {e}")
-                backtrace = traceback.format_exc()
-                logger.error(f"Backtrace: {backtrace}")
-                self.result.error_traceback = backtrace
-                return self.result
+                return self._handle_syntax_error(e)
 
-            # Execute the compiled code in the controlled namespace
-            # This populates namespace with function definitions and executes statements
-            # We wrap the code in an async function (done above),
-            # then get the function pointer and execute the function with the namespace.
+            # Execute to get the function
             temp_namespace = {}
             exec(compiled_code, temp_namespace)
-            fn = temp_namespace["__async_exec__"]
-            fn_copy = types.FunctionType(
-                fn.__code__,
-                namespace,
-                fn.__name__,
-                fn.__defaults__,
-                fn.__closure__,
+            method = temp_namespace["__exec_method__"]
+
+            # Merge namespace with frame locals and self/agent reference
+            execution_namespace = namespace.copy()
+            if current_frame:
+                execution_namespace.update(current_frame.locals)
+            execution_namespace["self"] = self.agent
+            execution_namespace["agent"] = self.agent  # Allow 'agent' as alias
+
+            # Create bound method with merged namespace
+            bound_method = types.MethodType(
+                types.FunctionType(
+                    method.__code__,
+                    execution_namespace,
+                    method.__name__,
+                    method.__defaults__,
+                    method.__closure__,
+                ),
+                self.agent,
             )
 
-            await fn_copy()
+            # Execute the bound method (self is automatically the agent, and agent = self)
+            await bound_method()
 
         except SyntaxError as e:
-            self.result.syntax_error = e
-            self.result.error_message = f"SyntaxError: {e}"
-            logger.error(f"Syntax error executing code: {e}")
-            backtrace = traceback.format_exc()
-            logger.error(f"Backtrace: {backtrace}")
-            # Store full traceback for LLM feedback
-            self.result.error_traceback = backtrace
+            return self._handle_syntax_error(e)
 
         except Exception as e:
             self.result.runtime_error = e
             self.result.error_message = f"{type(e).__name__}: {e}"
-            logger.error(f"Error executing code: {type(e).__name__}: {e}")
-            backtrace = traceback.format_exc()
-            logger.error(f"Backtrace: {backtrace}")
-            # Store full traceback for LLM feedback
-            self.result.error_traceback = backtrace
+            self.result.error_traceback = traceback.format_exc()
 
+        # No cleanup needed - executor is tied to call stack frame lifecycle
+        # When the frame is popped, the previous frame's executor becomes current
         return self.result
 
-    async def _capture_step(self, location: str) -> None:
-        """Capture Step() call.
+    async def capture_step(self, location: str) -> None:
+        """Capture step execution and update call stack.
 
         Args:
             location: Step location string (e.g., "Welcome:01:QUE")
         """
         instruction_pointer = self.agent.parse_instruction_pointer(location)
         self.result.steps.append(instruction_pointer)
-        self.agent.state.call_stack.advance_instruction_pointer(instruction_pointer)
+        self.agent.call_stack.advance_instruction_pointer(instruction_pointer)
         self.current_instruction_pointer = instruction_pointer
 
         # Try to resolve the actual playbook code for this step so we can label spans
@@ -433,13 +318,6 @@ class PythonExecutor:
         if not step_code:
             step_code = location
 
-        try:
-            langfuse = get_client()
-            if langfuse and hasattr(langfuse, "update_current_span"):
-                langfuse.update_current_span(name=step_code)
-        except Exception as exc:
-            logger.debug("Failed to update Langfuse span with step code: %s", exc)
-
         # Check if this is a thinking step
         is_thinking = step_type == "TNK"
         if is_thinking:
@@ -450,58 +328,8 @@ class PythonExecutor:
             agent_id=self.agent.id,
         )
 
-    async def _capture_say(self, target: str, message: str) -> None:
-        """Capture Say() call.
-
-        Args:
-            target: Message recipient ("user", "human", agent_id, etc.)
-            message: Message content
-        """
-        self.result.messages.append((target, message))
-
-    async def _capture_var(self, name: str, value: Any) -> None:
-        """Capture variable and update state.
-
-        This is called both for explicit Var() calls and for variable
-        assignments like $x = 10 that are captured by LLMNamespace.
-
-        Args:
-            name: Variable name (without $ prefix, e.g., "x")
-            value: Variable value
-        """
-        from playbooks.config import config
-
-        # Check if value should be stored as an artifact (similar to playbook results)
-        # Convert to artifact if value string representation exceeds threshold
-        if len(str(value)) > config.artifact_result_threshold:
-            # Create an artifact to store the large value
-            artifact_summary = f"Variable: {name}"
-            artifact_contents = str(value)
-
-            artifact = Artifact(
-                name=f"${name}",
-                summary=artifact_summary,
-                value=artifact_contents,
-            )
-
-            self.result.vars[name] = artifact
-
-            # Update the actual state variables with $ prefix
-            if self.agent.state and hasattr(self.agent.state, "variables"):
-                self.agent.state.variables[f"${name}"] = artifact
-        else:
-            # Store as regular variable if below threshold
-            self.result.vars[name] = value
-            # Update the actual state variables with $ prefix
-            if self.agent.state and hasattr(self.agent.state, "variables"):
-                self.agent.state.variables.__setitem__(
-                    name=f"${name}",
-                    value=value,
-                    instruction_pointer=self.current_instruction_pointer,
-                )
-
-    async def _capture_artifact(self, name: str, summary: str, content: str) -> None:
-        """Capture Artifact() call.
+    async def capture_artifact(self, name: str, summary: str, content: str) -> None:
+        """Capture artifact creation and store in agent state.
 
         Args:
             name: Artifact name
@@ -510,37 +338,28 @@ class PythonExecutor:
         """
         artifact = Artifact(name=name, summary=summary, value=content)
         self.result.artifacts[name] = artifact
-        self.result.vars[name] = artifact
+        setattr(self.agent.state, name, artifact)
 
-        # Update state variables
-        if self.agent.state and hasattr(self.agent.state, "variables"):
-            self.agent.state.variables[f"${name}"] = artifact
-
-    async def _capture_trigger(self, code: str) -> None:
-        """Capture Trigger() call.
+    async def capture_trigger(self, code: str) -> None:
+        """Capture trigger execution.
 
         Args:
             code: Trigger code/name
         """
         self.result.triggers.append(code)
 
-    async def _capture_return(self, value: Any = None) -> None:
-        """Capture Return() call.
+    async def capture_return(self, value: Any = None) -> None:
+        """Capture return value and mark playbook as finished.
 
         Args:
             value: Return value
         """
         self.result.return_value = value
-        if self.agent.state and hasattr(self.agent.state, "variables"):
-            self.agent.state.variables.__setitem__(
-                name="$_",
-                value=value,
-                instruction_pointer=self.current_instruction_pointer,
-            )
+        self.agent.state._ = value
         self.result.playbook_finished = True
 
-    async def _capture_yld(self, target: str = "user") -> None:
-        """Capture Yld() call.
+    async def capture_yld(self, target: str = "user") -> Optional[str]:
+        """Capture yield point and handle waiting logic.
 
         Args:
             target: Yield target ("user", "human", agent_id, etc.)
@@ -559,8 +378,9 @@ class PythonExecutor:
             self.result.wait_for_agent_target = target
 
         # Perform the actual waiting operations
+        messages = []
         if target_lower in ["user", "human"]:
-            await self.agent.WaitForMessage("human")
+            messages = await self.agent.WaitForMessage("human")
         elif target_lower not in ["exit", "return"]:
             # Agent ID or meeting spec
             target_agent_id = self._resolve_yld_target(target)
@@ -570,10 +390,18 @@ class PythonExecutor:
                     meeting_id_obj = MeetingID.parse(target_agent_id)
                     meeting_id = meeting_id_obj.id
                     if meeting_id == "current":
-                        meeting_id = self.agent.state.call_stack.peek().meeting_id
-                    await self.agent.WaitForMessage(f"meeting {meeting_id}")
+                        meeting_id = self.agent.call_stack.peek().meeting_id
+                    messages = await self.agent.WaitForMessage(
+                        f"meeting {meeting_id}", timeout=10.0
+                    )
+                    # On timeout, return None (do not inject a synthetic message into the meeting).
                 else:
-                    await self.agent.WaitForMessage(target_agent_id)
+                    messages = await self.agent.WaitForMessage(target_agent_id)
+        if messages:
+            return "\n".join(
+                [message.content for message in messages if message.content != EOM]
+            )
+        return None
 
     def _resolve_yld_target(self, target: str) -> Optional[str]:
         """Resolve a YLD target to an agent ID.
@@ -590,34 +418,3 @@ class PythonExecutor:
         # Use the unified target resolver with no fallback for YLD
         # (YLD should be explicit about what it's waiting for)
         return self.agent.resolve_target(target, allow_fallback=False)
-
-    def _create_say_wrapper(self) -> Callable[[str, str], Any]:
-        """Create a wrapper for Say() that ensures proper pre/post processing.
-
-        The wrapper calls execute_playbook to ensure proper logging, langfuse tracking,
-        and other pre/post processing. The _currently_streaming flag is checked
-        internally by agent.Say() to prevent duplicate output.
-
-        _currently_streaming flag interaction:
-        - During LLM streaming, Say("human", "...") calls are pattern-detected and
-          displayed in real-time to the user (see execution/playbook.py)
-        - The flag is set to True to mark that the message was already streamed
-        - When this Python code executes later, Say() checks the flag
-        - If True, it skips the streaming path and just delivers the message
-        - This prevents showing the same message twice (once streamed, once executed)
-        - For agent-to-agent messages, streaming is skipped entirely (human-only)
-
-        Returns:
-            Async function that wraps Say() playbook execution
-        """
-
-        async def say_wrapper(target: str, message: str) -> Any:
-            # Execute the Say() playbook (which will internally check _currently_streaming)
-            success, result = await self.agent.execute_playbook(
-                "Say", [target, message], {}
-            )
-            if not success:
-                return "ERROR: " + result
-            return result
-
-        return say_wrapper

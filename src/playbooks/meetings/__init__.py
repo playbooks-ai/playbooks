@@ -12,7 +12,6 @@ from .meeting import (
     MeetingInvitationStatus,
     Message,
 )
-from .meeting_manager import MeetingManager
 
 # from .meeting_message_handler import MeetingMessageHandler
 from .meeting_registry import MeetingRegistry
@@ -23,7 +22,7 @@ __all__ = [
     "MeetingInvitationStatus",
     "Message",
     "JoinedMeeting",
-    "MeetingManager",
+    # "MeetingManager",
     # "MeetingMessageHandler",
     "MeetingRegistry",
 ]

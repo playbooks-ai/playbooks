@@ -24,7 +24,7 @@ class MockAIAgent(AIAgent):
     def __init__(self):
         super().__init__(Mock(spec=EventBus))
 
-    def discover_playbooks(self):
+    async def discover_playbooks(self):
         pass
 
 

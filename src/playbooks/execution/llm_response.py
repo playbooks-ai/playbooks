@@ -74,7 +74,7 @@ class LLMResponse(AsyncInitMixin):
         self.response = response
         self.event_bus = event_bus
         self.agent = agent
-        self.agent.state.last_llm_response = self.response
+        self.agent.last_llm_response = self.response
         self.preprocessed_code: Optional[str] = None
         self.execution_result: Optional[ExecutionResult] = None
 

@@ -159,16 +159,13 @@ class PythonPlaybook(LocalPlaybook):
         triggers = getattr(func, "__triggers__", [])
         metadata = getattr(func, "__metadata__", {})
 
-        # If triggers are not prefixed with T1:BGN, T1:CND, etc., add T{i}:CND
+        # If triggers are not prefixed with T1:BGN, T1:CND, etc., add appropriate prefix
         # Use regex to find if prefix is missing
-        triggers = [
-            (
-                f"T{i+1}:CND {trigger}"
-                if not re.match(r"^T\d+:[A-Z]{3} ", trigger)
-                else trigger
-            )
-            for i, trigger in enumerate(triggers)
-        ]
+        for i, trigger in enumerate(triggers):
+            if not re.match(r"^T\d+:[A-Z]{3} ", trigger):
+                raise ValueError(
+                    f"Expected trigger {trigger} to be prefixed with T1:BGN, T1:CND, etc."
+                )
 
         if triggers:
             triggers = PlaybookTriggers(

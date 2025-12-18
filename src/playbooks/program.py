@@ -8,6 +8,7 @@ communication between all system components.
 import asyncio
 import json
 import logging
+import random
 import re
 from pathlib import Path
 
@@ -15,8 +16,16 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, Union
 
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.config import config
 from playbooks.core.constants import EXECUTION_FINISHED, HUMAN_AGENT_KLASS
-from playbooks.core.events import ChannelCreatedEvent, ProgramTerminatedEvent
+from playbooks.core.events import (
+    AgentCreatedEvent,
+    ChannelCreatedEvent,
+    CompiledProgramEvent,
+    MessageRoutedEvent,
+    MessageSentEvent,
+    ProgramTerminatedEvent,
+)
 from playbooks.core.exceptions import ExecutionFinished, KlassNotFoundError
 from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.core.message import Message, MessageType
@@ -24,8 +33,10 @@ from playbooks.core.stream_result import StreamResult
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.state.variables import Artifact
+from playbooks.utils.error_utils import log_agent_errors
+from playbooks.utils.langfuse_event_handler import LangfuseEventHandler
 
-from .agents import AIAgent, HumanAgent
+from .agents import AIAgent, HumanAgent, RemoteAIAgent
 from .agents.agent_builder import AgentBuilder
 from .agents.base_agent import BaseAgent
 from .channels import AgentParticipant, Channel, HumanParticipant
@@ -36,6 +47,20 @@ from .meetings import MeetingRegistry
 from .utils import file_utils
 
 logger = logging.getLogger(__name__)
+
+
+def is_agent_busy(agent: BaseAgent) -> bool:
+    """Check if agent is busy, with defensive handling.
+
+    Args:
+        agent: Agent instance to check
+
+    Returns:
+        True if agent is busy, False otherwise (defaults to False if state is missing)
+    """
+    if not hasattr(agent, "state"):
+        return False
+    return getattr(agent.state, "_busy", False)
 
 
 class AsyncAgentRuntime:
@@ -206,8 +231,6 @@ class AsyncAgentRuntime:
             self.program._has_agent_errors = True
 
             # Log agent error using error_utils for consistency
-            from playbooks.utils.error_utils import log_agent_errors
-
             error_info = [
                 {
                     "agent_id": agent.id,
@@ -241,11 +264,8 @@ class AsyncAgentRuntime:
             done = True
             for agent in self.program.agents:
                 if isinstance(agent, AIAgent):
-                    if len(agent.state.call_stack.frames) > 0:
-                        if "$_busy" not in agent.state.variables:
-                            done = False
-                            break
-                        if agent.state.variables["$_busy"].value is True:
+                    if len(agent.call_stack.frames) > 0:
+                        if is_agent_busy(agent):
                             done = False
                             break
             await asyncio.sleep(1)
@@ -321,9 +341,9 @@ class ProgramAgentsCommunicationMixin:
                 )
 
         # Get sender agent
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(sender_agent_id.id)
         if not sender_agent:
-            raise ValueError(f"Sender agent {sender_id} not found")
+            raise ValueError(f"Sender agent {sender_agent_id.id} not found")
 
         # Get or create channel for this communication
         try:
@@ -359,6 +379,30 @@ class ProgramAgentsCommunicationMixin:
             stream_id=stream_id,
         )
 
+        # Publish routed-message event for observers (web/cli should subscribe instead of monkey-patching)
+        self.event_bus.publish(
+            MessageRoutedEvent(
+                session_id=self.event_bus.session_id,
+                agent_id=sender_agent_id.id,
+                channel_id=channel.channel_id,
+                message=msg,
+            )
+        )
+
+        # Publish message sent event for telemetry
+        self.event_bus.publish(
+            MessageSentEvent(
+                session_id=self.event_bus.session_id,
+                agent_id=sender_agent_id.id,
+                message_id=msg.id,
+                sender_id=sender_agent_id.id,
+                sender_klass=sender_klass,
+                recipients=receiver_spec,
+                content_preview=message_str[:100] if message_str else "",
+                channel_id=channel.channel_id,
+            )
+        )
+
         # Send via channel (channel handles delivery to all participants)
         await channel.send(msg, sender_agent_id.id)
 
@@ -379,7 +423,7 @@ class ProgramAgentsCommunicationMixin:
         Returns:
             StreamResult indicating whether streaming was started and providing stream_id
         """
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(AgentID.parse(sender_id).id)
         if not sender_agent:
             return StreamResult.start(stream_id)
 
@@ -431,7 +475,7 @@ class ProgramAgentsCommunicationMixin:
         content: str,
     ) -> None:
         """Send a chunk of streaming content via channel."""
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(AgentID.parse(sender_id).id)
         if not sender_agent:
             return
 
@@ -449,7 +493,7 @@ class ProgramAgentsCommunicationMixin:
         final_content: Optional[str] = None,
     ) -> None:
         """Complete a streaming message via channel."""
-        sender_agent = self.agents_by_id.get(sender_id)
+        sender_agent = self.agents_by_id.get(AgentID.parse(sender_id).id)
         if not sender_agent:
             return
 
@@ -475,13 +519,13 @@ class ProgramAgentsCommunicationMixin:
 
             # Create the final message with structured IDs
             final_message = Message(
-                sender_id=AgentID(sender_id),
+                sender_id=AgentID.parse(sender_id),
                 sender_klass=sender_agent.klass,
                 content=final_content or "",
                 recipient_klass=recipient_klass,
-                recipient_id=AgentID(recipient_id) if recipient_id else None,
+                recipient_id=AgentID.parse(recipient_id) if recipient_id else None,
                 message_type=message_type,
-                meeting_id=MeetingID(meeting_id) if meeting_id else None,
+                meeting_id=MeetingID.parse(meeting_id) if meeting_id else None,
                 stream_id=stream_id,
             )
 
@@ -554,15 +598,41 @@ class Program(ProgramAgentsCommunicationMixin):
         # Agent runtime manages execution with asyncio
         self.runtime = AsyncAgentRuntime(program=self)
 
+        # Lock for agent creation to prevent race conditions
+        self._agent_creation_lock = asyncio.Lock()
+
         self.extract_public_json()
         self.parse_metadata()
 
         self.agent_klasses = {}
+        # Note: agent_klasses will be populated in async initialize() method
 
+        self.agents = []
+        self.agents_by_klass = {}
+        self.agents_by_id = {}
+
+        self.execution_finished = False
+        self.initialized = False
+        self._has_agent_errors = (
+            False  # Track if any agents have had errors for test visibility
+        )
+        self.enable_agent_streaming = (
+            False  # Enable streaming for agent-to-agent messages (for snoop mode)
+        )
+
+        # Initialize telemetry handler if enabled
+        self._langfuse_handler = None
+        if config.langfuse.enabled:
+            self._langfuse_handler = LangfuseEventHandler(self.event_bus)
+
+    async def initialize(self) -> None:
+        # Create agent classes from AST (requires async for LLM compilation)
         if self.program_content:
             # Using program content directly (no cache file)
             ast = markdown_to_ast(self.program_content)
-            self.agent_klasses.update(AgentBuilder.create_agent_classes_from_ast(ast))
+            self.agent_klasses.update(
+                await AgentBuilder.create_agent_classes_from_ast(ast)
+            )
         else:
             # Using compiled program paths (cache files)
             for i, markdown_content in enumerate(self.markdown_contents):
@@ -578,23 +648,9 @@ class Program(ProgramAgentsCommunicationMixin):
 
                 ast = markdown_to_ast(markdown_content, source_file_path=source_path)
                 self.agent_klasses.update(
-                    AgentBuilder.create_agent_classes_from_ast(ast)
+                    await AgentBuilder.create_agent_classes_from_ast(ast)
                 )
 
-        self.agents = []
-        self.agents_by_klass = {}
-        self.agents_by_id = {}
-
-        self.execution_finished = False
-        self.initialized = False
-        self._has_agent_errors = (
-            False  # Track if any agents have had errors for test visibility
-        )
-        self.enable_agent_streaming = (
-            False  # Enable streaming for agent-to-agent messages (for snoop mode)
-        )
-
-    async def initialize(self) -> None:
         self.agents = [
             await self.create_agent(klass)
             for klass in self.agent_klasses.values()
@@ -603,35 +659,29 @@ class Program(ProgramAgentsCommunicationMixin):
 
         # Set initial state variables on all agents
         if self.initial_state:
-            from playbooks.config import config as playbooks_config
-            from playbooks.state.variables import Artifact
-
             for agent in self.agents:
-                if hasattr(agent, "state") and hasattr(agent.state, "variables"):
+                if hasattr(agent, "state"):
                     for var_name, var_value in self.initial_state.items():
                         # Check if should be promoted to Artifact based on threshold
-                        if (
-                            len(str(var_value))
-                            > playbooks_config.artifact_result_threshold
-                        ):
+                        if len(str(var_value)) > config.artifact_result_threshold:
                             artifact = Artifact(
-                                name=f"${var_name}",
+                                name=var_name,
                                 summary=f"Initial state variable: {var_name}",
                                 value=var_value,
                             )
-                            agent.state.variables[f"${var_name}"] = artifact
+                            # Store directly on state using dictionary-style access
+                            agent.state[var_name] = artifact
 
                             # Store artifact for pre-loading into first call stack frame
                             if not hasattr(agent, "_initial_artifacts_to_load"):
                                 agent._initial_artifacts_to_load = []
-                            agent._initial_artifacts_to_load.append(f"${var_name}")
+                            agent._initial_artifacts_to_load.append(var_name)
                         else:
-                            agent.state.variables[f"${var_name}"] = var_value
+                            # Store directly on state using dictionary-style access
+                            agent.state[var_name] = var_value
         # Validate public.json count (only for local AI agents, not remote/MCP agents)
         # Remote agents (MCPAgent, RemoteAIAgent) don't have playbooks in the current playbook
         # Allow empty or missing public.json for testing scenarios
-        from playbooks.agents import RemoteAIAgent
-
         # Get non-empty public json lists
         non_empty_public_jsons = [pj for pj in self.public_jsons if pj]
 
@@ -774,7 +824,86 @@ class Program(ProgramAgentsCommunicationMixin):
         if self._debug_server:
             await self._debug_server.send_thread_started_event(agent.id)
 
+        # Publish creation event for observers (web/cli apps should subscribe instead of monkey-patching)
+        self.event_bus.publish(
+            AgentCreatedEvent(
+                session_id=self.event_bus.session_id,
+                agent_id=agent.id,
+                agent_klass=agent.klass,
+            )
+        )
+
         return agent
+
+    async def get_or_create_agent(self, agent_klass: str, **create_kwargs) -> BaseAgent:
+        """Get an available agent or create a new one.
+
+        Finds idle agents of the requested type using load balancing.
+        Creates a new agent if all are busy or none exist.
+
+        Args:
+            agent_klass: Agent class name (e.g., "AccountantExpert")
+            **create_kwargs: Arguments to pass to create_agent()
+
+        Returns:
+            Agent instance (either existing idle one or newly created)
+
+        Raises:
+            ValueError: If agent_klass is not found in agent_klasses
+            RuntimeError: If agent creation fails after registration
+        """
+        # Validate that the agent class exists
+        if agent_klass not in self.agent_klasses:
+            raise ValueError(
+                f"Agent class '{agent_klass}' not found. "
+                f"Available classes: {list(self.agent_klasses.keys())}"
+            )
+
+        # Use lock to prevent race conditions in async context
+        async with self._agent_creation_lock:
+            # Get all agents of this type
+            agents = self.agents_by_klass.get(agent_klass, [])
+
+            # Find idle agents (not busy) with defensive checks
+            idle_agents = []
+            for agent in agents:
+                # Defensive check: ensure agent has state and variables
+                if not hasattr(agent, "state"):
+                    logger.debug(
+                        f"Agent {agent.id if hasattr(agent, 'id') else 'unknown'} "
+                        "missing state attribute, skipping in get_or_create_agent"
+                    )
+                    continue
+                # Check if agent is idle (not busy)
+                if not is_agent_busy(agent):
+                    idle_agents.append(agent)
+
+            # Load balance: randomly select from idle agents
+            if idle_agents:
+                return random.choice(idle_agents)
+
+            # Create new agent if all busy or none exist
+            # Track registration state for rollback on failure
+            new_agent = None
+            agent_registered = False
+            try:
+                new_agent = await self.create_agent(agent_klass, **create_kwargs)
+                agent_registered = True
+                await self.runtime.start_agent(new_agent)
+                return new_agent
+            except Exception as e:
+                # Rollback: remove agent from registries if it was registered
+                if agent_registered and new_agent is not None:
+                    self.agents.remove(new_agent)
+                    if agent_klass in self.agents_by_klass:
+                        if new_agent in self.agents_by_klass[agent_klass]:
+                            self.agents_by_klass[agent_klass].remove(new_agent)
+                    if new_agent.id in self.agents_by_id:
+                        del self.agents_by_id[new_agent.id]
+                    self.event_agents_changed()
+                raise RuntimeError(
+                    f"Failed to create or start agent '{agent_klass}': {e}"
+                ) from e
 
     async def _start_new_agent(self, agent: BaseAgent) -> None:
         """Initialize and start a newly created agent."""
@@ -800,8 +929,6 @@ class Program(ProgramAgentsCommunicationMixin):
 
     def _emit_compiled_program_event(self) -> None:
         """Emit an event with the compiled program content for debugging."""
-        from .events import CompiledProgramEvent
-
         compiled_file_path = self._get_compiled_file_name()
         event = CompiledProgramEvent(
             session_id="program",
@@ -940,10 +1067,11 @@ class Program(ProgramAgentsCommunicationMixin):
             reason: Reason for finishing (e.g., "normal", "error")
             exit_code: Exit code (0 for success, non-zero for errors)
         """
+        self.execution_finished = True
+
         # Wait for all agents to become idle
         await self.runtime.wait_for_all_agents_idle()
 
-        self.execution_finished = True
         if hasattr(self, "execution_finished_event"):
             self.execution_finished_event.set()
         if self.event_bus:
@@ -962,6 +1090,10 @@ class Program(ProgramAgentsCommunicationMixin):
 
         # Stop all agent tasks via runtime
         await self.runtime.stop_all_agents()
+
+        # Shutdown telemetry handler
+        if self._langfuse_handler:
+            self._langfuse_handler.shutdown()
 
         # Shutdown debug server if running
         await self.shutdown_debug_server()
@@ -1137,7 +1269,7 @@ class Program(ProgramAgentsCommunicationMixin):
     ) -> Channel:
         """Get or create a channel for communication.
 
-        When a new channel is created, all registered callbacks are invoked immediately
+        When a new channel is created, a ChannelCreatedEvent is published to the EventBus
         to enable event-driven channel discovery.
 
         Args:
@@ -1212,7 +1344,7 @@ class Program(ProgramAgentsCommunicationMixin):
         """Create a channel for a meeting.
 
         This is called by MeetingManager when creating a meeting.
-        When a new channel is created, all registered callbacks are invoked immediately.
+        When a new channel is created, a ChannelCreatedEvent is published to the EventBus.
 
         Args:
             meeting_id: ID of the meeting

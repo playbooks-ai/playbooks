@@ -5,16 +5,19 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from playbooks.compilation.expression_engine import (
     ExpressionContext,
+    bind_call_parameters,
     resolve_description_placeholders,
     update_description_in_markdown,
 )
 from playbooks.config import config
+from playbooks.core.argument_types import LiteralValue, VariableReference
 from playbooks.core.constants import EXECUTION_FINISHED
-from playbooks.core.exceptions import ExecutionFinished
+from playbooks.core.events import PlaybookEndEvent, PlaybookStartEvent
+from playbooks.core.exceptions import ExecutionFinished, InteractiveInputRequired
 from playbooks.debug.debug_handler import DebugHandler, NoOpDebugHandler
 from playbooks.execution.call import PlaybookCall
 from playbooks.execution.interpreter_prompt import InterpreterPrompt
-from playbooks.execution.llm_response import LLMResponse
+from playbooks.execution.llm_response import LLMResponse, _strip_code_block_markers
 from playbooks.execution.streaming_python_executor import (
     StreamingExecutionError,
     StreamingPythonExecutor,
@@ -23,9 +26,9 @@ from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     PlaybookImplementationLLMMessage,
 )
-from playbooks.utils.langfuse_client import get_client
+from playbooks.llm.messages.types import ExecutionResultLLMMessage
 from playbooks.utils.llm_config import LLMConfig
-from playbooks.utils.llm_helper import get_completion
+from playbooks.utils.llm_helper import ensure_async_iterable, get_completion
 
 from .base import LLMExecution
 
@@ -34,6 +37,40 @@ if TYPE_CHECKING:
     from playbooks.playbook.llm_playbook import LLMPlaybook
 
 logger = logging.getLogger(__name__)
+
+
+def _validate_interpreter_response(response: str) -> bool:
+    """Validate that an LLM response is properly formatted for interpreter/playbook execution.
+
+    Args:
+        response: Raw LLM response string
+
+    Returns:
+        True if response is valid and should be cached, False otherwise
+    """
+    if not response or not response.strip():
+        return False
+
+    response = response.strip()
+
+    # must start with ```python
+    if not response.startswith("```python"):
+        return False
+
+    # must end with ```
+    if not response.endswith("```"):
+        return False
+
+    # Strip code block markers if present
+    processed = _strip_code_block_markers(response)
+
+    # Check if it starts with the expected comment format
+    lines = processed.strip().split("\n")
+    if not lines:
+        return False
+
+    first_line = lines[0].strip()
+    return first_line.startswith("# execution_id:")
 
 
 class PlaybookLLMExecution(LLMExecution):
@@ -88,9 +125,7 @@ class PlaybookLLMExecution(LLMExecution):
 
         # Resolve description placeholders if present
         if self.playbook.description and "{" in self.playbook.description:
-            context = ExpressionContext(
-                agent=self.agent, state=self.agent.state, call=call
-            )
+            context = ExpressionContext(agent=self.agent, call=call)
             resolved_description = await resolve_description_placeholders(
                 self.playbook.description, context
             )
@@ -112,7 +147,7 @@ class PlaybookLLMExecution(LLMExecution):
         )
 
         # Add the message object directly to the call stack
-        self.agent.state.call_stack.add_llm_message(playbook_impl_msg)
+        self.agent.call_stack.add_llm_message(playbook_impl_msg)
 
     async def execute(self, *args: Any, **kwargs: Any) -> Any:
         """Execute the playbook with traditional step-by-step logic.
@@ -133,6 +168,15 @@ class PlaybookLLMExecution(LLMExecution):
         call = PlaybookCall(self.playbook.name, args, kwargs)
         await self.pre_execute(call)
 
+        # Publish playbook start event
+        self.agent.event_bus.publish(
+            PlaybookStartEvent(
+                session_id=self.agent.program.event_bus.session_id,
+                agent_id=self.agent.id,
+                playbook=self.playbook.name,
+            )
+        )
+
         instruction = f"Execute {str(call)} from step 01. Refer to {self.playbook.name} playbook implementation above."
         artifacts_to_load = []
 
@@ -146,14 +190,16 @@ class PlaybookLLMExecution(LLMExecution):
             playbook_args = self._extract_playbook_arguments(call)
 
             # Make the LLM call and execute the generated code streaming
+            raw_llm_response = await self.make_llm_call(
+                instruction=instruction,
+                agent_instructions=f"Remember: You are {str(self.agent)}. {description_paragraph}",
+                artifacts_to_load=artifacts_to_load,
+                playbook_args=playbook_args,
+            )
+
             llm_response = await LLMResponse.create(
-                await self.make_llm_call(
-                    instruction=instruction,
-                    agent_instructions=f"Remember: You are {str(self.agent)}. {description_paragraph}",
-                    artifacts_to_load=artifacts_to_load,
-                    playbook_args=playbook_args,
-                ),
-                event_bus=self.agent.state.event_bus,
+                raw_llm_response,
+                event_bus=self.agent.event_bus,
                 agent=self.agent,
             )
 
@@ -183,98 +229,15 @@ class PlaybookLLMExecution(LLMExecution):
                 )
 
                 # Add error message to call stack for LLM to see
-                from playbooks.llm.messages.types import ExecutionResultLLMMessage
-
                 error_msg = ExecutionResultLLMMessage(
                     content=error_content,
                     playbook_name=self.playbook.name,
                     success=False,
                 )
-                self.agent.state.call_stack.add_llm_message(error_msg)
+                self.agent.call_stack.add_llm_message(error_msg)
 
                 # Continue the loop to let LLM retry
                 continue
-
-            # artifacts_to_load = []
-
-            # all_steps = []
-            # for line in llm_response.lines:
-            #     for step in line.steps:
-            #         all_steps.append(step)
-            # next_steps = {}
-            # for i in range(len(all_steps)):
-            #     if i == len(all_steps) - 1:
-            #         next_steps[all_steps[i]] = all_steps[i]
-            #     else:
-            #         next_steps[all_steps[i]] = all_steps[i + 1]
-
-            # for line in llm_response.lines:
-            #     if self.agent.program.execution_finished:
-            #         break
-
-            #     if "`SaveArtifact(" not in line.text:
-            #         for step in line.steps:
-            #             if step.step:
-            #                 self.agent.state.session_log.append(
-            #                     SessionLogItemMessage(
-            #                         f"{self.playbook.name}:{step.step.raw_text}"
-            #                     ),
-            #                     level=SessionLogItemLevel.HIGH,
-            #                 )
-            #         self.agent.state.session_log.append(
-            #             SessionLogItemMessage(line.text),
-            #             level=SessionLogItemLevel.LOW,
-            #         )
-
-            #     # Process steps but only call handle_execution_start once per line
-            #     for i in range(len(line.steps)):
-            #         # debug("Execution step", step_index=i, step=str(line.steps[i]))
-            #         step = line.steps[i]
-            #         if i == len(line.steps) - 1:
-            #             next_step = step.copy()
-            #             # debug("Next step prepared", next_step=str(next_step))
-            #         else:
-            #             next_step = step
-
-            #         self.agent.state.call_stack.advance_instruction_pointer(next_step)
-
-            #     # Replace the current call stack frame with the last executed step
-            #     if line.steps:
-            #         # last_step = line.steps[-1].copy()
-
-            #         # debug(
-            #         #     "Call handle_step",
-            #         #     last_step=str(last_step),
-            #         #     next_step=str(next_step),
-            #         # )
-
-            #         for step in line.steps:
-            #             # debug(f"Agent {self.agent.id} pause if needed on step {step}")
-            #             await self.debug_handler.pause_if_needed(
-            #                 instruction_pointer=step,
-            #                 agent_id=self.agent.id,
-            #             )
-            #             # debug(
-            #             #     f"Agent {self.agent.id} pause if needed on step {step} done"
-            #             # )
-
-            #     # Update variables
-            #     if len(line.vars) > 0:
-            #         self.agent.state.variables.update(line.vars)
-
-            #     # Process playbook calls for logging and special cases only
-            #     # (playbooks are now executed immediately when called in Python code)
-            #     if line.playbook_calls:
-            #         for playbook_call in line.playbook_calls:
-            #             if self.agent.program.execution_finished:
-            #                 break
-
-            #             # debug("Playbook call", playbook_call=str(playbook_call))
-            #             if playbook_call.playbook_klass == "Return":
-            #                 if playbook_call.args:
-            #                     return_value = playbook_call.args[0]
-            #             elif playbook_call.playbook_klass == "LoadArtifact":
-            #                 artifacts_to_load.append(playbook_call.args[0])
 
             # Check if exiting program
             if llm_response.execution_result.exit_program:
@@ -289,13 +252,25 @@ class PlaybookLLMExecution(LLMExecution):
             instruction = []
             for loaded_artifact in artifacts_to_load:
                 instruction.append(f"Loaded Artifact[{loaded_artifact}]")
-            top_of_stack = self.agent.state.call_stack.peek()
+            top_of_stack = self.agent.call_stack.peek()
             instruction.append(
                 f"{str(top_of_stack)} was executed - "
                 f"continue execution. Refer to {top_of_stack.instruction_pointer.playbook} playbook implementation above."
             )
 
             instruction = "\n".join(instruction)
+
+        # Publish playbook end event
+        call_stack_depth = len(self.agent.call_stack.frames)
+        self.agent.event_bus.publish(
+            PlaybookEndEvent(
+                session_id=self.agent.program.event_bus.session_id,
+                agent_id=self.agent.id,
+                playbook=self.playbook.name,
+                return_value=return_value,
+                call_stack_depth=call_stack_depth,
+            )
+        )
 
         if self.agent.program.execution_finished:
             return EXECUTION_FINISHED
@@ -337,8 +312,19 @@ class PlaybookLLMExecution(LLMExecution):
                 f"Number of LLM calls excceed (config.max_llm_calls={config.max_llm_calls})"
             )
 
+        # Flush pending meeting messages before constructing prompt
+        # This ensures all agent communications are included in the LLM context
+        if hasattr(self.agent, "meeting_manager") and self.agent.meeting_manager:
+            current_meeting_id = (
+                self.agent.meeting_manager.get_current_meeting_from_call_stack()
+            )
+            if current_meeting_id:
+                await self.agent.meeting_manager.flush_pending_messages(
+                    current_meeting_id
+                )
+
         prompt = InterpreterPrompt(
-            self.agent.state,
+            self.agent,
             self.agent.playbooks,
             self.playbook,
             instruction=instruction,
@@ -346,9 +332,11 @@ class PlaybookLLMExecution(LLMExecution):
             artifacts_to_load=artifacts_to_load,
             agent_information=self.agent.get_compact_information(),
             other_agent_klasses_information=self.agent.other_agent_klasses_information(),
-            trigger_instructions=self.agent.all_trigger_instructions(),
             execution_id=execution_id,  # NEW: Pass execution_id to prompt
         )
+
+        # Create the user input message for this LLM call
+        prompt.create_user_message()
 
         # Use streaming to handle Say() calls progressively
         return await self._stream_llm_response(
@@ -404,48 +392,39 @@ class PlaybookLLMExecution(LLMExecution):
         say_end_pattern = '")'  # Tracks closing pattern for Say content
         say_quote_type: Optional[str] = None  # "single" or "triple"
 
-        # Get LLM messages before adding the placeholder AssistantResponseLLMMessage
+        # Get LLM messages
         messages = prompt.messages
 
         # Create an placeholder AssistantResponseLLMMessage so that it
         # appears before any messages from the execution results
         self.llm_response_msg = AssistantResponseLLMMessage("Thinking...")
-        self.agent.state.call_stack.add_llm_message(self.llm_response_msg)
+        self.agent.call_stack.add_llm_message(self.llm_response_msg)
 
-        # Create generation span with OTEL context - this stays active during code execution
-        # so that exec spans (@observe) nest under this generation
-
-        langfuse = get_client()
-        llm_config = LLMConfig()
-
-        # Prefer explicit execution_id argument but fall back to prompt metadata
-        execution_id = execution_id or getattr(prompt, "execution_id", None)
-        span_name = (
-            f"LLM Call {execution_id}: {llm_config.model}"
-            if execution_id is not None
-            else f"LLM Call: {llm_config.model}"
+        # Create LLM config for the call
+        execution_model = config.model.execution
+        llm_config = LLMConfig(
+            model=execution_model.name,
+            provider=execution_model.provider,
+            temperature=execution_model.temperature,
+            max_completion_tokens=execution_model.max_completion_tokens,
         )
 
-        generation_ctx = langfuse.start_as_current_observation(
-            name=span_name,
-            as_type="generation",
-            model=llm_config.model,
-            model_parameters={
-                "maxTokens": llm_config.max_completion_tokens,
-                "temperature": llm_config.temperature,
-            },
-            input=messages,
-            metadata={"stream": True},
-        )
-        generation = generation_ctx.__enter__()
+        # Set generation to None since we removed the creation code
+        generation = None
 
         try:
-            for chunk in get_completion(
-                messages=messages,
-                llm_config=llm_config,
-                stream=True,
-                json_mode=False,
-                execution_id=execution_id,
+            async for chunk in ensure_async_iterable(
+                get_completion(
+                    messages=messages,
+                    llm_config=llm_config,
+                    stream=True,
+                    json_mode=False,
+                    execution_id=execution_id,
+                    event_bus=self.agent.event_bus,
+                    agent_id=self.agent.id,
+                    session_id=self.agent.program.event_bus.session_id,
+                    response_validator=_validate_interpreter_response,
+                )
             ):
                 buffer += chunk
 
@@ -455,12 +434,16 @@ class PlaybookLLMExecution(LLMExecution):
                 # Feed chunk to streaming executor for incremental execution
                 try:
                     await streaming_executor.add_chunk(chunk)
+                    if (
+                        hasattr(self.agent, "program")
+                        and self.agent.program
+                        and getattr(self.agent.program, "execution_finished", False)
+                    ):
+                        raise ExecutionFinished("Program execution finished")
                 except StreamingExecutionError as e:
                     # Check if the underlying error is InteractiveInputRequired
                     # These should not be retried, they should fail immediately
                     if hasattr(e, "original_error"):
-                        from playbooks.core.exceptions import InteractiveInputRequired
-
                         if isinstance(e.original_error, InteractiveInputRequired):
                             # Re-raise InteractiveInputRequired exceptions
                             raise e.original_error
@@ -469,12 +452,6 @@ class PlaybookLLMExecution(LLMExecution):
                     # The error details are already captured in streaming_executor.result
                     logger.error(f"Streaming execution error: {e}")
                     self.streaming_execution_result = streaming_executor.result
-                    # Close generation context and return buffer
-                    try:
-                        generation.update(output=buffer, status_message=str(e))
-                        generation_ctx.__exit__(None, None, None)
-                    except Exception:
-                        pass
                     return buffer
 
                 # Only look for new Say() calls in the unprocessed part of the buffer
@@ -520,9 +497,6 @@ class PlaybookLLMExecution(LLMExecution):
                                 current_say_content = ""
                                 say_has_placeholders = False  # Reset for new Say call
                                 processed_up_to = say_start_pos
-                                # Set flag indicating we're actively streaming Say() calls
-                                # This prevents double-processing when the generated code executes
-                                self.agent._currently_streaming = True
                                 # Use channel-based streaming infrastructure
                                 stream_result = (
                                     await self.agent.start_streaming_say_via_channel(
@@ -534,6 +508,11 @@ class PlaybookLLMExecution(LLMExecution):
                                     if stream_result.should_stream
                                     else None
                                 )
+                                # Set flag indicating we're actively streaming Say() calls
+                                # This prevents double-processing when the generated code executes
+                                # Only set if streaming is actually happening
+                                if say_stream_id:
+                                    self.agent._currently_streaming = True
                             else:
                                 # Not streaming this Say call
                                 processed_up_to = recipient_end_pos + len(
@@ -663,9 +642,13 @@ class PlaybookLLMExecution(LLMExecution):
             self.streaming_execution_result = await streaming_executor.finalize()
 
             # Update generation with output and close context
-            generation.update(output=buffer)
-            generation_ctx.__exit__(None, None, None)
+            if generation:
+                generation.update(output=buffer)
+                generation.end()
 
+        except ExecutionFinished as e:
+            # Program execution finished, stop streaming
+            raise e
         except Exception as e:
             # Unexpected error during streaming (not a StreamingExecutionError)
             logger.error(
@@ -679,8 +662,9 @@ class PlaybookLLMExecution(LLMExecution):
                 pass
             # Update generation with error and close context
             try:
-                generation.update(output=buffer, status_message=str(e))
-                generation_ctx.__exit__(None, None, None)
+                if generation:
+                    generation.update(output=buffer, status_message=str(e))
+                    generation.end()
             except Exception:
                 pass
             raise
@@ -700,7 +684,7 @@ class PlaybookLLMExecution(LLMExecution):
             return message
 
         # Create expression context for resolution
-        context = ExpressionContext(agent=self.agent, state=self.agent.state, call=None)
+        context = ExpressionContext(agent=self.agent, call=None)
 
         # Resolve placeholders
         resolved = await resolve_description_placeholders(message, context)
@@ -719,9 +703,6 @@ class PlaybookLLMExecution(LLMExecution):
         Returns:
             Dictionary mapping parameter names to resolved values
         """
-        from playbooks.compilation.expression_engine import bind_call_parameters
-        from playbooks.core.argument_types import LiteralValue, VariableReference
-
         result = {}
 
         # Get playbook signature
@@ -747,20 +728,11 @@ class PlaybookLLMExecution(LLMExecution):
                     ref = ref[1:]
                 try:
                     # Try to get from state variables
-                    if self.agent.state and hasattr(self.agent.state, "variables"):
-                        state_key = f"${ref}"
-                        if state_key in self.agent.state.variables:
-                            var = self.agent.state.variables[state_key]
-                            from playbooks.state.variables import Variable
-
-                            if isinstance(var, Variable):
-                                result[param_name] = var.value
-                            else:
-                                result[param_name] = var
-                        else:
-                            # Variable not found, store the reference as-is
-                            result[param_name] = value
+                    if self.agent.state and hasattr(self.agent.state, ref):
+                        var = getattr(self.agent.state, ref)
+                        result[param_name] = var
                     else:
+                        # Variable not found, store the reference as-is
                         result[param_name] = value
                 except Exception:
                     # If can't resolve, store the reference as-is

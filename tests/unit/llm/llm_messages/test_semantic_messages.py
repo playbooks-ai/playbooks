@@ -1,5 +1,7 @@
 """Tests for the semantic LLMMessage subclasses."""
 
+import time
+
 from playbooks.core.enums import LLMMessageRole, LLMMessageType
 from playbooks.llm.messages import (
     AgentCommunicationLLMMessage,
@@ -16,6 +18,7 @@ from playbooks.llm.messages import (
     TriggerInstructionsLLMMessage,
     UserInputLLMMessage,
 )
+from playbooks.llm.messages.timestamp import get_timestamp, reset_timestamp_manager
 
 
 class TestLLMMessageBase:
@@ -33,23 +36,19 @@ class TestLLMMessageBase:
         msg = LLMMessage("Test", LLMMessageRole.ASSISTANT)
         result = msg.to_full_message(is_cached=True)
 
-        assert result == {
-            "role": LLMMessageRole.ASSISTANT,
-            "type": LLMMessageType.USER_INPUT,
-            "content": "Test",
-            "cache_control": {"type": "ephemeral"},
-        }
+        assert result["role"] == LLMMessageRole.ASSISTANT
+        assert result["type"] == LLMMessageType.USER_INPUT
+        assert result["content"] == "Test"
+        assert result["cache_control"] == {"type": "ephemeral"}
 
     def test_to_full_message_without_cache(self):
         """Test converting message to dictionary without caching."""
         msg = LLMMessage("Test", LLMMessageRole.USER)
         result = msg.to_full_message(is_cached=False)
 
-        assert result == {
-            "role": LLMMessageRole.USER,
-            "type": LLMMessageType.USER_INPUT,
-            "content": "Test",
-        }
+        assert result["role"] == LLMMessageRole.USER
+        assert result["type"] == LLMMessageType.USER_INPUT
+        assert result["content"] == "Test"
         assert "cache_control" not in result
 
     def test_repr(self):
@@ -60,6 +59,7 @@ class TestLLMMessageBase:
         assert "LLMMessage" in repr_str
         assert "role=LLMMessageRole.SYSTEM" in repr_str
         assert "content_length=12" in repr_str
+        assert "timestamp=" in repr_str
         assert "cached" not in repr_str.lower()
 
     def test_equality(self):
@@ -70,6 +70,27 @@ class TestLLMMessageBase:
 
         assert msg1 == msg2
         assert msg1 != msg3
+
+    def test_timestamp_field(self):
+        """Test that timestamp is set automatically and can be provided."""
+        # Reset timestamp manager for consistent testing
+        reset_timestamp_manager()
+        time.sleep(0.01)  # Small delay to ensure timestamp advances
+
+        # Test automatic timestamp
+        before_ts = get_timestamp()
+        msg1 = LLMMessage("Test", LLMMessageRole.USER)
+        after_ts = get_timestamp()
+
+        assert hasattr(msg1, "timestamp")
+        assert isinstance(msg1.timestamp, int)
+        assert before_ts <= msg1.timestamp <= after_ts
+
+        # Test custom timestamp
+        custom_timestamp = 12345
+        msg2 = LLMMessage("Test", LLMMessageRole.USER, timestamp=custom_timestamp)
+        assert msg2.timestamp == custom_timestamp
+        assert isinstance(msg2.timestamp, int)
 
 
 class TestPlaybookImplementationLLMMessage:
@@ -246,10 +267,9 @@ class TestSystemPromptLLMMessage:
 
     def test_creation(self):
         """Test creating a system prompt message."""
-        content = "You are a helpful assistant."
-        msg = SystemPromptLLMMessage(content)
+        msg = SystemPromptLLMMessage()
 
-        assert msg.content == content
+        assert msg.content is not None  # Content is loaded from file
         assert msg.role == LLMMessageRole.SYSTEM
         assert msg.type == LLMMessageType.SYSTEM_PROMPT
 

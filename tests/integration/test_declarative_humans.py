@@ -272,10 +272,11 @@ metadata:
         event_bus = create_event_bus()
         async with event_bus:
             with pytest.raises(Exception) as exc_info:
-                Program(
+                program = Program(
                     event_bus=event_bus,
                     program_content=playbook_content,
                 )
+                await program.initialize()
 
             # Should mention invalid agent type
             assert "Invalid agent type" in str(exc_info.value)

@@ -34,7 +34,7 @@ class TestMultiFrameMessages:
         frame1 = CallStackFrame(ip1)
 
         msg1 = PlaybookImplementationLLMMessage("# Playbook 1", "playbook1")
-        msg2 = UserInputLLMMessage("Execute step 1")
+        msg2 = UserInputLLMMessage(instruction="Execute step 1")
         msg3 = AssistantResponseLLMMessage("Step 1 complete")
 
         frame1.add_llm_message(msg1)
@@ -66,7 +66,7 @@ class TestMultiFrameMessages:
         ip2 = InstructionPointer("playbook2", "01", 1)
         frame2 = CallStackFrame(ip2)
         frame2.add_llm_message(PlaybookImplementationLLMMessage("# P2", "p2"))
-        frame2.add_llm_message(UserInputLLMMessage("Input 2"))
+        frame2.add_llm_message(UserInputLLMMessage(instruction="Input 2"))
         frame2.add_llm_message(AssistantResponseLLMMessage("Response 2"))
         call_stack.push(frame2)
 
@@ -94,7 +94,7 @@ class TestMultiFrameMessages:
         # Frame 1: 1 message
         ip1 = InstructionPointer("main", "01", 1)
         frame1 = CallStackFrame(ip1)
-        frame1.add_llm_message(UserInputLLMMessage("Start"))
+        frame1.add_llm_message(UserInputLLMMessage(instruction="Start"))
         call_stack.push(frame1)
 
         # Frame 2: 2 messages
@@ -107,7 +107,7 @@ class TestMultiFrameMessages:
         # Frame 3: 1 message
         ip3 = InstructionPointer("sub2", "01", 1)
         frame3 = CallStackFrame(ip3)
-        frame3.add_llm_message(UserInputLLMMessage("Final"))
+        frame3.add_llm_message(UserInputLLMMessage(instruction="Final"))
         call_stack.push(frame3)
 
         messages = call_stack.get_llm_messages()
@@ -146,13 +146,13 @@ class TestMultiFrameMessages:
         # Push 2 frames
         ip1 = InstructionPointer("p1", "01", 1)
         frame1 = CallStackFrame(ip1)
-        frame1.add_llm_message(UserInputLLMMessage("Frame 1 msg 1"))
-        frame1.add_llm_message(UserInputLLMMessage("Frame 1 msg 2"))
+        frame1.add_llm_message(UserInputLLMMessage(instruction="Frame 1 msg 1"))
+        frame1.add_llm_message(UserInputLLMMessage(instruction="Frame 1 msg 2"))
         call_stack.push(frame1)
 
         ip2 = InstructionPointer("p2", "01", 1)
         frame2 = CallStackFrame(ip2)
-        frame2.add_llm_message(UserInputLLMMessage("Frame 2 msg"))
+        frame2.add_llm_message(UserInputLLMMessage(instruction="Frame 2 msg"))
         call_stack.push(frame2)
 
         # Before pop: should have 3 messages

@@ -6,7 +6,7 @@
 ### Steps
 - Say to user "Hello from A"
 - Call C.Greet()
-- Call Greet2 on a new B
+- Create a new B and call Greet2
 - End program
 
 # B

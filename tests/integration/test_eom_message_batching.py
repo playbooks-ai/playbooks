@@ -40,7 +40,7 @@ async def test_eom_separates_message_batches(test_data_dir):
     # The unit tests verify the core EOM handling in AsyncMessageQueue
     # This integration test verifies the end-to-end flow works
 
-    log = agent.state.session_log.to_log_full()
+    log = agent.session_log.to_log_full()
 
     # Verify execution completed successfully
     assert len(log) > 0, "Agent should have executed and logged activity"
@@ -76,7 +76,7 @@ async def test_multiple_messages_before_eom(test_data_dir):
 
     await playbooks.program.run_till_exit()
 
-    log = agent.state.session_log.to_log_full()
+    log = agent.session_log.to_log_full()
 
     # All three messages should have been delivered in the same batch
     # (We can't easily verify this from log alone, but test that execution works)

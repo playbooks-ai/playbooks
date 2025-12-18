@@ -7,10 +7,11 @@ meetings, and system messages.
 
 import enum
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.utils.text_utils import simple_shorten
 
 
@@ -54,25 +55,25 @@ class Message:
         created_at: Timestamp when message was created
     """
 
-    sender_id: str
+    sender_id: AgentID
     sender_klass: str
 
-    recipient_id: Optional[str]
+    recipient_id: Optional[AgentID]
     recipient_klass: Optional[str]
 
     message_type: MessageType
     content: str
 
-    meeting_id: Optional[str]
+    meeting_id: Optional[MeetingID]
 
     # Agent targeting for differential timeouts in meetings
-    target_agent_ids: Optional[List[str]] = None
+    target_agent_ids: Optional[List[AgentID]] = None
 
     # Streaming support
     stream_id: Optional[str] = None
 
-    id: str = uuid.uuid4()
-    created_at: datetime = datetime.now()
+    id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = field(default_factory=datetime.now)
 
     def __str__(self, compact: bool = False) -> str:
         """Return human-readable string representation of the message."""
@@ -82,21 +83,21 @@ class Message:
             else "Message"
         )
 
-        if self.sender_klass == "HumanAgent":
-            sender = f"from human {self.sender_id}"
-        elif self.sender_klass is None:
+        if self.sender_klass is None:
             sender = ""
+        elif self.sender_id.id == "human" or self.sender_klass == "HumanAgent":
+            sender = "from human"
         else:
-            sender = f"from {self.sender_klass}(agent {self.sender_id})"
+            sender = f"from {self.sender_klass}({self.sender_id.id})"
 
-        if self.recipient_klass == "HumanAgent":
-            target = f"to human {self.recipient_id}"
-        elif self.recipient_klass is None or self.recipient_id is None:
+        if self.recipient_klass is None or self.recipient_id is None:
             target = "to everyone"
+        elif self.recipient_id.id == "human" or self.recipient_klass == "HumanAgent":
+            target = "to human"
         else:
-            target = f"to {self.recipient_klass}({self.recipient_id})"
+            target = f"to {self.recipient_klass}({self.recipient_id.id})"
 
-        meeting_message = f"in meeting {self.meeting_id}" if self.meeting_id else ""
+        meeting_message = f"in meeting {self.meeting_id.id}" if self.meeting_id else ""
 
         content = self.content
         if compact:
@@ -116,28 +117,30 @@ class Message:
             Compact string representation similar to CLI output format
         """
         # Format sender
-        if self.sender_klass == "HumanAgent":
-            sender = "User"
-        elif self.sender_id == "human":
+        if self.sender_id.id == "human" or self.sender_klass == "HumanAgent":
             sender = "User"
         else:
-            sender = f"{self.sender_klass}({self.sender_id})"
+            sender = f"{self.sender_klass}({self.sender_id.id})"
 
         # Format recipient
-        if self.recipient_klass == "HumanAgent":
-            recipient = "User"
-        elif self.recipient_id == "human":
+        if self.recipient_id and self.recipient_id.id == "human":
             recipient = "User"
         elif self.recipient_klass is None or self.recipient_id is None:
             recipient = "Everyone"
         else:
-            recipient = f"{self.recipient_klass}({self.recipient_id})"
+            recipient = f"{self.recipient_klass}({self.recipient_id.id})"
 
         # Add meeting invitation indicator
         if self.message_type == MessageType.MEETING_INVITATION:
-            meeting_info = f" [MEETING_INVITATION for meeting {self.meeting_id}]"
+            meeting_info = (
+                f" [MEETING_INVITATION for meeting {self.meeting_id.id}]"
+                if self.meeting_id
+                else ""
+            )
         elif self.message_type == MessageType.MEETING_BROADCAST:
-            meeting_info = f" [in meeting {self.meeting_id}]"
+            meeting_info = (
+                f" [in meeting {self.meeting_id.id}]" if self.meeting_id else ""
+            )
         else:
             meeting_info = ""
 
@@ -153,11 +156,11 @@ class Message:
             Dictionary with message fields (excludes streaming and targeting metadata)
         """
         return {
-            "sender_id": self.sender_id,
+            "sender_id": self.sender_id.id,
             "sender_klass": self.sender_klass,
-            "recipient_id": self.recipient_id,
+            "recipient_id": self.recipient_id.id if self.recipient_id else None,
             "recipient_klass": self.recipient_klass,
             "message_type": self.message_type.value,
             "content": self.content,
-            "meeting_id": self.meeting_id,
+            "meeting_id": self.meeting_id.id if self.meeting_id else None,
         }

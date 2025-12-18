@@ -4,14 +4,18 @@ This module provides a unified interface for LLM interactions, including:
 - Streaming and non-streaming completion requests
 - Automatic retry logic for rate limits and overloads
 - LLM response caching (disk or Redis)
-- Langfuse integration for observability
+- Event-based telemetry integration
 - Message preprocessing and consolidation
 """
 
+import asyncio
 import hashlib
+import json
 import logging
 import os
+import queue
 import tempfile
+import threading
 import time
 from functools import wraps
 from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
@@ -19,18 +23,31 @@ from typing import Any, Callable, Iterator, List, Optional, TypeVar, Union
 import litellm
 from litellm import completion, get_supported_openai_params
 
+try:
+    from diskcache import Cache
+except ImportError:
+    Cache = None
+
+try:
+    from redis import Redis
+except ImportError:
+    Redis = None
+
 from playbooks.config import config
 from playbooks.core.constants import SYSTEM_PROMPT_DELIMITER
 from playbooks.core.enums import LLMMessageRole
+from playbooks.core.events import LLMCallEndedEvent, LLMCallStartedEvent
 from playbooks.core.exceptions import (
     CompilationError,
     VendorAPIOverloadedError,
     VendorAPIRateLimitError,
 )
 from playbooks.infrastructure.logging.debug_logger import debug
-from playbooks.llm.messages import SystemPromptLLMMessage, UserInputLLMMessage
+from playbooks.llm.messages import (
+    LLMMessage,
+    UserInputLLMMessage,
+)
 
-from .langfuse_helper import LangfuseHelper
 from .llm_config import LLMConfig
 from .playbooks_lm_handler import PlaybooksLMHandler
 
@@ -44,7 +61,6 @@ for logger_name in loggers:
 litellm.suppress_debug_info = True
 # Handle different litellm versions
 litellm.drop_params = True
-# Note: LLM_API_BASE is now applied per-model basis, not globally
 # litellm._turn_on_debug()
 
 # Initialize the Playbooks-LM handler
@@ -52,6 +68,27 @@ playbooks_handler = PlaybooksLMHandler()
 
 # Store the original completion function
 _original_completion = completion
+
+
+def ensure_async_iterable(obj: Any):
+    """Coerce an iterable into an async iterable.
+
+    This keeps call sites compatible with tests that monkeypatch `get_completion`
+    to return a plain (sync) iterator while production code returns an async
+    generator.
+    """
+    if hasattr(obj, "__aiter__"):
+        return obj
+
+    if hasattr(obj, "__iter__"):
+
+        async def _gen():
+            for item in obj:
+                yield item
+
+        return _gen()
+
+    raise TypeError(f"Expected async iterable or iterable, got {type(obj).__name__}")
 
 
 def completion_with_preprocessing(*args: Any, **kwargs: Any) -> Any:
@@ -68,8 +105,6 @@ def completion_with_preprocessing(*args: Any, **kwargs: Any) -> Any:
         Response from litellm.completion
     """
     model = kwargs.get("model", "")
-
-    # Note: Playbooks-LM preprocessing is now handled in get_completion() before Langfuse logging
 
     # Debug: log the call to help diagnose auth issues when verbose mode is enabled
     if os.getenv("LLM_SET_VERBOSE", "False").lower() == "true":
@@ -103,16 +138,12 @@ llm_cache_path = config.llm_cache.path
 
 if llm_cache_enabled:
     if llm_cache_type == "disk":
-        from diskcache import Cache
-
         cache_dir = (
             llm_cache_path or tempfile.TemporaryDirectory(prefix="llm_cache_").name
         )
         cache = Cache(directory=cache_dir)
 
     elif llm_cache_type == "redis":
-        from redis import Redis
-
         redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
         cache = Redis.from_url(redis_url)
         debug("Using LLM cache", redis_url=redis_url)
@@ -130,8 +161,6 @@ def custom_get_cache_key(**kwargs) -> str:
     Returns:
         A unique hash string to use as cache key
     """
-    import json
-
     # Create a deterministic representation of the cache key components
     cache_components = {
         "model": kwargs.get("model", ""),
@@ -230,22 +259,10 @@ def _make_completion_request(completion_kwargs: dict) -> str:
     return content
 
 
-def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
-    """Make a streaming completion request to the LLM with automatic retries on overload.
+def _make_completion_request_stream_sync(completion_kwargs: dict) -> Iterator[str]:
+    """Synchronous helper that performs the actual streaming.
 
-    Since exceptions occur on the first token (during initial call), we can retry
-    the entire stream creation and maintain true streaming.
-
-    Args:
-        completion_kwargs: Dictionary of arguments for litellm.completion
-
-    Yields:
-        Response text chunks as they arrive from the LLM
-
-    Raises:
-        VendorAPIOverloadedError: If API is overloaded after retries
-        VendorAPIRateLimitError: If rate limit exceeded after retries
-        litellm exceptions: Various litellm exceptions if request fails
+    This runs in a thread pool to avoid blocking the event loop.
     """
     max_retries = 5
     base_delay = 1.0
@@ -268,7 +285,7 @@ def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
             if content is not None:
                 yield content
 
-            # Now stream the rest normally
+            # Stream the rest
             for chunk in response_iter:
                 content = chunk.choices[0].delta.content
                 if content is not None:
@@ -294,6 +311,62 @@ def _make_completion_request_stream(completion_kwargs: dict) -> Iterator[str]:
             continue
 
 
+async def _make_completion_request_stream(completion_kwargs: dict):
+    """Make a streaming completion request to the LLM without blocking the event loop.
+
+    Runs the synchronous streaming in a thread pool to keep the event loop responsive.
+
+    Args:
+        completion_kwargs: Dictionary of arguments for litellm.completion
+
+    Yields:
+        Response text chunks as they arrive from the LLM
+
+    Raises:
+        VendorAPIOverloadedError: If API is overloaded after retries
+        VendorAPIRateLimitError: If rate limit exceeded after retries
+        litellm exceptions: Various litellm exceptions if request fails
+    """
+    # Create a queue to transfer chunks from thread to async code
+    chunk_queue = queue.Queue()
+    exception_holder = []
+
+    def _stream_in_thread():
+        """Run the synchronous streaming in a background thread."""
+        try:
+            for chunk in _make_completion_request_stream_sync(completion_kwargs):
+                chunk_queue.put(("chunk", chunk))
+            chunk_queue.put(("done", None))
+        except Exception as e:
+            exception_holder.append(e)
+            chunk_queue.put(("error", e))
+
+    # Start streaming in background thread
+    stream_thread = threading.Thread(target=_stream_in_thread, daemon=True)
+    stream_thread.start()
+
+    # Yield chunks as they arrive, without blocking the event loop
+    while True:
+        # Check queue in thread pool to avoid blocking
+        try:
+            item_type, item_value = await asyncio.to_thread(
+                chunk_queue.get, timeout=0.1
+            )
+        except queue.Empty:
+            # No chunk yet, yield control and try again
+            await asyncio.sleep(0.01)
+            continue
+
+        if item_type == "chunk":
+            yield item_value
+            # Yield control after each chunk
+            await asyncio.sleep(0)
+        elif item_type == "error":
+            raise item_value
+        elif item_type == "done":
+            break
+
+
 def _check_llm_calls_allowed() -> bool:
     """Check if LLM calls are allowed in the current context.
 
@@ -313,7 +386,7 @@ def _check_llm_calls_allowed() -> bool:
     return allow_llm == "true"
 
 
-def get_completion(
+async def get_completion(
     llm_config: LLMConfig,
     messages: List[dict],
     stream: bool = False,
@@ -321,8 +394,11 @@ def get_completion(
     json_mode: bool = False,
     session_id: Optional[str] = None,
     execution_id: Optional[int] = None,
+    event_bus: Optional[Any] = None,
+    agent_id: Optional[str] = None,
+    response_validator: Optional[Callable[[str], bool]] = None,
     **kwargs,
-) -> Iterator[str]:
+):
     """Get completion from LLM with optional streaming and caching support.
 
     Args:
@@ -333,12 +409,16 @@ def get_completion(
         json_mode: If True, instructs the model to return a JSON response
         session_id: Optional session ID to associate with the generation
         execution_id: Optional counter identifying this LLM call for tracing
-        langfuse_span: Optional parent span for Langfuse tracing
+        event_bus: Optional event bus for telemetry events
+        response_validator: Optional function to validate responses before caching.
+                          Should return True if response is valid, False otherwise.
         **kwargs: Additional arguments passed to litellm.completion
 
     Returns:
         An iterator of response text (single item for non-streaming)
     """
+    cache_key = None
+
     # Check if LLM calls are allowed in the current context
     if not _check_llm_calls_allowed():
         raise RuntimeError(
@@ -347,11 +427,30 @@ def get_completion(
             "Use @patch('playbooks.utils.llm_helper.get_completion') to mock LLM calls in unit tests."
         )
 
+    # Estimate input token count
+    input_token_count = (
+        sum(len(str(msg.get("content", ""))) for msg in messages) // 4
+    )  # Rough estimate
+
+    # Publish LLM call started event
+    if event_bus and agent_id and session_id:
+        event_bus.publish(
+            LLMCallStartedEvent(
+                session_id=session_id,
+                agent_id=agent_id,
+                model=llm_config.model,
+                input_tokens=input_token_count,
+                input=messages,
+                stream=stream,
+                metadata={"execution_id": execution_id, "json_mode": json_mode},
+            )
+        )
+
     messages = remove_empty_messages(messages)
     # messages = consolidate_messages(messages)
     messages = ensure_upto_N_cached_messages(messages)
 
-    # Apply playbooks-lm preprocessing if needed (before Langfuse logging)
+    # Apply playbooks-lm preprocessing if needed (before telemetry events)
     if "playbooks-lm" in llm_config.model.lower():
         messages = playbooks_handler.preprocess_messages(messages.copy())
 
@@ -371,42 +470,13 @@ def get_completion(
         if "reasoning_effort" in params:
             completion_kwargs["reasoning_effort"] = "low"
 
-    # Note: For streaming mode, generation tracing is handled by the caller
-    # (playbook.py) so that exec spans can nest under the generation.
-    # For non-streaming mode, we still create the generation here.
-    langfuse_helper = LangfuseHelper.instance()
-    langfuse_generation = None
-
-    if langfuse_helper is not None and not stream:
-        span_name = (
-            f"LLM Call {execution_id}: {llm_config.model}"
-            if execution_id is not None
-            else f"LLM Call: {llm_config.model}"
-        )
-        langfuse_generation = langfuse_helper.start_observation(
-            name=span_name,
-            as_type="generation",
-            model=llm_config.model,
-            model_parameters={
-                "maxTokens": completion_kwargs["max_completion_tokens"],
-                "temperature": completion_kwargs["temperature"],
-            },
-            input=messages,
-            metadata={"stream": stream},
-        )
-
     # Try to get response from cache if enabled
     if llm_cache_enabled and use_cache and cache is not None:
         cache_key = custom_get_cache_key(**completion_kwargs)
         cache_value = cache.get(cache_key)
 
         if cache_value is not None:
-            if langfuse_generation:
-                langfuse_generation.update(
-                    metadata={"cache_hit": True}, output=str(cache_value)
-                )
-                langfuse_generation.end()
-                LangfuseHelper.flush()
+            debug(f"cache_hit: {True}", cache_key=cache_key)
 
             if stream:
                 for chunk in cache_value:
@@ -414,17 +484,34 @@ def get_completion(
             else:
                 yield cache_value
 
+            # Publish LLM call ended event for cache hit
+            if event_bus and agent_id and session_id:
+                output_value = str(cache_value)
+                output_token_count = len(output_value) // 4  # Rough estimate
+
+                event_bus.publish(
+                    LLMCallEndedEvent(
+                        session_id=session_id,
+                        agent_id=agent_id,
+                        model=llm_config.model,
+                        output_tokens=output_token_count,
+                        output=output_value,
+                        error=None,
+                        cache_hit=True,
+                    )
+                )
+
             return
 
     # Get response from LLM
     full_response: Union[str, List[str]] = [] if stream else ""
     error_occurred = False
+    error_msg = None
     try:
-        if langfuse_generation:
-            langfuse_generation.update(metadata={"cache_hit": False})
+        debug(f"cache_hit: {False}", cache_key=cache_key)
 
         if stream:
-            for chunk in _make_completion_request_stream(completion_kwargs):
+            async for chunk in _make_completion_request_stream(completion_kwargs):
                 full_response.append(chunk)  # type: ignore
                 yield chunk
             full_response = "".join(full_response)  # type: ignore
@@ -433,13 +520,10 @@ def get_completion(
             yield full_response
     except Exception as e:
         error_occurred = True
-        if langfuse_generation:
-            langfuse_generation.update(status_message=str(e))
-            langfuse_generation.end()
-            LangfuseHelper.flush()
+        error_msg = str(e)
         raise e  # Re-raise the exception to be caught by the decorator if applicable
     finally:
-        # Update cache and Langfuse
+        # Update cache - only store valid responses
         if (
             not error_occurred
             and llm_cache_enabled
@@ -451,13 +535,38 @@ def get_completion(
             if isinstance(full_response, list):
                 full_response = "".join(full_response)
             full_response = str(full_response)
-            cache.set(cache_key, full_response)
 
-        if langfuse_generation and not error_occurred:
-            # Only update if no exception occurred
-            langfuse_generation.update(output=full_response)
-            langfuse_generation.end()
-            LangfuseHelper.flush()
+            # Validate response before caching if validator provided
+            if response_validator is None or response_validator(full_response):
+                cache.set(cache_key, full_response)
+            else:
+                debug(
+                    "Response validation failed - not caching invalid response",
+                    cache_key=cache_key,
+                )
+
+        # Publish LLM call ended event
+        if event_bus and agent_id and session_id:
+            output_token_count = (
+                len(str(full_response)) // 4 if full_response else 0
+            )  # Rough estimate
+            output_value = full_response if not error_occurred else None
+
+            event_bus.publish(
+                LLMCallEndedEvent(
+                    session_id=session_id,
+                    agent_id=agent_id,
+                    model=llm_config.model,
+                    output_tokens=output_token_count,
+                    output=output_value,
+                    error=error_msg,
+                    cache_hit=(
+                        cache_key is not None and cache_value is not None
+                        if "cache_value" in locals()
+                        else False
+                    ),
+                )
+            )
 
 
 def remove_empty_messages(messages: List[dict]) -> List[dict]:
@@ -490,13 +599,13 @@ def get_messages_for_prompt(prompt: str) -> List[dict]:
         system, user = prompt.split(SYSTEM_PROMPT_DELIMITER)
 
         messages = [
-            SystemPromptLLMMessage(system.strip()).to_full_message(),
-            UserInputLLMMessage(user.strip()).to_full_message(),
+            {"role": LLMMessageRole.SYSTEM, "content": system.strip()},
+            UserInputLLMMessage(instruction=user.strip()).to_full_message(),
         ]
         # System message should always be cached
         messages[0]["cache_control"] = {"type": "ephemeral"}
         return messages
-    return [UserInputLLMMessage(prompt.strip()).to_full_message()]
+    return [UserInputLLMMessage(instruction=prompt.strip()).to_full_message()]
 
 
 def consolidate_messages(messages: List[dict]) -> List[dict]:
@@ -555,8 +664,6 @@ def consolidate_messages(messages: List[dict]) -> List[dict]:
         contents = "\n\n".join(contents)
 
         # Add the consolidated message to the list
-        from playbooks.llm.messages import LLMMessage
-
         llm_msg = LLMMessage(contents, LLMMessageRole(group[0]["role"]))
         msg_dict = llm_msg.to_full_message()
         if cache_control:

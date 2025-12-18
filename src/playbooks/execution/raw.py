@@ -11,7 +11,7 @@ from playbooks.core.events import PlaybookEndEvent, PlaybookStartEvent
 from playbooks.execution.call import PlaybookCall
 from playbooks.llm.messages import AssistantResponseLLMMessage, UserInputLLMMessage
 from playbooks.utils.llm_config import LLMConfig
-from playbooks.utils.llm_helper import get_completion
+from playbooks.utils.llm_helper import ensure_async_iterable, get_completion
 
 from .base import LLMExecution
 
@@ -46,7 +46,7 @@ class RawLLMExecution(LLMExecution):
         # No need to push/pop here as it would create double management
 
         # Publish playbook start event
-        self.agent.state.event_bus.publish(
+        self.agent.event_bus.publish(
             PlaybookStartEvent(
                 agent_id=self.agent.id, session_id="", playbook=self.playbook.name
             )
@@ -62,8 +62,8 @@ class RawLLMExecution(LLMExecution):
         result = self._parse_response(response)
 
         # Publish playbook end event
-        call_stack_depth = len(self.agent.state.call_stack.frames)
-        self.agent.state.event_bus.publish(
+        call_stack_depth = len(self.agent.call_stack.frames)
+        self.agent.event_bus.publish(
             PlaybookEndEvent(
                 agent_id=self.agent.id,
                 session_id="",
@@ -90,12 +90,12 @@ class RawLLMExecution(LLMExecution):
         """
         call = PlaybookCall(self.playbook.name, args, kwargs)
 
-        context = ExpressionContext(agent=self.agent, state=self.agent.state, call=call)
+        context = ExpressionContext(agent=self.agent, call=call)
         resolved_description = await resolve_description_placeholders(
             self.playbook.description, context
         )
 
-        stack_frame = self.agent.state.call_stack.peek()
+        stack_frame = self.agent.call_stack.peek()
         # Get file load messages from the call stack
         file_load_messages = [
             msg
@@ -104,7 +104,7 @@ class RawLLMExecution(LLMExecution):
         ]
 
         # Create user input message
-        user_msg = UserInputLLMMessage(resolved_description)
+        user_msg = UserInputLLMMessage(instruction=resolved_description)
 
         # Convert to dict format
         messages = [msg.to_full_message() for msg in file_load_messages]
@@ -124,18 +124,25 @@ class RawLLMExecution(LLMExecution):
             Response string from the LLM
         """
         # Get completion
-        response_generator = get_completion(
-            messages=messages,
-            llm_config=LLMConfig(),
-            stream=False,
-            json_mode=False,
-        )
+        response_chunks = []
+        async for chunk in ensure_async_iterable(
+            get_completion(
+                messages=messages,
+                llm_config=LLMConfig(),
+                stream=False,
+                json_mode=False,
+                event_bus=self.agent.event_bus,
+                agent_id=self.agent.id,
+                session_id=self.agent.program.event_bus.session_id,
+            )
+        ):
+            response_chunks.append(chunk)
 
-        response = next(response_generator)
+        response = "".join(response_chunks)
 
         # Add the response to call stack (will be marked for caching as last message)
         response_msg = AssistantResponseLLMMessage(response)
-        self.agent.state.call_stack.add_llm_message(response_msg)
+        self.agent.call_stack.add_llm_message(response_msg)
 
         return response
 

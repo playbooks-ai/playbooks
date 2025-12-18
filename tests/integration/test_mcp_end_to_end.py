@@ -6,14 +6,13 @@ import traceback
 import pytest
 from fastmcp import Client
 
-from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.agents import MCPAgent
 from playbooks.agents.agent_builder import AgentBuilder
+from playbooks.compilation.markdown_to_ast import markdown_to_ast
+from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.program import Program
 from playbooks.transport.mcp_transport import MCPTransport
-from playbooks.compilation.markdown_to_ast import markdown_to_ast
-
 from tests.unit.applications.test_mcp_server import get_test_server
 
 
@@ -517,7 +516,8 @@ This is a remote task management agent.
             assert agent.remote_config == config
             assert agent.transport is not None
 
-    def test_mcp_agent_builder_integration(self):
+    @pytest.mark.asyncio
+    async def test_mcp_agent_builder_integration(self):
         """Test AgentBuilder integration with various MCP configurations."""
         # Test comprehensive configuration
         markdown_text = """# ComprehensiveMCPAgent
@@ -535,7 +535,7 @@ This is a comprehensive MCP agent configuration test.
 """
 
         ast = markdown_to_ast(markdown_text)
-        agents = AgentBuilder.create_agent_classes_from_ast(ast)
+        agents = await AgentBuilder.create_agent_classes_from_ast(ast)
 
         assert len(agents) == 1
         assert "ComprehensiveMCPAgent" in agents
@@ -620,7 +620,8 @@ This is a comprehensive MCP agent configuration test.
         finally:
             await agent.disconnect()
 
-    def test_mcp_configuration_error_scenarios(self):
+    @pytest.mark.asyncio
+    async def test_mcp_configuration_error_scenarios(self):
         """Test comprehensive error scenarios for MCP configuration."""
         # These should all raise AgentConfigurationError
         error_configs = [
@@ -679,4 +680,4 @@ Transport URL mismatch.
         for config_text in error_configs:
             ast = markdown_to_ast(config_text)
             with pytest.raises(AgentConfigurationError):
-                AgentBuilder.create_agent_classes_from_ast(ast)
+                await AgentBuilder.create_agent_classes_from_ast(ast)

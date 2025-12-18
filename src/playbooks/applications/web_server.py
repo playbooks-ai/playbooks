@@ -14,24 +14,25 @@ from urllib.parse import urlparse
 import websockets
 
 from playbooks import Playbooks
-from playbooks.agents.messaging_mixin import MessagingMixin
+from playbooks.agents.ai_agent import AIAgent
 from playbooks.applications.streaming_observer import (
     ChannelStreamObserver as BaseChannelStreamObserver,
 )
-from playbooks.applications.human_wait import build_human_wait_patch
 from playbooks.channels.stream_events import (
     StreamChunkEvent,
     StreamCompleteEvent,
     StreamStartEvent,
 )
 from playbooks.core.constants import EOM
-from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.core.events import (
+    AgentCreatedEvent,
+    MessageRoutedEvent,
+    WaitForMessageEvent,
+)
 from playbooks.core.exceptions import ExecutionFinished
-from playbooks.meetings.meeting_manager import MeetingManager
-from playbooks.core.message import MessageType
-from playbooks.program import Program
-from playbooks.state.streaming_log import StreamingSessionLog
 from playbooks.core.identifiers import AgentID
+from playbooks.infrastructure.logging.debug_logger import debug
+from playbooks.state.streaming_log import StreamingSessionLog
 
 
 class EventType(Enum):
@@ -132,12 +133,6 @@ class SessionLogEvent(BaseEvent):
     log_minimal: Optional[str] = None
 
 
-@dataclass
-class AgentCreatedEvent(BaseEvent):
-    agent_id: str
-    agent_klass: str
-
-
 class ChannelStreamObserver(BaseChannelStreamObserver):
     """WebSocket-based streaming observer - broadcasts to connected clients."""
 
@@ -228,106 +223,83 @@ class PlaybookRun:
         self.execution_started = False
         self.client_connected_event = asyncio.Event()
 
-        # Store original methods for restoration
-        self._original_methods = {}
-
         # Initialize channel stream observer
         self.stream_observer = ChannelStreamObserver(self)
+        # Subscribe to core events for message/wait/agent tracking (no monkey-patching)
+        self._setup_event_subscriptions()
 
-        # Setup message interception (but not streaming logs yet)
-        self._setup_message_interception()
+    def _setup_event_subscriptions(self) -> None:
+        """Subscribe to core EventBus for observability instead of monkey-patching."""
 
-    def _setup_message_interception(self):
-        """Setup comprehensive message interception."""
+        program = self.playbooks.program
 
-        # Store original methods
-        self._original_methods["route_message"] = Program.route_message
-        self._original_methods["wait_for_message"] = MessagingMixin.WaitForMessage
-        self._original_methods["broadcast_to_meeting"] = (
-            MeetingManager.broadcast_to_meeting_as_owner
+        def on_agent_created(event: AgentCreatedEvent) -> None:
+            # Broadcast agent created event to clients
+            asyncio.create_task(self._handle_agent_created(event))
+
+        def on_message_routed(event: MessageRoutedEvent) -> None:
+            asyncio.create_task(self._handle_message_routed(event))
+
+        def on_wait(event: WaitForMessageEvent) -> None:
+            asyncio.create_task(self._handle_wait_for_message(event))
+
+        program.event_bus.subscribe(AgentCreatedEvent, on_agent_created)
+        program.event_bus.subscribe(MessageRoutedEvent, on_message_routed)
+        program.event_bus.subscribe(WaitForMessageEvent, on_wait)
+
+        # Store for unsubscribe on shutdown
+        self._event_subscriptions = [
+            (AgentCreatedEvent, on_agent_created),
+            (MessageRoutedEvent, on_message_routed),
+            (WaitForMessageEvent, on_wait),
+        ]
+
+    async def _handle_agent_created(self, event: AgentCreatedEvent) -> None:
+        web_event = AgentCreatedEvent(
+            type=EventType.AGENT_CREATED,
+            timestamp=datetime.now().isoformat(),
+            run_id=self.run_id,
+            agent_id=event.agent_id,
+            agent_klass=event.agent_klass,
         )
-        self._original_methods["create_agent"] = Program.create_agent
+        await self._broadcast_event(web_event)
 
-        # Note: Session log streaming is now setup in _setup_early_streaming
-
-        # Create bound methods for this specific run
-        # Capture self in local variable to ensure proper closure
-        playbook_run = self
-
-        async def patched_route_message(
-            program_self,
-            sender_id,
-            sender_klass,
-            receiver_spec,
-            message,
-            message_type=MessageType.DIRECT,
-            meeting_id=None,
+    async def _handle_message_routed(self, event: MessageRoutedEvent) -> None:
+        msg = event.message
+        if not msg:
+            return
+        # Skip EOM messages but allow agent-to-human messages
+        if msg.content != EOM and not (
+            msg.sender_id.id == "human"
+            and (msg.recipient_id and msg.recipient_id.id != "human")
         ):
-            # Check if playbook_run is properly captured and not corrupted
-            try:
-                # Validate that playbook_run has the expected attributes
-                if (
-                    hasattr(playbook_run, "playbooks")
-                    and hasattr(playbook_run.playbooks, "program")
-                    and hasattr(playbook_run, "_intercept_route_message")
-                ):
-                    await playbook_run._intercept_route_message(
-                        sender_id,
-                        sender_klass,
-                        receiver_spec,
-                        message,
-                        message_type,
-                        meeting_id,
-                    )
-                # If playbook_run is corrupted or doesn't have expected attributes,
-                # skip interception and just call original method
-            except AttributeError:
-                # If there's an AttributeError, just skip the interception
-                pass
-            return await playbook_run._original_methods["route_message"](
-                program_self,
-                sender_id,
-                sender_klass,
-                receiver_spec,
-                message,
-                message_type,
-                meeting_id,
+            recipient_id = msg.recipient_id.id if msg.recipient_id else "broadcast"
+            recipient_klass = msg.recipient_klass or "Unknown"
+            web_event = AgentMessageEvent(
+                type=EventType.AGENT_MESSAGE,
+                timestamp=datetime.now().isoformat(),
+                run_id=self.run_id,
+                sender_id=msg.sender_id.id,
+                sender_klass=msg.sender_klass,
+                recipient_id=recipient_id,
+                recipient_klass=recipient_klass,
+                message=msg.content,
+                message_type=msg.message_type.name,
+                metadata={
+                    "channel_id": event.channel_id,
+                    "meeting_id": msg.meeting_id.id if msg.meeting_id else None,
+                },
             )
+            await self._broadcast_event(web_event)
 
-        async def on_wait(agent_self, source_agent_id: str):
-            await playbook_run._intercept_wait_for_message(source_agent_id)
-
-        async def patched_broadcast_to_meeting(
-            manager_self, meeting_id, message, from_agent_id=None, from_agent_klass=None
-        ):
-            await playbook_run._intercept_meeting_broadcast(
-                meeting_id, message, from_agent_id, from_agent_klass
+    async def _handle_wait_for_message(self, event: WaitForMessageEvent) -> None:
+        if event.wait_for_message_from in ("human", "user"):
+            web_event = BaseEvent(
+                type=EventType.HUMAN_INPUT_REQUESTED,
+                timestamp=datetime.now().isoformat(),
+                run_id=self.run_id,
             )
-            return await playbook_run._original_methods["broadcast_to_meeting"](
-                manager_self, meeting_id, message, from_agent_id, from_agent_klass
-            )
-
-        async def patched_create_agent(program_self, agent_klass, **kwargs):
-            # Call original create_agent method
-            agent = await playbook_run._original_methods["create_agent"](
-                program_self, agent_klass, **kwargs
-            )
-
-            # Set up streaming for the newly created agent
-            await playbook_run._setup_streaming_for_new_agent(agent)
-
-            return agent
-
-        # Patch methods
-        Program.route_message = patched_route_message
-        MessagingMixin.WaitForMessage = build_human_wait_patch(
-            self._original_methods["wait_for_message"],
-            on_wait=on_wait,
-        )
-        MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting
-        Program.create_agent = patched_create_agent
-
-        # Note: Agent streaming is now setup in _setup_early_streaming
+            await self._broadcast_event(web_event)
 
     def _setup_streaming_session_logs(self):
         """Replace agent session logs with streaming versions."""
@@ -364,7 +336,7 @@ class PlaybookRun:
             agent_count=len(self.playbooks.program.agents),
         )
         for agent in self.playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+            if hasattr(agent, "session_log"):
                 debug(
                     "Setting up streaming for agent",
                     agent_id=agent.id,
@@ -374,13 +346,13 @@ class PlaybookRun:
                 callback = create_session_log_callback(agent.id, agent.klass)
 
                 # Replace with streaming version, preserving existing data
-                original_log = agent.state.session_log
+                original_log = agent.session_log
                 streaming_log = StreamingSessionLog(
                     original_log.klass, original_log.agent_id, callback
                 )
                 # Copy existing log entries
                 streaming_log.log = original_log.log.copy()
-                agent.state.session_log = streaming_log
+                agent.session_log = streaming_log
                 debug(
                     "Replaced session log for agent",
                     agent_id=agent.id,
@@ -409,7 +381,7 @@ class PlaybookRun:
         )
 
         # Set up session log streaming if the agent has one
-        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
+        if hasattr(agent, "session_log"):
             debug("Setting up session log streaming for new agent", agent_id=agent.id)
 
             def create_session_log_callback(agent_id, agent_klass):
@@ -443,13 +415,13 @@ class PlaybookRun:
             callback = create_session_log_callback(agent.id, agent.klass)
 
             # Replace with streaming version, preserving existing data
-            original_log = agent.state.session_log
+            original_log = agent.session_log
             streaming_log = StreamingSessionLog(
                 original_log.klass, original_log.agent_id, callback
             )
             # Copy existing log entries
             streaming_log.log = original_log.log.copy()
-            agent.state.session_log = streaming_log
+            agent.session_log = streaming_log
             debug(
                 "Replaced session log for new agent",
                 agent_id=agent.id,
@@ -466,70 +438,7 @@ class PlaybookRun:
         )
         await self._broadcast_event(agent_created_event)
 
-    async def _intercept_route_message(
-        self,
-        sender_id,
-        sender_klass,
-        receiver_spec,
-        message,
-        message_type=MessageType.DIRECT,
-        meeting_id=None,
-    ):
-        """Intercept and broadcast route_message calls."""
-
-        # Extract recipient info
-        recipient_agent_id = AgentID.parse(receiver_spec)
-        recipient_id = recipient_agent_id.id
-        recipient = self.playbooks.program.agents_by_id.get(recipient_id)
-        recipient_klass = recipient.klass if recipient else "Unknown"
-
-        # Skip EOM messages but allow agent-to-human messages
-        if message != EOM and not (sender_id == "human" and recipient_id != "human"):
-            event = AgentMessageEvent(
-                type=EventType.AGENT_MESSAGE,
-                timestamp=datetime.now().isoformat(),
-                run_id=self.run_id,
-                sender_id=sender_id,
-                sender_klass=sender_klass,
-                recipient_id=recipient_id,
-                recipient_klass=recipient_klass,
-                message=message,
-                message_type=message_type.name,
-                metadata={"receiver_spec": receiver_spec, "meeting_id": meeting_id},
-            )
-            await self._broadcast_event(event)
-
-    async def _intercept_wait_for_message(self, source_agent_id: str):
-        """Intercept and broadcast wait_for_message calls."""
-
-        if source_agent_id == "human":
-            # Send human input request event
-            event = BaseEvent(
-                type=EventType.HUMAN_INPUT_REQUESTED,
-                timestamp=datetime.now().isoformat(),
-                run_id=self.run_id,
-            )
-            await self._broadcast_event(event)
-
-    async def _intercept_meeting_broadcast(
-        self, meeting_id, message, from_agent_id=None, from_agent_klass=None
-    ):
-        """Intercept and broadcast meeting_broadcast calls."""
-
-        # Get meeting participants (simplified - would need actual meeting manager integration)
-        participants = []
-
-        event = MeetingBroadcastEvent(
-            type=EventType.MEETING_BROADCAST,
-            timestamp=datetime.now().isoformat(),
-            run_id=self.run_id,
-            meeting_id=meeting_id,
-            sender_id=from_agent_id or "system",
-            sender_klass=from_agent_klass or "system",
-            message=message,
-            participants=participants,
-        )
-        await self._broadcast_event(event)
+    # NOTE: legacy interception methods removed; PlaybookRun now subscribes to core EventBus events.
 
     async def _broadcast_event(self, event: BaseEvent):
         """Broadcast event to all connected clients."""
@@ -589,8 +498,12 @@ class PlaybookRun:
         debug("Sending existing session logs to client", client_id=client.client_id)
 
         for agent in self.playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-                session_log = agent.state.session_log
+            if (
+                isinstance(agent, AIAgent)
+                and hasattr(agent, "state")
+                and "session_log" in agent.state
+            ):
+                session_log = agent.session_log
                 debug(
                     "Agent session log entries",
                     agent_id=agent.id,
@@ -656,18 +569,17 @@ class PlaybookRun:
         await self.playbooks.program.route_message(
             sender_id="human",
             sender_klass="human",
-            receiver_spec=f"agent {main_agent.id}",
+            receiver_spec=str(AgentID.parse(main_agent.id)),
             message=message,
         )
 
     async def cleanup(self):
-        """Cleanup resources and restore original methods."""
-        Program.route_message = self._original_methods["route_message"]
-        MessagingMixin.WaitForMessage = self._original_methods["wait_for_message"]
-        MeetingManager.broadcast_to_meeting_as_owner = self._original_methods[
-            "broadcast_to_meeting"
-        ]
-        Program.create_agent = self._original_methods["create_agent"]
+        """Cleanup resources and unsubscribe from EventBus."""
+        for event_type, handler in getattr(self, "_event_subscriptions", []):
+            try:
+                self.playbooks.program.event_bus.unsubscribe(event_type, handler)
+            except Exception:
+                pass
 
 
 class WebSocketClient:

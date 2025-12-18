@@ -43,12 +43,13 @@ from playbooks.channels.stream_events import (
     StreamStartEvent,
 )
 from playbooks.core.constants import EOM, EXECUTION_FINISHED
-from playbooks.core.events import Event
+from playbooks.core.events import Event, MessageRoutedEvent
 from playbooks.core.exceptions import ExecutionFinished
+from playbooks.core.identifiers import AgentID
+from playbooks.core.message import MessageType
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.infrastructure.user_output import user_output
 from playbooks.llm.messages import AgentCommunicationLLMMessage
-from playbooks.meetings.meeting_manager import MeetingManager
 from playbooks.program import Program
 from playbooks.utils.error_utils import check_playbooks_health
 
@@ -173,7 +174,7 @@ class ChannelStreamObserver(BaseChannelStreamObserver):
                 f"\n[cyan][{sender_display} → {recipient_display}][/cyan]"
             )
         else:
-            console_stderr.print(f"\n[cyan]{sender_display}][/cyan]")
+            console_stderr.print(f"\n[cyan][{sender_display}][/cyan]")
 
     async def _display_chunk(self, event: StreamChunkEvent) -> None:
         """Display stream chunk - content to stdout."""
@@ -258,7 +259,30 @@ class SessionLogWrapper:
 
 # Store original methods for restoring later
 original_wait_for_message = MessagingMixin.WaitForMessage
-original_broadcast_to_meeting = None  # Will be set after MeetingManager is imported
+original_broadcast_to_meeting = None  # deprecated (no longer used)
+original_broadcast_to_meeting_participant = None  # deprecated (no longer used)
+
+
+def _on_message_routed(event: MessageRoutedEvent) -> None:
+    """Display meeting broadcasts in CLI without patching meeting manager methods."""
+    msg = event.message
+    if not msg:
+        return
+    try:
+        if (
+            getattr(msg, "message_type", None)
+            and msg.message_type == MessageType.MEETING_BROADCAST
+        ):
+            meeting_id = (
+                msg.meeting_id.id if getattr(msg, "meeting_id", None) else "unknown"
+            )
+            console.print(
+                f"\n[bold blue]📢 meeting {meeting_id}[/bold blue] - "
+                f"[cyan]{msg.sender_klass}({msg.sender_id.id})[/cyan]: {msg.content}"
+            )
+    except Exception:
+        # Best-effort only; never break execution
+        return
 
 
 async def prompt_for_human_input(agent_self):
@@ -304,34 +328,21 @@ async def prompt_for_human_input(agent_self):
         await program.route_message(
             sender_id=sender_id,
             sender_klass=sender_klass,
-            receiver_spec=f"agent {agent_self.id}",
+            receiver_spec=str(AgentID.parse(agent_self.id)),
             message=message,
         )
 
 
-async def patched_broadcast_to_meeting_as_owner(
-    self,
-    meeting_id: str,
-    message: str,
-    from_agent_id: str = None,
-    from_agent_klass: str = None,
-):
-    """Patched version of broadcast_to_meeting_as_owner that displays meeting messages nicely."""
-    # Display the meeting message with formatting
-    if not from_agent_id or not from_agent_klass:
-        from_agent_id = self.agent_id
-        from_agent_klass = self.agent_klass
-
-    # Format and display the meeting broadcast
-    console.print(
-        f"\n[bold blue]📢 Meeting {meeting_id}[/bold blue] - [cyan]{from_agent_klass}({from_agent_id})[/cyan]: {message}"
+async def patched_broadcast_to_meeting_as_owner(*args, **kwargs):
+    raise RuntimeError(
+        "broadcast_to_meeting_as_owner no longer exists; use Program.route_message"
     )
 
-    # Call the original method
-    if original_broadcast_to_meeting:
-        return await original_broadcast_to_meeting(
-            self, meeting_id, message, from_agent_id, from_agent_klass
-        )
+
+async def patched_broadcast_to_meeting_as_participant(*args, **kwargs):
+    raise RuntimeError(
+        "broadcast_to_meeting_as_participant no longer exists; use Program.route_message"
+    )
 
 
 async def main(
@@ -397,14 +408,8 @@ async def main(
     # Enable agent streaming if snoop mode is on
     playbooks.program.enable_agent_streaming = snoop
 
-    # Store original methods and apply patches after playbooks are loaded
-    global original_broadcast_to_meeting
-    original_broadcast_to_meeting = MeetingManager.broadcast_to_meeting_as_owner
-
-    # Apply patches
-    MeetingManager.broadcast_to_meeting_as_owner = patched_broadcast_to_meeting_as_owner
-    # Note: Message display is now handled by ChannelStreamObserver for both
-    # streaming and non-streaming modes, so no need to patch route_message
+    # Subscribe to routed messages for meeting broadcast display
+    playbooks.event_bus.subscribe(MessageRoutedEvent, _on_message_routed)
 
     pubsub = PubSub()
 
@@ -417,9 +422,13 @@ async def main(
 
     # Wrap session logs with SessionLogWrapper for verbose output
     for agent in playbooks.program.agents:
-        if hasattr(agent, "state") and hasattr(agent.state, "session_log"):
-            wrapper = SessionLogWrapper(agent.state.session_log, pubsub, verbose)
-            agent.state.session_log = wrapper
+        if (
+            isinstance(agent, AIAgent)
+            and hasattr(agent, "state")
+            and "session_log" in agent.state
+        ):
+            wrapper = SessionLogWrapper(agent.session_log, pubsub, verbose)
+            agent.session_log = wrapper
 
     # Add message directly to LLM context so it's visible during BGN playbook execution
     if message:
@@ -434,7 +443,7 @@ async def main(
                     sender_agent=human_klass,
                     target_agent=agent.klass,
                 )
-                agent.state.call_stack.top_level_llm_messages.append(agent_comm_msg)
+                agent.call_stack.top_level_llm_messages.append(agent_comm_msg)
 
     def log_event(event: Event) -> None:
         print(event)
@@ -483,8 +492,7 @@ async def main(
             await playbooks.program.shutdown_debug_server()
         # Restore the original methods when we're done
         MessagingMixin.WaitForMessage = original_wait_for_message
-        if original_broadcast_to_meeting:
-            MeetingManager.broadcast_to_meeting_as_owner = original_broadcast_to_meeting
+        playbooks.event_bus.unsubscribe(MessageRoutedEvent, _on_message_routed)
 
 
 if __name__ == "__main__":

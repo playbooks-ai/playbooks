@@ -1,7 +1,6 @@
 """Comprehensive test suite for session_log_items.py"""
 
-from datetime import datetime
-
+from playbooks.llm.messages.timestamp import get_timestamp
 from playbooks.state.log_items import (
     SessionLogItemAgentMessage,
     SessionLogItemBase,
@@ -27,7 +26,7 @@ class TestSessionLogItemBase:
             def to_log_full(self) -> str:
                 return "test"
 
-        timestamp = datetime.now()
+        timestamp = get_timestamp()
         item = SessionLogItemTestType(
             timestamp=timestamp, agent_id="test-agent", agent_klass="TestAgent"
         )
@@ -41,7 +40,7 @@ class TestSessionLogItemBase:
             def to_log_full(self) -> str:
                 return "test"
 
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
         item = SessionLogItemTestType(
             timestamp=timestamp, agent_id="agent-123", agent_klass="AIAgent"
         )
@@ -49,7 +48,8 @@ class TestSessionLogItemBase:
         metadata = item.to_metadata()
 
         assert metadata["type"] == "testtype"
-        assert metadata["timestamp"] == "2024-01-15T10:30:45"
+        assert metadata["timestamp"] == 12345
+        assert isinstance(metadata["timestamp"], int)
         assert metadata["agent_id"] == "agent-123"
         assert metadata["agent_klass"] == "AIAgent"
 
@@ -60,14 +60,15 @@ class TestSessionLogItemBase:
             def to_log_full(self) -> str:
                 return "test"
 
-        # Test with microseconds
-        timestamp = datetime(2024, 1, 15, 10, 30, 45, 123456)
+        # Test with integer timestamp
+        timestamp = 54321
         item = SessionLogItemTestType(
             timestamp=timestamp, agent_id="test-agent", agent_klass="TestAgent"
         )
 
         metadata = item.to_metadata()
-        assert metadata["timestamp"] == "2024-01-15T10:30:45.123456"
+        assert metadata["timestamp"] == 54321
+        assert isinstance(metadata["timestamp"], int)
 
 
 class TestSessionLogItemPlaybookStart:
@@ -75,7 +76,7 @@ class TestSessionLogItemPlaybookStart:
 
     def test_creation_minimal(self):
         """Test creating PlaybookStart with minimal fields."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookStart(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -89,7 +90,7 @@ class TestSessionLogItemPlaybookStart:
 
     def test_creation_full(self):
         """Test creating PlaybookStart with all fields."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookStart(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -105,7 +106,7 @@ class TestSessionLogItemPlaybookStart:
 
     def test_to_log_full(self):
         """Test full log format."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookStart(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -117,7 +118,7 @@ class TestSessionLogItemPlaybookStart:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
         item = SessionLogItemPlaybookStart(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -131,7 +132,7 @@ class TestSessionLogItemPlaybookStart:
 
         # Check base fields
         assert metadata["type"] == "playbookstart"
-        assert metadata["timestamp"] == "2024-01-15T10:30:45"
+        assert isinstance(metadata["timestamp"], int)
         assert metadata["agent_id"] == "agent-1"
         assert metadata["agent_klass"] == "AIAgent"
 
@@ -142,7 +143,7 @@ class TestSessionLogItemPlaybookStart:
 
     def test_to_metadata_with_none_values(self):
         """Test metadata conversion with None values."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookStart(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -162,7 +163,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_creation_minimal(self):
         """Test creating PlaybookEnd with minimal fields."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -179,7 +180,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_creation_with_success_and_return_value(self):
         """Test creating PlaybookEnd with success and return value."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -196,7 +197,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_creation_with_error(self):
         """Test creating PlaybookEnd with error."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -211,7 +212,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_to_log_full_success_with_return_value(self):
         """Test full log format for successful execution with return value."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -227,7 +228,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_to_log_full_success_without_return_value(self):
         """Test full log format for successful execution without return value."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -242,7 +243,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_to_log_full_error(self):
         """Test full log format for failed execution."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -257,7 +258,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -281,7 +282,7 @@ class TestSessionLogItemPlaybookEnd:
 
     def test_to_metadata_with_none_return_value(self):
         """Test metadata conversion with None return value."""
-        timestamp = datetime.now()
+        timestamp = 0
         item = SessionLogItemPlaybookEnd(
             timestamp=timestamp,
             agent_id="agent-1",
@@ -298,7 +299,7 @@ class TestSessionLogItemLLMRequest:
 
     def test_creation_minimal(self):
         """Test creating LLMRequest with minimal fields."""
-        timestamp = datetime.now()
+        timestamp = 0
         messages = [{"role": "user", "content": "Hello"}]
 
         item = SessionLogItemLLMRequest(
@@ -316,7 +317,7 @@ class TestSessionLogItemLLMRequest:
 
     def test_creation_full(self):
         """Test creating LLMRequest with all fields."""
-        timestamp = datetime.now()
+        timestamp = 0
         messages = [{"role": "user", "content": "Hello"}]
 
         item = SessionLogItemLLMRequest(
@@ -334,7 +335,7 @@ class TestSessionLogItemLLMRequest:
 
     def test_to_log_full(self):
         """Test full log format."""
-        timestamp = datetime.now()
+        timestamp = 0
         messages = [
             {"role": "system", "content": "You are helpful"},
             {"role": "user", "content": "Hello"},
@@ -354,7 +355,7 @@ class TestSessionLogItemLLMRequest:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
         messages = [{"role": "user", "content": "Test message"}]
 
         item = SessionLogItemLLMRequest(
@@ -381,7 +382,7 @@ class TestSessionLogItemLLMResponse:
 
     def test_creation_minimal(self):
         """Test creating LLMResponse with minimal fields."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemLLMResponse(
             timestamp=timestamp,
@@ -398,7 +399,7 @@ class TestSessionLogItemLLMResponse:
 
     def test_creation_full(self):
         """Test creating LLMResponse with all fields."""
-        timestamp = datetime.now()
+        timestamp = 0
         usage = {"prompt_tokens": 50, "completion_tokens": 25, "total_tokens": 75}
 
         item = SessionLogItemLLMResponse(
@@ -416,7 +417,7 @@ class TestSessionLogItemLLMResponse:
 
     def test_to_log_full_short_content(self):
         """Test full log format with short content."""
-        timestamp = datetime.now()
+        timestamp = 0
         usage = {"total_tokens": 100}
 
         item = SessionLogItemLLMResponse(
@@ -434,7 +435,7 @@ class TestSessionLogItemLLMResponse:
 
     def test_to_log_full_long_content(self):
         """Test full log format with long content (truncated)."""
-        timestamp = datetime.now()
+        timestamp = 0
         long_content = "A" * 250  # 250 characters
 
         item = SessionLogItemLLMResponse(
@@ -452,7 +453,7 @@ class TestSessionLogItemLLMResponse:
 
     def test_to_log_full_without_usage_and_time(self):
         """Test full log format without usage and response time."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemLLMResponse(
             timestamp=timestamp,
@@ -467,7 +468,7 @@ class TestSessionLogItemLLMResponse:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
         usage = {"prompt_tokens": 20, "completion_tokens": 30, "total_tokens": 50}
 
         item = SessionLogItemLLMResponse(
@@ -494,7 +495,7 @@ class TestSessionLogItemStepExecution:
 
     def test_creation(self):
         """Test creating StepExecution."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemStepExecution(
             timestamp=timestamp,
@@ -513,7 +514,7 @@ class TestSessionLogItemStepExecution:
 
     def test_to_log_full(self):
         """Test full log format."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemStepExecution(
             timestamp=timestamp,
@@ -530,7 +531,7 @@ class TestSessionLogItemStepExecution:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
 
         item = SessionLogItemStepExecution(
             timestamp=timestamp,
@@ -556,7 +557,7 @@ class TestSessionLogItemVariableUpdate:
 
     def test_creation(self):
         """Test creating VariableUpdate."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemVariableUpdate(
             timestamp=timestamp,
@@ -575,7 +576,7 @@ class TestSessionLogItemVariableUpdate:
 
     def test_creation_with_complex_values(self):
         """Test creating VariableUpdate with complex data types."""
-        timestamp = datetime.now()
+        timestamp = 0
         old_dict = {"key": "old_value"}
         new_dict = {"key": "new_value", "extra": "data"}
 
@@ -595,7 +596,7 @@ class TestSessionLogItemVariableUpdate:
 
     def test_to_log_full(self):
         """Test full log format."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemVariableUpdate(
             timestamp=timestamp,
@@ -612,7 +613,7 @@ class TestSessionLogItemVariableUpdate:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
 
         item = SessionLogItemVariableUpdate(
             timestamp=timestamp,
@@ -638,7 +639,7 @@ class TestSessionLogItemAgentMessage:
 
     def test_creation(self):
         """Test creating AgentMessage."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemAgentMessage(
             timestamp=timestamp,
@@ -661,7 +662,7 @@ class TestSessionLogItemAgentMessage:
 
     def test_to_log_full(self):
         """Test full log format."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemAgentMessage(
             timestamp=timestamp,
@@ -680,7 +681,7 @@ class TestSessionLogItemAgentMessage:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
 
         item = SessionLogItemAgentMessage(
             timestamp=timestamp,
@@ -710,7 +711,7 @@ class TestSessionLogItemError:
 
     def test_creation_minimal(self):
         """Test creating Error with minimal fields."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemError(
             timestamp=timestamp,
@@ -727,7 +728,7 @@ class TestSessionLogItemError:
 
     def test_creation_full(self):
         """Test creating Error with all fields."""
-        timestamp = datetime.now()
+        timestamp = 0
         stack_trace = "Traceback (most recent call last):\n  File test.py, line 10\n    raise ValueError()"
         context = {"function": "process_data", "line": 42, "file": "processor.py"}
 
@@ -746,7 +747,7 @@ class TestSessionLogItemError:
 
     def test_to_log_full_without_stack_trace(self):
         """Test full log format without stack trace."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemError(
             timestamp=timestamp,
@@ -761,7 +762,7 @@ class TestSessionLogItemError:
 
     def test_to_log_full_with_stack_trace(self):
         """Test full log format with stack trace."""
-        timestamp = datetime.now()
+        timestamp = 0
         stack_trace = "Traceback:\n  File test.py, line 5\n    x = 1/0"
 
         item = SessionLogItemError(
@@ -778,7 +779,7 @@ class TestSessionLogItemError:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
         stack_trace = "Traceback: Error occurred"
         context = {"module": "auth", "function": "login"}
 
@@ -806,7 +807,7 @@ class TestSessionLogItemDebug:
 
     def test_creation_minimal(self):
         """Test creating Debug with minimal fields."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemDebug(
             timestamp=timestamp,
@@ -820,7 +821,7 @@ class TestSessionLogItemDebug:
 
     def test_creation_with_data(self):
         """Test creating Debug with data."""
-        timestamp = datetime.now()
+        timestamp = 0
         debug_data = {"variable": "value", "state": "processing", "count": 42}
 
         item = SessionLogItemDebug(
@@ -835,7 +836,7 @@ class TestSessionLogItemDebug:
 
     def test_to_log_full_without_data(self):
         """Test full log format without data."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemDebug(
             timestamp=timestamp,
@@ -849,7 +850,7 @@ class TestSessionLogItemDebug:
 
     def test_to_log_full_with_data(self):
         """Test full log format with data."""
-        timestamp = datetime.now()
+        timestamp = 0
         debug_data = {"counter": 5, "status": "active"}
 
         item = SessionLogItemDebug(
@@ -865,7 +866,7 @@ class TestSessionLogItemDebug:
 
     def test_to_metadata(self):
         """Test metadata conversion."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
         debug_data = {"thread": "main", "memory": "12MB", "cpu": "15%"}
 
         item = SessionLogItemDebug(
@@ -884,7 +885,7 @@ class TestSessionLogItemDebug:
 
     def test_to_metadata_without_data(self):
         """Test metadata conversion without data."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         item = SessionLogItemDebug(
             timestamp=timestamp,
@@ -902,7 +903,7 @@ class TestIntegrationScenarios:
 
     def test_complete_playbook_execution_flow(self):
         """Test a complete playbook execution flow with multiple log items."""
-        timestamp = datetime(2024, 1, 15, 10, 30, 45)
+        timestamp = 12345
 
         # Start playbook
         start_item = SessionLogItemPlaybookStart(
@@ -956,7 +957,7 @@ class TestIntegrationScenarios:
 
     def test_error_handling_flow(self):
         """Test error handling flow in a playbook."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         # Start playbook
         start_item = SessionLogItemPlaybookStart(
@@ -1004,7 +1005,7 @@ class TestIntegrationScenarios:
 
     def test_llm_interaction_flow(self):
         """Test LLM request/response flow."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         # LLM Request
         request_item = SessionLogItemLLMRequest(
@@ -1039,7 +1040,7 @@ class TestIntegrationScenarios:
 
     def test_agent_communication_flow(self):
         """Test inter-agent communication flow."""
-        timestamp = datetime.now()
+        timestamp = 0
 
         # Agent A sends message to Agent B
         message_item = SessionLogItemAgentMessage(

@@ -37,6 +37,9 @@ required_attendees: [HeadChef, MarketingSpecialist]
 - Otherwise
   - Return the reason for the failure to reach consensus so that user can decide what to do next
 
+### Notes
+- Use self.current_meeting.shared_state to store and access the menu proposal and other relevant information
+
 # Head Chef
 
 ## Menu Redesign Meeting
@@ -68,6 +71,9 @@ meeting: true
     - Suggest dishes that share ingredients to reduce waste
     - Propose prep efficiencies across multiple dishes
 
+### Notes
+- Use self.current_meeting.shared_state to store and access the menu proposal and other relevant information
+
 # Marketing Specialist
 
 ## Menu Redesign Meeting  
@@ -98,3 +104,6 @@ meeting: true
     - Provide competitive pricing analysis
     - Recommend bundle or combo opportunities
     - Suggest promotional strategies for menu launch
+
+### Notes
+- Use self.current_meeting.shared_state to store and access the menu proposal and other relevant information

@@ -163,19 +163,19 @@ async def main(
         from playbooks.state.variables import Artifact
 
         for agent in playbooks.program.agents:
-            if hasattr(agent, "state") and hasattr(agent.state, "variables"):
+            if hasattr(agent, "state"):
                 # Check if should be an Artifact based on length threshold
                 if len(str(stdin_content)) > config.artifact_result_threshold:
                     # Create Artifact for large content
                     artifact = Artifact(
-                        name="$startup_message",
+                        name="startup_message",
                         summary="Startup message from stdin",
                         value=stdin_content,
                     )
-                    agent.state.variables["$startup_message"] = artifact
+                    agent.state.startup_message = artifact
                 else:
                     # Regular variable for small content
-                    agent.state.variables["$startup_message"] = stdin_content
+                    agent.state.startup_message = stdin_content
 
                 # Reset last_sent_state to ensure this variable is included in first I-frame
                 agent.state.last_sent_state = None
@@ -194,7 +194,7 @@ async def main(
                     sender_agent=human_klass,
                     target_agent=agent.klass,
                 )
-                agent.state.call_stack.top_level_llm_messages.append(agent_comm_msg)
+                agent.call_stack.top_level_llm_messages.append(agent_comm_msg)
 
     # Set up CLI stream observer
     stream_observer = CLIStreamObserver(
@@ -211,12 +211,14 @@ async def main(
 
         original_wait_for_message = MessagingMixin.WaitForMessage
 
-        async def patched_wait(self, source_agent_id: str):
+        async def patched_wait(self, source_agent_id: str, *, timeout: float = None):
             if source_agent_id in ("human", "user"):
                 raise InteractiveInputRequired(
                     "Interactive input required but --non-interactive mode is enabled"
                 )
-            return await original_wait_for_message(self, source_agent_id)
+            return await original_wait_for_message(
+                self, source_agent_id, timeout=timeout
+            )
 
         MessagingMixin.WaitForMessage = patched_wait
 

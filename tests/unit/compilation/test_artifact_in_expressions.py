@@ -2,27 +2,37 @@
 
 import pytest
 
-from playbooks.infrastructure.event_bus import EventBus
-from playbooks.state.execution_state import ExecutionState
-from playbooks.execution.call import PlaybookCall
+from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.compilation.expression_engine import ExpressionContext
+from playbooks.execution.call import PlaybookCall
+from playbooks.infrastructure.event_bus import EventBus
 from playbooks.state.variables import Artifact
+
+
+class TestAgent(LocalAIAgent):
+    """Test agent with concrete klass."""
+
+    klass = "TestAgent"
+    description = "Test Agent"
+    metadata = {}
+    playbooks = {}
+    namespace_manager = None
 
 
 @pytest.fixture
 def expression_context():
     """Create an expression context with an artifact."""
     event_bus = EventBus(session_id="test-session")
-    state = ExecutionState(event_bus, "TestAgent", "test-agent-123")
+    agent = TestAgent(event_bus, agent_id="test-agent-123")
 
-    # Create an artifact and add to state
+    # Create an artifact and add to agent state (no $ prefix in storage)
     artifact = Artifact(name="report", summary="Test Report", value="Hello World")
-    state.variables["$report"] = artifact
+    agent.state.report = artifact
 
     # Create a mock call
     call = PlaybookCall("TestPlaybook", [], {})
 
-    return ExpressionContext(agent=None, state=state, call=call)
+    return ExpressionContext(agent=agent, call=call)
 
 
 def test_len_in_expression(expression_context):
@@ -75,7 +85,7 @@ def test_comparison_in_expression(expression_context):
 
 def test_multiplication_in_expression(expression_context):
     """Test that artifact multiplication works in expressions."""
-    expression_context.state.variables["$short"] = Artifact(
+    expression_context.agent.state.short = Artifact(
         name="short", summary="Short", value="Ha"
     )
     result = expression_context.evaluate_expression("$short * 3")
@@ -90,7 +100,7 @@ def test_str_function_in_expression(expression_context):
 
 def test_artifact_with_dict_content_in_expression(expression_context):
     """Test that artifacts with dict content work in expressions."""
-    expression_context.state.variables["$data"] = Artifact(
+    expression_context.agent.state.data = Artifact(
         name="data", summary="Data", value={"key": "value"}
     )
 
@@ -111,6 +121,6 @@ def test_chained_operations_in_expression(expression_context):
 
 def test_artifact_in_complex_expression(expression_context):
     """Test artifacts in more complex expressions."""
-    expression_context.state.variables["$count"] = 3
+    expression_context.agent.state.count = 3
     result = expression_context.evaluate_expression("len($report) > $count")
     assert result is True  # len("Hello World") = 11 > 3

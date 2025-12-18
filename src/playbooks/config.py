@@ -23,10 +23,10 @@ from __future__ import annotations
 import json
 import os
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any, Iterable, Tuple
 
-import tomllib
 from platformdirs import PlatformDirs
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -78,15 +78,6 @@ class LitellmConfig(BaseModel):
     verbose: bool = False
 
 
-class StateCompressionConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")  # catch typos early
-
-    enabled: bool = True
-    full_state_interval: int = Field(
-        10, gt=0
-    )  # Send full state every N LLM calls (I-frame interval)
-
-
 class PlaybooksConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")  # catch typos early
 
@@ -96,11 +87,19 @@ class PlaybooksConfig(BaseModel):
         500, gt=0
     )  # Min chars to auto-create artifact
     max_llm_calls: int = Field(100)
+    meeting_message_batch_timeout: float = Field(
+        2.0, gt=0
+    )  # Rolling timeout for batching meeting messages (seconds)
+    meeting_message_batch_max_wait: float = Field(
+        10.0, gt=0
+    )  # Absolute maximum wait time for oldest message in batch (seconds)
+    timestamp_granularity: int = Field(
+        0, ge=-3, le=6
+    )  # Timestamp granularity: 0=seconds, 3=milliseconds, -1=10s, etc.
     model: ModelsConfig = ModelsConfig()
     llm_cache: LLMCacheConfig = LLMCacheConfig()
     langfuse: LangfuseConfig = LangfuseConfig()
     litellm: LitellmConfig = LitellmConfig()
-    state_compression: StateCompressionConfig = StateCompressionConfig()
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump()
@@ -308,7 +307,6 @@ __all__ = [
     "ModelsConfig",
     "LLMCacheConfig",
     "LangfuseConfig",
-    "StateCompressionConfig",
     "config",
     "load_config",
     "resolve_config_files",

@@ -1,5 +1,6 @@
 """Test compact message formatting in LLM context."""
 
+from playbooks.core.identifiers import AgentID
 from playbooks.core.message import Message, MessageType
 from playbooks.execution.call import PlaybookCall
 
@@ -7,9 +8,9 @@ from playbooks.execution.call import PlaybookCall
 def test_message_compact_str():
     """Test that Message.to_compact_str() produces compact format."""
     msg = Message(
-        sender_id="1000",
+        sender_id=AgentID("1000"),
         sender_klass="StoryTeller",
-        recipient_id="1001",
+        recipient_id=AgentID("1001"),
         recipient_klass="CharacterCreator",
         message_type=MessageType.DIRECT,
         content="Hi! Could you please create a new character for a story I'm crafting?",
@@ -28,9 +29,9 @@ def test_message_compact_str():
 def test_message_compact_str_human():
     """Test compact formatting for messages to/from human."""
     msg = Message(
-        sender_id="1000",
+        sender_id=AgentID("1000"),
         sender_klass="StoryTeller",
-        recipient_id="human",
+        recipient_id=AgentID("human"),
         recipient_klass="User",
         message_type=MessageType.DIRECT,
         content="Hello!",
@@ -47,9 +48,9 @@ def test_message_compact_str_human():
 def test_message_compact_str_from_human():
     """Test compact formatting for messages from human to agent."""
     msg = Message(
-        sender_id="human",
+        sender_id=AgentID("human"),
         sender_klass="User",
-        recipient_id="1000",
+        recipient_id=AgentID("1000"),
         recipient_klass="Assistant",
         message_type=MessageType.DIRECT,
         content="Help me with this task",
@@ -66,9 +67,9 @@ def test_message_compact_str_truncation():
     """Test that very long messages are truncated."""
     long_content = "a" * 200
     msg = Message(
-        sender_id="1000",
+        sender_id=AgentID("1000"),
         sender_klass="StoryTeller",
-        recipient_id="1001",
+        recipient_id=AgentID("1001"),
         recipient_klass="CharacterCreator",
         message_type=MessageType.DIRECT,
         content=long_content,
@@ -86,9 +87,9 @@ def test_playbook_call_with_messages():
     """Test that PlaybookCall formats messages compactly."""
     messages = [
         Message(
-            sender_id="1000",
+            sender_id=AgentID("1000"),
             sender_klass="StoryTeller",
-            recipient_id="1001",
+            recipient_id=AgentID("1001"),
             recipient_klass="CharacterCreator",
             message_type=MessageType.DIRECT,
             content="Hi! Could you please create a new character?",
@@ -115,18 +116,18 @@ def test_playbook_call_with_multiple_messages():
     """Test that PlaybookCall formats multiple messages compactly."""
     messages = [
         Message(
-            sender_id="1000",
+            sender_id=AgentID("1000"),
             sender_klass="StoryTeller",
-            recipient_id="1001",
+            recipient_id=AgentID("1001"),
             recipient_klass="CharacterCreator",
             message_type=MessageType.DIRECT,
             content="Message 1",
             meeting_id=None,
         ),
         Message(
-            sender_id="1002",
+            sender_id=AgentID("1002"),
             sender_klass="WorldBuilder",
-            recipient_id="human",
+            recipient_id=AgentID("human"),
             recipient_klass="User",
             message_type=MessageType.DIRECT,
             content="Message 2",

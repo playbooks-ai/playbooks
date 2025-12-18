@@ -138,7 +138,8 @@ class CallStackFrame:
         self.is_meeting = is_meeting
         self.meeting_id = meeting_id
         self.depth = -1
-        self.langfuse_span: Optional[Any] = None
+        self.executor = None  # Executor context for this frame (handles nested calls)
+        self.locals: Dict[str, Any] = {}  # Frame-specific local variables
 
     @property
     def source_line_number(self) -> int:
@@ -168,7 +169,6 @@ class CallStackFrame:
         """
         result = {
             "instruction_pointer": str(self.instruction_pointer),
-            "langfuse_span": str(self.langfuse_span) if self.langfuse_span else None,
         }
         if self.is_meeting:
             result["is_meeting"] = self.is_meeting
@@ -293,11 +293,28 @@ class CallStack:
     def get_llm_messages(self) -> List[Dict[str, str]]:
         """Get the messages for the call stack for the LLM."""
         messages = []
-        for frame in self.frames:
-            messages.extend(frame.get_llm_messages())
-        # Add top-level messages (when call stack is empty or before first playbook)
+
+        # Add top-level messages first (system messages, etc.)
         for msg in self.top_level_llm_messages:
             messages.append(msg.to_full_message())
+
+        # Then add frame messages (execution context)
+        for frame in self.frames:
+            messages.extend(frame.get_llm_messages())
+
+        return messages
+
+    def get_llm_message_objects(self) -> List[LLMMessage]:
+        """Get the raw LLM message objects for context compaction."""
+        messages = []
+
+        # Add top-level messages first (system messages, etc.)
+        messages.extend(self.top_level_llm_messages)
+
+        # Then add frame messages (execution context)
+        for frame in self.frames:
+            messages.extend(frame.llm_messages)
+
         return messages
 
     def add_llm_message(self, message: LLMMessage) -> None:
@@ -364,16 +381,12 @@ class CallStack:
         """Check if an artifact is loaded in any frame.
 
         Args:
-            artifact_name: The name of the artifact (with or without $ prefix).
+            artifact_name: The name of the artifact
 
         Returns:
             True if the artifact is loaded in any frame, False otherwise.
         """
         from playbooks.llm.messages.types import ArtifactLLMMessage
-
-        # Normalize artifact name to include $ prefix
-        if not artifact_name.startswith("$"):
-            artifact_name = f"${artifact_name}"
 
         for frame in self.frames:
             for msg in frame.llm_messages:

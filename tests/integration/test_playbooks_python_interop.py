@@ -59,7 +59,7 @@ async def test_execute_playbook_A(playbooks):
 @pytest.mark.asyncio
 async def test_execute_playbook_AB(playbooks):
     """Call a python playbook that calls another python playbook"""
-    await playbooks.program.initialize()
+    await playbooks.initialize()
     success, result = await playbooks.program.agents[0].execute_playbook("AB", args=[4])
     assert success
     assert result == 4
@@ -69,7 +69,7 @@ async def test_execute_playbook_AB(playbooks):
 @pytest.mark.integration
 async def test_execute_playbook_X(playbooks):
     """Call a markdown playbook (requires LLM)"""
-    await playbooks.program.initialize()
+    await playbooks.initialize()
     success, result = await playbooks.program.agents[0].execute_playbook(
         "X", kwargs={"num": 2}
     )
@@ -81,7 +81,7 @@ async def test_execute_playbook_X(playbooks):
 @pytest.mark.integration
 async def test_execute_playbook_XY(playbooks):
     """Call a markdown playbook that calls another markdown playbook (requires LLM)"""
-    await playbooks.program.initialize()
+    await playbooks.initialize()
     success, result = await playbooks.program.agents[0].execute_playbook("XY", args=[2])
     assert success
     assert result == 2
@@ -91,7 +91,7 @@ async def test_execute_playbook_XY(playbooks):
 @pytest.mark.integration
 async def test_execute_playbook_CallX(playbooks):
     """Call a python playbook that calls a markdown playbook (requires LLM)"""
-    await playbooks.program.initialize()
+    await playbooks.initialize()
     success, result = await playbooks.program.agents[0].execute_playbook(
         "CallX", args=[2]
     )
@@ -103,7 +103,7 @@ async def test_execute_playbook_CallX(playbooks):
 @pytest.mark.integration
 async def test_execute_playbook_CallA(playbooks):
     """Call a markdown playbook that calls a python playbook (requires LLM)"""
-    await playbooks.program.initialize()
+    await playbooks.initialize()
     success, result = await playbooks.program.agents[0].execute_playbook(
         "CallA", args=[4]
     )
@@ -115,7 +115,7 @@ async def test_execute_playbook_CallA(playbooks):
 @pytest.mark.integration
 async def test_execute_playbook_Call_Complex(playbooks):
     """Test a complex call chain (requires LLM)"""
-    await playbooks.program.initialize()
+    await playbooks.initialize()
     success, result = await playbooks.program.agents[0].execute_playbook(
         "BAXY1", args=[8]
     )

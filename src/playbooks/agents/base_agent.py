@@ -7,8 +7,14 @@ inherit from, along with the BaseAgentMeta metaclass for agent configuration.
 from abc import ABC, ABCMeta
 from typing import TYPE_CHECKING, Any, Dict, Optional
 
-from playbooks.core.events import AgentPausedEvent, AgentResumedEvent
+from playbooks.core.events import (
+    AgentPausedEvent,
+    AgentResumedEvent,
+    MethodCallEndedEvent,
+    MethodCallStartedEvent,
+)
 from playbooks.core.identifiers import AgentID, MeetingID
+from playbooks.core.message import MessageType
 from playbooks.infrastructure.logging.debug_logger import debug
 from playbooks.llm.messages import AgentCommunicationLLMMessage
 
@@ -89,7 +95,7 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         pass
 
     # Built-in playbook methods
-    async def Say(self, target: str, message: str) -> str:
+    async def say(self, target: str, message: str) -> str:
         """Send a message to a target (agent, human, or meeting).
 
         This is the main entry point for message sending. It resolves the target,
@@ -102,53 +108,165 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         Returns:
             The message content (for compatibility with existing code)
         """
-        resolved_target = self.resolve_target(target, allow_fallback=True)
+        # Publish method call start event for telemetry
+        self.event_bus.publish(
+            MethodCallStartedEvent(
+                session_id=self.program.event_bus.session_id if self.program else "",
+                agent_id=self.id,
+                method_name="Say",
+                args=[
+                    target,
+                    message[:100] + "..." if len(message) > 100 else message,
+                ],  # Truncate long messages
+                kwargs={},
+            )
+        )
 
-        # Route to appropriate handler based on target type
-        if resolved_target.startswith("meeting "):
-            return await self._say_to_meeting(resolved_target, message)
+        try:
+            resolved_target = self.resolve_target(target, allow_fallback=True)
 
-        return await self._say_direct(resolved_target, message)
+            # Route to appropriate handler based on target type
+            if resolved_target.startswith("meeting "):
+                result = await self._say_to_meeting(resolved_target, message)
+            else:
+                result = await self._say_direct(resolved_target, message)
+
+            # Publish method call end event
+            self.event_bus.publish(
+                MethodCallEndedEvent(
+                    session_id=(
+                        self.program.event_bus.session_id if self.program else ""
+                    ),
+                    agent_id=self.id,
+                    method_name="Say",
+                    result=result,
+                )
+            )
+
+            return result
+
+        except Exception as e:
+            # Publish method call end event with error
+            self.event_bus.publish(
+                MethodCallEndedEvent(
+                    session_id=(
+                        self.program.event_bus.session_id if self.program else ""
+                    ),
+                    agent_id=self.id,
+                    method_name="Say",
+                    error=str(e),
+                )
+            )
+            raise
 
     async def _say_to_meeting(self, meeting_spec: str, message: str) -> str:
         """Send message to a meeting.
 
         Args:
-            meeting_spec: Meeting specification (e.g., "meeting 123")
+            meeting_spec: Meeting specification (e.g., "meeting 123" or "meeting 123, agent 456")
             message: Message content to broadcast
 
         Returns:
             The message content
         """
-        meeting_id = MeetingID.parse(meeting_spec).id
+        # Extract just the meeting ID for participation check (before any comma)
+        meeting_id_part = meeting_spec.split(",")[0].strip()
+        meeting_id = MeetingID.parse(meeting_id_part).id
 
-        # Check meeting participation and broadcast accordingly
-        if hasattr(self, "state") and hasattr(self.state, "owned_meetings"):
-            if meeting_id in self.state.owned_meetings:
-                debug(f"{str(self)}: Broadcasting to meeting {meeting_id} as owner")
-                await self.meeting_manager.broadcast_to_meeting_as_owner(
-                    meeting_id, message
-                )
-                return message
+        # Check if not a participant - log error and return early
+        is_participant = False
+        if hasattr(self, "owned_meetings") and meeting_id in self.owned_meetings:
+            is_participant = True
+        elif hasattr(self, "joined_meetings") and meeting_id in self.joined_meetings:
+            is_participant = True
 
-        if hasattr(self, "state") and hasattr(self.state, "joined_meetings"):
-            if meeting_id in self.state.joined_meetings:
-                debug(
-                    f"{str(self)}: Broadcasting to meeting {meeting_id} as participant"
+        if not is_participant:
+            debug(
+                f"{str(self)}: Cannot broadcast to meeting {meeting_id} - not a participant"
+            )
+            if hasattr(self, "session_log"):
+                self.session_log.append(
+                    f"Cannot broadcast to meeting {meeting_id} - not a participant"
                 )
-                await self.meeting_manager.broadcast_to_meeting_as_participant(
-                    meeting_id, message
-                )
-                return message
+            return message
 
-        # Not a participant - log error
-        debug(
-            f"{str(self)}: Cannot broadcast to meeting {meeting_id} - not a participant"
-        )
-        self.state.session_log.append(
-            f"Cannot broadcast to meeting {meeting_id} - not a participant"
-        )
+        # Use streaming infrastructure like _say_direct does
+        already_streamed = getattr(self, "_currently_streaming", False)
+
+        debug(f"{str(self)}: _say_to_meeting: already_streamed={already_streamed}")
+
+        if not already_streamed and self.program:
+            debug(f"{str(self)}: _say_to_meeting: Calling _say_meeting_with_streaming")
+            await self._say_meeting_with_streaming(meeting_spec, message)
+        else:
+            debug(
+                f"{str(self)}: _say_to_meeting: Calling _say_meeting_without_streaming"
+            )
+            await self._say_meeting_without_streaming(meeting_spec, message)
+
         return message
+
+    async def _say_meeting_with_streaming(
+        self, meeting_spec: str, message: str
+    ) -> None:
+        """Send meeting message with streaming support.
+
+        Args:
+            meeting_spec: Meeting specification
+            message: Message content to broadcast
+        """
+        stream_result = await self.start_streaming_say_via_channel(meeting_spec)
+
+        if stream_result.should_stream:
+            # Use streaming path - this will deliver the message
+            await self.stream_say_update_via_channel(
+                stream_result.stream_id, meeting_spec, message
+            )
+            await self.complete_streaming_say_via_channel(
+                stream_result.stream_id, meeting_spec, message
+            )
+        else:
+            # Streaming was skipped (no human and agent streaming disabled) - still route via channel.
+            # Extract meeting ID for message metadata, but always go through Program routing.
+            meeting_id_part = meeting_spec.split(",")[0].strip()
+            meeting_id = MeetingID.parse(meeting_id_part).id
+            await self.program.route_message(
+                sender_id=self.id,
+                sender_klass=self.klass,
+                receiver_spec=meeting_spec,
+                message=message,
+                message_type=MessageType.MEETING_BROADCAST,
+                meeting_id=meeting_id,
+            )
+
+    async def _say_meeting_without_streaming(
+        self, meeting_spec: str, message: str
+    ) -> None:
+        """Send meeting message without streaming.
+
+        Args:
+            meeting_spec: Meeting specification
+            message: Message content to broadcast
+        """
+        # If currently in streaming context, message was already delivered via channel.complete_stream
+        # Skip to avoid duplicate delivery
+        if getattr(self, "_currently_streaming", False):
+            debug(
+                f"{str(self)}: _say_meeting_without_streaming: SKIPPING (already streamed)"
+            )
+            return
+
+        # Extract meeting ID for metadata
+        meeting_id_part = meeting_spec.split(",")[0].strip()
+        meeting_id = MeetingID.parse(meeting_id_part).id
+        await self.program.route_message(
+            sender_id=self.id,
+            sender_klass=self.klass,
+            receiver_spec=meeting_spec,
+            message=message,
+            message_type=MessageType.MEETING_BROADCAST,
+            meeting_id=meeting_id,
+        )
 
     async def _say_direct(self, resolved_target: str, message: str) -> str:
         """Send direct message to agent or human.
@@ -164,7 +282,8 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
         """
         # Track conversation context (skip for human and meetings)
         if resolved_target not in ["human", "user"]:
-            self.state.last_message_target = resolved_target
+            if hasattr(self, "last_message_target"):
+                self.last_message_target = resolved_target
 
         # Check if we're re-executing already-streamed code
         already_streamed = getattr(self, "_currently_streaming", False)
@@ -258,15 +377,9 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             target_agent=target_name,
         )
 
-        # Add to call stack (handles both frame and top-level message cases)
-        if hasattr(self, "state") and hasattr(self.state, "call_stack"):
-            current_frame = self.state.call_stack.peek()
-            if current_frame is not None and current_frame.playbook == "Say":
-                # If we're in Say playbook, add to its parent context
-                self.state.call_stack.add_llm_message_on_parent(agent_comm_msg)
-            else:
-                # Add to current frame or top-level if stack is empty
-                self.state.call_stack.add_llm_message(agent_comm_msg)
+        # Add to call stack (always add to the current top frame; if stack is empty, goes to top-level)
+        if hasattr(self, "call_stack"):
+            self.call_stack.add_llm_message(agent_comm_msg)
 
         # Route through program runtime
         # target_agent_id is a raw ID, convert to spec format for routing
@@ -370,6 +483,38 @@ class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
             Dictionary with agent type, ID, and any additional kwargs
         """
         return {**self.kwargs, "type": self.klass, "agent_id": self.id}
+
+    def __getattr__(self, name: str) -> Any:
+        """Expose playbooks as callable attributes.
+
+        If a playbook with the given name exists, returns a callable that
+        executes the playbook via its execute() method.
+
+        Args:
+            name: The attribute name to look up
+
+        Returns:
+            A callable that executes the playbook via execute()
+
+        Raises:
+            AttributeError: If the attribute is not a playbook and doesn't exist
+        """
+        # Check if playbooks dictionary exists and contains the requested name
+        if hasattr(self, "playbooks") and name in self.playbooks:
+            # Return a wrapper that calls the playbook's execute() method
+            async def playbook_wrapper(*args, **kwargs):
+                success, result = await self.execute_playbook(name, args, kwargs)
+                if success:
+                    return result
+                else:
+                    return {"error": result}
+
+            return playbook_wrapper
+
+        # Attribute not found - raise AttributeError
+        raise AttributeError(
+            f"'{self.__class__.__name__}' object has no attribute '{name}'"
+        )
 
     def get_debug_thread_id(self) -> Optional[int]:
         """Get the debug thread ID for this agent.
