@@ -4,6 +4,58 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [v0.7.2] - 2025-12-17
+
+### Added
+
+#### Telemetry & Observability
+- **Event-Driven Langfuse Integration** - Direct Langfuse calls created tight coupling between business logic and telemetry. Introduced comprehensive event handler system with LangfuseEventHandler class that subscribes to semantic business events and translates them to appropriate spans, observations, and traces
+- **Enhanced Trace Hierarchy** - Trace organization lacked proper nesting structure. Implemented root container observations for each agent, nested playbook spans, and trace namer observations for final trace names reflecting agent class and ID
+- **Comprehensive Observability Events** - Agent lifecycle wasn't properly tracked. Added AgentCreatedEvent, MessageRoutedEvent, and WaitForMessageEvent for complete visibility into system behavior
+
+#### Meeting System
+- **Meeting Shared State** - Participants couldn't share variables across meeting contexts. Added meeting shared state functionality allowing participants to share and access variables during multi-agent coordination
+- **Unified Meeting Routing** - Multiple broadcast methods caused confusion. Removed deprecated meeting broadcast methods in favor of unified routing
+- **End-of-Meeting Signals** - Meetings lacked proper termination handling. Added end-of-meeting signals with better error handling
+- **Immediate Broadcast Delivery** - Broadcast messages were delayed. Implemented immediate delivery for broadcast messages
+- **Background Task Routing** - Meeting tasks weren't routed properly. Enhanced routing for background tasks in meetings
+- **Direct Agent Class References** - Proxy-based cross-agent calls were overly complex. Replaced with direct agent class references in namespace for factory method access
+- **AgentsAccessor Class** - Agent registry access was scattered. Added clean, encapsulated access to agent registries
+- **Structured Message IDs** - String IDs lacked type safety. Replaced with AgentID/MeetingID types throughout the codebase
+- **Participant Deduplication** - Participant lists could contain duplicates. Added deduplication for meeting participants
+- **Missing MEETING INVITATION Text** - Meeting invitations lacked proper text. Added missing invitation text
+
+
+#### LLM Providers
+- **Non-API Key Provider Support** - Cloud providers using IAM authentication weren't supported. Added support for credential-based providers like Google Vertex AI that use gcloud authentication instead of API keys (Fixes #73)
+- **Improved model selection** - Added support for Grok 4.1 Fast Non-Reasoning and Gemini 3 Flash model
+
+
+#### Runtime improvements
+- **Component-Based User Input Messages** - Monolithic content strings were inflexible. Refactored UserInputLLMMessage to support structured components (about_you, instruction, python_code_context, final_instructions)
+- **Python Code Context Format** - JSON state blocks were verbose and harder for LLMs to work with. Replaced with Python code context showing imports, local variables, call stack, and self.state as executable Python code. Now playbooks is based on JIT coding.
+- **Simplified Variable Handling** - Variable preprocessing with $ prefix was complex. LLM now generates valid Python directly (state.x = 10) with no AST transformation needed
+- **Self Reference in Playbooks** - 'agent' reference was inconsistent with Python conventions. Replaced 'agent' with 'self' as primary reference in playbook execution context
+- **Async LLM Chunk Processing** - Synchronous chunk processing blocked event queue for 3-15s causing multi-agent synchronization issues. Made LLM chunk processing async to enable proper message buffering
+- **Integer Timestamps** - Datetime objects had performance overhead. Replaced with integer timestamps relative to program start time
+
+
+### Changed
+
+#### Execution Context
+- **Trigger Instructions Use Self** - Trigger instructions referenced 'agent' inconsistently. Updated to use 'self' for current agent reference
+- **last_llm_response Removed from State** - This internal value didn't belong in visible state. Removed from state variables
+- **Return Just Result on Success** - Error wrapping on success was unnecessary. Now returns just the result value
+
+#### Other improvements
+- **--message Processing Order** - CLI --message flag was processed after BGN playbook. Fixed to process before BGN playbook execution
+- **Program Termination on Break** - Program didn't exit when terminated. Added break out of execution if program is terminated
+- **Silent Message Skipping** - Messages were silently dropped. Fixed to not silently skip messages
+- **Meeting Requests as BGN Triggers** - Meeting requests were incorrectly set as BGN triggers. Fixed trigger classification
+- **Unwanted BGN Triggers** - BGN triggers were added to first playbook even when not requested. Fixed trigger assignment logic
+
+---
+
 ## [v0.7.1] - 2025-11-27
 
 ### Added
