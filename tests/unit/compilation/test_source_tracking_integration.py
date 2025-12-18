@@ -3,12 +3,15 @@
 import tempfile
 from pathlib import Path
 
+import pytest
+
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class TestSourceTrackingIntegration:
     """Integration test demonstrating the complete source tracking flow."""
 
+    @pytest.mark.asyncio
     async def test_complete_source_tracking_flow(self):
         """Test the complete flow from cache file to Agent with source tracking."""
 
