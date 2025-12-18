@@ -22,9 +22,9 @@ This is a test for the variables management in playbooks
 - set local variable lastname to "Pinkerton"
 - say user's name if that information is available to you, otherwise say I don't know
 - say user's last name if that information is available to you, otherwise say I don't know
-- say user's age if that information is available to you, otherwise say I don't know
-- say user's z if that information is available to you, otherwise say I don't know
+- say the userage if that information is available to you, otherwise say I don't know
+- say the z if that information is available to you, otherwise say I don't know
 - say user's gender if that information is available to you, otherwise say I don't know
-- ask user their favorite color and $game is and engage user in a conversation till they provide the information
+- ask user for $color and $game
 - say last name, favorite color, and $game
 - return "India"

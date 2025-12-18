@@ -6,7 +6,7 @@
 ### Steps
 - Introduce yourself
 - Ask user for their favorite food
-- Ask character creator agent for a new character; if it doesn't respond after waiting 2 turns apologize to user and end program
+- Call CreateNewCharacter on character creator agent
 - Tell user the character description
 - Think how you would create a 5-10 line story about this character, subtly weaving in the user's favorite food
 - Tell user the story

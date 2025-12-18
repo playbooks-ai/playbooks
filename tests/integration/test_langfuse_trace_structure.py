@@ -26,7 +26,7 @@ async def test_langfuse_trace_structure(test_data_dir):
 
     # Get the trace ID from the agent
     agent = playbooks.program.agents[0]
-    trace_id = getattr(agent, "_agent_trace_id", None)
+    trace_id = playbooks.program._langfuse_handler._agent_traces.get(agent.id, None)
 
     # Run the program
     await playbooks.program.run_till_exit()
@@ -114,7 +114,7 @@ async def test_trace_structure_with_python_playbook(test_data_dir):
     await playbooks.initialize()
 
     agent = playbooks.program.agents[0]
-    trace_id = getattr(agent, "_agent_trace_id", None)
+    trace_id = playbooks.program._langfuse_handler._agent_traces.get(agent.id, None)
 
     # Seed the input so the program can complete
     await playbooks.program.agents_by_id["human"].SendMessage(agent.id, "10")

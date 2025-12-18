@@ -9,9 +9,9 @@ When generating code, you have access to `self` - the current agent instance:
 - `self.id` (str): Agent instance ID (e.g., "agent 1020")
 - `self.klass` (str): Agent class name (e.g., "AccountantExpert")
 
-**Variables:**
-- State variables: `Ask user for $name:str` → `self.state.name = await self.Yield("user")`
-- Local variables: `x is $age + 5` → `x = self.state.age + 5`
+**Agent state and local variables:**
+- Agent state variables have $ prefix: `Ask user for $name:str` → `self.state.name = await self.Yield("user")`
+- Local variables do not have $ prefix: `x is $age + 5` → `x = self.state.age + 5`
 - Summary of playbook execution: `self.state.__`
 
 **Agent Access:**
@@ -32,6 +32,7 @@ When generating code, you have access to `self` - the current agent instance:
 **Playbook Execution:**
 - `await self.MyPlaybook(...)` - Call local playbook
 - `await other_agent.AnotherPlaybook(...)` - Call remote playbook
+- `await mcp_agent.ToolName(...)` - Call MCP tool on MCP agent (MCP tools are exposed as remote playbooks)
 
 **Built-in Playbooks:**
 - `await self.Say(target, message)` - Send message to user, agent or meeting
@@ -199,6 +200,27 @@ self.state.__ = "Welcome() engaged in a conversation with user to get their name
 await self.Return(story)
 ```
 
+**Ex 1b – Conditional say based on available information**
+- 01:QUE Say user's name if that information is available to you, otherwise say I don't know
+
+```python
+# execution_id: 1
+# recap: beginning at InfoCheck:01:QUE
+# plan: check if user name is available
+# trig? no
+await self.Step("InfoCheck:01:QUE")
+if 'name' in locals() and name:
+  # think: User name is available, so say it
+  await self.Say("user", f"user's name is {name}")
+elif hasattr(self.state, 'name') and self.state.name:
+  # think: User name is available in state, so say it
+  await self.Say("user", f"user's name is {self.state.name}")
+else:
+  # think: User name is not available, so say I don't know
+  await self.Say("user", "I don't know")
+...
+```
+
 **Ex 2 – Loops**
 - 01:CND Initialize counter to 0; While conversation is ongoing
   - 01.01:QUE Increment counter; Wait for user to say something
@@ -253,33 +275,43 @@ await self.Step("Main:02:YLD")
 await self.Yield("exit")
 ```
 
-**Ex 3 – Trigger firing**
-If a trigger condition is met, fire the trigger and yld for call.
-e.g. - When checkout amount is more than $50, trigger the Offer playbook
+**Ex 3 – Python computable triggers**
+If a trigger condition can be checked in Python, produce appropriate code to check the condition.
+e.g. - T1:CND When checkout amount is more than $50, trigger the Offer playbook
 
 ```python
 # execution_id: 3
 # recap: user provided self.state.amount=200
 # plan: Checkout:01:QUE done, execute Checkout:02:QUE, continue checkout
-# trig? yes, Trigger["Offer:01:CND"] because checkout amount is more than $50
-await self.LogTrigger("Offer:01:CND")
-await self.Offer(code="SPRING", total=self.state.amount)
-# trig? yes, already triggered
-# yld? yes, execute trigger from first step
-await self.Step("Offer:01")
-await self.Yield("call")
+# trig? maybe, checkout amount may be more than $50 so T1:CND may match
+if self.state.amount > 50:
+    # think: Offer:01:CND matched, triggering the Offer playbook
+    await self.LogTrigger("Offer:01:CND")
+    await self.Offer(code="SPRING", total=self.state.amount)
+...
 ```
 
-**Ex 3b – Yielding to evalute trigger**
-If a trigger condition cannot be evaluated due to a pending code execution, yield.
-e.g. - When $x > 15, `Trigger["TooBig:T1:CND"]` by enqueuing `TooBig()`
+**Ex 3b – Semantic triggers**
+If a trigger condition cannot be evaluated in Python, use yield to get called back.
+e.g. - T2:CND If user would be unhappy with the offer, execute GetBetterOffer
 
 ```python
 # execution_id: 3
 ...
 await self.Step("Main:08:EXE")
-self.state.x = self.state.x * 2
-# trig? self.state.x, i.e. $x, has changed and I don't have the value yet. I cannot evaluate a trigger that depends on the value of $x, so yielding for the calculation
+self.state.offer = await self.GetOffer()
+# trig? maybe, user may be unhappy with the offer so T2:CND may match. I cannot evaluate happiness in Python, so yield.
+await self.Yield("call")
+```
+
+*second call* Now you see offer value and can decide whether user would be unhappy with the offer
+
+```python
+# execution_id: 4
+# trig? yes, the offer value is $100 and based on previous interactions, that offer is likely not good enough, so T2:CND matched, executing GetBetterOffer playbook
+await self.LogTrigger("Main:T2:CND")
+offer = await self.GetBetterOffer(current_offer=self.state.offer)
+# yld? yes, must wait for GetBetterOffer to execute to get updated offer value. Then I can check if user would be unhappy with the new offer.
 await self.Yield("call")
 ```
 

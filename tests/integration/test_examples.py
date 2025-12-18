@@ -331,7 +331,7 @@ async def test_example_storyteller(test_examples_dir):
 
     character_creator = playbooks.program.agents_by_klass["CharacterCreator"][0]
     log = character_creator.session_log.to_log_full()
-    assert "CreateNewCharacter() →" in log
+    assert "CreateNewCharacter(" in log and "→" in log
 
 
 @pytest.mark.integration

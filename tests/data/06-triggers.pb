@@ -7,7 +7,7 @@ async def Validation1(pin: str) -> bool:
     await Say("user","Sorry, that's not a valid PIN. Please try again.")
     messages = await WaitForMessage("human")
     pin = messages[0].content
-  agent.state.variables.pin = pin
+  agent.state.pin = pin
   return pin
 ```
 
