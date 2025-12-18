@@ -2,13 +2,14 @@
 
 import tempfile
 from pathlib import Path
+
 from playbooks.compilation.markdown_to_ast import markdown_to_ast
 
 
 class TestSourceTrackingIntegration:
     """Integration test demonstrating the complete source tracking flow."""
 
-    def test_complete_source_tracking_flow(self):
+    async def test_complete_source_tracking_flow(self):
         """Test the complete flow from cache file to Agent with source tracking."""
 
         # Simulate a compiled .pbasm content (output of compiler)
@@ -92,7 +93,9 @@ Say the greeting to the user.
                 from playbooks.agents.agent_builder import AgentBuilder
 
                 try:
-                    agent_classes = AgentBuilder.create_agent_classes_from_ast(ast)
+                    agent_classes = await AgentBuilder.create_agent_classes_from_ast(
+                        ast
+                    )
                     print("✅ AgentBuilder successfully created agent classes from AST")
                     print(f"✅ Agent classes: {list(agent_classes.keys())}")
 
