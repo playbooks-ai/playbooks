@@ -200,27 +200,6 @@ self.state.__ = "Welcome() engaged in a conversation with user to get their name
 await self.Return(story)
 ```
 
-**Ex 1b – Conditional say based on available information**
-- 01:QUE Say user's name if that information is available to you, otherwise say I don't know
-
-```python
-# execution_id: 1
-# recap: beginning at InfoCheck:01:QUE
-# plan: check if user name is available
-# trig? no
-await self.Step("InfoCheck:01:QUE")
-if 'name' in locals() and name:
-  # think: User name is available, so say it
-  await self.Say("user", f"user's name is {name}")
-elif hasattr(self.state, 'name') and self.state.name:
-  # think: User name is available in state, so say it
-  await self.Say("user", f"user's name is {self.state.name}")
-else:
-  # think: User name is not available, so say I don't know
-  await self.Say("user", "I don't know")
-...
-```
-
 **Ex 2 – Loops**
 - 01:CND Initialize counter to 0; While conversation is ongoing
   - 01.01:QUE Increment counter; Wait for user to say something
@@ -390,7 +369,7 @@ meeting = await self.DailyScrum(topic=f"Daily scrum for project {self.state.proj
 await self.Yield("call")
 ```
 
-** Ex 8 - Communicating with another agent **
+**Ex 7 - Communicating with another agent **
 Think carefully when asked to communicate with or call a playbook from another agent
 
 - Main:03:QUE Ask user for gross income
@@ -443,4 +422,36 @@ await self.Step("Main:04:QUE")
 # yld? yes, returning error result
 self.state.__ = "Main() asked user for gross income, but no agent type for accountant found"
 await self.Return({"error": "No agent type for accountant found"})
+```
+
+**Ex 8 - Variables **
+Think carefully when asked to communicate with or call a playbook from another agent
+
+- Main:03:EXE $department = "Accounting"
+- Main:04:EXE count = 20
+- Main:05:EXE If $company is available, Say(user, say company name)
+- Main:06:EXE If region is available, Say(user, say region name)
+
+```python
+# execution_id: 11
+...
+await self.Step("Main:03:EXE")
+self.state.department = "Accounting"
+# trig? no
+# yld? no
+await self.Step("Main:04:EXE")
+count = 20
+# trig? no
+# yld? no
+await self.Step("Main:05:EXE")
+if hasattr(self.state, "company") and self.state.company:
+  self.Say(f"Company is {self.state.company})
+# trig? no
+# yld? no
+await self.Step("Main:06:EXE")
+if "region" in locals() and region:
+  self.Say(f"Region is {region})
+# trig? no
+# yld? no
+...
 ```

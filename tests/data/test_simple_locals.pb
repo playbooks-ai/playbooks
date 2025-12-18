@@ -1,6 +1,9 @@
 # SimpleLocalVars
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - x is 10
 - y is 20

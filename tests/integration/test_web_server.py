@@ -317,31 +317,29 @@ class TestPlaybookRun:
 
     @pytest.mark.asyncio
     async def test_message_interception_setup(self, playbooks_instance):
-        """Test that message interception is properly set up."""
+        """Test that EventBus subscriptions are properly set up."""
         playbooks = await playbooks_instance()
         run = PlaybookRun("test-run-123", playbooks)
 
-        # Verify that original methods are stored
-        assert "route_message" in run._original_methods
-        assert "wait_for_message" in run._original_methods
-        assert "broadcast_to_meeting" in run._original_methods
-        assert "create_agent" in run._original_methods
+        # Verify that EventBus subscriptions are set up
+        assert hasattr(run, "_event_subscriptions")
+        assert len(run._event_subscriptions) == 3
 
-        # Verify that methods are patched
-        from playbooks.agents.messaging_mixin import MessagingMixin
-        from playbooks.meetings.meeting_manager import MeetingManager
-        from playbooks.program import Program
+        # Check that the correct event types are subscribed to
+        from playbooks.core.events import (
+            AgentCreatedEvent,
+            MessageRoutedEvent,
+            WaitForMessageEvent,
+        )
 
-        # The methods should be different from the originals (patched)
-        assert Program.route_message != run._original_methods["route_message"]
-        assert (
-            MessagingMixin.WaitForMessage != run._original_methods["wait_for_message"]
-        )
-        assert (
-            MeetingManager.broadcast_to_meeting_as_owner
-            != run._original_methods["broadcast_to_meeting"]
-        )
-        assert Program.create_agent != run._original_methods["create_agent"]
+        event_types = [event_type for event_type, handler in run._event_subscriptions]
+        assert AgentCreatedEvent in event_types
+        assert MessageRoutedEvent in event_types
+        assert WaitForMessageEvent in event_types
+
+        # Verify that handlers are callable
+        for event_type, handler in run._event_subscriptions:
+            assert callable(handler)
 
         # Cleanup for other tests
         await run.cleanup()

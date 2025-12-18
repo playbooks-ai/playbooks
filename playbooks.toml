@@ -14,8 +14,10 @@ temperature = 0.2
 max_completion_tokens=15000
 
 [model.execution]
-provider = "xai"
-name = "xai/grok-4-1-fast-non-reasoning" # fast and accurate!
+# provider = "xai"
+# name = "xai/grok-4-1-fast-non-reasoning"
+provider = "gemini"
+name = "gemini/gemini-3-flash-preview"
 
 [model.compilation]
 provider = "anthropic"

@@ -19,6 +19,9 @@ async def test_simple_playbook_with_local_variables(test_data_dir):
     playbook_content = """# SimpleLocalVars
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - x is 10
 - y is 20
@@ -51,6 +54,9 @@ async def test_playbook_with_yield_preserves_locals(test_data_dir):
     playbook_content = """# YieldPreservation
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - x is 5
 - ask user for a number and store in $usernum
@@ -87,6 +93,9 @@ async def test_nested_playbook_calls_separate_frames(test_data_dir):
     playbook_content = """# NestedFrames
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - x is 100
 - result is Helper()
@@ -124,6 +133,9 @@ async def test_playbook_args_and_locals_interaction(test_data_dir):
     playbook_content = """# ArgsAndLocals
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - base is 10
 - result is Compute(base, 5)
@@ -160,6 +172,9 @@ async def test_complex_variable_flow(test_data_dir):
     playbook_content = """# ComplexFlow
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - Initialize counter to 0 as a local variable
 - set $state_count to 0
@@ -219,7 +234,10 @@ async def test_local_variables_in_loops(test_data_dir):
     playbook_content = """# LoopLocals
 
 ## Main
-### Steps
+### Triggers
+- At the beginning
+
+### Steps   
 - Initialize empty list as items
 - Initialize counter to 0
 - For each iteration from 1 to 5:
@@ -253,6 +271,9 @@ async def test_variables_across_conditional_branches(test_data_dir):
     playbook_content = """# ConditionalVars
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - x is 10
 - ask user for a number and store in $usernum
@@ -296,6 +317,9 @@ async def test_local_variables_with_state_persistence(test_data_dir):
     playbook_content = """# LocalsAndState
 
 ## Main
+### Triggers
+- At the beginning
+
 ### Steps
 - local_var is 100
 - set $state_var to 200
