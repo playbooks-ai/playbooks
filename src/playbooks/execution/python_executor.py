@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 from box import Box
 
 from playbooks.core.constants import EOM
-from playbooks.core.identifiers import MeetingID
+from playbooks.core.identifiers import AgentID, MeetingID
 from playbooks.debug.debug_handler import NoOpDebugHandler
 from playbooks.execution.call import PlaybookCall
 from playbooks.execution.step import PlaybookStep
@@ -396,7 +396,10 @@ class PythonExecutor:
                     )
                     # On timeout, return None (do not inject a synthetic message into the meeting).
                 else:
-                    messages = await self.agent.WaitForMessage(target_agent_id)
+                    # Agent-to-agent communication with progressive timeout notifications
+                    return await self._wait_for_agent_with_timeout_notifications(
+                        target_agent_id
+                    )
         if messages:
             return "\n".join(
                 [message.content for message in messages if message.content != EOM]
@@ -418,3 +421,106 @@ class PythonExecutor:
         # Use the unified target resolver with no fallback for YLD
         # (YLD should be explicit about what it's waiting for)
         return self.agent.resolve_target(target, allow_fallback=False)
+
+    async def _wait_for_agent_with_timeout_notifications(
+        self, target_agent_id: str
+    ) -> Optional[str]:
+        """Wait for agent response with progressive timeout notifications.
+
+        This method waits for a response from a specific agent with periodic
+        timeout checks. On each timeout, it:
+        1. Checks for messages from the target agent
+        2. Collects any interrupt messages from other sources (user, other agents)
+        3. Returns a combined message with interrupts + system timeout notification
+
+        The LLM can then decide whether to continue waiting (by calling Yld() again)
+        or take alternative action. There is no hard maximum wait time - the LLM
+        decides when to give up based on task context.
+
+        Args:
+            target_agent_id: The resolved agent ID to wait for
+
+        Returns:
+            - Response from target agent if received
+            - Combined message with interrupts + timeout notification if timeout
+            - None if target_agent_id is invalid
+        """
+        if not target_agent_id:
+            return None
+
+        timeout_interval = 5.0  # Check every 5 seconds
+        total_waited = 0.0
+
+        while True:  # No max_wait - LLM decides when to give up
+            # Wait for target agent with timeout
+            messages = await self.agent.WaitForMessage(
+                target_agent_id, timeout=timeout_interval
+            )
+
+            # Check if we got messages FROM THE TARGET agent
+            if messages:
+                target_agent_id_parsed = AgentID.parse(target_agent_id)
+                target_messages = [
+                    m
+                    for m in messages
+                    if m.sender_id == target_agent_id_parsed and m.content != EOM
+                ]
+                if target_messages:
+                    # SUCCESS - got response from target!
+                    # Note: WaitForMessage() already called _process_collected_messages_from_queue()
+                    # which added the AgentCommunicationLLMMessage to call stack
+                    return "\n".join([m.content for m in target_messages])
+
+            # Timeout - check for interrupt messages from OTHER sources
+            total_waited += timeout_interval
+
+            # Quick check for any other messages (user, other agents, meetings)
+            # Use a very short timeout to avoid blocking
+            try:
+                interrupt_messages = await self.agent.WaitForMessage("*", timeout=0.1)
+            except asyncio.TimeoutError:
+                interrupt_messages = []
+
+            # Filter: exclude target agent and EOM
+            target_id = AgentID.parse(target_agent_id)
+            interrupts = [
+                m
+                for m in interrupt_messages
+                if m.sender_id != target_id and m.content != EOM
+            ]
+
+            # Note: WaitForMessage("*") already processed all messages and added them
+            # to call stack via _process_collected_messages_from_queue()
+            # We just need to build the response string
+
+            # Build response: interrupts + system timeout message
+            response_parts = []
+
+            # Add interrupt messages first (if any)
+            for msg in interrupts:
+                response_parts.append(
+                    f"Received message from {msg.sender_klass}({msg.sender_id.id}): {msg.content}"
+                )
+
+            # Add system timeout notification
+            response_parts.append(
+                f"System: {target_agent_id} hasn't replied in {total_waited:.0f} seconds. "
+                f'You may continue waiting by calling await self.Yld("{target_agent_id}") again, '
+                f"or proceed with other actions if this seems too long for the expected task."
+            )
+
+            # Build combined message
+            combined_message = "\n".join(response_parts)
+
+            # Add to call stack as AgentCommunicationLLMMessage so LLM sees it in next context
+            from playbooks.llm.messages import AgentCommunicationLLMMessage
+
+            agent_comm_msg = AgentCommunicationLLMMessage(
+                combined_message,
+                sender_agent="System",
+                target_agent=self.agent.klass,
+            )
+            self.agent.call_stack.add_llm_message(agent_comm_msg)
+
+            # Return combined message - LLM decides what to do
+            return combined_message

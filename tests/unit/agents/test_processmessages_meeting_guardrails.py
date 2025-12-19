@@ -2,8 +2,8 @@ from unittest.mock import Mock
 
 import pytest
 
-from playbooks.agents.builtin_playbooks import BuiltinPlaybooks
 from playbooks.agents.ai_agent import AIAgent
+from playbooks.agents.builtin_playbooks import BuiltinPlaybooks
 from playbooks.infrastructure.event_bus import EventBus
 
 
@@ -27,6 +27,10 @@ class _StubMeetingPlaybook:
 
     async def execute(self, *args, **kwargs):
         return "ok"
+
+    def trigger_instructions(self, namespace=None, skip_bgn=True):
+        """Return empty trigger instructions for stub playbook."""
+        return []
 
 
 class _TestAgent(AIAgent):
