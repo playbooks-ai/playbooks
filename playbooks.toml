@@ -31,4 +31,4 @@ type = "disk"
 path = ".llm_cache"
 
 [langfuse]
-enabled = true
+enabled = false
