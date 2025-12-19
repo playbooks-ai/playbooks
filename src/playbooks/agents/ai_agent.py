@@ -980,6 +980,11 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         Returns:
             Tuple of (success: bool, result: Any)
         """
+        # Ensure agent is initialized before execution to populate system messages.
+        # This acts as a safety net for agents that failed initial discovery or
+        # were created after program initialization.
+        await self.initialize()
+
         if self.program and self.program.execution_finished:
             return (True, EXECUTION_FINISHED)
 

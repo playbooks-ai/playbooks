@@ -4,7 +4,6 @@ import json
 import traceback
 
 import pytest
-from fastmcp import Client
 
 from playbooks.agents import MCPAgent
 from playbooks.agents.agent_builder import AgentBuilder
@@ -13,7 +12,6 @@ from playbooks.core.exceptions import AgentConfigurationError
 from playbooks.infrastructure.event_bus import EventBus
 from playbooks.program import Program
 from playbooks.transport.mcp_transport import MCPTransport
-from tests.unit.applications.test_mcp_server import get_test_server
 
 
 class MCPTestAgent(MCPAgent):
@@ -21,73 +19,6 @@ class MCPTestAgent(MCPAgent):
     description = "Test MCP agent"
     playbooks = {}
     metadata = {}
-
-
-class InMemoryMCPTransport(MCPTransport):
-    """Custom transport for testing with in-memory server."""
-
-    def __init__(self, server):
-        # Initialize with dummy config
-        super().__init__({"url": "memory://test"})
-        self.server = server
-
-    async def connect(self) -> None:
-        """Connect to in-memory server."""
-        if self._connected:
-            return
-
-        self.client = Client(self.server)
-        await self.client.__aenter__()
-        self._connected = True
-
-    async def disconnect(self) -> None:
-        """Disconnect from in-memory server."""
-        if not self._connected or not self.client:
-            return
-
-        try:
-            await self.client.__aexit__(None, None, None)
-        except Exception:
-            pass  # Ignore disconnect errors in tests
-        finally:
-            self.client = None
-            self._connected = False
-
-    async def list_tools(self):
-        """List available tools."""
-        if not self._connected:
-            raise ConnectionError("Transport not connected")
-        return await self.client.list_tools()
-
-    async def call_tool(self, tool_name: str, arguments: dict):
-        """Call a tool with arguments."""
-        if not self._connected:
-            raise ConnectionError("Transport not connected")
-        return await self.client.call_tool(tool_name, arguments)
-
-    async def list_resources(self):
-        """List available resources."""
-        if not self._connected:
-            raise ConnectionError("Transport not connected")
-        return await self.client.list_resources()
-
-    async def read_resource(self, uri: str):
-        """Read a resource."""
-        if not self._connected:
-            raise ConnectionError("Transport not connected")
-        return await self.client.read_resource(uri)
-
-    async def list_prompts(self):
-        """List available prompts."""
-        if not self._connected:
-            raise ConnectionError("Transport not connected")
-        return await self.client.list_prompts()
-
-    async def get_prompt(self, name: str, arguments: dict = None):
-        """Get a prompt."""
-        if not self._connected:
-            raise ConnectionError("Transport not connected")
-        return await self.client.get_prompt(name, arguments or {})
 
 
 class TestMCPEndToEnd:
@@ -101,20 +32,17 @@ class TestMCPEndToEnd:
     @pytest.mark.asyncio
     async def test_mcp_agent_full_lifecycle(self):
         """Test complete MCP agent lifecycle with real server."""
-        # Create test server
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
-        # Create MCP agent
+        # Create MCP agent with native memory transport
         event_bus = EventBus("test-session")
 
         agent = MCPTestAgent(
             event_bus=event_bus,
-            remote_config={"url": "memory://test", "transport": "memory"},
+            remote_config={
+                "url": "memory://../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
         )
-
-        # Replace transport with in-memory version
-        agent.transport = InMemoryMCPTransport(mcp_server)
 
         try:
             # Test connection
@@ -199,16 +127,15 @@ class TestMCPEndToEnd:
     @pytest.mark.asyncio
     async def test_mcp_agent_error_handling(self):
         """Test MCP agent error handling with various error scenarios."""
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
         event_bus = EventBus("test-session")
         agent = MCPTestAgent(
             event_bus=event_bus,
-            remote_config={"url": "memory://test"},
+            remote_config={
+                "url": "memory://../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
         )
-
-        agent.transport = InMemoryMCPTransport(mcp_server)
 
         try:
             await agent.connect()
@@ -241,16 +168,13 @@ class TestMCPEndToEnd:
     @pytest.mark.asyncio
     async def test_mcp_agent_with_program(self):
         """Test MCP agent integration with Program class."""
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
         # Create a program with MCP agent
         program_text = """
 # TaskManagerAgent
 metadata:
   remote:
     type: mcp
-    url: memory://test
+    url: memory://tests/data/test_mcp.py
     transport: memory
 ---
 This agent manages tasks using MCP tools.
@@ -269,9 +193,6 @@ This agent manages tasks using MCP tools.
 
         assert task_agent is not None
         assert isinstance(task_agent, MCPAgent)
-
-        # Replace transport with in-memory version
-        task_agent.transport = InMemoryMCPTransport(mcp_server)
 
         try:
             # Connect and discover tools
@@ -334,9 +255,6 @@ This agent manages tasks using MCP tools.
     @pytest.mark.asyncio
     async def test_mcp_agent_cross_agent_communication(self):
         """Test MCP agent communication with local agents."""
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
         # Create a program with both local and MCP agents
         program_text = """```public.json
 []
@@ -359,7 +277,7 @@ async def calculate_sum(a: int, b: int) -> int:
 metadata:
   remote:
     type: mcp
-    url: memory://test
+    url: memory://tests/data/test_mcp.py
     transport: memory
 ---
 This is a remote task management agent.
@@ -378,9 +296,6 @@ This is a remote task management agent.
 
         assert local_agent is not None
         assert remote_agent is not None
-
-        # Replace remote agent transport
-        remote_agent.transport = InMemoryMCPTransport(mcp_server)
 
         try:
             # Connect remote agent
@@ -411,11 +326,14 @@ This is a remote task management agent.
     @pytest.mark.asyncio
     async def test_mcp_agent_resource_access(self):
         """Test MCP agent resource access capabilities."""
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
         # Create transport directly for resource testing
-        transport = InMemoryMCPTransport(mcp_server)
+        transport = MCPTransport(
+            {
+                "url": "memory://../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
+        )
 
         try:
             await transport.connect()
@@ -451,10 +369,13 @@ This is a remote task management agent.
     @pytest.mark.asyncio
     async def test_mcp_agent_prompt_access(self):
         """Test MCP agent prompt access capabilities."""
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
-        transport = InMemoryMCPTransport(mcp_server)
+        transport = MCPTransport(
+            {
+                "url": "memory://../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
+        )
 
         try:
             await transport.connect()
@@ -496,10 +417,14 @@ This is a remote task management agent.
         """Test various MCP agent configuration scenarios."""
         # Test different transport configurations
         configs = [
-            {"url": "memory://test", "transport": "memory"},
-            {"url": "memory://test", "transport": "memory", "timeout": 60.0},
+            {"url": "memory://../data/test_mcp.py", "transport": "memory"},
             {
-                "url": "memory://test",
+                "url": "memory://../data/test_mcp.py",
+                "transport": "memory",
+                "timeout": 60.0,
+            },
+            {
+                "url": "memory://../data/test_mcp.py",
                 "transport": "memory",
                 "auth": {"type": "api_key", "key": "test"},
             },
@@ -554,16 +479,15 @@ This is a comprehensive MCP agent configuration test.
     @pytest.mark.asyncio
     async def test_mcp_agent_context_manager_usage(self):
         """Test MCP agent as async context manager."""
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
         event_bus = EventBus("test-session")
         agent = MCPTestAgent(
             event_bus=event_bus,
-            remote_config={"url": "memory://test"},
+            remote_config={
+                "url": "memory://../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
         )
-
-        agent.transport = InMemoryMCPTransport(mcp_server)
 
         # Test context manager usage
         async with agent:
@@ -585,16 +509,15 @@ This is a comprehensive MCP agent configuration test.
     @pytest.mark.asyncio
     async def test_mcp_agent_performance_and_caching(self):
         """Test MCP agent performance characteristics and caching."""
-        test_server = get_test_server()
-        mcp_server = test_server.get_server()
-
         event_bus = EventBus("test-session")
         agent = MCPTestAgent(
             event_bus=event_bus,
-            remote_config={"url": "memory://test"},
+            remote_config={
+                "url": "memory://../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
         )
-
-        agent.transport = InMemoryMCPTransport(mcp_server)
 
         try:
             await agent.connect()

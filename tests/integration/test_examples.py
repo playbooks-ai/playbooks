@@ -9,7 +9,6 @@ from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.agents.mcp_agent import MCPAgent
 from playbooks.core.constants import EOM, EXECUTION_FINISHED
 from tests.conftest import extract_messages_from_cli_output
-from tests.integration.test_mcp_end_to_end import InMemoryMCPTransport
 
 
 @pytest.mark.asyncio
@@ -136,18 +135,14 @@ async def test_example_10(test_data_dir):
 
 
 @pytest.mark.asyncio
-async def test_example_11(test_data_dir, test_mcp_server_instance):
+async def test_example_11(test_data_dir):
     playbooks = Playbooks([test_data_dir / "11-mcp-agent.pb"])
     await playbooks.initialize()
-    mcp_agent = next(
-        filter(lambda x: isinstance(x, MCPAgent), playbooks.program.agents)
-    )
+
+    _ = next(filter(lambda x: isinstance(x, MCPAgent), playbooks.program.agents))
     markdown_agent = next(
         filter(lambda x: isinstance(x, LocalAIAgent), playbooks.program.agents)
     )
-
-    mcp_agent.transport = InMemoryMCPTransport(test_mcp_server_instance)
-    await mcp_agent.initialize()
 
     await playbooks.program.run_till_exit()
 

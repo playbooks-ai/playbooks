@@ -248,6 +248,18 @@ class MCPTransport(TransportProtocol):
         """Convenience method to read an MCP resource."""
         return await self.call("read_resource", {"uri": uri})
 
+    async def list_prompts(self) -> List[Any]:
+        """Convenience method to list available MCP prompts."""
+        if not self._connected or not self.client:
+            raise ConnectionError("MCP transport not connected")
+        return await self.client.list_prompts()
+
+    async def get_prompt(self, name: str, arguments: Dict[str, Any] = None) -> Any:
+        """Convenience method to get an MCP prompt."""
+        return await self.call(
+            "get_prompt", {"name": name, "arguments": arguments or {}}
+        )
+
     def get_cached_tools(self) -> Optional[List[Dict[str, Any]]]:
         """Get cached tools list if available."""
         return self._tools_cache

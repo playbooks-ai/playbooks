@@ -762,6 +762,29 @@ class Program(ProgramAgentsCommunicationMixin):
             agent.program = self
 
         self.event_agents_changed()
+
+        # Pass 1: Discover playbooks for all agents in parallel
+        # This ensures all agents (especially MCP/Remote agents) have their playbooks
+        # populated before any agent initializes its system messages.
+        discovery_tasks = []
+        for agent in self.agents:
+            if isinstance(agent, AIAgent):
+                discovery_tasks.append(agent.discover_playbooks())
+        if discovery_tasks:
+            # Individual agent discovery failures should not crash the entire program initialization.
+            # This allows for lazy initialization or manual transport setup in tests.
+            await asyncio.gather(*discovery_tasks, return_exceptions=True)
+
+        # Pass 2: Initialize all agents sequentially
+        # This builds system messages and handles BGN playbooks
+        for agent in self.agents:
+            try:
+                await agent.initialize()
+            except Exception as e:
+                logger.warning(
+                    f"Failed to initialize agent {agent.klass} ({agent.id}): {e}"
+                )
+
         self.initialized = True
 
     @property
@@ -893,8 +916,13 @@ class Program(ProgramAgentsCommunicationMixin):
                 # For AIAgents, ensure discovery and initialization are complete
                 # before the background task starts execution
                 if isinstance(new_agent, AIAgent):
-                    await new_agent.discover_playbooks()
-                    await new_agent.initialize()
+                    try:
+                        await new_agent.discover_playbooks()
+                        await new_agent.initialize()
+                    except Exception as e:
+                        logger.warning(
+                            f"Lazy initialization failed for agent {new_agent.klass} ({new_agent.id}): {e}"
+                        )
 
                 await self.runtime.start_agent(new_agent)
                 return new_agent
@@ -966,25 +994,10 @@ class Program(ProgramAgentsCommunicationMixin):
     async def begin(self) -> None:
         """Start all agents asynchronously.
 
-        Initializes all agents sequentially, then starts them as concurrent
-        asyncio tasks. Agents run independently and don't block each other.
+        Starts all agents as concurrent asyncio tasks. Agents run
+        independently and don't block each other.
         """
-        # Pass 1: Discover playbooks for all agents in parallel
-        # This ensures all agents (especially MCP/Remote agents) have their playbooks
-        # populated before any agent initializes its system messages.
-        discovery_tasks = []
-        for agent in self.agents:
-            if isinstance(agent, AIAgent):
-                discovery_tasks.append(agent.discover_playbooks())
-        if discovery_tasks:
-            await asyncio.gather(*discovery_tasks)
-
-        # Pass 2: Initialize all agents sequentially
-        # This builds system messages and handles BGN playbooks
-        for agent in self.agents:
-            await agent.initialize()
-
-        # Pass 3: Start all agents as asyncio tasks concurrently
+        # Start all agents as asyncio tasks concurrently
         tasks = []
         for agent in self.agents:
             task = await self.runtime.start_agent(agent)
