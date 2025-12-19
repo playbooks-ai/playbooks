@@ -18,7 +18,7 @@ class TestCompactionConfig:
     def test_default_config(self):
         """Test default configuration values."""
         config = CompactionConfig()
-        assert config.min_preserved_assistant_messages == 1
+        assert config.min_preserved_assistant_messages == 2
         assert config.enabled is True
 
     def test_config_from_env(self):
@@ -79,54 +79,53 @@ class TestLLMContextCompactor:
         assert result[1]["content"] == get_assistant_contents(1)
 
     def test_insufficient_messages_no_compaction(self):
-        """Test that insufficient messages don't trigger compaction."""
+        """Test that user messages are compacted even if assistant messages are few."""
         compactor = LLMContextCompactor(
             CompactionConfig(min_preserved_assistant_messages=2)
         )
 
-        # Only 2 assistant responses (need 7 for compaction with default config)
+        # U0, A1, U2, A3.
+        # A1, A3 are the last 2 assistants -> full.
+        # U2 is not the last message (A3 is) -> compacted.
+        # U0 is not the last message -> compacted.
         messages = get_message_pairs(2)
 
         result = compactor.compact_messages(messages)
 
-        # Should return original messages
         assert len(result) == 4
-        assert result[0]["content"] == get_user_contents(0)
+        assert result[0]["content"] == get_user_contents(0)  # compacted
         assert result[1]["content"] == get_assistant_contents(1)
-        assert result[2]["content"] == get_user_contents(2)
+        assert result[2]["content"] == get_user_contents(2)  # compacted
         assert result[3]["content"] == get_assistant_contents(3)
 
     def test_basic_compaction_scenario(self):
-        """Test basic compaction with sufficient messages."""
+        """Test basic compaction where only last user message and last N assistants are full."""
         config = CompactionConfig(min_preserved_assistant_messages=2)
         compactor = LLMContextCompactor(config)
 
-        messages = get_message_pairs(4)  # u0, a1, u2, a3, u4, a5, u6, a7
+        # u0, a1, u2, a3, u4, a5, u6, a7, u8
+        messages = get_message_pairs(4)
+        messages.append(UserInputLLMMessage(instruction=get_user_contents(8)))
 
         result = compactor.compact_messages(messages)
 
         # With min_preserved_assistant_messages=2, we keep the last 2 assistants (a5, a7)
-        # The first preserved assistant is a5 at index 5
-        # All messages BEFORE index 5 are compacted: u0, a1, u2, a3, u4
-        # All messages AT OR AFTER index 5 are kept full: a5, u6, a7
-        # This ensures old user_input messages (like u4) are compacted, while new ones (like u6) are kept full
-        assert len(result) == 8
-        assert result[0]["content"] == get_user_contents(
-            0
-        )  # u0 compacted (no Python Context to remove in test data)
+        # Only the very last user message (u8) is kept full
+        # All other messages are compacted
+        assert len(result) == 9
+        assert result[0]["content"] == get_user_contents(0)  # u0 compacted
         assert result[1]["content"] == get_assistant_contents_compacted(
             1
         )  # a1 compacted
-        assert result[2]["content"] == get_user_contents(
-            2
-        )  # u2 compacted (no Python Context to remove in test data)
+        assert result[2]["content"] == get_user_contents(2)  # u2 compacted
         assert result[3]["content"] == get_assistant_contents_compacted(
             3
         )  # a3 compacted
         assert result[4]["content"] == get_user_contents(4)  # u4 compacted
         assert result[5]["content"] == get_assistant_contents(5)  # a5 full
-        assert result[6]["content"] == get_user_contents(6)  # u6 full
+        assert result[6]["content"] == get_user_contents(6)  # u6 compacted
         assert result[7]["content"] == get_assistant_contents(7)  # a7 full
+        assert result[8]["content"] == get_user_contents(8)  # u8 full (last)
 
     def compacted_assistant_message_user_role(self):
         """Test that compacted assistant message is user role."""
