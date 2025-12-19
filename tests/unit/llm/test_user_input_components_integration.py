@@ -97,6 +97,16 @@ agents.all: list[str] = ["agent 1020", "agent 1021"]
             )
         )
 
+        # The actual NEW user message that should be kept full
+        messages.append(
+            UserInputLLMMessage(
+                about_you="Remember: You are Agent A",
+                instruction="Execute step 3",
+                python_code_context="*Python Code Context*\n```python\nself.state = {'x': 2}\n```",
+                final_instructions="Follow the contract.",
+            )
+        )
+
         compactor = LLMContextCompactor()
         result = compactor.compact_messages(messages)
 
@@ -104,22 +114,23 @@ agents.all: list[str] = ["agent 1020", "agent 1021"]
         assert result[0]["role"] == "user"
         assert result[0]["content"] == "Execute step 1"
         assert "Remember: You are Agent A" not in result[0]["content"]
-        assert "*Python Code Context*" not in result[0]["content"]
-        assert "self.state" not in result[0]["content"]
-        assert "Follow the contract." not in result[0]["content"]
 
         # First assistant message should be compacted (first 2 lines only)
         assert result[1]["role"] == "assistant"
         assert "# execution_id: 1" in result[1]["content"]
-        assert "# recap: Step 1 done" in result[1]["content"]
 
-        # Recent user message should be full (includes Python Context)
+        # Intermediate user message (u2) should now be compacted even though it's recent
         assert result[2]["role"] == "user"
-        assert "Remember: You are Agent A" in result[2]["content"]
-        assert "Execute step 2" in result[2]["content"]
-        assert "*Python Code Context*" in result[2]["content"]
-        assert "self.state = {'x': 1}" in result[2]["content"]
+        assert result[2]["content"] == "Execute step 2"
+        assert "Remember: You are Agent A" not in result[2]["content"]
 
-        # Recent assistant message should be full
+        # Recent assistant message (a2) should be full (last 2 preserved)
         assert result[3]["role"] == "assistant"
         assert "some logs" in result[3]["content"]
+
+        # THE LAST user message should be full
+        assert result[4]["role"] == "user"
+        assert "Remember: You are Agent A" in result[4]["content"]
+        assert "Execute step 3" in result[4]["content"]
+        assert "*Python Code Context*" in result[4]["content"]
+        assert "self.state = {'x': 2}" in result[4]["content"]
