@@ -95,6 +95,9 @@ class MCPTransport(TransportProtocol):
                     from pathlib import Path
 
                     base_dir = str(Path(self.source_file_path).parent)
+                    logger.debug(
+                        f"MCP transport base_dir: {base_dir} (from source_file_path: {self.source_file_path})"
+                    )
 
                 server = load_mcp_server(
                     self._memory_server_path, self._memory_var_name, base_dir=base_dir
