@@ -82,35 +82,15 @@ class TestMCPTransportIntegration:
 
     @pytest.mark.asyncio
     async def test_mcp_transport_wrapper_integration(self):
-        """Test our MCPTransport wrapper with a real server."""
-        # Create test server
-        test_server = create_test_server()
-
-        # Create a mock config that would work with our transport
-        # Note: For this test, we'll create a custom transport that uses
-        # the in-memory server directly
-
-        class InMemoryMCPTransport(MCPTransport):
-            """Custom transport for testing with in-memory server."""
-
-            def __init__(self, server):
-                # Initialize with dummy config
-                super().__init__({"url": "memory://test"})
-                self.server = server
-
-            async def connect(self) -> None:
-                """Connect to in-memory server."""
-                if self._connected:
-                    return
-
-                from fastmcp import Client
-
-                self.client = Client(self.server)
-                await self.client.__aenter__()
-                self._connected = True
-
-        # Test the transport
-        transport = InMemoryMCPTransport(test_server)
+        """Test our MCPTransport wrapper with a real server using native memory transport."""
+        # Use the native memory transport with the test_mcp.py file
+        transport = MCPTransport(
+            {
+                "url": "memory://../../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
+        )
 
         try:
             await transport.connect()
@@ -140,26 +120,17 @@ class TestMCPTransportIntegration:
 
     @pytest.mark.asyncio
     async def test_transport_context_manager_integration(self):
-        """Test transport as context manager with real server."""
-        test_server = create_test_server()
-
-        class InMemoryMCPTransport(MCPTransport):
-            def __init__(self, server):
-                super().__init__({"url": "memory://test"})
-                self.server = server
-
-            async def connect(self) -> None:
-                if self._connected:
-                    return
-                from fastmcp import Client
-
-                self.client = Client(self.server)
-                await self.client.__aenter__()
-                self._connected = True
+        """Test transport as context manager with real server using native memory transport."""
+        # Use the native memory transport with the test_mcp.py file
+        transport = MCPTransport(
+            {
+                "url": "memory://../../data/test_mcp.py",
+                "transport": "memory",
+            },
+            source_file_path=__file__,
+        )
 
         # Test context manager usage
-        transport = InMemoryMCPTransport(test_server)
-
         async with transport:
             assert transport.is_connected
 

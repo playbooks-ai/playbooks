@@ -1,7 +1,7 @@
 # Example MCP Server
 remote:
   type: mcp
-  url: memory://test
+  url: memory://./test_mcp.py
   transport: memory
 
 
