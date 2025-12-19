@@ -15,7 +15,8 @@ async def process_countries(countries: List[str]):
 
 ## GetCountryFact($country)
 ### Steps
-- Return an unusual historical fact about $country
+- Do web search for top news story today from $country
+- Return an unusual historical fact about $country and include the top news story today from $search_results
 
 ## Main
 ### Triggers
@@ -28,4 +29,12 @@ async def process_countries(countries: List[str]):
 - Inform the user that you will now tell them some interesting facts about each of the countries
 - process_countries($countries)
 - End program
+
+# WebAgent
+This agent provides web search capabilities using the Web Tools MCP server.
+
+remote:
+  type: mcp
+  transport: memory
+  url: memory://./../../examples/deepagents/web_tools_mcp.py
  

@@ -20,7 +20,7 @@ class CompactionConfig:
 
     enabled: bool = True
     min_preserved_assistant_messages: int = (
-        2  # Alias for keep_last_n_assistant_messages
+        1  # Alias for keep_last_n_assistant_messages
     )
 
     @property

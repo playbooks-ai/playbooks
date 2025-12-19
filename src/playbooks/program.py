@@ -178,7 +178,7 @@ class AsyncAgentRuntime:
         """
         try:
             # Initialize and start the agent
-            # await agent.initialize()
+            await agent.initialize()
             if not self.program.execution_finished:
                 await agent.begin()
 
@@ -889,6 +889,13 @@ class Program(ProgramAgentsCommunicationMixin):
             try:
                 new_agent = await self.create_agent(agent_klass, **create_kwargs)
                 agent_registered = True
+
+                # For AIAgents, ensure discovery and initialization are complete
+                # before the background task starts execution
+                if isinstance(new_agent, AIAgent):
+                    await new_agent.discover_playbooks()
+                    await new_agent.initialize()
+
                 await self.runtime.start_agent(new_agent)
                 return new_agent
             except Exception as e:
@@ -962,11 +969,23 @@ class Program(ProgramAgentsCommunicationMixin):
         Initializes all agents sequentially, then starts them as concurrent
         asyncio tasks. Agents run independently and don't block each other.
         """
-        # Start all agents as asyncio tasks concurrently
-        # Use task creation instead of gather to let them run independently
-        tasks = []
+        # Pass 1: Discover playbooks for all agents in parallel
+        # This ensures all agents (especially MCP/Remote agents) have their playbooks
+        # populated before any agent initializes its system messages.
+        discovery_tasks = []
+        for agent in self.agents:
+            if isinstance(agent, AIAgent):
+                discovery_tasks.append(agent.discover_playbooks())
+        if discovery_tasks:
+            await asyncio.gather(*discovery_tasks)
+
+        # Pass 2: Initialize all agents sequentially
+        # This builds system messages and handles BGN playbooks
         for agent in self.agents:
             await agent.initialize()
+
+        # Pass 3: Start all agents as asyncio tasks concurrently
+        tasks = []
         for agent in self.agents:
             task = await self.runtime.start_agent(agent)
             if task:  # Only append if a task was created

@@ -8,6 +8,7 @@ import logging
 from typing import Any, Dict
 
 from playbooks.infrastructure.event_bus import EventBus
+
 from .ai_agent import AIAgent
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,7 @@ class RemoteAIAgent(AIAgent):
         self.remote_config = remote_config
         self.transport = None
         self._connected = False
+        self._discovered = False
 
     async def connect(self) -> None:
         """Establish connection to the remote service."""
@@ -84,8 +86,10 @@ class RemoteAIAgent(AIAgent):
 
     async def initialize(self):
         """Connect and discover playbooks, then execute BGN trigger playbooks."""
-        await self.connect()
-        await self.discover_playbooks()
+        if not self._connected:
+            await self.connect()
+        if not self._discovered:
+            await self.discover_playbooks()
         await super().initialize()
 
     async def __aenter__(self):
