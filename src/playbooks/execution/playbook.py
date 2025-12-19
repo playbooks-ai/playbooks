@@ -741,4 +741,14 @@ class PlaybookLLMExecution(LLMExecution):
                 # Already a resolved value
                 result[param_name] = value
 
+        # Set state variables (parameters with $ prefix in signature) on self.state
+        # Check if the original signature has $ prefix for each parameter
+        for param_name, value in result.items():
+            if (
+                f"${param_name}" in self.playbook.signature
+                or f"${param_name}:" in self.playbook.signature
+            ):
+                # This is a state variable, set it on self.state
+                setattr(self.agent.state, param_name, value)
+
         return result

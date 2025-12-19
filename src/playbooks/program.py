@@ -294,10 +294,10 @@ class ProgramAgentsCommunicationMixin:
         Args:
             stream_id: If provided, this message is part of a stream
         """
-        # Handle Artifact objects - use content for actual message delivery
+        # Handle Artifact objects - use value for actual message delivery
         message_str = message
         if isinstance(message, Artifact):
-            message_str = str(message.content)
+            message_str = str(message.value)
 
         debug(
             "Routing message via channel",
