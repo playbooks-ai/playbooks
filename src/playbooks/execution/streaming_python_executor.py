@@ -163,6 +163,9 @@ class StreamingPythonExecutor:
             self.code_buffer.consume_prefix(executable)
             self.executed_lines.append(executable)
 
+        except ExecutionFinished:
+            # Program execution finished - propagate without wrapping as error
+            raise
         except Exception as e:
             # Execution error - capture and stop processing
             self.has_error = True

@@ -297,6 +297,6 @@ class MessagingMixin:
         )
 
         # Add to call stack (handles both frame and top-level message cases)
-        self.call_stack.add_llm_message_on_parent(agent_comm_msg)
+        self.call_stack.add_llm_message(agent_comm_msg)
 
         return messages
