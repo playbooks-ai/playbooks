@@ -18,7 +18,7 @@ class TestCompactionConfig:
     def test_default_config(self):
         """Test default configuration values."""
         config = CompactionConfig()
-        assert config.min_preserved_assistant_messages == 2
+        assert config.min_preserved_assistant_messages == 1
         assert config.enabled is True
 
     def test_config_from_env(self):

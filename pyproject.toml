@@ -1,6 +1,6 @@
 [project]
 name = "playbooks"
-version = "0.7.1"
+version = "0.7.3"
 description = "A framework for creating AI applications and agents using natural language programming"
 readme = "README.md"
 license = {text = "MIT"}

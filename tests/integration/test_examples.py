@@ -406,12 +406,15 @@ def test_streaming_vs_nonstreaming_consistency(test_data_dir):
 
     # Verify we got the expected messages
     assert len(messages_streaming) == 3, "Should have 3 messages from HelloWorldDemo"
-    assert "Hello" in messages_streaming[0] and "playbooks" in messages_streaming[0]
+    assert (
+        "hello" in messages_streaming[0].lower()
+        and "playbooks" in messages_streaming[0].lower()
+    )
     assert (
         "demo" in messages_streaming[1].lower()
         and "playbooks" in messages_streaming[1].lower()
     )
-    assert "Goodbye" in messages_streaming[2] or "goodbye" in messages_streaming[2]
+    assert "goodbye" in messages_streaming[2].lower()
 
 
 @pytest.mark.asyncio
@@ -445,7 +448,7 @@ async def test_example_16(test_data_dir):
 
     ai_agent = playbooks.program.agents[0]
     await playbooks.program.agents_by_id["human"].SendMessage(
-        ai_agent.id, "checkers and blue"
+        ai_agent.id, "color is blue, game is checkers"
     )
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
 

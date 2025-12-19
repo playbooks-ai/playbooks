@@ -279,6 +279,9 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
 
     async def discover_playbooks(self) -> None:
         """Discover MCP tools and create RemotePlaybook instances for each."""
+        if self._discovered:
+            return
+
         if not self._connected:
             await self.connect()
 
@@ -375,6 +378,7 @@ class MCPAgent(RemoteAIAgent, metaclass=MCPAgentMeta):
             )
 
             self.__class__.playbooks = self.playbooks
+            self._discovered = True
         except Exception as e:
             logger.error(
                 f"Failed to discover MCP tools for agent {self.klass}: {str(e)}"
