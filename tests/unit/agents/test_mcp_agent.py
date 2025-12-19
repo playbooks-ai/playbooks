@@ -160,6 +160,7 @@ class TestMCPAgent:
         )
         agent.transport = mock_transport
         agent._connected = True
+        agent._discovered = True  # Prevent discover_playbooks from clearing playbooks
 
         # Create a mock playbook
         mock_execute_fn = AsyncMock(return_value={"result": 8})
@@ -183,7 +184,7 @@ class TestMCPAgent:
 
     @pytest.mark.asyncio
     async def test_execute_playbook_cross_agent_call(
-        self, event_bus, mcp_config, mock_program
+        self, event_bus, mcp_config, mock_transport, mock_program
     ):
         """Test cross-agent playbook execution."""
         agent = MCPTestAgent(
@@ -191,6 +192,9 @@ class TestMCPAgent:
             remote_config=mcp_config,
             program=mock_program,
         )
+        agent.transport = mock_transport
+        agent._connected = True
+        agent._discovered = True  # Prevent initialization from trying to connect
 
         # Create mock other agent
         other_agent = AsyncMock(
@@ -214,14 +218,18 @@ class TestMCPAgent:
         )
 
     @pytest.mark.asyncio
-    async def test_execute_unknown_playbook(self, event_bus, mcp_config, mock_program):
+    async def test_execute_unknown_playbook(
+        self, event_bus, mcp_config, mock_transport, mock_program
+    ):
         """Test executing an unknown playbook raises error."""
         agent = MCPTestAgent(
             event_bus=event_bus,
             remote_config=mcp_config,
             program=mock_program,
         )
+        agent.transport = mock_transport
         agent._connected = True
+        agent._discovered = True  # Prevent discovery from trying to connect
 
         # Try to execute unknown playbook
         success, result = await agent.execute_playbook("unknown_playbook")
