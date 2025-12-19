@@ -7,6 +7,7 @@ coordination between various system components.
 
 import uuid
 from functools import reduce
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import frontmatter
@@ -144,6 +145,10 @@ class Playbooks:
                 if not original_source and self.program_paths:
                     # Fallback to first program path
                     original_source = self.program_paths[0]
+
+                # Resolve to absolute path immediately
+                if original_source:
+                    original_source = str(Path(original_source).resolve())
 
                 source_file_paths.append(original_source)
 
