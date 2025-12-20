@@ -167,8 +167,7 @@ class AIAgent(BaseAgent, ABC, metaclass=AIAgentMeta):
         self.session_log: SessionLog = SessionLog(self.klass, self.id)
         self.call_stack: CallStack = CallStack(event_bus, self.id)
 
-        # Initialize system messages in call stack
-        self._initialize_system_messages()
+        self._initialized = False
 
         self.state: PlaybookBox = PlaybookBox()
         self.previous_variables: Optional[Dict[str, Any]] = None
@@ -425,6 +424,18 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
             playbook.source_file_path = file_path
             playbook.agent_name = str(self)
         self.playbooks.update(new_playbook)
+
+    async def initialize(self) -> None:
+        """Initialize the agent.
+
+        This method is called by the Program before begin().
+        """
+        if self._initialized:
+            return
+
+        await super().initialize()
+        self._initialize_system_messages()
+        self._initialized = True
 
     async def begin(self):
         # Pre-load initial artifacts if any
@@ -969,6 +980,11 @@ async def {self.bgn_playbook_name}(**kwargs) -> None:
         Returns:
             Tuple of (success: bool, result: Any)
         """
+        # Ensure agent is initialized before execution to populate system messages.
+        # This acts as a safety net for agents that failed initial discovery or
+        # were created after program initialization.
+        await self.initialize()
+
         if self.program and self.program.execution_finished:
             return (True, EXECUTION_FINISHED)
 

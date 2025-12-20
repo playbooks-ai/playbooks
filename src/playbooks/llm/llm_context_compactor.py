@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Optional
 from playbooks.llm.messages import (
     AssistantResponseLLMMessage,
     LLMMessage,
+    UserInputLLMMessage,
 )
 
 
@@ -48,8 +49,9 @@ class LLMContextCompactor:
     def compact_messages(self, messages: List[LLMMessage]) -> List[Dict[str, Any]]:
         """Compact a list of LLM messages based on configuration.
 
-        Keeps the last N assistant message cycles in full format while compacting
-        older messages to summaries.
+        Keeps the last N assistant messages and the last user message in full format.
+        All other assistant and user messages are compacted. Other message types
+        (System, AgentInfo, etc.) are always kept full.
 
         Args:
             messages: List of LLMMessage objects to potentially compact
@@ -57,38 +59,36 @@ class LLMContextCompactor:
         Returns:
             List of message dictionaries in LLM API format (with compacted older messages)
         """
-        if not self.config.enabled or len(messages) == 0:
+        if not self.config.enabled or not messages:
             return [msg.to_full_message() for msg in messages]
 
-        # Walk backwards to find last safe (uncompacted) assistant message
-        assistant_count = 0
-        safe_assistant_index = -1
-        for i in range(len(messages) - 1, -1, -1):
-            if isinstance(messages[i], AssistantResponseLLMMessage):
-                assistant_count += 1
-                if assistant_count >= self.config.keep_last_n_assistant_messages:
-                    safe_assistant_index = i
-                    break
+        # Identify indices of assistant and user messages
+        assistant_indices = [
+            i
+            for i, msg in enumerate(messages)
+            if isinstance(msg, AssistantResponseLLMMessage)
+        ]
+        user_indices = [
+            i for i, msg in enumerate(messages) if isinstance(msg, UserInputLLMMessage)
+        ]
 
-        # If no safe assistant message found, return all messages as full
-        if safe_assistant_index == -1:
-            return [msg.to_full_message() for msg in messages]
+        # Determine which indices to keep full
+        keep_full = set(
+            assistant_indices[-self.config.keep_last_n_assistant_messages :]
+        )
+        if user_indices:
+            keep_full.add(user_indices[-1])
 
-        # The safe_assistant_index is the first assistant message we want to keep full.
-        # We compact ALL messages before this index (including user messages).
-        # We keep ALL messages at or after this index full.
-        # This ensures only user messages that are part of the last N assistant cycles are kept full.
-        safe_index = safe_assistant_index
-
-        # All messages before safe_index are compacted
-        # Messages at or after safe_index are kept full
         result = []
         for i, msg in enumerate(messages):
-            if i < safe_index:
-                compact_message = msg.to_compact_message()
-                if compact_message:
-                    result.append(compact_message)
+            # If it's a message type that supports compaction and not in keep_full, compact it
+            if isinstance(msg, (AssistantResponseLLMMessage, UserInputLLMMessage)):
+                if i in keep_full:
+                    result.append(msg.to_full_message())
+                else:
+                    result.append(msg.to_compact_message())
             else:
+                # Other messages (System, AgentInfo, etc.) are always full
                 result.append(msg.to_full_message())
 
         return result

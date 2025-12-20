@@ -1068,15 +1068,23 @@ class TestInterpreterPromptCompaction:
         assert "# recap: Step 2 done" in messages[3]["content"]
         assert "more logs" in messages[3]["content"]
 
-        # Third user message should be full (it's recent, after the preserved assistant)
-        assert messages[4]["role"] == "user"
-        assert "Remember: You are Agent Test" in messages[4]["content"]
-        assert "Execute step 3" in messages[4]["content"]
-        assert "*Python Code Context*" in messages[4]["content"]
-
         # Third assistant message should be full (most recent)
         assert messages[5]["role"] == "assistant"
         assert "even more logs" in messages[5]["content"]
+
+        # If we add a NEW user message, it should be full while u3 becomes compacted
+        prompt.create_user_message()
+        messages = prompt.messages
+        assert len(messages) == 7
+
+        # messages[4] (u3) should be compacted now
+        assert messages[4]["role"] == "user"
+        assert "Remember: You are Agent Test" not in messages[4]["content"]
+
+        # messages[6] (new u4) should be full
+        assert messages[6]["role"] == "user"
+        assert "Test agent instructions" in messages[6]["content"]
+        assert "Test instruction" in messages[6]["content"]
 
     def test_compaction_disabled_returns_full_messages(self):
         """Test that when compaction is disabled, all messages are returned in full."""

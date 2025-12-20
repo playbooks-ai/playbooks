@@ -1,6 +1,7 @@
 """Unit tests for MCP module loader."""
 
 import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -312,5 +313,135 @@ mcp = FastMCP("TestServer")
             # Both should be valid
             assert server1 is not None
             assert server2 is not None
+        finally:
+            os.unlink(tmp_path)
+
+    def test_search_priority_base_dir_wins(self):
+        """Test that base_dir takes priority over CWD."""
+        with (
+            tempfile.TemporaryDirectory() as base_dir,
+            tempfile.TemporaryDirectory() as cwd_dir,
+        ):
+            # Create MCP server in both locations with different markers
+            base_server = Path(base_dir) / "server.py"
+            base_server.write_text(
+                """
+from fastmcp import FastMCP
+
+mcp = FastMCP("BaseDirServer")
+"""
+            )
+
+            cwd_server = Path(cwd_dir) / "server.py"
+            cwd_server.write_text(
+                """
+from fastmcp import FastMCP
+
+mcp = FastMCP("CwdServer")
+"""
+            )
+
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(cwd_dir)
+                server = load_mcp_server("server.py", base_dir=base_dir)
+                # Should load from base_dir, not cwd
+                assert server is not None
+                assert type(server).__name__ == "FastMCP"
+                # Verify it loaded the base_dir version
+                assert "BaseDirServer" in str(server)
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_fallback_to_cwd_when_base_dir_missing(self):
+        """Test fallback to CWD when base_dir doesn't contain the file."""
+        with (
+            tempfile.TemporaryDirectory() as base_dir,
+            tempfile.TemporaryDirectory() as cwd_dir,
+        ):
+            # Create MCP server only in CWD
+            cwd_server = Path(cwd_dir) / "server.py"
+            cwd_server.write_text(
+                """
+from fastmcp import FastMCP
+
+mcp = FastMCP("CwdServer")
+"""
+            )
+
+            orig_cwd = os.getcwd()
+            try:
+                os.chdir(cwd_dir)
+                server = load_mcp_server("server.py", base_dir=base_dir)
+                # Should load from CWD as fallback
+                assert server is not None
+                assert type(server).__name__ == "FastMCP"
+                assert "CwdServer" in str(server)
+            finally:
+                os.chdir(orig_cwd)
+
+    def test_fallback_to_sys_path(self):
+        """Test fallback to sys.path when neither base_dir nor CWD work."""
+        import tempfile
+
+        # Create a temporary directory and add it to sys.path
+        with tempfile.TemporaryDirectory() as sys_path_dir:
+            # Create MCP server in sys.path location
+            sys_path_server = Path(sys_path_dir) / "server.py"
+            sys_path_server.write_text(
+                """
+from fastmcp import FastMCP
+
+mcp = FastMCP("SysPathServer")
+"""
+            )
+
+            # Temporarily add to sys.path
+            original_sys_path = sys.path.copy()
+            sys.path.insert(0, sys_path_dir)
+
+            try:
+                # Try to load from a non-existent location
+                server = load_mcp_server(
+                    "server.py", base_dir="/nonexistent", force_reload=True
+                )
+                # Should find it in sys.path
+                assert server is not None
+                assert type(server).__name__ == "FastMCP"
+                assert "SysPathServer" in str(server)
+            finally:
+                # Restore sys.path
+                sys.path[:] = original_sys_path
+
+    def test_enhanced_error_message_shows_all_locations(self):
+        """Test error message shows all search locations."""
+        with pytest.raises(FileNotFoundError) as exc_info:
+            load_mcp_server("nonexistent.py", base_dir="/some/base/dir")
+
+        error_msg = str(exc_info.value)
+        assert "MCP server file not found: nonexistent.py" in error_msg
+        assert "Searched in:" in error_msg
+        assert "playbook directory" in error_msg
+        assert "current working directory" in error_msg
+        assert "Python path" in error_msg
+
+    def test_absolute_path_bypasses_search_strategy(self):
+        """Test that absolute paths bypass the search strategy."""
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as tmp:
+            tmp.write(
+                """
+from fastmcp import FastMCP
+
+mcp = FastMCP("AbsoluteServer")
+"""
+            )
+            tmp_path = tmp.name
+
+        try:
+            # Load using absolute path
+            server = load_mcp_server(tmp_path)
+            assert server is not None
+            assert type(server).__name__ == "FastMCP"
+            assert "AbsoluteServer" in str(server)
         finally:
             os.unlink(tmp_path)

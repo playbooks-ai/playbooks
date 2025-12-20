@@ -1,7 +1,7 @@
 # Example MCP Server
 remote:
   type: mcp
-  url: memory://test
+  url: memory://./test_mcp.py
   transport: memory
 
 
@@ -13,6 +13,6 @@ remote:
 - When program starts
 
 ### Steps
-- Call ExampleMCPServer.get_secret() to get the secret
+- get secret from Example MCP Server
 - reveal secret to user
 - end program

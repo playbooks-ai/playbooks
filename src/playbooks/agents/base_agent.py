@@ -35,6 +35,39 @@ class BaseAgentMeta(ABCMeta):
         """
         return False
 
+    def __getattr__(cls, name: str) -> Any:
+        """Expose playbooks as callable class attributes.
+
+        This allows accessing playbooks via AgentClass.playbook_name syntax,
+        which is used in expressions like {FilesystemAgent.read_file(...)}.
+
+        Args:
+            name: The attribute name to look up
+
+        Returns:
+            A callable for the playbook
+
+        Raises:
+            AttributeError: If the attribute is not found
+        """
+        # Check if playbooks dictionary exists and contains the requested name
+        # Use type.__getattribute__ to avoid recursion
+        try:
+            playbooks = type.__getattribute__(cls, "playbooks")
+            if name in playbooks:
+                playbook = playbooks[name]
+                # For RemotePlaybook, return the execute_fn which is already callable and bound
+                if hasattr(playbook, "execute_fn") and playbook.execute_fn:
+                    return playbook.execute_fn
+                # For other playbooks, we'd need to create a wrapper, but this shouldn't
+                # happen in practice since only remote playbooks are accessed this way
+                return playbook
+        except AttributeError:
+            pass
+
+        # Attribute not found - raise AttributeError
+        raise AttributeError(f"type object '{cls.__name__}' has no attribute '{name}'")
+
 
 class BaseAgent(MessagingMixin, ABC, metaclass=BaseAgentMeta):
     """

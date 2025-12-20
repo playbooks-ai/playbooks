@@ -4,6 +4,39 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [v0.7.3] - 2025-12-19
+
+### Added
+
+#### Agent Communication
+- **Progressive Timeout Notifications** - Agents waiting for responses had no visibility into delays. Added wait mechanism with periodic timeout checks that collects interrupt messages from other sources (user, other agents) and returns combined notification. The LLM decides whether to continue waiting or take alternative action—no hard maximum wait time
+
+#### MCP Integration
+- **MCP Playbooks Discovery** - MCP servers couldn't expose available playbooks. Added automatic playbooks discovery for MCP servers enabling dynamic capability exposure
+
+### Improved
+
+#### LLM Context Management
+- **Message Compaction Strategy** - Improved compaction to keep only the last user message and last 2 assistant messages in full; all prior messages are compacted
+
+#### Path Resolution
+- **Relative MCP Server Paths** - MCP server paths were resolved from CWD causing issues. Changed to resolve relative paths based on location of the .pb file for consistent behavior
+
+#### Initialization
+- **Agent Initialization Timing** - Agents were initialized too late in the lifecycle. Moved agent initialization to program initialize phase for proper startup sequencing
+
+### Changed
+
+#### Testing & CI
+- **Removed Codecov Block** - Integration tests no longer run on GitHub making coverage numbers misleading. Removed codecov configuration from CI
+- **MCP Test Transport** - MCP tests used network transport unnecessarily. Updated to use memory transport for faster, more reliable tests
+
+### Fixed
+
+- **Multi-Agent Test Reliability** - test_multi_agent.py had flaky behavior. Fixed test stability issues
+
+---
+
 ## [v0.7.2] - 2025-12-17
 
 ### Added

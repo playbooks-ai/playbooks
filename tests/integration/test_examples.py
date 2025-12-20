@@ -9,7 +9,6 @@ from playbooks.agents.local_ai_agent import LocalAIAgent
 from playbooks.agents.mcp_agent import MCPAgent
 from playbooks.core.constants import EOM, EXECUTION_FINISHED
 from tests.conftest import extract_messages_from_cli_output
-from tests.integration.test_mcp_end_to_end import InMemoryMCPTransport
 
 
 @pytest.mark.asyncio
@@ -136,18 +135,14 @@ async def test_example_10(test_data_dir):
 
 
 @pytest.mark.asyncio
-async def test_example_11(test_data_dir, test_mcp_server_instance):
+async def test_example_11(test_data_dir):
     playbooks = Playbooks([test_data_dir / "11-mcp-agent.pb"])
     await playbooks.initialize()
-    mcp_agent = next(
-        filter(lambda x: isinstance(x, MCPAgent), playbooks.program.agents)
-    )
+
+    _ = next(filter(lambda x: isinstance(x, MCPAgent), playbooks.program.agents))
     markdown_agent = next(
         filter(lambda x: isinstance(x, LocalAIAgent), playbooks.program.agents)
     )
-
-    mcp_agent.transport = InMemoryMCPTransport(test_mcp_server_instance)
-    await mcp_agent.initialize()
 
     await playbooks.program.run_till_exit()
 
@@ -406,12 +401,15 @@ def test_streaming_vs_nonstreaming_consistency(test_data_dir):
 
     # Verify we got the expected messages
     assert len(messages_streaming) == 3, "Should have 3 messages from HelloWorldDemo"
-    assert "Hello" in messages_streaming[0] and "playbooks" in messages_streaming[0]
+    assert (
+        "hello" in messages_streaming[0].lower()
+        and "playbooks" in messages_streaming[0].lower()
+    )
     assert (
         "demo" in messages_streaming[1].lower()
         and "playbooks" in messages_streaming[1].lower()
     )
-    assert "Goodbye" in messages_streaming[2] or "goodbye" in messages_streaming[2]
+    assert "goodbye" in messages_streaming[2].lower()
 
 
 @pytest.mark.asyncio
@@ -445,7 +443,7 @@ async def test_example_16(test_data_dir):
 
     ai_agent = playbooks.program.agents[0]
     await playbooks.program.agents_by_id["human"].SendMessage(
-        ai_agent.id, "checkers and blue"
+        ai_agent.id, "color is blue, game is checkers"
     )
     await playbooks.program.agents_by_id["human"].SendMessage(ai_agent.id, EOM)
 

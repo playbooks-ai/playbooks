@@ -56,7 +56,7 @@ When generating code, you have access to `self` - the current agent instance:
   - **YLD for user/agent/meeting/call/return/exit**  yield control back to orchestrator
 - `### Notes` hold extra rules.
 - Variables may hold **boolean, string, number, list, dict, null, artifact**.
-- Artifact is (1 line summary, long form multi-line content) tuple.
+- Artifact variable is (name=name, summary=1 line summary, value=long form multi-line content) tuple.
 ---
 #### 2. Output Contract — **WRITE NOTHING ELSE**
 ```python

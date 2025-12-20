@@ -64,21 +64,24 @@ def load_mcp_server(
 ) -> Any:
     """Load an MCP server instance from a Python file.
 
+    Resolution strategy for relative paths:
+    1. Relative to base_dir (playbook directory) - highest priority
+    2. Relative to current working directory
+    3. Relative to Python sys.path entries (for installed packages)
+
     This function loads a Python module and extracts the MCP server instance.
     Loaded servers are cached at the module level to ensure only one instance
     per file per session.
 
     Args:
         file_path: Path to the Python file containing the MCP server.
-                  Relative paths are resolved from base_dir if provided,
-                  otherwise from current working directory.
+                  Relative paths are resolved using the priority above.
         var_name: Name of the variable containing the MCP server instance.
                  Defaults to 'mcp'.
         force_reload: If True, reload the module even if cached.
         base_dir: Base directory for resolving relative paths. When using memory
                  transport in playbooks, this is automatically set to the playbook
-                 file's directory, making relative paths intuitive. If None, falls
-                 back to current working directory.
+                 file's directory, making relative paths intuitive.
 
     Returns:
         The MCP server instance (typically a FastMCP object)
@@ -88,27 +91,53 @@ def load_mcp_server(
         ValueError: If the module doesn't contain the specified variable
         ImportError: If the module cannot be imported
     """
-    # Resolve file path
-    resolved_path = Path(file_path)
-    if not resolved_path.is_absolute():
-        # Use base_dir if provided, otherwise fall back to CWD
+    original_file_path = Path(file_path)
+    resolved_path = None
+    search_paths = []
+
+    # If absolute, use directly
+    if original_file_path.is_absolute():
+        resolved_path = original_file_path.resolve()
+    else:
+        # Build search path list
         if base_dir:
-            resolved_path = Path(base_dir) / resolved_path
-        else:
-            resolved_path = Path(os.getcwd()) / resolved_path
+            search_paths.append(("playbook directory", Path(base_dir)))
 
-    resolved_path = resolved_path.resolve()
+        search_paths.append(("current working directory", Path(os.getcwd())))
 
-    if not resolved_path.exists():
-        resolution_info = (
-            f"Base directory: {base_dir}"
-            if base_dir
-            else f"Current working directory: {os.getcwd()}"
+        # Add sys.path entries (excluding empty strings and non-directory paths)
+        for path_str in sys.path:
+            if path_str and Path(path_str).is_dir():
+                search_paths.append(("Python path", Path(path_str)))
+
+        # Try each search path in order
+        for location_name, search_path in search_paths:
+            candidate = (search_path / original_file_path).resolve()
+            if candidate.exists() and candidate.is_file():
+                resolved_path = candidate
+                logger.debug(
+                    f"Found MCP server at: {resolved_path} "
+                    f"(via {location_name}: {search_path})"
+                )
+                break
+
+    # Check if file exists
+    if not resolved_path or not resolved_path.exists():
+        # Build detailed error message showing all locations searched
+        search_info_lines = [
+            f"  {i+1}. {name}: {path} -> {(path / original_file_path).resolve()}"
+            for i, (name, path) in enumerate(search_paths)
+        ]
+        search_info = (
+            "\n".join(search_info_lines)
+            if search_info_lines
+            else "  (no search paths available)"
         )
+
         raise FileNotFoundError(
             f"MCP server file not found: {file_path}\n"
-            f"Resolved to: {resolved_path}\n"
-            f"{resolution_info}"
+            f"Searched in:\n{search_info}\n"
+            f"Original file path: {file_path}"
         )
 
     if not resolved_path.is_file():
