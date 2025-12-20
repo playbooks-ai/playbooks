@@ -24,9 +24,9 @@ import litellm
 from litellm import completion, get_supported_openai_params
 
 try:
-    from diskcache import Cache
+    from diskcache import FanoutCache
 except ImportError:
-    Cache = None
+    FanoutCache = None
 
 try:
     from redis import Redis
@@ -141,7 +141,7 @@ if llm_cache_enabled:
         cache_dir = (
             llm_cache_path or tempfile.TemporaryDirectory(prefix="llm_cache_").name
         )
-        cache = Cache(directory=cache_dir)
+        cache = FanoutCache(directory=cache_dir, timeout=60)
 
     elif llm_cache_type == "redis":
         redis_url = os.getenv("REDIS_URL", "redis://127.0.0.1:6379/0")
