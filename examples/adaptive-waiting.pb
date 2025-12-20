@@ -14,7 +14,7 @@ An agent that demonstrates adaptive waiting.
 - End program
 
 ### Notes
-- SlowColleague typically responds in 2 seconds, but can take up to 30 seconds when busy. Keep the user informed and entertained while waiting every 10 seconds or so.
+- SlowColleague typically responds in 2 seconds, but can take up to 30 seconds when busy. Keep the user informed and entertained frequently while waiting.
 
 # SlowColleague  
 A deliberately slow agent for testing.
