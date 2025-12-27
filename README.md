@@ -24,6 +24,8 @@
 
 **Playbooks is a semantic programming system for AI agents**
 
+![Playbooks Architecture](https://docs.runplaybooks.ai/assets/images/playbooks-illustrated.jpg)
+
 Playbooks is a programming language, a stable semantic intermediate representation (PBAsm), and a runtime for building and running AI agents.
 
 It treats large language models as **semantic execution engines (similar to CPUs)**.
@@ -218,7 +220,7 @@ pip install playbooks
 playbooks run example.pb
 ```
 
-Visit our [documentation](https://playbooks-ai.github.io/playbooks-docs/) for comprehensive guides, tutorials, and reference materials.
+Visit our [documentation](https://docs.runplaybooks.ai) for comprehensive guides, tutorials, and reference materials.
 
 ## Changelog
 
