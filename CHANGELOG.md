@@ -4,6 +4,55 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [v0.7.4] - 2026-02-01
+
+### Added
+
+#### Examples
+- **Adaptive Waiting Example** - Added example demonstrating adaptive waiting patterns for agents
+- **Nativity Playbook** - New nativity.pb example playbook
+
+#### Agent System
+- **Unified Message Batching** - Implemented unified RollingMessageCollector for batching all agent messages including direct and meeting broadcasts. Human messages now trigger immediate flush of pending batches for responsive interaction
+
+#### Performance
+- **FanoutCache for Concurrent Access** - Added FanoutCache to handle concurrent agent access patterns more efficiently
+
+### Improved
+
+#### LLM Context Management
+- **Accurate Token Counting** - Refactored token counting to use tiktoken library for precise token calculations. Replaced rough estimations with accurate counts via get_messages_token_count and get_token_count utility functions
+- **Trigger Evaluation Examples** - Refined trigger evaluation and yield examples in prompts for better clarity on computable vs non-computable triggers
+- **Final Instructions** - Revised InterpreterPrompt final instructions to emphasize concise thinking, strict adherence to available playbooks, and clear communication of assumptions for more reliable expert-like behavior
+
+### Changed
+
+#### Configuration
+- **BGN Playbooks Visibility** - BGN playbooks are no longer made public by default for better security and encapsulation
+- **Message Batching Config** - Updated message batching configuration and package dependencies
+- **Optional Return Values** - Return values are now optional in playbooks for more flexible execution patterns
+
+#### Development
+- **Stop Tracking .llm_cache_test** - Removed .llm_cache_test folder from git tracking
+
+#### Documentation
+- **README Updates** - Updated README.md with latest information
+
+### Fixed
+
+#### Observability
+- **LangFuse Message Spans** - Fixed LangFuse spans for messages not displaying message content. Now skips LangFuse spans for EOM (End of Message) markers
+- **LangFuse Token Counts** - Fixed LangFuse LLM calls not showing token counts. Introduced _llm_input_tokens dictionary to correlate input tokens between LLM start and end events with proper cleanup
+- **Streaming in Conditional Blocks** - Fixed Say() calls inside generated if and else blocks not being streamed. Disabled streaming of Say() calls after indented code is detected to maintain execution consistency
+
+#### Core Functionality
+- **Playbooks Attribute Check** - Fixed potential recursion issues in BaseAgent by replacing hasattr() with direct __dict__ access when checking for 'playbooks' attribute
+
+#### Dependencies
+- **Lazy Imports** - Refactored imports in messaging_mixin.py and meeting_manager.py to use lazy imports, resolving circular dependency issues
+
+---
+
 ## [v0.7.3] - 2025-12-19
 
 ### Added
