@@ -26,6 +26,11 @@ async def test_langfuse_trace_structure(test_data_dir):
 
     # Get the trace ID from the agent
     agent = playbooks.program.agents[0]
+
+    # Skip test if Langfuse handler is not initialized (e.g., when disabled in config)
+    if not playbooks.program._langfuse_handler:
+        pytest.skip("Langfuse tracing not enabled")
+
     trace_id = playbooks.program._langfuse_handler._agent_traces.get(agent.id, None)
 
     # Run the program
@@ -114,6 +119,11 @@ async def test_trace_structure_with_python_playbook(test_data_dir):
     await playbooks.initialize()
 
     agent = playbooks.program.agents[0]
+
+    # Skip test if Langfuse handler is not initialized (e.g., when disabled in config)
+    if not playbooks.program._langfuse_handler:
+        pytest.skip("Langfuse tracing not enabled")
+
     trace_id = playbooks.program._langfuse_handler._agent_traces.get(agent.id, None)
 
     # Seed the input so the program can complete

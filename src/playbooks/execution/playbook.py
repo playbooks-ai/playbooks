@@ -464,7 +464,9 @@ class PlaybookLLMExecution(LLMExecution):
                     self.streaming_execution_result = streaming_executor.result
                     return buffer
 
-                # Only look for new Say() calls in the unprocessed part of the buffer
+                # Pattern-based Say() streaming provides real-time feedback as tokens arrive.
+                # The _currently_streaming flag prevents duplicates when code later executes.
+                # StreamingPythonExecutor will skip streaming for already-streamed Say() calls.
                 if not in_say_call:
                     # Updated pattern: no backticks (Python code format)
                     say_pattern = 'Say("'

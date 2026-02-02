@@ -305,9 +305,9 @@ Compiled:
 ### Public Playbooks
 - Python syntax: `@playbook(public=True)`
 - Markdown syntax: `public: true`
-- Automatically mark BGN playbooks as public
-- Generate public.json with tool info for each public python and markdown playbooks
-- If no public playbooks, generate empty [] public.json
+- Do NOT automatically add `public: true` to BGN playbooks unless explicitly specified in the source
+- Generate public.json with tool info for each public playbook AND each BGN playbook (for CLI entry point)
+- If no public playbooks and no BGN playbooks, generate empty [] public.json
 
 ### Agent and Playbook metadata
 Collect any metadata in the description area into a metadata yaml block. When metadata is present, add a --- document separator and write description after that. This applies to # agent and ## playbook blocks.
@@ -748,7 +748,7 @@ Conduct a planning meeting
 
 ====
 
-Remember: Mark playbooks as BGN only when a "when program starts" type trigger is specified. BGN playbooks are public by default. 
+Remember: Mark playbooks as BGN only when a "when program starts" type trigger is specified. Include BGN playbooks in public.json for CLI entry points, but do NOT add `public: true` to their metadata unless explicitly specified in the source. 
 **Follow the output contract exactly; deviations break execution.**
 
 **Output:**

@@ -537,7 +537,15 @@ async def get_completion(
 
             # Validate response before caching if validator provided
             if response_validator is None or response_validator(full_response):
-                cache.set(cache_key, full_response)
+                try:
+                    cache.set(cache_key, full_response)
+                except Exception as cache_error:
+                    # Log cache error but don't fail the LLM call
+                    debug(
+                        "Failed to cache LLM response - continuing without caching",
+                        error=str(cache_error),
+                        cache_key=cache_key,
+                    )
             else:
                 debug(
                     "Response validation failed - not caching invalid response",

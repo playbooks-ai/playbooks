@@ -1,6 +1,6 @@
 [project]
 name = "playbooks"
-version = "0.7.3"
+version = "0.7.4"
 description = "Playbooks is a semantic programming system for AI agents — easy enough to design behavior, rigorous enough to run it at enterprise scale."
 readme = "README.md"
 license = {text = "MIT"}
