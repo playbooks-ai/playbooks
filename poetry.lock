@@ -870,6 +870,18 @@ files = [
 ]
 
 [[package]]
+name = "diskcache-community"
+version = "5.8.4"
+description = "Disk Cache - Disk and file backed persistent cache."
+optional = false
+python-versions = ">=3.8"
+groups = ["main"]
+files = [
+    {file = "diskcache_community-5.8.4-py3-none-any.whl", hash = "sha256:5c60a23a3f245616f9425144c936181709ccf69e5885ef25325b29cd7c4e3744"},
+    {file = "diskcache_community-5.8.4.tar.gz", hash = "sha256:ed359124af93879978b2851a81f437c4e708f946e4ee5db7256b95f562ee0eeb"},
+]
+
+[[package]]
 name = "distro"
 version = "1.9.0"
 description = "Distro - an OS platform information API"
@@ -4761,4 +4773,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.12"
-content-hash = "5c8c00ffa630a7056185fba6d076332f5ba1256e0f3e640c887559d92a59e686"
+content-hash = "7aa84aefb5c10da3c03aff6d6ed3a975f1c2675a63043fa24d9022a0e9b7983d"

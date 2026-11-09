@@ -3,6 +3,7 @@
 from unittest.mock import patch
 
 import pytest
+from diskcache_community import Disk, FanoutCache
 
 from playbooks.core.enums import LLMMessageRole
 from playbooks.core.exceptions import (
@@ -16,11 +17,14 @@ from playbooks.llm.messages import (
     SystemPromptLLMMessage,
     UserInputLLMMessage,
 )
+from playbooks.utils import llm_helper
+from playbooks.utils.llm_config import LLMConfig
 from playbooks.utils.llm_helper import (
     _make_completion_request,
     consolidate_messages,
     custom_get_cache_key,
     ensure_upto_N_cached_messages,
+    get_completion,
     get_messages_for_prompt,
     remove_empty_messages,
     retry_on_overload,
@@ -366,3 +370,37 @@ def test_make_completion_request_none_content(mock_completion):
         _make_completion_request(kwargs)
 
     assert "empty content" in str(exc_info.value)
+
+
+planted_calls = []
+
+
+def planted():
+    planted_calls.append(True)
+    return "Planted response"
+
+
+class Planted:
+    def __reduce__(self):
+        return (planted, ())
+
+
+@pytest.mark.asyncio
+@patch("playbooks.utils.llm_helper._check_llm_calls_allowed", return_value=True)
+@patch("playbooks.utils.llm_helper.completion")
+async def test_get_completion_ignores_planted_cache_entry(mock_completion, mock_check):
+    mock_completion.return_value = {
+        "choices": [{"message": {"content": "Fresh response"}, "finish_reason": "stop"}]
+    }
+    llm_config = LLMConfig(model="gpt-4", api_key="test-key")
+    messages = [{"role": "user", "content": "Planted cache entry"}]
+    key = custom_get_cache_key(
+        model=llm_config.model, messages=messages, temperature=llm_config.temperature
+    )
+    with FanoutCache(llm_helper.cache.directory, disk=Disk) as other_writer:
+        other_writer.set(key, Planted())
+
+    chunks = [chunk async for chunk in get_completion(llm_config, messages)]
+
+    assert "".join(chunks) == "Fresh response"
+    assert planted_calls == []
